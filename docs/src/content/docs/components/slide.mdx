@@ -3,9 +3,11 @@ title: Slide
 description: The self-closing type marker that connects a recurring slide role to its specific authoring guidance and structural name.
 ---
 
-`Slide` applies one type from Big Plan's closed, guidance-bearing catalog to the h2 immediately after it.
+`Slide` applies one type from Big Plan's closed, guidance-bearing catalog to the heading immediately after it.
+Most markers describe an h2 slide.
+A `user-journey` marker can also describe an h3 sub-slide inside an h2 group.
 Most types supply the reusable structural name shown in the kicker, [TableOfContents](/components/table-of-contents/), and sidebar navigation; user journeys supply their deeper naming forms on the marker.
-The h2 remains the large, plan-specific title.
+The heading remains the large, plan-specific title.
 
 The marker itself emits no HTML.
 Untyped slides keep the existing behavior: the h2 is both their name and title.
@@ -81,7 +83,7 @@ For each typed journey:
 
 - `name` is a distinct, concrete journey name shown in the kicker and sidebar.
 - `toc` is an ultra-concise form shown in the TableOfContents.
-- The h2 is the full plain-language claim.
+- The heading under the marker is the full plain-language claim.
 - A default `Wireframe` carries the actual `Screen` mockups for the shortest path that proves the journey. If no UI exists to show, add a non-empty `wireframeReason` attribute to the marker.
 
 Repeat the singular `user-journey` marker for several individual journeys.

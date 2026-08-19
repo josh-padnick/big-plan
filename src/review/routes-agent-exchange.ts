@@ -41,6 +41,7 @@ import {
 import { readCommittedRevisionsToObserve } from "./change-set-commit.js";
 import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
+import { settlementRefusal } from "./review-route-settlement.js";
 
 const appendProgressBestEffort = async ({
   context,
@@ -180,8 +181,7 @@ export const sendAgentRequest = async (
         requestIds: [requestId],
       });
     } catch (error: unknown) {
-      if (!(error instanceof AgentExchangeRejected)) throw error;
-      return refusal({ status: 409, reason: error.message });
+      return settlementRefusal(error);
     }
     let revised;
     try {
@@ -215,11 +215,29 @@ export const sendAgentRequest = async (
       value: { requestId, kind: revised.kind, request: revised },
     });
   }
-  store = await (await anchorReviewStore(store)).resolveStore();
+  const requestId = randomId(8);
   const source = await readFile(resolvedPlanPath, "utf8");
   const premiseSnapshot = deriveSnapshotDigest(source);
+  let requestDraft: ReturnType<typeof messageAgentRequest>;
+  try {
+    requestDraft = messageAgentRequest({
+      kind,
+      requestId,
+      sessionId,
+      planId,
+      premiseSnapshot,
+      createdAt: new Date().toISOString(),
+      body: messageBody,
+      ...(kind === "reply" && typeof payload.commentId === "string"
+        ? { commentId: payload.commentId }
+        : {}),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 400, reason: error.message });
+  }
+  store = await (await anchorReviewStore(store)).resolveStore();
   await writeSnapshot({ store, snapshot: premiseSnapshot, source });
-  const requestId = randomId(8);
   const imageReferences = imageReferencesForBodies([messageBody]);
   if (imageReferences.length > MAX_IMAGES_PER_MESSAGE) {
     return refusal({
@@ -233,6 +251,7 @@ export const sendAgentRequest = async (
       store,
       requestId,
       references: imageReferences,
+      totalByteLimit: MAX_MESSAGE_IMAGE_BYTES,
     });
   } catch (error: unknown) {
     return refusal({
@@ -243,30 +262,11 @@ export const sendAgentRequest = async (
           : "An image could not be attached",
     });
   }
-  if (
-    attachments.reduce(
-      (total, attachment) => total + attachment.byteLength,
-      0,
-    ) > MAX_MESSAGE_IMAGE_BYTES
-  ) {
-    return refusal({
-      status: 400,
-      reason: "Images in one message exceed the 20 MiB limit",
-    });
-  }
-  const agentRequest = messageAgentRequest({
-    kind,
-    requestId,
-    sessionId,
-    planId,
-    premiseSnapshot,
-    createdAt: new Date().toISOString(),
-    body: messageBody,
+  const agentRequest = {
+    ...requestDraft,
+    attachmentManifest: attachments,
     attachments,
-    ...(kind === "reply" && typeof payload.commentId === "string"
-      ? { commentId: payload.commentId }
-      : {}),
-  });
+  };
   if (agentRequest.kind === "reply") {
     const sent = await planRenderer.readStoredComments(store.sentPath);
     if (!sent.some((comment) => comment.id === agentRequest.commentId)) {
@@ -338,8 +338,7 @@ export const deleteQueuedAgentRequest = async (
       requestIds: [requestId],
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+    return settlementRefusal(error);
   }
   let deletion: AgentRequestDeletionResult;
   try {
@@ -397,8 +396,7 @@ export const cancelPendingAgentRequest = async (
       requestIds: [requestId],
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+    return settlementRefusal(error);
   }
   const exchange = await readAgentExchange({ store, sessionId, planId });
   const agentRequest = exchange.requests.find(

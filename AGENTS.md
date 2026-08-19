@@ -145,16 +145,7 @@ Use these placement tests:
 
 ## Subsystems
 
-Big Plan's product work is partitioned into seven subsystems, grounded in the codebase's module boundaries rather than issue-tracker categories.
-Full definitions, code anchors, and boundary rules live in [docs/subsystems.md](docs/subsystems.md).
-
-- **Change Engine** - the change set (baseline, current, acceptance, provenance, and its optional conversation) that a diff-and-accept review loop operates on.
-- **Session Reliability** - keeping the browser, server, and agent connected and honest about liveness, with no message lost or double-processed.
-- **Commenting Surface** - the browser chrome for reading and writing comments.
-- **Element-Level Commenting** - stable comment addresses for elements inside a component, such as one wireframe screen or diagram node.
-- **Renderer Fidelity** - faithful, comfortable rendering of authored content and the affordances every container gets.
-- **Chat Modality** - how much the agent says, and cheap on-demand explanations outside the comment flow.
-- **Authoring Guidance** - what agents are taught to author, and keeping its citations from breaking.
+[docs/subsystems.md](docs/subsystems.md) owns the subsystem partition Big Plan's product work is organized into: how many there are, their names, what each one covers, its code anchors, and the boundary rules between them.
 
 State which subsystem new work belongs to before starting it; when work spans more than one, say so explicitly.
 

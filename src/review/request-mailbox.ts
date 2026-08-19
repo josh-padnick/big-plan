@@ -52,6 +52,7 @@ import {
 import type { CommittedPlanRevision } from "./change-set-commit.js";
 import {
   claimIsHeldByAnother,
+  claimIsLive,
   claimLeaseExpiryMs,
 } from "./shared/agent-claim.js";
 import type { AgentModelIdentity } from "./shared/agent-model.js";
@@ -397,9 +398,15 @@ const assertRequestIsWithdrawable = async ({
   // on disk here means the answer has published or is one rename from
   // publishing. Withdrawing it would leave the plan carrying a revision every
   // record calls canceled.
-  if (
-    await hasPreparedMutationJournal({ store, requestId: request.requestId })
-  ) {
+  const publishing = await hasPreparedMutationJournal({
+    store,
+    requestId: request.requestId,
+  }).catch(() => {
+    throw new AgentExchangeRejected(
+      "Big Plan cannot tell whether the agent's answer for this request is already publishing, so it cannot be canceled",
+    );
+  });
+  if (publishing) {
     throw new AgentExchangeRejected(
       "The agent's answer for this request is already publishing, so it can no longer be canceled",
     );
@@ -504,6 +511,45 @@ export const ensureAgentRequest = async ({
 };
 
 /**
+ * Refuses when some other request on this plan is being worked right now.
+ *
+ * One plan carries one live claim, so this is asked of every claim that is not
+ * simply renewing a lease it already holds - including one reviving a lapsed
+ * claim, because the plan was free while that lease was expired and another
+ * agent may have taken it in the meantime.
+ */
+const assertPlanIsFree = async ({
+  store,
+  activeSessionId,
+  planId,
+  requestId,
+  nowMs,
+}: {
+  readonly store: ReviewStore;
+  readonly activeSessionId: string;
+  readonly planId: string;
+  readonly requestId: string;
+  readonly nowMs: number;
+}): Promise<void> => {
+  const requests = await readValidatedAgentRequests({
+    store,
+    sessionId: activeSessionId,
+    planId,
+  });
+  if (
+    requests.some(
+      (candidate) =>
+        candidate.requestId !== requestId &&
+        requestBlocksPlanPickup({ request: candidate, nowMs }),
+    )
+  ) {
+    throw new AgentClaimContended(
+      "Another agent session is working on this plan",
+    );
+  }
+};
+
+/**
  * Takes or renews one agent session's exclusive claim on a request, freezing
  * the source baseline the claim's work will be diffed against.
  *
@@ -575,6 +621,24 @@ export const claimAgentRequest = async ({
               "Another agent session is working on this request",
             );
           }
+          // A renewal of a claim that is still live is the ordinary path and
+          // needs no plan-wide check: nothing else can be working this plan
+          // while this claim holds it. A *lapsed* claim is different - the
+          // plan was released when it expired, and another agent may have
+          // taken it since - so reviving one asks the same question a fresh
+          // claim asks.
+          if (
+            request.claimedBy === claimedBy &&
+            !claimIsLive({ request, nowMs })
+          ) {
+            await assertPlanIsFree({
+              store: lockedStore,
+              activeSessionId,
+              planId: request.planId,
+              requestId,
+              nowMs,
+            });
+          }
           if (request.claimedBy === claimedBy) {
             const renewed = validateAgentRequest({
               ...request,
@@ -594,22 +658,13 @@ export const claimAgentRequest = async ({
             });
             return { request: renewed, atMs: nowMs };
           }
-          const requests = await readValidatedAgentRequests({
+          await assertPlanIsFree({
             store: lockedStore,
-            sessionId: activeSessionId,
+            activeSessionId,
             planId: request.planId,
+            requestId,
+            nowMs,
           });
-          if (
-            requests.some(
-              (candidate) =>
-                candidate.requestId !== requestId &&
-                requestBlocksPlanPickup({ request: candidate, nowMs }),
-            )
-          ) {
-            throw new AgentClaimContended(
-              "Another agent session is working on this plan",
-            );
-          }
           // A takeover is a new claim, so it raises the generation. The
           // displaced holder keeps writing to a stage whose generation the
           // commit boundary no longer accepts.
@@ -1253,7 +1308,11 @@ export const appendProgressEvent = async ({
       });
       const checked = { ...event, seq };
       await appendProgressValue({ store, event: checked });
-      await compactProgressLog({ store });
+      // Compaction reclaims space in a log this append has already joined. It
+      // is not part of the append's contract, so a full disk or a permission
+      // error leaves the log longer than it needs to be rather than reporting
+      // a successful append as a failure the caller would retry.
+      await compactProgressLog({ store }).catch(() => undefined);
       return checked;
     },
     timeoutError: () =>

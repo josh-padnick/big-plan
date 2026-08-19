@@ -8,7 +8,7 @@ Start with the root [agent guide](../AGENTS.md) for product orientation and repo
 
 Big Plan's product work is organized into seven subsystems.
 The partition is grounded in the codebase's actual module boundaries, not in issue-tracker categories.
-New work should state which subsystem it belongs to before it starts; when a change spans two subsystems, say so explicitly rather than leaving it implicit.
+The [agent guide](../AGENTS.md#subsystems) owns the workflow rule about naming a subsystem before starting work; this document owns which subsystems there are and where each one ends.
 
 ## Why the partition falls where it does
 
@@ -42,8 +42,8 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 - The thread is the change set's container, not the other way round.
   A change set's provenance (reviewer comment, plan-wide chat, or an unsolicited agent-pushed revision) is an attribute of the change set, not a hard-coded assumption that every change is born from a conversation.
   An inbound push is a new message kind through `src/review/agent-exchange.ts` and rides the same claim-and-atomic-terminal delivery protocol as any other exchange; it does not invent its own delivery path.
-- Diff mode is a component contract, not an engine-owned rendering choice: see [Captain amendments](#captain-amendments).
-- The engine keeps sole ownership of detection, alignment, baseline policy, and attribution; components own only honest presentation of the pair.
+- A component never _finds_ a change. The engine keeps sole ownership of detection, alignment, baseline policy, and attribution, and hands a component the baseline-and-current pair it found.
+- What a component owns is that pair once it has it: its own model-level `(baselineModel, currentModel) -> diffModel`, and whether it has a bespoke diff mode at all or takes the free default. That is a component contract rather than an engine-owned rendering choice - see [Captain amendments](#captain-amendments).
 - A change set describes committed revisions only.
   `src/review/change-set-commit.ts` is the seam: a revision is recorded inside the terminal commit and nowhere else, the reader's current snapshot advances from that log rather than from response files, and folding the log keeps a thread's baseline and provenance stable across every later reply.
   When the full aggregate lands it implements that contract without adopting claim stages as domain state.

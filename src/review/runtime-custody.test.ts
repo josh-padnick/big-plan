@@ -45,10 +45,22 @@ The runtime serves this document and nothing else.
 Today's reality is that the preview seed lands in someone else's review.
 `;
 
-/** Every stored file under one review store, by path and exact content. */
+/**
+ * Every stored file under one review store, by path and exact content, minus
+ * the files a live runtime rewrites on its own timers.
+ *
+ * Custody is about shared review state. A heartbeat or an agent-connection
+ * record tick landing between the capture and the assertion would fail this
+ * comparison without any custody violation having happened.
+ */
 const storeContents = async (
   store: ReviewStore,
 ): Promise<ReadonlyArray<readonly [string, string]>> => {
+  const liveness = [
+    store.heartbeatPath,
+    store.agentHeartbeatPath,
+    store.agentConnectionDirectory,
+  ];
   const entries = await readdir(store.root, {
     recursive: true,
     withFileTypes: true,
@@ -57,6 +69,7 @@ const storeContents = async (
   return Promise.all(
     files
       .map((entry) => join(entry.parentPath, entry.name))
+      .filter((path) => !liveness.some((live) => path.startsWith(live)))
       .sort()
       .map(
         async (path) =>

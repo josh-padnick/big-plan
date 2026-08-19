@@ -514,7 +514,16 @@ const checkArtboardTypeRamp = async (sourceRoot) => {
   return failures;
 };
 
-/** Collects every authored TypeScript module below the source root. */
+/**
+ * Collects every authored TypeScript module below the source root.
+ *
+ * TypeScript only, and deliberately: every rule above matches a Tailwind
+ * utility name, which is a fact about markup. Stylesheets are governed by
+ * scripts/style-contract/check.mjs instead, so an `approved-metric:` comment
+ * in a `.css` file satisfies nothing here - reviewers have asked for one more
+ * than once. If the closed scales should reach authored CSS, that is a new
+ * rule shape rather than a wider file sweep.
+ */
 const findModules = async (root) => {
   const modules = [];
   const visit = async (directory) => {

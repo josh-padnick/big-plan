@@ -188,6 +188,9 @@ const addSignoffTrailer = (messageFile, ident, commentMarker) => {
   if (commentLines.length > 0) {
     writeFileSync(messageFile, contentLines.join("\n"), "utf8");
   }
+  // `core.commentString` needs Git 2.45 or newer. An older Git ignores the
+  // unknown key and falls back to "#", which lets interpret-trailers strip an
+  // authored line that begins with "#". CONTRIBUTING.md records the floor.
   const trailerConfig = commentMarker
     ? []
     : ["-c", `core.commentString=${unusedCommentMarker(rawMessage)}`];

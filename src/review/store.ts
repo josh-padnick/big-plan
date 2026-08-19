@@ -790,6 +790,7 @@ export const freezeRequestAttachments = async ({
   store,
   requestId,
   references,
+  totalByteLimit,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
@@ -797,8 +798,34 @@ export const freezeRequestAttachments = async ({
     readonly id: string;
     readonly alt: string;
   }>;
+  /**
+   * The most these attachments may weigh together. It is checked here, before
+   * any bytes are written, because a caller that sums afterwards has already
+   * copied the images it is about to refuse - and nothing removes them.
+   */
+  readonly totalByteLimit: number;
 }): Promise<ReadonlyArray<ReviewImageAttachment>> => {
   if (!/^[a-f0-9]{16}$/.test(requestId)) throw new Error("Invalid request id");
+  const prepared = await Promise.all(
+    references.map(async (reference) => {
+      const stored = await readReviewImage({ store, id: reference.id });
+      if (stored === undefined)
+        throw new Error(`Unknown or corrupt review image ${reference.id}`);
+      const format = sniffReviewImage(stored.bytes);
+      if (format === undefined)
+        throw new Error(`Unknown or corrupt review image ${reference.id}`);
+      return { reference, stored, format };
+    }),
+  );
+  const totalBytes = prepared.reduce(
+    (total, { stored }) => total + stored.descriptor.byteLength,
+    0,
+  );
+  if (totalBytes > totalByteLimit) {
+    throw new Error(
+      `The images in one message must total ${Math.floor(totalByteLimit / (1024 * 1024))} MiB or less.`,
+    );
+  }
   const temporary = inside({
     base: store.requestAttachmentsDirectory,
     leaf: `.attachments-${requestId}-${randomBytes(6).toString("hex")}`,
@@ -810,13 +837,7 @@ export const freezeRequestAttachments = async ({
   await mkdir(temporary, { recursive: true, mode: DIRECTORY_MODE });
   try {
     const attachments: Array<ReviewImageAttachment> = [];
-    for (const reference of references) {
-      const stored = await readReviewImage({ store, id: reference.id });
-      if (stored === undefined)
-        throw new Error(`Unknown or corrupt review image ${reference.id}`);
-      const format = sniffReviewImage(stored.bytes);
-      if (format === undefined)
-        throw new Error(`Unknown or corrupt review image ${reference.id}`);
+    for (const { reference, stored, format } of prepared) {
       const filename = `image-${reference.id}.${format.extension}`;
       await writeFile(
         inside({ base: temporary, leaf: filename }),
@@ -1695,11 +1716,20 @@ export const hasPreparedMutationJournal = async ({
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
-}): Promise<boolean> =>
-  stat(agentMutationJournalPath({ store, requestId })).then(
-    () => true,
-    () => false,
-  );
+}): Promise<boolean> => {
+  try {
+    await stat(agentMutationJournalPath({ store, requestId }));
+    return true;
+  } catch (error: unknown) {
+    // Only a missing file proves there is no prepared commit. Reading any
+    // other failure as absence would let a cancel withdraw a request whose
+    // revision may already be published, so the caller refuses instead.
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+};
 
 /**
  * The highest claim generation this request has a stage directory for, or 0
@@ -2231,10 +2261,14 @@ export const compactProgressLog = async ({
     progressCompactionChecks.get(store.progressPath) ??
     PROGRESS_COMPACTION_CHECK + 1;
   if (values.length < nextCheck) return false;
+  // A retained record is written back exactly as it was read. The parsed form
+  // is normalized for readers - truncated text, invalid optional fields
+  // dropped, unknown fields removed - and compaction only decides which
+  // records survive, so rewriting from it would quietly edit the ones it kept.
   const compacted = [...readableProgressHistories(values).values()]
     .flatMap((history) => history.entries.slice(-PROGRESS_EVENT_LIMIT))
     .sort((left, right) => left.index - right.index)
-    .map((entry) => entry.event);
+    .map((entry) => values[entry.index] ?? entry.event);
   const reclaimable = values.length - compacted.length;
   if (reclaimable < PROGRESS_COMPACTION_RECLAIM) {
     progressCompactionChecks.set(

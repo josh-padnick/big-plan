@@ -51,7 +51,7 @@ See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence mode
 
 - An MDX plan format made of standard Markdown, GFM, and built-in components; imports, exports, expressions, and inline JSX are rejected and never executed.
 - Positional diagnostics that aggregate recoverable unsupported syntax, unknown components, invalid attributes, and malformed component content after MDX parses.
-- `Slide` markers from a closed, growing catalog, with type-specific authoring guidance, derived structural names, plan-specific h2 titles, and conservative objective lint.
+- `Slide` markers from a closed, growing catalog, with type-specific authoring guidance, derived structural names, plan-specific heading titles, and conservative objective lint.
 - `DecisionAnalysis` components for weighty choices, rendered as keyed qualitative or weighted criteria matrices with lifecycle state, recommendations, required reversibility, optional interactive choice, and calculated totals.
 - `Callout` components for notes, tips, warnings, and dangers.
 - `CodeDiff` components with optional line numbers and change counts, unified and side-by-side views, and scoped line annotations.

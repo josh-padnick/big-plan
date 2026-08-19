@@ -17,10 +17,22 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-// Any commit message on the branch may carry this trailer. The value is a list
-// of exact repository-relative paths. Exact paths only: a glob would let one
-// careless declaration cover work nobody looked at.
+// Any commit message on the branch may carry this trailer. The value is a
+// whitespace- or comma-separated list of exact repository-relative paths, the
+// form CONTRIBUTING.md documents. Exact paths only: a glob would let one
+// careless declaration cover work nobody looked at. A path containing
+// whitespace cannot be declared, which is the price of the list form.
 export const EXCEPTION_TRAILER = "Overwrites-main";
+
+/**
+ * Reads a ref from the environment, treating an empty value as unset.
+ *
+ * CI produces an empty string from an unset interpolation, and an empty ref
+ * reaches `rev-parse` and fails, which would block a push for a configuration
+ * reason rather than for detected loss.
+ */
+export const refOrUnset = (value) =>
+  value === undefined || value.trim() === "" ? undefined : value;
 
 export const DEFAULT_MAIN_REFS = ["origin/main", "main"];
 

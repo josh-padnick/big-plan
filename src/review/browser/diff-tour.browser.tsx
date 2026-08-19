@@ -59,7 +59,7 @@ type DiffTourValue = {
     placeIds: ReadonlyArray<string>,
     accepted: boolean,
   ) => void;
-  /** False while this session may not record anything, so no control offers to. */
+  /** False while this page may not record anything, so no control offers to. */
   readonly canRecordAcceptance: boolean;
   readonly openTour: (tour: OpenTour) => void;
   readonly closeTour: () => void;
@@ -70,11 +70,12 @@ type EscapeKeyboardEvent = KeyboardEvent & {
   bigPlanEscapeHandled?: boolean;
 };
 
-// Acceptance is recorded with the review, so a session that may not write
-// cannot accept anything. The control says why rather than accepting into a
-// place nothing reads back.
+// Acceptance is recorded with the review, so a page that may not write cannot
+// accept anything. Two different pages land here - a read-only session, and a
+// standalone rendered document that was never a session at all - so the label
+// names the shared consequence rather than guessing which cause applies.
 export const UNRECORDABLE_ACCEPTANCE_LABEL =
-  "Accepting is unavailable because this review session is read-only";
+  "Accepting is unavailable because this page cannot record review state";
 
 /** Gives change attachments one shared tour without coupling them together. */
 export const useDiffTour = (): DiffTourValue => {

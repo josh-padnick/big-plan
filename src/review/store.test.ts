@@ -203,6 +203,7 @@ describe("review image store", () => {
       store,
       requestId: "1111111111111111",
       references: [{ id: first.id, alt: "Frozen capture" }],
+      totalByteLimit: MAX_IMAGE_BYTES,
     });
     expect(frozen[0]).toMatchObject({ id: first.id, alt: "Frozen capture" });
     await expect(readFile(frozen[0].path)).resolves.toEqual(
@@ -219,11 +220,37 @@ describe("review image store", () => {
         store,
         requestId: "2222222222222222",
         references: [{ id: "a".repeat(64), alt: "Missing" }],
+        totalByteLimit: MAX_IMAGE_BYTES,
       }),
     ).rejects.toThrow(/Unknown or corrupt/);
     await expect(
       stat(join(store.requestAttachmentsDirectory, "2222222222222222")),
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("should validate the total before creating a request attachment directory", async () => {
+    const { directory, planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const descriptor = await publishReviewImage({
+      store,
+      bytes: tinyPng,
+      alt: "Capture",
+    });
+    const blockedDirectory = join(directory, "not-a-directory");
+    await writeFile(blockedDirectory, "blocks request attachment writes");
+
+    await expect(
+      freezeRequestAttachments({
+        store: { ...store, requestAttachmentsDirectory: blockedDirectory },
+        requestId: "3333333333333333",
+        references: Array.from({ length: 3 }, () => ({
+          id: descriptor.id,
+          alt: "Capture",
+        })),
+        totalByteLimit: tinyPng.byteLength * 2,
+      }),
+    ).rejects.toThrow(/must total/);
   });
 
   it("should refuse oversized and non-regular stored image files", async () => {

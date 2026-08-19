@@ -165,7 +165,8 @@ Choosing **Change** is not a reversible peek: it retracts the saved answer strai
 So choose **Change** and confirm a different option to replace an answer, or **Change** and then **Clear answer** to leave the decision deliberately unanswered.
 
 **Suggest another option** opens a composer that asks what your own words are for.
-By default they are the decision: **Confirm choice** records them as the answer, and they then stand as a **New option** until **Change** reopens the field with the text kept.
+By default they are the decision: **Confirm choice** records them as the answer for this reading session, and they then stand as a **New option** until **Change** reopens the field with the text kept.
+Unlike a chosen option, your own words are not saved with the review and do not come back after a reload.
 Flip it to **Submit as comment** when the agent should act on the words instead: that side uses the review's own comment controls, so **Submit right away** decides whether the comment is sent immediately or staged with the rest of your feedback, and it reaches the agent as **Decision options feedback** with its thread beside the composer.
 **Cancel** leaves the composer from either side, and the comment side needs a live review; a standalone document says so instead of submitting.
 
@@ -193,13 +194,15 @@ The review id comes from the resolved source path, so staged comments survive th
 Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
 Each tab keeps exactly one record, written and cleared only by the tab that owns it, and read once when the page loads.
 The one exception is a record this build can no longer read: any tab claiming its writer identity removes such dead records so they cannot fill browser storage, while readable records from other tabs are never removed.
-A reload merges that record against the runtime's authoritative state automatically, or asks which version to keep when both sides changed the same comment.
+When the runtime answers on reload, that record is merged against its authoritative state automatically, or you are asked which version to keep when both sides changed the same comment.
+When the runtime cannot be reached, the tab's own record is restored on its own and there is nothing to merge it against yet.
 Tabs never read or adopt each other's records; two tabs converge through the runtime instead of through browser storage.
 A composer whose place in the plan no longer exists is not reattached, and the review retains its text for copying until the reviewer discards it.
 Text currently being typed in the plan-wide **Chat** composer exists only in the current page and does not survive a reload.
 Static `big-plan render` documents use browser storage for their document-level comment draft.
 
-Every write of the reviewer's own state is conditional on the state the page last read, so a second tab or the runtime itself cannot have its work replaced without notice.
+Every runtime write of the reviewer's own state is conditional on the state the page last read, so a second tab or the runtime itself cannot have its work replaced without notice.
+The tab's own browser recovery record carries no runtime version; it is this tab's copy of what it was holding, not a claim on the shared state.
 When a write finds the state has moved on, the page reconciles comment by comment.
 If the same comment really was changed in two places, the review shows both versions and asks which one to keep.
 If one copy was submitted while another copy was still being edited, the review asks before staging that edit as new feedback.
@@ -331,7 +334,8 @@ Choose **Accept change** to mark the current place accepted and advance to the n
 Acceptance is a review checklist rather than an edit: it does not change the plan or resolve the comment thread.
 It is recorded with the review, so it survives a reload and a runtime restart, and every place it is counted - the change digest on the agent's message and the navigator touring that same set - reports the same number.
 Acceptance is recorded against the two snapshots the change set compares, so a later revision arrives as its own set to review rather than inheriting what you already accepted.
-A read-only review session records nothing, so its accept controls say why instead of offering a checklist nothing reads back.
+A page that cannot record review state, such as a read-only review session or a standalone rendered document, disables its accept controls and says why.
+If Big Plan cannot reach the runtime while reading recorded acceptances, it warns that the page may show an incomplete count and keeps retrying.
 If recording an acceptance fails, Big Plan says it is not saved yet and keeps retrying; keep the review open until the change set reports itself accepted.
 If the runtime refuses the acceptance outright, the mark comes back off and the review says so, so the page never claims work that nothing recorded.
 After accepting the set, choose **Keep chatting**; a comment thread also offers **Resolve thread**.

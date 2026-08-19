@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import test, { after } from "node:test";
 
 import { ensureBody, GENERATED_BODY_NOTE } from "./prepare-commit-msg.mjs";
+import { gitCheckoutIsAvailable } from "./install.mjs";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const isolatedGitConfigDirectory = mkdtempSync(
@@ -678,5 +679,78 @@ test("a merge commit preserves Git's generated participant body", () => {
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// `prepare` runs this on every install, including installs with no repository
+// and images with no git. Exactly those two absences are absorbed; anything
+// else is a real error about a checkout that may well exist, and reading it as
+// "nothing to install into" would skip the hooks and exit successfully.
+test("should report no checkout for a directory that is not in a repository", () => {
+  const outside = mkdtempSync(join(tmpdir(), "big-plan-no-repo-"));
+  try {
+    assert.equal(gitCheckoutIsAvailable(outside), false);
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("should detect no checkout independently of the caller's Git locale", () => {
+  const previousPath = process.env["PATH"];
+  const previousLocale = process.env["LC_ALL"];
+  const previousGitDirectory = process.env["GIT_DIR"];
+  const fakeBin = mkdtempSync(join(tmpdir(), "big-plan-localized-git-"));
+  const outside = mkdtempSync(join(tmpdir(), "big-plan-localized-no-repo-"));
+  const fakeGit = join(fakeBin, "git");
+  writeFileSync(
+    fakeGit,
+    `#!/bin/sh
+if [ "\${LC_ALL:-}" = C ]; then
+  printf '%s\n' 'fatal: not a git repository' >&2
+else
+  printf '%s\n' 'fatal: kein Git-Repository' >&2
+fi
+exit 128
+`,
+    { mode: 0o755 },
+  );
+  process.env["PATH"] = fakeBin;
+  process.env["LC_ALL"] = "de_DE.UTF-8";
+  delete process.env["GIT_DIR"];
+  try {
+    assert.equal(gitCheckoutIsAvailable(outside), false);
+  } finally {
+    process.env["PATH"] = previousPath;
+    if (previousLocale === undefined) delete process.env["LC_ALL"];
+    else process.env["LC_ALL"] = previousLocale;
+    if (previousGitDirectory === undefined) delete process.env["GIT_DIR"];
+    else process.env["GIT_DIR"] = previousGitDirectory;
+    rmSync(fakeBin, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("should report no checkout when git itself is missing", () => {
+  const previous = process.env["PATH"];
+  const empty = mkdtempSync(join(tmpdir(), "big-plan-no-git-"));
+  process.env["PATH"] = empty;
+  try {
+    assert.equal(gitCheckoutIsAvailable(repoRoot), false);
+  } finally {
+    process.env["PATH"] = previous;
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+test("should raise rather than absorb a misconfigured GIT_DIR", () => {
+  const previous = process.env["GIT_DIR"];
+  const outside = mkdtempSync(join(tmpdir(), "big-plan-bad-git-dir-"));
+  process.env["GIT_DIR"] = join(outside, "nonexistent");
+  try {
+    assert.throws(() => gitCheckoutIsAvailable(outside));
+  } finally {
+    if (previous === undefined) delete process.env["GIT_DIR"];
+    else process.env["GIT_DIR"] = previous;
+    rmSync(outside, { recursive: true, force: true });
   }
 });

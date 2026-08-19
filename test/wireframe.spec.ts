@@ -261,15 +261,24 @@ test("should fit a maximized screen to the panel on both axes", async ({
       await rail.getByRole("button").nth(screenIndex).click();
     }
     const screen = figure.locator("[data-wireframe-screen]:visible");
-    const fit = await screen.evaluate((node) => ({
-      id: node.getAttribute("data-wireframe-screen"),
-      overflow: node.scrollHeight - node.clientHeight,
-      zoom: Number.parseFloat(
-        getComputedStyle(
-          node.querySelector(".wireframe-frame") ?? node,
-        ).zoom.toString(),
-      ),
-    }));
+    const readFit = () =>
+      screen.evaluate((node) => ({
+        id: node.getAttribute("data-wireframe-screen"),
+        overflow: node.scrollHeight - node.clientHeight,
+        zoom: Number.parseFloat(
+          getComputedStyle(
+            node.querySelector(".wireframe-frame") ?? node,
+          ).zoom.toString(),
+        ),
+      }));
+    // The refit for a newly shown screen is scheduled in requestAnimationFrame,
+    // so it lands a frame after the click resolves. Measuring straight away
+    // reads the previous screen's zoom - which is either a false pass or a
+    // false failure, depending on which screen was shown before.
+    await expect
+      .poll(async () => (await readFit()).overflow)
+      .toBeLessThanOrEqual(0);
+    const fit = await readFit();
     expect(
       fit.overflow,
       `maximized screen "${fit.id}" overflows its panel by ${fit.overflow}px`,

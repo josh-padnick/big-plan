@@ -80,19 +80,35 @@ export const reviewRuntimeRefusal = async ({
   });
 };
 
+// A 4xx that names congestion rather than the request itself: something in
+// front of the runtime is busy, so the same request can still be accepted.
+// 425 stays out, because replaying an early request needs a replay-safe policy
+// this boundary does not have.
+const CONGESTED_STATUSES = new Set([408, 429]);
+
 /**
  * True when repeating the request cannot change the answer. The runtime
  * examined this request and rejected it - a decision the plan no longer asks,
  * a session that no longer holds authority - so a retry loop would reissue a
  * refusal forever instead of telling the reader what happened. A 5xx is the
- * runtime failing at a request it accepted, which is worth trying again.
+ * runtime failing at a request it accepted, which is worth trying again, and
+ * so is a 4xx that reports congestion rather than a verdict on the request.
  */
 export const isTerminalReviewRuntimeRefusal = (error: unknown): boolean => {
   const status = reviewRuntimeRefusalStatus(error);
-  return status !== undefined && status < 500;
+  return (
+    status !== undefined && status < 500 && !CONGESTED_STATUSES.has(status)
+  );
 };
 
-/** Normalizes browser transport failures while preserving application errors. */
+/**
+ * Normalizes browser transport failures while preserving application errors.
+ *
+ * A refusal outranks the timeout flag. The runtime answers before its body is
+ * read, so an abort that fires during that read would otherwise turn a verdict
+ * the runtime already gave into "unavailable", and a caller would retry a
+ * request that was refused.
+ */
 export const normalizeReviewRuntimeRequestError = ({
   error,
   timedOut,
@@ -100,6 +116,8 @@ export const normalizeReviewRuntimeRequestError = ({
   readonly error: unknown;
   readonly timedOut: boolean;
 }): unknown =>
-  timedOut || error instanceof TypeError
-    ? new ReviewRuntimeUnavailableError({ cause: error })
-    : error;
+  error instanceof ReviewRuntimeRefusedError
+    ? error
+    : timedOut || error instanceof TypeError
+      ? new ReviewRuntimeUnavailableError({ cause: error })
+      : error;

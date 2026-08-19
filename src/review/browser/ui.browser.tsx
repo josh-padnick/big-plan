@@ -398,14 +398,18 @@ export const Tooltip = ({
           <span
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-auto fixed z-[2147483647] w-max max-w-[min(11rem,calc(100vw_-_2rem))] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs leading-[1.35] font-semibold whitespace-normal text-[var(--bg)] shadow-floating [overflow-wrap:anywhere] ${position.placement === "above" ? "-translate-y-full" : ""}`}
+            className={`pointer-events-auto fixed z-[2147483647] w-max max-w-[min(11rem,calc(100vw_-_2rem))] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-ink px-2 py-1 text-center text-2xs leading-snug font-semibold whitespace-normal text-paper shadow-floating [overflow-wrap:anywhere] ${position.placement === "above" ? "-translate-y-full" : ""}`}
             style={{
               top: position.top,
               left: position.left,
               maxHeight: position.maxHeight,
             }}
             onMouseEnter={show}
-            onMouseLeave={hide}
+            // Scheduled, not immediate: the pointer travelling from the
+            // tooltip back to its anchor would otherwise close it before the
+            // anchor's own enter handler could cancel the hide, and the next
+            // reveal would wait out the full open delay again.
+            onMouseLeave={scheduleHide}
             {...tooltipProps}
           >
             {label}

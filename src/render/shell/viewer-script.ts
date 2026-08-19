@@ -2513,7 +2513,7 @@ const wireDecisions = () => {
     const proposalTitle = own("[data-decision-proposal-title]");
     const proposalRecord = own("[data-decision-proposal-record]");
     const propose = own("[data-option-proposal]");
-    const proposeLink = own(".decision-propose-link");
+    const proposeLink = own("[data-decision-propose-link]");
     const choices = ownAll("[data-decision-choice]");
     const panels = ownAll("[data-rationale-panel]");
     const cells = ownAll("[data-decision-column]");
@@ -2536,7 +2536,7 @@ const wireDecisions = () => {
     // them, sending them and showing them, and a second copy of that here was
     // what made this card feel like its own little application.
     const commentActions = own("[data-decision-comment-actions]");
-    const proposalActions = own(".decision-proposal-actions");
+    const proposalActions = own("[data-decision-proposal-actions]");
     const commentSubmit = own("[data-decision-comment-submit]");
     const sendNow = own("[data-decision-send-now]");
     const modeRow = own("[data-decision-mode]");
@@ -2975,6 +2975,25 @@ const wireDecisions = () => {
     const setSuperseded = (shown) => {
       if (supersededNotice !== null) supersededNotice.hidden = !shown;
     };
+    // One decision holds one answer, so the handoff array an embedding host
+    // reads holds one record for it. A confirmation replaces the record rather
+    // than appending beside it, and every path that takes the answer back -
+    // change, clear, and the store resetting the card - removes it, so the
+    // array never says the reader chose something they have retracted.
+    const recordDecisionAnswer = (record) => {
+      const answers = window.bigPlanDecisionAnswers || [];
+      window.bigPlanDecisionAnswers = [
+        ...answers.filter((entry) => entry.decision !== decision.id),
+        record,
+      ];
+    };
+    const forgetDecisionAnswer = () => {
+      const answers = window.bigPlanDecisionAnswers;
+      if (answers === undefined) return;
+      window.bigPlanDecisionAnswers = answers.filter(
+        (entry) => entry.decision !== decision.id,
+      );
+    };
     const showPersistenceFailure = () => {
       if (answerLead !== null) answerLead.textContent = "Answer not saved";
       if (answerCaption !== null) {
@@ -3051,8 +3070,7 @@ const wireDecisions = () => {
         option: choice.value,
         proposal: proposing ? proposalValue() : "",
       };
-      window.bigPlanDecisionAnswers = window.bigPlanDecisionAnswers || [];
-      window.bigPlanDecisionAnswers.push(record);
+      recordDecisionAnswer(record);
       decision.dispatchEvent(
         new CustomEvent("bigplan:decision-answered", {
           bubbles: true,
@@ -3084,6 +3102,7 @@ const wireDecisions = () => {
         // keyboard reader continues from here.
         const first = choices.find((candidate) => !proposes(candidate));
         if (first !== undefined) first.focus();
+        forgetDecisionAnswer();
         // Clicking change already retracted the stored answer; announcing it
         // again keeps the record empty even when the reader reached the
         // chooser some other way, and repeating a retraction changes nothing.
@@ -3139,6 +3158,7 @@ const wireDecisions = () => {
         proposalText.value = "";
       }
       if (answerTitle !== null) answerTitle.textContent = "";
+      forgetDecisionAnswer();
       decision.removeAttribute("data-decision-answered");
       for (const header of columnHeaders) {
         header.removeAttribute("data-option-chosen");
@@ -3160,6 +3180,7 @@ const wireDecisions = () => {
     document.addEventListener("bigplan:review-authority", syncAuthority);
     change.addEventListener("click", () => {
       changingAnswer = true;
+      forgetDecisionAnswer();
       decision.removeAttribute("data-decision-answered");
       for (const header of columnHeaders) {
         header.removeAttribute("data-option-chosen");

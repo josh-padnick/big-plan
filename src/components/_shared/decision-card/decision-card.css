@@ -564,7 +564,7 @@
   article .decision-proposal-title {
     color: var(--ink-c);
     font-size: 0.875rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
   }
   article .decision-proposal-title[hidden],
   article .decision-proposal-record[hidden] {
@@ -612,7 +612,7 @@
   article .decision-mode-side {
     color: var(--color-muted);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
   }
   /* The live side is the one the reader is in, so it carries the ink and the
      other recedes. */
@@ -632,8 +632,11 @@
     cursor: pointer;
     color: var(--ink-c);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
   }
+  /* The toggle's own geometry, not a scale step: the track is a fixed control
+     the two labels sit between, and the knob is inset by the track's border
+     plus a hairline so the pill reads as closed at either end. */
   article .decision-mode-track {
     position: relative;
     display: inline-flex;
@@ -853,7 +856,7 @@
     background: transparent;
     color: var(--color-muted);
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
   }
   article .decision-clear:hover {
     color: var(--color-ink);
@@ -861,7 +864,7 @@
   }
   article .decision-clear:focus-visible {
     outline: none;
-    border-radius: 0.375rem;
+    border-radius: var(--radius-md);
     color: var(--color-ink);
     box-shadow: var(--elevation-focus);
   }

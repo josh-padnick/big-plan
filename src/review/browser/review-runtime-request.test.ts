@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isReviewRuntimeUnavailable,
+  isTerminalReviewRuntimeRefusal,
   normalizeReviewRuntimeRequestError,
   reviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
@@ -54,4 +55,49 @@ describe("review runtime request errors", () => {
   it("should report no refusal status for an ordinary failure", () => {
     expect(reviewRuntimeRefusalStatus(new Error("boom"))).toBeUndefined();
   });
+
+  it("should keep a refusal a refusal when the timeout fires during the body read", async () => {
+    const refusal = await reviewRuntimeRefusal({
+      status: 409,
+      readBody: () =>
+        Promise.resolve({ error: "The plan no longer asks this." }),
+    });
+
+    expect(
+      normalizeReviewRuntimeRequestError({ error: refusal, timedOut: true }),
+    ).toBe(refusal);
+    expect(
+      isTerminalReviewRuntimeRefusal(
+        normalizeReviewRuntimeRequestError({ error: refusal, timedOut: true }),
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    { status: 408, name: "a request timeout" },
+    { status: 429, name: "too many requests" },
+  ])("should keep $name retryable", async ({ status }) => {
+    expect(
+      isTerminalReviewRuntimeRefusal(
+        await reviewRuntimeRefusal({
+          status,
+          readBody: () => Promise.resolve({}),
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([{ status: 409 }, { status: 425 }, { status: 400 }])(
+    "should keep $status terminal",
+    async ({ status }) => {
+      expect(
+        isTerminalReviewRuntimeRefusal(
+          await reviewRuntimeRefusal({
+            status,
+            readBody: () => Promise.resolve({}),
+          }),
+        ),
+      ).toBe(true);
+    },
+  );
 });

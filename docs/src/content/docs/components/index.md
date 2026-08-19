@@ -31,7 +31,7 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [Part](/components/part/)                                 | Divide the plan's sections into numbered acts rendered as anchored divider bands.                                    |
 | [QuickSummary](/components/quick-summary/)                | Open the plan with its few key points as a standout card, capped at five bullets and six hundred characters.         |
 | [QuickDecision](/components/quick-decision/)              | Answer one small brief-format question; repeat the component to batch independent calls.                             |
-| [Slide](/components/slide/)                               | Apply a recurring slide type and its specific authoring guidance while keeping the h2 as the plan-specific title.    |
+| [Slide](/components/slide/)                               | Apply a recurring slide type and its guidance while keeping its heading as the plan-specific title.                  |
 | [TableOfContents](/components/table-of-contents/)         | Show the plan in one look: one linked row per section with its one-line gist.                                        |
 | [Wireframe](/components/wireframe/)                       | Draw true-size product screens and connect them into a short walkable prototype.                                     |
 

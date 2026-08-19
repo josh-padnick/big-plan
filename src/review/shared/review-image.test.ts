@@ -75,4 +75,25 @@ describe("review images", () => {
       isReviewImageWithinLimits({ byteLength: 10, width: 5000, height: 5001 }),
     ).toBe(false);
   });
+
+  // The builder and the pattern have to agree on what an alt may hold, or a
+  // reference is produced that nothing downstream recognizes - and the image
+  // is silently never frozen as an attachment. Both line breaks count: a
+  // lone carriage return is a real line break in text pasted from Windows.
+  it("should keep a line break out of a reference, and out of what one matches", () => {
+    const built = buildReviewImageReference({
+      alt: "Wallet screen\r\nafter retry",
+      id: reviewImageId("a".repeat(64)),
+    });
+
+    expect(built).not.toMatch(/[\r\n]/u);
+    expect(extractReviewImageReferences(built)).toEqual([
+      { id: reviewImageId("a".repeat(64)), alt: "Wallet screen after retry" },
+    ]);
+    expect(
+      extractReviewImageReferences(
+        `![Wallet\rscreen](review-image:${"a".repeat(64)})`,
+      ),
+    ).toEqual([]);
+  });
 });

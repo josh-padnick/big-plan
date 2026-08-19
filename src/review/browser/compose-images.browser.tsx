@@ -3,6 +3,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -18,10 +19,15 @@ import {
 } from "../shared/review-image.js";
 import { ReviewImage } from "./review-image.browser.js";
 import {
+  insertAtComposerAnchor,
+  rebaseComposerInsertion,
+  type ComposerInsertionAnchor,
+} from "./compose-image-anchor.js";
+import {
   reviewWriteRefusal,
   type ReviewWriteAvailability,
 } from "./review-write-availability.js";
-import { Textarea } from "./ui.browser.js";
+import { Button, Textarea } from "./ui.browser.js";
 
 // Uploading is the one image action that still needs the live session: it
 // writes into the plan's review store, so it carries the session token the
@@ -65,13 +71,35 @@ export const ComposeImages = ({
   readonly id?: string;
 }) => {
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const [pending, setPending] = useState(0);
+  const picker = useRef<HTMLInputElement>(null);
+  const captureActive = useRef(false);
+  const bodyGeneration = useRef(0);
+  const insertionAnchor = useRef<ComposerInsertionAnchor>({ body, offset: 0 });
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     if (autoFocus) textarea.current?.focus();
   }, [autoFocus]);
+  // External body replacement and unmount invalidate pending captures.
+  useLayoutEffect(() => {
+    if (body === insertionAnchor.current.body) return;
+    bodyGeneration.current += 1;
+    insertionAnchor.current = { body, offset: body.length };
+  }, [body]);
+  useLayoutEffect(
+    () => () => {
+      bodyGeneration.current += 1;
+    },
+    [],
+  );
   const references = extractReviewImageReferences(body);
-  const upload = async (file: File, caret: number, altOverride?: string) => {
+  const upload = async (
+    file: File,
+    captureGeneration: number,
+    altOverride?: string,
+  ): Promise<void> => {
+    const isCurrentCapture = () => captureGeneration === bodyGeneration.current;
+    if (!isCurrentCapture()) return;
     // Nothing typed is touched: only the digest reference this would have
     // inserted is withheld, so the composer keeps exactly what it had.
     const refusal = reviewWriteRefusal({
@@ -91,7 +119,6 @@ export const ComposeImages = ({
       setError("Each image must be 10 MiB or smaller.");
       return;
     }
-    setPending((value) => value + 1);
     try {
       const response = await fetch("/api/review-images", {
         method: "POST",
@@ -109,33 +136,53 @@ export const ComposeImages = ({
           "error" in value && value.error ? value.error : "Image upload failed",
         );
       }
-      const current = textarea.current?.value ?? body;
-      onBodyChange(
-        `${current.slice(0, caret)}${buildReviewImageReference({ alt: value.alt, id: value.id })}${current.slice(caret)}`,
-      );
+      if (!isCurrentCapture()) return;
+      const reference = buildReviewImageReference({
+        alt: value.alt,
+        id: value.id,
+      });
+      insertionAnchor.current = insertAtComposerAnchor({
+        anchor: insertionAnchor.current,
+        reference,
+      });
+      onBodyChange(insertionAnchor.current.body);
       setError("");
     } catch (uploadError: unknown) {
+      if (!isCurrentCapture()) return;
       setError(
         uploadError instanceof Error
           ? uploadError.message
           : "Image upload failed",
       );
-    } finally {
-      setPending((value) => value - 1);
     }
   };
   const capture = (files: ReadonlyArray<File>, altOverride?: string) => {
+    if (captureActive.current) {
+      setError("Wait for the current image upload to finish.");
+      return;
+    }
     if (references.length + files.length > MAX_IMAGES_PER_MESSAGE) {
       setError(
         `A message can contain at most ${MAX_IMAGES_PER_MESSAGE} images.`,
       );
       return;
     }
-    const caret = textarea.current?.selectionStart ?? body.length;
-    void files.reduce(
-      (chain, file) => chain.then(() => upload(file, caret, altOverride)),
-      Promise.resolve(),
-    );
+    captureActive.current = true;
+    setPending(true);
+    const currentBody = textarea.current?.value ?? body;
+    const caret = textarea.current?.selectionStart ?? currentBody.length;
+    const captureGeneration = bodyGeneration.current;
+    insertionAnchor.current = { body: currentBody, offset: caret };
+    void (async () => {
+      try {
+        for (const file of files) {
+          await upload(file, captureGeneration, altOverride);
+        }
+      } finally {
+        captureActive.current = false;
+        setPending(false);
+      }
+    })();
   };
   const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.items).flatMap((item) => {
@@ -161,7 +208,13 @@ export const ComposeImages = ({
         value={body}
         maxLength={maxLength}
         placeholder={placeholder}
-        onChange={(event) => onBodyChange(event.target.value)}
+        onChange={(event) => {
+          insertionAnchor.current = rebaseComposerInsertion({
+            anchor: insertionAnchor.current,
+            body: event.target.value,
+          });
+          onBodyChange(event.target.value);
+        }}
         onPaste={paste}
         onKeyDown={onKeyDown}
       />
@@ -176,11 +229,36 @@ export const ComposeImages = ({
           ))}
         </div>
       ) : null}
-      <p className="mt-1 mb-0 text-2xs text-muted">
-        Markdown and images supported
-      </p>
+      {/* Paste and drop cover the common capture, but neither is available to
+          a reader working from the keyboard or from a file they already have
+          on disk, so the picker is the third way in rather than a fourth
+          convenience. */}
+      <input
+        ref={picker}
+        className="hidden"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        multiple
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          event.target.value = "";
+          if (files.length > 0) capture(files);
+        }}
+      />
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => picker.current?.click()}
+        >
+          Choose image
+        </Button>
+        <p className="m-0 text-2xs text-muted">Markdown and images supported</p>
+      </div>
       <div className="mt-1 flex items-center gap-2">
-        {pending > 0 ? (
+        {pending ? (
           <span className="text-2xs text-muted">Uploading…</span>
         ) : null}
         {error ? (

@@ -143,6 +143,19 @@ describe("agent command connector model identity", () => {
       environmentValue: undefined,
       expectedModel: undefined,
     },
+    // A name is what a reviewer reads on the badge, so neither of these can be
+    // allowed to reach it: whitespace names nothing, and an overlong value is
+    // not a model name a connector meant to report.
+    {
+      label: "no model for a whitespace-only report",
+      environmentValue: "   ",
+      expectedModel: undefined,
+    },
+    {
+      label: "no model for a report past the length bound",
+      environmentValue: "m".repeat(81),
+      expectedModel: undefined,
+    },
   ])("should persist $label", async ({ environmentValue, expectedModel }) => {
     if (environmentValue === undefined) {
       delete process.env["BIG_PLAN_AGENT_MODEL"];
@@ -195,6 +208,75 @@ describe("agent command connector model identity", () => {
             claimedModel: expectedModel,
           });
         }
+      } finally {
+        await review.close();
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // `note` carries the connector's model too, and it is the command an agent
+  // runs repeatedly during a turn - so a connector that starts reporting a
+  // model mid-turn has to reach the badge through this path as well.
+  it("should persist the connector model reported on a note", async () => {
+    delete process.env["BIG_PLAN_AGENT_MODEL"];
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-cli-agent-model-note-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this question.\n";
+    try {
+      await writeFile(planPath, source);
+      const review = await startReviewRuntime({ planPath });
+      try {
+        await writeAgentRequest({
+          store: review.store,
+          request: messageAgentRequest({
+            kind: "chat",
+            requestId: "dddddddddddddddd",
+            sessionId: review.sessionId,
+            planId: review.planId,
+            premiseSnapshot: deriveSnapshotDigest(source),
+            createdAt: "2026-08-12T12:00:00.000Z",
+            body: "What should we prioritize?",
+          }),
+        });
+        await agentCommand(["next", planPath]);
+        const claimed = (
+          await readAgentExchange({
+            store: review.store,
+            sessionId: review.sessionId,
+            planId: review.planId,
+          })
+        ).requests[0];
+        expect(claimed).not.toHaveProperty("claimedModel");
+        const agentToken = claimed?.claimedBy;
+        if (typeof agentToken !== "string") {
+          throw new Error("The next command minted no claim token");
+        }
+
+        process.env["BIG_PLAN_AGENT_MODEL"] = "  Grok 4.6  ";
+        await agentCommand([
+          "note",
+          planPath,
+          "Reading the request",
+          "--agent",
+          agentToken,
+        ]);
+
+        // A note renews the claim, so the model it reports lands on the
+        // request's `claimedModel` - the same field the `next` path writes,
+        // and the one the badge reads.
+        expect(
+          (
+            await readAgentExchange({
+              store: review.store,
+              sessionId: review.sessionId,
+              planId: review.planId,
+            })
+          ).requests[0],
+        ).toMatchObject({ claimedModel: { name: "Grok 4.6" } });
       } finally {
         await review.close();
       }

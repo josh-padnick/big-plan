@@ -1049,9 +1049,12 @@ export const runRefusedAgentCli = async (
   args: ReadonlyArray<string>,
 ): Promise<{ readonly stdout: string; readonly stderr: string }> => {
   const { code, stdout, stderr } = await spawnAgentCli(args);
-  if (code === 0) {
+  // A signal death reports `code: null`. Only a positive exit status is the
+  // CLI deciding to refuse; anything else is a crash wearing a refusal's
+  // clothes, and the journey would assert refusal text against partial output.
+  if (code === null || code === 0) {
     throw new Error(
-      `Agent CLI was expected to refuse this command.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+      `Agent CLI was expected to refuse this command, but it exited with ${code === null ? "a signal" : "code 0"}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
     );
   }
   return { stdout, stderr };
@@ -1065,11 +1068,20 @@ export const runRefusedAgentCli = async (
  * the encoding from reading as a missing field once every few hundred runs.
  */
 export const agentIdOf = (stdout: string, field: string): string => {
-  const id = new RegExp(`${field}: "?([a-f0-9]{16})"?`, "u").exec(stdout)?.[1];
-  if (id === undefined) {
+  // The field is matched literally, and bounded at both ends: without the
+  // leading boundary a request for "agent_token" matches "notagent_token", and
+  // without the trailing one the first 16 characters of a longer value read as
+  // a whole id. Either way the test would compare something it did not ask for.
+  const literal = field.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const id = new RegExp(
+    `(?<![A-Za-z0-9_])${literal}: (?:"([a-f0-9]{16})"|([a-f0-9]{16}))(?![A-Za-z0-9_])`,
+    "u",
+  ).exec(stdout);
+  const value = id?.[1] ?? id?.[2];
+  if (value === undefined) {
     throw new Error(`The agent CLI printed no ${field}:\n${stdout}`);
   }
-  return id;
+  return value;
 };
 
 /**

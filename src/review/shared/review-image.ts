@@ -66,9 +66,25 @@ export const buildReviewImageReference = ({
 }: {
   readonly alt: string;
   readonly id: ReviewImageId;
-}): string => `![${alt.replaceAll("]", "")}](review-image:${id})`;
+  // The matching pattern excludes "]" and a newline from the alt text, so both
+  // are removed here rather than only the bracket: an alt carrying a newline
+  // produced Markdown that nothing downstream could recognize, and the image
+  // was silently never frozen as an attachment.
+}): string =>
+  `![${alt.replaceAll(/[\]\r\n]+/gu, " ").trim()}](review-image:${id})`;
 
-const REFERENCE = /!\[([^\]\n]*)\]\(review-image:([a-f0-9]{64})\)/gu;
+/**
+ * The one pattern that recognizes a stored image reference.
+ *
+ * Extraction and rewriting must agree exactly: if one copy of this changed,
+ * `materializeReviewImages` would leave references unrewritten and say
+ * nothing, so there is only one copy. Callers that need their own lastIndex
+ * take a fresh instance through `reviewImageReferencePattern()`.
+ */
+const REFERENCE = /!\[([^\]\r\n]*)\]\(review-image:([a-f0-9]{64})\)/gu;
+
+export const reviewImageReferencePattern = (): RegExp =>
+  new RegExp(REFERENCE.source, REFERENCE.flags);
 
 /** Extracts valid image references in source order, preserving duplicates. */
 export const extractReviewImageReferences = (

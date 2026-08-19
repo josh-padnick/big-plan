@@ -44,7 +44,7 @@ npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
 npx big-plan service status
 npx big-plan agent <input.mdx>
-npx big-plan agent next <input.mdx> --wait [--agent <token>]
+npx big-plan agent next <input.mdx> [--wait] [--agent <token>]
 npx big-plan agent note <input.mdx> "<progress>" --agent <token>
 npx big-plan agent respond <input.mdx> <response.json> --agent <token>
 npx big-plan update --check
@@ -208,7 +208,9 @@ a model provider itself. The launched coding-agent session uses:
 it as `agent_token` together with ready-to-run `note_command` and
 `respond_command` strings.
 It also returns `candidate_plan`: this claim's own copy of the plan, and the
-only file the agent edits.
+only repository file the agent edits.
+The agent writes its response JSON to the returned `response_file`, then runs
+the returned `respond_command` to validate and publish both files.
 The plan path itself stays read-only identity, so relative asset paths and
 repository context still resolve against it, and Big Plan writes it only when a
 response publishes.

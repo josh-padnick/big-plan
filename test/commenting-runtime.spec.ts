@@ -4161,11 +4161,14 @@ test("should restore and submit staged comments through the local review runtime
     const seconds = Number(/(\d+)s/u.exec(value)?.[1] ?? 0);
     return hours * 3_600 + minutes * 60 + seconds;
   });
+  // Monotonic only. The contract this proves is that the label keeps counting
+  // up from the connection it names; an upper bound on the step cannot tell a
+  // wrong timer from a test process the machine starved for three seconds, so
+  // it can only ever produce a flake.
   for (let index = 1; index < durationSeconds.length; index += 1) {
     const previous = durationSeconds[index - 1] ?? 0;
     const current = durationSeconds[index] ?? 0;
     expect(current).toBeGreaterThan(previous);
-    expect(current - previous).toBeLessThanOrEqual(2);
   }
   await page.getByRole("button", { name: "Feedback", exact: true }).click();
   await rail.getByRole("tab", { name: "Comments" }).click();

@@ -135,15 +135,32 @@ describe("createDecisionAnswers", () => {
     expect(diagnostics).toHaveLength(1);
   });
 
-  it("holds the served revision over an out-of-band older record", async () => {
+  it("holds the served answer body over an out-of-band older record", async () => {
     const { store, answers } = await answersFor();
-    await answers.write({ version: 1, revision: 3, answers: [] });
+    await answers.write({
+      version: 1,
+      revision: 3,
+      answers: [
+        {
+          decisionId: "decision",
+          optionId: "option",
+          optionTitle: "Option",
+          prompt: "Choose an option",
+          answeredAt: "2026-08-18T12:00:00.000Z",
+          premiseSnapshot: "2222222222222222",
+          decisionDigest: "1111111111111111",
+        },
+      ],
+    });
     await writeFile(
       store.inputsPath,
       `${JSON.stringify({ version: 1, revision: 1, answers: [] })}\n`,
     );
 
-    expect((await answers.read()).revision).toBe(3);
+    await expect(answers.read()).resolves.toMatchObject({
+      revision: 3,
+      answers: [expect.objectContaining({ decisionId: "decision" })],
+    });
   });
 
   it("serves the stored revision once it catches back up", async () => {

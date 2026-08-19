@@ -183,6 +183,46 @@ const deployCompositeHook = (hooksDirectory, hookName, commonDirectory) => {
   }
 };
 
+/**
+ * Whether there is a Git checkout here at all, and a `git` to ask.
+ *
+ * A missing repository is the one failure `prepare` absorbs, so it is answered
+ * before installing rather than inferred from a caught error - which would
+ * also swallow the refusals this script exists to raise.
+ *
+ * Two absences count, and only two: no `git` on PATH (`ENOENT` from the spawn)
+ * and a tree that simply is not in a repository. Anything else - unreadable
+ * git data, a broken install - is a real error about a checkout that may well
+ * exist, and it is raised rather than read as "nothing to install into".
+ *
+ * `GIT_DIR` is what separates the second case from a misconfiguration, because
+ * git reports both as "not a git repository". Nobody sets `GIT_DIR` by
+ * accident: if it is set and git still cannot find a repository, the answer is
+ * that the setting is wrong, not that there is nothing here.
+ */
+export const gitCheckoutIsAvailable = (repoRoot) => {
+  try {
+    execFileSync("git", ["rev-parse", "--git-common-dir"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, LC_ALL: "C" },
+    });
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return false;
+    }
+    if (
+      process.env["GIT_DIR"] === undefined &&
+      /not a git repository/i.test(String(error?.stderr ?? ""))
+    ) {
+      return false;
+    }
+    throw error;
+  }
+};
+
 export const installGitHooks = (repoRoot) => {
   const committedHooksDirectory = resolve(repoRoot, ".githooks");
   const commonDirectory = execFileSync(
@@ -260,8 +300,22 @@ export const installGitHooks = (repoRoot) => {
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) {
   const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
-  const hooksPath = installGitHooks(repoRoot);
-  console.log(
-    `git hooks installed: core.hooksPath -> ${hooksPath} (${repoRoot})`,
-  );
+  // package.json runs this from `prepare`, so it executes on every install -
+  // including installs with no repository and images with no git, such as a
+  // Docker build over an extracted tarball. Hooks are a contributor
+  // convenience, so having nothing to install into must not fail the install.
+  //
+  // Only that case is tolerated. A refusal - a managed dispatcher owned by
+  // another repository, an unrelated hook already in place - is this script
+  // protecting someone's setup, and it has to keep failing loudly.
+  if (!gitCheckoutIsAvailable(repoRoot)) {
+    console.log(
+      "git hooks not installed: no Git checkout here. They are a contributor convenience, so the install continues.",
+    );
+  } else {
+    const hooksPath = installGitHooks(repoRoot);
+    console.log(
+      `git hooks installed: core.hooksPath -> ${hooksPath} (${repoRoot})`,
+    );
+  }
 }

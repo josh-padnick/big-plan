@@ -46,6 +46,7 @@ import {
   revertPlanSource,
   settleInterruptedCommitsFor,
 } from "./staged-plan-mutation.js";
+import { settlementRefusal } from "./review-route-settlement.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
@@ -144,7 +145,7 @@ type FeedbackSubmission = {
 // One submission carries a set of comments, not a sequence, so a retry that
 // sends the same comments in a different order has to reach the same stored
 // submission instead of duplicating the artifacts and the agent request.
-const canonicalSubmissionComments = (
+export const canonicalSubmissionComments = (
   comments: ReadonlyArray<ReviewComment>,
 ): ReadonlyArray<{
   readonly id: string;
@@ -386,18 +387,12 @@ export const submitFeedback = async (
     operation: "A feedback submission",
   });
   if (versionRefusal !== undefined) return versionRefusal;
-  const comments = await planRenderer.validateUpdates(payload.comments);
+  // Read the existing comments through the anchored store, not the one the
+  // renderer was built with, so a symlinked review directory cannot redirect
+  // them outside the chain this route just anchored.
+  const comments = await planRenderer.validateUpdates(payload.comments, store);
   if (comments.length === 0) {
     return refusal({ status: 400, reason: "Nothing to send" });
-  }
-  try {
-    await assertCommentsAreUnresolved({
-      store,
-      commentIds: comments.map((comment) => comment.id),
-    });
-  } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
   }
   const alreadySent = await planRenderer.readStoredComments(store.sentPath);
   const sentById = new Map(alreadySent.map((comment) => [comment.id, comment]));
@@ -416,6 +411,18 @@ export const submitFeedback = async (
     });
   }
   const newlySent = comments.filter((comment) => !sentById.has(comment.id));
+  // The refusal is defined for new work, so it is asked of new work only. A
+  // resend of something already sent is the retry this route answers with 200,
+  // and refusing it would make a retry harder to complete than the first try.
+  try {
+    await assertCommentsAreUnresolved({
+      store,
+      commentIds: newlySent.map((comment) => comment.id),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   const submittedIds = new Set(comments.map((comment) => comment.id));
   const remainingDrafts = (
     await planRenderer.readStoredComments(store.draftsPath)
@@ -459,6 +466,7 @@ export const submitFeedback = async (
         store,
         requestId: submissionId,
         references: imageReferences,
+        totalByteLimit: MAX_MESSAGE_IMAGE_BYTES,
       });
     } catch (error: unknown) {
       return refusal({
@@ -467,17 +475,6 @@ export const submitFeedback = async (
           error instanceof Error
             ? error.message
             : "An image could not be attached",
-      });
-    }
-    if (
-      attachments.reduce(
-        (total, attachment) => total + attachment.byteLength,
-        0,
-      ) > MAX_MESSAGE_IMAGE_BYTES
-    ) {
-      return refusal({
-        status: 400,
-        reason: "Images in one message exceed the 20 MiB limit",
       });
     }
     const source = await readFile(resolvedPlanPath, "utf8");
@@ -649,8 +646,7 @@ export const revertAgentChanges = async (
       source: baselineSource,
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+    return settlementRefusal(error);
   }
   readerProgress.accept(request.baselineSnapshot);
   return jsonResponse({
@@ -707,8 +703,7 @@ export const deleteSentComment = async (
       ),
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+    return settlementRefusal(error);
   }
   const exchange = settled ? await commentHistory() : initialExchange;
   const answeredRequestIds = new Set(

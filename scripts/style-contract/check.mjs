@@ -129,13 +129,33 @@ const placementFailure = ({ relativePath, renderStylesheets }) => {
   return componentOwns(segments) ? undefined : NO_VISUAL_OWNER;
 };
 
-/** Reports a rule that styles only classes, which no view needs a stylesheet for. */
-const isClassOnlyRule = (rule) => {
-  const selectors = postcss.list.comma(stripSelectorComments(rule.selector));
-  return (
-    selectors.length > 0 &&
-    selectors.every((selector) => CLASS_ONLY_COMPOUND.test(selector.trim()))
-  );
+/**
+ * Reports a rule that styles only classes, which no view needs a stylesheet
+ * for.
+ *
+ * One class-only selector anywhere in the list is enough. A list is a set of
+ * rules sharing a body, so `.owned, article .owned` still styles `.owned`
+ * directly; requiring every selector to qualify let a prohibited one ride in
+ * beside a permitted one.
+ */
+const classOnlySelectorsOf = (rule) =>
+  postcss.list
+    .comma(stripSelectorComments(rule.selector))
+    .map((selector) => selector.trim())
+    .filter((selector) => CLASS_ONLY_COMPOUND.test(selector));
+
+const isClassOnlyRule = (rule) => classOnlySelectorsOf(rule).length > 0;
+
+/**
+ * Names which selectors offend when only some of a list do, so a mixed list
+ * says which half to move rather than leaving the author to work it out.
+ */
+const classOnlyClause = (rule) => {
+  const offenders = classOnlySelectorsOf(rule);
+  const all = postcss.list.comma(stripSelectorComments(rule.selector));
+  return offenders.length === all.length
+    ? ""
+    : ` in "${offenders.join('", "')}"`;
 };
 
 /**
@@ -462,7 +482,7 @@ export const checkStylesheetContract = async ({
             diagnostic({
               relativePath,
               node: rule,
-              message: `"${rule.selector}" selects only classes, so it styles an element its own view renders; put these declarations in utilities on that markup, add an adjacent "${UTILITY_FORM_MARKER}" comment spelling out the utility string when it is genuinely unreadable, or declare this file a drawing system in scripts/style-contract/allowlist.mjs.`,
+              message: `"${rule.selector}" selects only classes${classOnlyClause(rule)}, so it styles an element its own view renders; put these declarations in utilities on that markup, add an adjacent "${UTILITY_FORM_MARKER}" comment spelling out the utility string when it is genuinely unreadable, or declare this file a drawing system in scripts/style-contract/allowlist.mjs.`,
             }),
           );
         }

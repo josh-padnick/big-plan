@@ -36,6 +36,7 @@ import {
 } from "./shared/agent-model.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
 import { requestIsOutstanding } from "./shared/request-lifecycle.js";
+import { compareTimestamps } from "./shared/timestamp-order.js";
 
 const TEXT_LIMIT = 4000;
 const MESSAGE_LIMIT = 200;
@@ -870,12 +871,17 @@ export const validateAgentResponse = (value: unknown): AgentResponse => {
     if (entry.state !== "changed") {
       return result;
     }
+    // Disk state is held to the bounds the live draft path enforces, or a
+    // hand-edited response could reach the viewer carrying value the runtime
+    // would have refused on the way in.
     if (
       !Array.isArray(entry.changeTargets) ||
       entry.changeTargets.length === 0 ||
+      entry.changeTargets.length > MESSAGE_LIMIT ||
       entry.changeTargets.some(
         (target) => typeof target !== "string" || !BLOCK_ID.test(target),
-      )
+      ) ||
+      new Set(entry.changeTargets).size !== entry.changeTargets.length
     ) {
       throw new AgentExchangeRejected("Stored change targets are invalid");
     }
@@ -971,7 +977,7 @@ export const readValidatedAgentRequests = async ({
     }
   }
   acceptedRequests.sort((left, right) => {
-    const chronological = left.createdAt.localeCompare(right.createdAt);
+    const chronological = compareTimestamps(left.createdAt, right.createdAt);
     if (chronological !== 0) return chronological;
     const currentSession =
       Number(left.sessionId === sessionId) -

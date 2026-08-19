@@ -563,9 +563,12 @@ export const projectConversationHistory = ({
   readonly responses: ReadonlyArray<ThreadResponse>;
 }): ReadonlyArray<Readonly<Record<string, unknown>>> => {
   if (request.kind === "feedback") return [];
+  const requestIndex = requests.findIndex(
+    (candidate) => candidate.requestId === request.requestId,
+  );
+  if (requestIndex < 0) return [];
   const history: Array<Readonly<Record<string, unknown>>> = [];
-  for (const candidate of requests) {
-    if (candidate.createdAt >= request.createdAt) continue;
+  for (const candidate of requests.slice(0, requestIndex)) {
     const response = responses.find(
       (entry) => entry.requestId === candidate.requestId,
     );

@@ -85,6 +85,7 @@ describe("committed change sets", () => {
       outcomes: [
         { commentId: THREAD, state: "answered", message: "One." },
         { commentId: OTHER_THREAD, state: "answered", message: "Two." },
+        { commentId: THREAD, state: "changed", message: "One again." },
       ],
     };
     expect(changeSetIdsFor(feedback)).toEqual([THREAD, OTHER_THREAD]);

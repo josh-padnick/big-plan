@@ -40,6 +40,9 @@ const FAILURES_BEFORE_NOTICE = 2;
 // later gesture.
 const DISPOSITION_RETRY_TOAST_ID = "big-plan-change-disposition-retry";
 const DISPOSITION_REFUSED_TOAST_ID = "big-plan-change-disposition-refused";
+// The read has its own notice: it says what the page may be under-reporting,
+// which is a different fact from a gesture that did not reach the record.
+const DISPOSITION_READ_TOAST_ID = "big-plan-change-disposition-read";
 
 /** One gesture on its way to the record. */
 type PendingDisposition = {
@@ -223,9 +226,50 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
 
   useEffect(() => {
     if (identity === null) return;
-    void requestJson({ path: DISPOSITIONS_PATH, identity })
-      .then(applyResponse)
-      .catch(() => undefined);
+    // The read is retried for the same reason the write is: this effect refires
+    // only when the identity or the article changes, so one swallowed failure
+    // would leave every surface reporting nothing accepted for the life of the
+    // page while the record holds acceptances.
+    let reading = true;
+    void (async () => {
+      let failures = 0;
+      while (reading && isMounted.current) {
+        try {
+          applyResponse(
+            await requestJson({ path: DISPOSITIONS_PATH, identity }),
+          );
+          toast.dismiss(DISPOSITION_READ_TOAST_ID);
+          return;
+        } catch (error: unknown) {
+          // A refused read is the runtime's answer, not a lost one, so it is
+          // reported once instead of collected forever.
+          if (isTerminalReviewRuntimeRefusal(error)) {
+            toast.error("Recorded change acceptances could not be read", {
+              id: DISPOSITION_READ_TOAST_ID,
+              description:
+                error instanceof Error
+                  ? error.message
+                  : "The review runtime refused this read.",
+              duration: Infinity,
+            });
+            return;
+          }
+          failures += 1;
+          if (failures === FAILURES_BEFORE_NOTICE) {
+            toast.error("Recorded change acceptances not read yet", {
+              id: DISPOSITION_READ_TOAST_ID,
+              description:
+                "Big Plan will keep retrying. What this page shows as accepted may be incomplete until it succeeds.",
+              duration: Infinity,
+            });
+          }
+          await sleep(RETRY_DELAY_MS);
+        }
+      }
+    })();
+    return () => {
+      reading = false;
+    };
   }, [applyResponse, articleVersion, identity]);
 
   const accepted = useMemo(

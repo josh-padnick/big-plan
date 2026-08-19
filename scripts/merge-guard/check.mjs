@@ -87,6 +87,7 @@ import {
   collectDeclaredPaths,
   resolveForkPoint,
   resolveHead,
+  refOrUnset,
 } from "./repo.mjs";
 
 /** Collects every path that a non-merge commit on the branch adds, edits, or deletes. */
@@ -343,8 +344,8 @@ const isMain =
 if (isMain) {
   const result = await checkMergeGuard({
     repoRoot: process.cwd(),
-    mainRef: process.env.MERGE_GUARD_MAIN_REF,
-    headRef: process.env.MERGE_GUARD_HEAD_REF,
+    mainRef: refOrUnset(process.env.MERGE_GUARD_MAIN_REF),
+    headRef: refOrUnset(process.env.MERGE_GUARD_HEAD_REF),
   });
   if (result.status === "unresolved") {
     console.error(`merge guard: ${result.reason}`);

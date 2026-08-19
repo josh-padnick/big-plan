@@ -15,6 +15,7 @@ import { join, dirname } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { checkMergeGuard, formatMergeGuardFailure } from "./check.mjs";
+import { refOrUnset } from "./repo.mjs";
 
 const run = promisify(execFile);
 
@@ -483,4 +484,14 @@ test("should report a path once with rule 1 when both rules find it", async () =
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+// CI writes an empty string for an unset interpolation. An empty ref reaches
+// rev-parse, fails, and reports "unresolved", which would block a push for a
+// configuration reason rather than for a detected loss.
+test("should treat an empty or blank ref environment value as unset", () => {
+  assert.equal(refOrUnset(""), undefined);
+  assert.equal(refOrUnset("   "), undefined);
+  assert.equal(refOrUnset(undefined), undefined);
+  assert.equal(refOrUnset("origin/main"), "origin/main");
 });

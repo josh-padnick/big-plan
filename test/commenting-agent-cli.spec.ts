@@ -484,9 +484,13 @@ test("should warn about a takeover before inviting one while work is held", asyn
       "data-review-agent-recovery",
       "plain",
     );
+    // The stale request is still open, so the card is still rendered - past the
+    // horizon it reads as disconnected rather than stalled. Naming that state
+    // is what a negated assertion could not do: "not stalled" would also pass
+    // if the card had disappeared, which is a different failure.
     await expect(
       agentSidebar(page).locator("[data-review-current-activity]"),
-    ).not.toHaveAttribute("data-review-current-activity", "stalled");
+    ).toHaveAttribute("data-review-current-activity", "disconnected");
 
     // Back inside the horizon the pickup explains the quiet again, so the
     // warning returns.

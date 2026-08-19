@@ -946,6 +946,76 @@ describe("conversation history", () => {
     ]);
   });
 
+  // The two ISO spellings of one instant sort the wrong way as strings: "Z"
+  // (0x5A) is above "." (0x2E), so a second-precision earlier turn compared
+  // lexically looks later than a millisecond-precision current one and drops
+  // out of the history.
+  it("should order turns by instant when the two timestamps are spelled differently", () => {
+    const earlier = answeredRequest({
+      requestId: "1111111111111111",
+      kind: "chat",
+      body: "What changes?",
+      commentIds: undefined,
+      createdAt: "2026-08-10T18:00:00Z",
+    });
+    const current = request({
+      requestId: "2222222222222222",
+      kind: "chat",
+      body: "Why?",
+      commentIds: undefined,
+      createdAt: "2026-08-10T18:00:00.500Z",
+    });
+
+    expect(
+      projectConversationHistory({
+        request: current,
+        requests: [earlier, current],
+        responses: [
+          {
+            requestId: earlier.requestId,
+            resultSnapshot: earlier.premiseSnapshot,
+            createdAt: "2026-08-10T18:00:00.100Z",
+            kind: "chat",
+            message: "The retry boundary changes.",
+          },
+        ],
+      }).map((entry) => entry.role),
+    ).toEqual(["reviewer", "agent"]);
+  });
+
+  it("should retain a completed chat preceding the current chat at the same instant", () => {
+    const earlier = answeredRequest({
+      requestId: "1111111111111111",
+      kind: "chat",
+      body: "What changes?",
+      commentIds: undefined,
+      createdAt: "2026-08-10T18:00:00.000Z",
+    });
+    const current = request({
+      requestId: "2222222222222222",
+      kind: "chat",
+      body: "Why?",
+      commentIds: undefined,
+      createdAt: "2026-08-10T18:00:00.000Z",
+    });
+
+    expect(
+      projectConversationHistory({
+        request: current,
+        requests: [earlier, current],
+        responses: [
+          {
+            requestId: earlier.requestId,
+            resultSnapshot: earlier.premiseSnapshot,
+            createdAt: "2026-08-10T18:01:00.000Z",
+            kind: "chat",
+            message: "The retry boundary changes.",
+          },
+        ],
+      }).map((entry) => entry.role),
+    ).toEqual(["reviewer", "agent"]);
+  });
+
   it("should project the original comment before a thread reply", () => {
     const original = answeredRequest({
       comments: [comment],

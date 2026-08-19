@@ -40,6 +40,7 @@ import {
   agentMutationJournalPath,
   writeAgentResponseValue,
   writeStoreJson,
+  withReviewStoreLock,
 } from "./store.js";
 import {
   prepareReviewImageAssets,
@@ -494,16 +495,18 @@ describe("review runtime transport", () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-orphan-socket-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
+    // The baseline is taken before the probe binds anything, so the probe's own
+    // listener can never be counted into it. A baseline read afterwards could
+    // still include it, and that listener leaving later would offset a leaked
+    // one and let this regression test pass.
+    const before = listeningSockets();
     const probe = await startReviewRuntime({ planPath });
     const sessionPath = probe.store.sessionPath;
     await probe.close();
     // A directory in place of the descriptor is a write this runtime cannot do.
     await rm(sessionPath, { force: true });
     await mkdir(sessionPath);
-    // A closed listener leaves the event loop one timer turn later, so the
-    // count is read after that turn rather than in the same one.
-    await new Promise((settle) => setTimeout(settle, 25));
-    const before = listeningSockets();
+    expect(await settledListeningSockets(before)).toBe(before);
     await expect(startReviewRuntime({ planPath })).rejects.toThrow();
     expect(await settledListeningSockets(before)).toBe(before);
     await rm(directory, { recursive: true, force: true });
@@ -924,7 +927,9 @@ describe("review runtime staged decision answers", () => {
         sessionToken,
         path: "/api/review-state",
       });
-      await expect(served.json()).resolves.toMatchObject({ answers: [] });
+      await expect(served.json()).resolves.toMatchObject({
+        answers: [expect.objectContaining({ optionId: GRADUAL_OPTION_ID })],
+      });
       expect(reported).toContainEqual(
         expect.stringContaining("Stored decision answers could not be read"),
       );
@@ -2472,6 +2477,81 @@ describe("review runtime feedback", () => {
     }
   });
 
+  it("should refuse a reply with no valid comment id as client input", async () => {
+    const response = await call({
+      path: "/api/agent-requests",
+      method: "POST",
+      body: { kind: "reply", body: "Please revisit this." },
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: '"commentId" must be text',
+    });
+  });
+
+  it("should report transient exchange contention as a runtime failure", async () => {
+    let releaseLock = (): void => undefined;
+    let markAcquired = (): void => undefined;
+    const acquired = new Promise<void>((settle) => {
+      markAcquired = settle;
+    });
+    const released = new Promise<void>((settle) => {
+      releaseLock = settle;
+    });
+    const held = withReviewStoreLock({
+      lockPath: join(runtime.store.reviewDirectory, ".progress.lock"),
+      change: async () => {
+        markAcquired();
+        await released;
+      },
+      timeoutError: () => new Error("Test failed to hold the progress lock"),
+    });
+    await acquired;
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const commentId = "71cc71cc";
+    try {
+      const response = await call({
+        path: "/api/feedback",
+        method: "POST",
+        body: {
+          comments: [
+            {
+              id: commentId,
+              body: "Keep this feedback despite progress contention.",
+              premiseSnapshot: PLAN_SNAPSHOT,
+              target: { type: "document" },
+            },
+          ],
+        },
+      });
+
+      expect(response.status).toBe(500);
+      expect(
+        (
+          await readAgentExchange({
+            store: runtime.store,
+            sessionId: runtime.sessionId,
+            planId: runtime.planId,
+          })
+        ).requests.some(
+          (request) =>
+            request.kind === "feedback" &&
+            request.comments.some((comment) => comment.id === commentId),
+        ),
+      ).toBe(true);
+      expect(
+        stderr.mock.calls.map(([chunk]) => String(chunk)).join(""),
+      ).toContain("Review request POST /api/feedback failed");
+    } finally {
+      stderr.mockRestore();
+      releaseLock();
+      await held;
+    }
+  });
+
   it("should serve a deterministic diff between retained snapshots", async () => {
     const revised = PLAN.replace(
       "feedback does not reach the agent",
@@ -3028,6 +3108,21 @@ The dashboard shows the retry backlog.
           now: new Date().toISOString(),
         }),
         now: new Date().toISOString(),
+      });
+
+      const mutationLockPath = join(
+        isolated.store.reviewDirectory,
+        ".plan-mutation.lock",
+      );
+      await writeFile(mutationLockPath, "Lock path unavailable.");
+      const unavailable = await isolatedCall({
+        path: "/api/revert-agent-changes",
+        body: { requestId: request.requestId, commentId: comment.id },
+      });
+      await rm(mutationLockPath, { force: true });
+      expect(unavailable.status).toBe(503);
+      await expect(unavailable.json()).resolves.toEqual({
+        error: "The plan mutation area is unavailable",
       });
 
       const reverted = await isolatedCall({
@@ -5375,6 +5470,100 @@ describe("review runtime reviewer controls versus an interrupted commit", () => 
     };
     return { live, planPath, cancel, post, close };
   };
+
+  it("should return 503 when reviewer controls cannot read settlement journals", async () => {
+    const { live, post, close } = await runtimeFor(
+      "big-plan-settlement-unavailable-",
+    );
+    const journalDirectory = live.store.agentMutationJournalDirectory;
+    try {
+      const sendChat = async (body: string): Promise<string> => {
+        const response = await post("/api/agent-requests", {
+          kind: "chat",
+          body,
+        });
+        expect(response.status).toBe(200);
+        const value: unknown = await response.json();
+        if (
+          typeof value !== "object" ||
+          value === null ||
+          !("requestId" in value) ||
+          typeof value.requestId !== "string"
+        ) {
+          throw new Error("The runtime did not return a request id");
+        }
+        return value.requestId;
+      };
+      const reviseId = await sendChat("Revise this queued question.");
+      const deleteId = await sendChat("Delete this queued question.");
+      const cancelId = await sendChat("Cancel this queued question.");
+      const comment = {
+        id: "a9a9a9a9",
+        body: "Delete this queued comment.",
+        premiseSnapshot: PLAN_SNAPSHOT,
+        target: { type: "document" as const },
+      };
+      const token = await runtimeToken(live);
+      expect(
+        (
+          await post("/api/feedback", {
+            comments: [comment],
+            version: await draftsVersionOf(live, token),
+          })
+        ).status,
+      ).toBe(200);
+      const commentVersion = await draftsVersionOf(live, token);
+
+      await rm(journalDirectory, { recursive: true, force: true });
+      await writeFile(journalDirectory, "Journal directory unavailable.");
+      const responses = await Promise.all([
+        post("/api/agent-requests", {
+          kind: "chat",
+          requestId: reviseId,
+          body: "Use this revised queued question.",
+        }),
+        post("/api/agent-request-delete", { requestId: deleteId }),
+        post("/api/agent-cancel", { requestId: cancelId }),
+        post("/api/comments-delete", {
+          commentId: comment.id,
+          version: commentVersion,
+        }),
+      ]);
+
+      for (const response of responses) {
+        expect(response.status).toBe(503);
+        await expect(response.json()).resolves.toEqual({
+          error:
+            "The interrupted-commit journals could not be read, so an interrupted plan commit cannot be settled",
+        });
+      }
+      const exchange = await readAgentExchange({
+        store: live.store,
+        sessionId: live.sessionId,
+        planId: live.planId,
+      });
+      expect(
+        exchange.requests.find((request) => request.requestId === reviseId),
+      ).toMatchObject({ body: "Revise this queued question." });
+      expect(
+        exchange.requests.find((request) => request.requestId === deleteId),
+      ).toBeDefined();
+      expect(
+        exchange.requests.find((request) => request.requestId === cancelId),
+      ).not.toMatchObject({ canceledAt: expect.any(String) });
+      await expect(
+        readComments({
+          path: live.store.sentPath,
+          validate: (value) =>
+            Array.isArray(value) ? (value as Array<ReviewComment>) : [],
+        }),
+      ).resolves.toEqual([expect.objectContaining({ id: comment.id })]);
+    } finally {
+      await rm(journalDirectory, { recursive: true, force: true });
+      await mkdir(journalDirectory, { recursive: true });
+      await close();
+    }
+  });
 
   it("should cancel through a journal whose rename never ran", async () => {
     const { live, planPath, cancel, close } = await runtimeFor(
