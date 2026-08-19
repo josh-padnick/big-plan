@@ -41,6 +41,7 @@ import {
 import { readCommittedRevisionsToObserve } from "./change-set-commit.js";
 import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
+import { settlementRefusal } from "./review-route-settlement.js";
 
 const appendProgressBestEffort = async ({
   context,
@@ -180,8 +181,7 @@ export const sendAgentRequest = async (
         requestIds: [requestId],
       });
     } catch (error: unknown) {
-      if (!(error instanceof AgentExchangeRejected)) throw error;
-      return refusal({ status: 409, reason: error.message });
+      return settlementRefusal(error);
     }
     let revised;
     try {
@@ -338,8 +338,7 @@ export const deleteQueuedAgentRequest = async (
       requestIds: [requestId],
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+    return settlementRefusal(error);
   }
   let deletion: AgentRequestDeletionResult;
   try {
@@ -397,8 +396,7 @@ export const cancelPendingAgentRequest = async (
       requestIds: [requestId],
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+    return settlementRefusal(error);
   }
   const exchange = await readAgentExchange({ store, sessionId, planId });
   const agentRequest = exchange.requests.find(

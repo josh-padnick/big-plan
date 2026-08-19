@@ -45,8 +45,8 @@ import {
   REVERT_SOURCE_MOVED_REASON,
   revertPlanSource,
   settleInterruptedCommitsFor,
-  StagedPlanMutationRejected,
 } from "./staged-plan-mutation.js";
+import { settlementRefusal } from "./review-route-settlement.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
@@ -646,18 +646,7 @@ export const revertAgentChanges = async (
       source: baselineSource,
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    // A contended lock is not a settled conflict. The message tells the
-    // reviewer to try again, so the status has to say the same thing, or a
-    // client that treats 409 as final never will.
-    return refusal({
-      status:
-        error instanceof StagedPlanMutationRejected &&
-        error.code === "unavailable"
-          ? 503
-          : 409,
-      reason: error.message,
-    });
+    return settlementRefusal(error);
   }
   readerProgress.accept(request.baselineSnapshot);
   return jsonResponse({
@@ -714,8 +703,7 @@ export const deleteSentComment = async (
       ),
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+    return settlementRefusal(error);
   }
   const exchange = settled ? await commentHistory() : initialExchange;
   const answeredRequestIds = new Set(

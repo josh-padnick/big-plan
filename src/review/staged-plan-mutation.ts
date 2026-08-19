@@ -671,7 +671,16 @@ export const settleInterruptedCommitsFor = async ({
     // route has resolved the id it was handed, so it answers rather than
     // throwing over what is really a "no such request".
     if (!REQUEST_ID.test(requestId)) continue;
-    if (!(await hasPreparedMutationJournal({ store, requestId }))) continue;
+    let prepared: boolean;
+    try {
+      prepared = await hasPreparedMutationJournal({ store, requestId });
+    } catch {
+      throw new StagedPlanMutationRejected(
+        "unavailable",
+        "The interrupted-commit journals could not be read, so an interrupted plan commit cannot be settled",
+      );
+    }
+    if (!prepared) continue;
     await recoverStagedPlanMutations({ store, planPath });
     return true;
   }
