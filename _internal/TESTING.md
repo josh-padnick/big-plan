@@ -119,6 +119,11 @@ Do not add one for visual styling alone, copy alone, hover states alone, every C
 Do not add speculative coverage for a non-critical screen.
 Do not use a browser test to test a framework or to repeat a lower-rung assertion.
 
+Run `bun run build` before `bun run test:e2e` whenever source changed.
+A journey renders through the CLI's compiled `dist/`, and `bun run gen` alone does not reach it, so a suite run after an un-built edit silently exercises the previous build.
+That is worst exactly when it matters most: a new regression test looks green against code that never received the fix, and a reverted fix looks green against a build that still has it.
+Prove a regression test by watching it fail on the unfixed build, and rebuild before every run on both sides of that check.
+
 Use the repository fixture in every browser spec.
 A journey that deliberately provokes a browser-level message, such as the 404 a missing picture logs while the document proves it says so, names that one message through the fixture's `allowedConsoleErrors` option; every other console error still fails the test.
 Use user-facing roles, accessible names, and stable domain identifiers.
