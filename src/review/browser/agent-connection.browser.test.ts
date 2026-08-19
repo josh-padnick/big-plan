@@ -7,6 +7,7 @@ import {
   connectionEventEnded,
   connectionLogRowReading,
   connectionMarkerClassName,
+  summarizeAgentConnection,
 } from "./agent-connection.browser.js";
 import { AGENT_SESSION_ENDED_REASON } from "../shared/agent-status.js";
 
@@ -112,6 +113,53 @@ describe("connectionLogRowReading", () => {
       suffix: "",
       showReason: true,
     });
+  });
+});
+
+describe("summarizeAgentConnection", () => {
+  const at = (minute: number) =>
+    `2026-08-19T10:${String(minute).padStart(2, "0")}:00.000Z`;
+  const quietEdge = (minute: number) => ({
+    connected: false,
+    at: at(minute),
+    reason: "No agent signal within 75 seconds",
+  });
+  const endedEdge = (minute: number) => ({
+    connected: false,
+    at: at(minute),
+    reason: AGENT_SESSION_ENDED_REASON,
+  });
+  const connectedEdge = (minute: number) => ({
+    connected: true,
+    at: at(minute),
+  });
+
+  it("counts a reported end apart from an inferred gap", () => {
+    expect(
+      summarizeAgentConnection({
+        events: [
+          connectedEdge(1),
+          quietEdge(2),
+          connectedEdge(3),
+          endedEdge(4),
+          connectedEdge(5),
+        ],
+      }),
+    ).toMatchObject({ quietPeriods: 1, sessionsEnded: 1, resumed: 2 });
+  });
+
+  it("counts nothing for a session that has only ever been connected", () => {
+    expect(
+      summarizeAgentConnection({ events: [connectedEdge(1)] }),
+    ).toMatchObject({ quietPeriods: 0, sessionsEnded: 0, resumed: 0 });
+  });
+
+  it("does not count a first signal as a resumption", () => {
+    // The store's opening edge can be a disconnect, and the connect that
+    // follows it is the session starting rather than recovering (BIG-147).
+    expect(
+      summarizeAgentConnection({ events: [quietEdge(1), connectedEdge(2)] }),
+    ).toMatchObject({ quietPeriods: 0, sessionsEnded: 0, resumed: 0 });
   });
 });
 

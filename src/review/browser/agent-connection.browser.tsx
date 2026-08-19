@@ -276,6 +276,7 @@ export const summarizeAgentConnection = ({
   readonly everConnected: boolean;
   readonly sinceAtMs: number | undefined;
   readonly quietPeriods: number;
+  readonly sessionsEnded: number;
   readonly resumed: number;
 } => {
   const ordered = events
@@ -285,12 +286,18 @@ export const summarizeAgentConnection = ({
   // A gap in the signal is a quiet period, not an observed disconnection. The
   // runtime records an edge whenever the heartbeat ages out, and nothing renews
   // it while a turn runs, so counting these as disconnects and reconnects put
-  // events in the reviewer's log that never happened (BIG-147).
+  // events in the reviewer's log that never happened (BIG-147). An end the
+  // agent's loop reported is the one edge that is not a guess, and it is
+  // counted apart from them (BIG-156).
   let quietPeriods = 0;
+  let sessionsEnded = 0;
   let resumed = 0;
   let hasConnected = false;
   ordered.forEach((event, index) => {
-    if (!event.connected && ordered[index - 1]?.connected) quietPeriods += 1;
+    if (!event.connected && ordered[index - 1]?.connected) {
+      if (connectionEventEnded(event)) sessionsEnded += 1;
+      else quietPeriods += 1;
+    }
     if (
       event.connected &&
       hasConnected &&
@@ -305,6 +312,7 @@ export const summarizeAgentConnection = ({
     everConnected: agentHasEverConnected({ events }),
     sinceAtMs: latest === undefined ? undefined : latest.atMs,
     quietPeriods,
+    sessionsEnded,
     resumed,
   };
 };
@@ -568,6 +576,15 @@ const CurrentActivityCard = ({
                   {connection.quietPeriods} quiet{" "}
                   {connection.quietPeriods === 1 ? "period" : "periods"}
                 </span>
+                {/* A reported end is a fact rather than an inference, so it is
+                    named apart from a quiet period - but only once one has
+                    happened, so an unbroken session reads no differently. */}
+                {connection.sessionsEnded === 0 ? null : (
+                  <span>
+                    {connection.sessionsEnded} ended{" "}
+                    {connection.sessionsEnded === 1 ? "session" : "sessions"}
+                  </span>
+                )}
                 <span>{connection.resumed} resumed</span>
               </dd>
             </div>
