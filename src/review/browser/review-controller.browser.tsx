@@ -416,9 +416,11 @@ const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
 // Both toolbar controls read as buttons rather than links: a transparent
 // ground with a real border at rest, and a pressed ground when their view is
 // open. The pressed look is neutral, not accent - it says "this is the open
-// one", which is not the kind of thing that should shout in colour.
+// one", which is not the kind of thing that should shout in colour. The edge
+// is the toolbar's own rather than the reading surface's, because these sit on
+// the chrome band and a warm hairline reads as a stain against it.
 const TOOLBAR_CONTROL_CLASS =
-  "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border border-edge bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:border-edge-strong hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-edge-strong aria-expanded:bg-raised aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:min-h-8";
+  "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border border-toolbar-edge bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:border-toolbar-edge-strong hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-toolbar-edge-strong aria-expanded:bg-raised aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:min-h-8";
 const FEEDBACK_TAB_CLASS =
   "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>span]:min-w-5 [&>span]:justify-center [&>span]:bg-[var(--annotation-bg)] [&>span]:text-2xs [&>span]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
