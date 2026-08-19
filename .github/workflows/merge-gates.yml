@@ -82,11 +82,13 @@ on:
         description: Pull request number to judge
         required: true
 
-# One judgment per pull request at a time. A burst of comments should settle on
-# the newest state, not race to publish an older one.
+# One judgment per pull request at a time. Keep the active judgment running so
+# an issue-comment event cannot leave the pull request's head with a canceled
+# judge check. GitHub retains only the newest pending run, so a burst still
+# settles on the newest state after the active judgment finishes.
 concurrency:
   group: merge-gates-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull-request }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   judge:
