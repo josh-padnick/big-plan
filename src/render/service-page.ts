@@ -44,12 +44,14 @@ const button = ({
   href,
   submit = false,
   copy,
+  autofocus = false,
 }: {
   readonly label: string;
   readonly variant: "default" | "outline" | "destructive";
   readonly href?: string;
   readonly submit?: boolean;
   readonly copy?: string;
+  readonly autofocus?: boolean;
 }): string => {
   const recipe =
     variant === "default"
@@ -58,8 +60,9 @@ const button = ({
         ? BUTTON_OUTLINE
         : BUTTON_DESTRUCTIVE;
   const className = `${BUTTON_BASE} ${recipe}`;
+  const focus = autofocus ? " autofocus" : "";
   if (href !== undefined) {
-    return `<a class="${className}" href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
+    return `<a class="${className}" href="${escapeHtml(href)}"${focus}>${escapeHtml(label)}</a>`;
   }
   const copyAttribute =
     copy === undefined ? "" : ` data-copy="${escapeHtml(copy)}"`;
@@ -89,6 +92,15 @@ const PROSE = ' data-authored-prose=""';
 // Copying is a convenience over text already on the page, so it never gates
 // anything and quietly does nothing where the clipboard is unavailable.
 const COPY_SCRIPT = `<script>
+// Focus the alert's safe action once the shell has finished setting itself up.
+// The markup carries autofocus too, but the review island initializes after
+// parse and does not preserve it, so this is what actually lands a keyboard
+// user inside the dialog. Purely an enhancement: the flow completes without
+// it, because every control is a link or a submit button.
+window.addEventListener("load", function () {
+  var safe = document.querySelector("[role=alertdialog] [autofocus]");
+  if (safe) safe.focus();
+});
 document.querySelectorAll("[data-copy]").forEach(function (control) {
   control.addEventListener("click", function () {
     if (!navigator.clipboard) return;
@@ -224,74 +236,33 @@ export const renderPlanUnknownPage = (): string =>
 ${commandBlock({ command: "big-plan review <your-plan.mdx>" })}`,
   });
 
-/** One plan the service answers for, as the welcome page lists it. */
-export type ServicePlanRow = {
-  readonly name: string;
-  readonly href: string;
-  readonly state: "live" | "ended" | "interrupted" | "never-started";
-};
-
-const STATE_LABELS: Readonly<Record<ServicePlanRow["state"], string>> = {
-  live: "Open now",
-  ended: "Ended",
-  interrupted: "Stopped unexpectedly",
-  "never-started": "Not started",
-};
-
-const plansSection = ({
-  plans,
-}: {
-  readonly plans: ReadonlyArray<ServicePlanRow>;
-}): string => {
-  if (plans.length === 0) {
-    return `<h2${PROSE}>Plans on this machine</h2>
-<p${PROSE}>None yet. The first <code${PROSE}>big-plan review</code> you run registers its plan here, and its address keeps working afterwards.</p>`;
-  }
-  const rows = plans
-    .map(
-      (plan) =>
-        `<li${PROSE}><a${PROSE} href="${escapeHtml(plan.href)}">${escapeHtml(plan.name)}</a> <span class="text-subtle">- ${escapeHtml(STATE_LABELS[plan.state])}</span></li>`,
-    )
-    .join("\n");
-  return `<h2${PROSE}>Plans on this machine</h2>
-<p${PROSE}>Each address below keeps working whether or not its review is running.</p>
-<ul${PROSE}>
-${rows}
-</ul>`;
-};
-
 const welcomeContent = ({
   port,
   startedAtMs,
-  plans,
 }: {
   readonly port: number;
   readonly startedAtMs: number;
-  readonly plans: ReadonlyArray<ServicePlanRow>;
 }): string => `<h1${PROSE}>Welcome to Big Plan.</h1>
-<p${PROSE}>Reviewing agent plans is kind of a big deal. Do it better with Big Plan.</p>
+<p${PROSE}>Reviewing agent plans is kind of a big deal.</p>
 <section class="${CARD}">
 <h2 class="plan-slide-title m-0 border-b-0 pb-0 text-2xl">Big Plan service</h2>
 <p${PROSE}>Hosted at 127.0.0.1:${port}. Plans on this machine are available here.</p>
 <p${PROSE}>Running since ${escapeHtml(clockTime(startedAtMs))}.</p>
 <p${PROSE}>${button({ label: "Stop the service", variant: "destructive", href: "/stop" })}</p>
 </section>
-${plansSection({ plans })}
 ${tip({ bodyHtml: `<p${PROSE}>Any <code${PROSE}>big-plan</code> command starts this service when it needs one, so you never have to start it by hand.</p>` })}`;
 
 /** The page at `/`: what this process is, to someone who found the port. */
 export const renderServiceWelcomePage = ({
   port,
   startedAtMs,
-  plans,
 }: {
   readonly port: number;
   readonly startedAtMs: number;
-  readonly plans: ReadonlyArray<ServicePlanRow>;
 }): string =>
   servicePage({
     title: "Welcome to Big Plan",
-    contentHtml: welcomeContent({ port, startedAtMs, plans }),
+    contentHtml: welcomeContent({ port, startedAtMs }),
   });
 
 /**
@@ -306,26 +277,25 @@ export const renderServiceWelcomePage = ({
 export const renderServiceStopConfirmPage = ({
   port,
   startedAtMs,
-  plans,
   nonce,
 }: {
   readonly port: number;
   readonly startedAtMs: number;
-  readonly plans: ReadonlyArray<ServicePlanRow>;
   readonly nonce: string;
 }): string =>
   servicePage({
     title: "Stop the service?",
-    contentHtml: welcomeContent({ port, startedAtMs, plans }),
-    overlayHtml: `<div class="fixed inset-0 z-50 grid place-items-center bg-[var(--preferences-backdrop-c)] p-4">
-<div class="w-full max-w-lg rounded-xl border border-edge bg-paper p-6 text-ink shadow-floating" role="alertdialog" aria-modal="true" aria-labelledby="service-stop-title" aria-describedby="service-stop-description">
+    contentHtml: welcomeContent({ port, startedAtMs }),
+    overlayHtml: `<div class="fixed inset-0 z-50 grid place-items-center bg-backdrop/70 p-4" data-modal-backdrop>
+<div class="w-full max-w-lg rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating" role="alertdialog" aria-modal="true" aria-labelledby="service-stop-title" aria-describedby="service-stop-description">
 <h2 class="m-0 text-xl font-semibold" id="service-stop-title">Stop the service?</h2>
-<p class="mt-3 text-base text-muted" id="service-stop-description">Plans on this machine stop opening. Any <code${PROSE}>big-plan</code> command starts the service again.</p>
+<p class="mt-3 text-base text-muted" id="service-stop-description">Big Plans on this machine will no longer be accessible through the web browser.</p>
+<p class="mt-3 text-base text-muted">To start the service again, run any <code${PROSE}>big-plan</code> command (or request a new big plan)</p>
 <div class="mt-4">
-${tip({ bodyHtml: `<p${PROSE}>Same as running <code${PROSE}>big-plan service stop</code> in a terminal.</p>` })}
+${tip({ bodyHtml: `<p${PROSE}>Stopping the service here is the same as running <code${PROSE}>big-plan service stop</code> in a terminal.</p>` })}
 </div>
 <div class="mt-6 flex justify-end gap-2">
-${button({ label: "Keep it running", variant: "outline", href: "/" })}
+${button({ label: "Keep it running", variant: "outline", href: "/", autofocus: true })}
 <form method="post" action="/stop">
 <input name="nonce" type="hidden" value="${escapeHtml(nonce)}">
 ${button({ label: "Stop the service", variant: "destructive", submit: true })}
@@ -345,6 +315,8 @@ export const renderServiceStoppedPage = (): string =>
   servicePage({
     title: "The service is stopped",
     contentHtml: `<h1${PROSE}>The service is stopped.</h1>
+<p${PROSE}>Reviewing agent plans is kind of a big deal.</p>
 <p${PROSE}>Start it again to open plans on this machine.</p>
-${commandBlock({ command: "big-plan service start" })}`,
+${commandBlock({ command: "big-plan service start" })}
+${tip({ bodyHtml: `<p${PROSE}>This is the last page the service serves. Reloading it will show a browser connection error, because nothing is listening on this address any more.</p>` })}`,
   });

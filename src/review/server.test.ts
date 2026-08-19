@@ -2696,7 +2696,10 @@ Restores the selected snapshot as a new current plan.
     // This case compiles both snapshots through every first-class component,
     // including the Mermaid renderer, so it needs the same headroom the
     // renderer's own suites take rather than the default per-test timeout.
-  }, 15000);
+    // It runs in about 7s alone and occasionally crossed 15s under full-suite
+    // parallel load, which is a flake rather than a regression; the ceiling is
+    // sized to the observed worst case instead of the typical one.
+  }, 30000);
 
   it("should carry both pictures when a snapshot swaps one", async () => {
     const before = `# Pictures

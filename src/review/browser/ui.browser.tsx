@@ -524,12 +524,20 @@ export const AlertDialog = ({
   const descriptionId = "review-alert-dialog-description";
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-[var(--preferences-backdrop-c)] p-4"
+      // --preferences-backdrop-c was never defined, so every alert opened over
+      // a page that still looked active. bg-backdrop/70 is the treatment the
+      // settings sheet and the image viewer already use, and the data
+      // attribute opts this backdrop into the approved 80% dark-mode dim.
+      className="fixed inset-0 z-50 grid place-items-center bg-backdrop/70 p-4"
+      data-modal-backdrop
       onKeyDown={handleKeyDown}
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-lg rounded-xl border border-edge bg-paper p-6 text-ink shadow-floating"
+        // Raised, not paper: a floating surface reads as floating through
+        // colour first, before its shadow. The danger tone belongs to the
+        // destructive action alone, never to the whole dialog.
+        className="w-full max-w-lg rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating"
         role="alertdialog"
         tabIndex={-1}
         aria-modal="true"

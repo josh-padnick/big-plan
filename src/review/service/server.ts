@@ -24,7 +24,7 @@ import {
   renderServiceStoppedPage,
   renderServiceWelcomePage,
 } from "../../render/service-page.js";
-import { answerForPlan, listServicePlanRows } from "./plan-status.js";
+import { answerForPlan } from "./plan-status.js";
 import { servicePort } from "./paths.js";
 import { isServicePlanId } from "./registry.js";
 
@@ -38,6 +38,11 @@ const PLAN_ROUTE = /^\/plan\/([a-z0-9]+)\/?$/;
 // only in pages this very process served. It dies with the process, which is
 // exactly the lifetime a page-scoped credential should have.
 const MAX_FORM_BYTES = 4 * 1024;
+
+// How long the service waits for a browser to follow the stop redirect before
+// shutting down anyway. Long enough for a slow page load, short enough that an
+// abandoned stop is still a stop.
+const ABANDONED_STOP_MS = 10_000;
 
 /** What `GET /healthz` answers, and the only thing that proves identity. */
 export const SERVICE_PRODUCT = "big-plan-service";
@@ -175,6 +180,12 @@ export const startService = async ({
 }): Promise<ServiceRuntime> => {
   const startedAtMs = now;
   const pageNonce = randomBytes(32).toString("base64url");
+  // Armed only by an authenticated stop, and only once. A browser stop is a
+  // form post, so it answers with a redirect rather than a page: refreshing
+  // afterwards must not re-submit it. The process therefore has to outlive its
+  // own POST long enough to serve one more GET, and `/stopped` is that page.
+  // Unarmed it does not exist, so nobody can end the service by guessing a URL.
+  let stopArmed = false;
 
   const handle = async ({
     request,
@@ -221,11 +232,7 @@ export const startService = async ({
       sendHtml({
         response,
         status: 200,
-        html: renderServiceWelcomePage({
-          port: boundPort,
-          startedAtMs,
-          plans: await listServicePlanRows(),
-        }),
+        html: renderServiceWelcomePage({ port: boundPort, startedAtMs }),
       });
       return;
     }
@@ -281,6 +288,22 @@ export const startService = async ({
       }
     }
 
+    if (method === "GET" && target.pathname === "/stopped") {
+      if (!stopArmed) {
+        refuse({ response, status: 404, reason: "No such route" });
+        return;
+      }
+      stopArmed = false;
+      sendHtml({ response, status: 200, html: renderServiceStoppedPage() });
+      // The last thing this process does. Closing after the response finishes
+      // is what makes the page's own warning true: reloading it errors,
+      // because by then nothing is listening.
+      response.on("finish", () => {
+        void close();
+      });
+      return;
+    }
+
     if (method === "GET" && target.pathname === "/stop") {
       // A link, not a scripted button, so the whole stop flow works with
       // scripts disabled.
@@ -290,7 +313,6 @@ export const startService = async ({
         html: renderServiceStopConfirmPage({
           port: boundPort,
           startedAtMs,
-          plans: await listServicePlanRows(),
           nonce: pageNonce,
         }),
       });
@@ -344,13 +366,27 @@ export const startService = async ({
         });
         return;
       }
-      // The dying process serves the last page itself; after this the address
-      // stops answering, which is the honest end state.
       if (byNonce) {
-        sendHtml({ response, status: 200, html: renderServiceStoppedPage() });
-      } else {
-        sendJson({ response, status: 200, value: { stopping: true } });
+        // Post/Redirect/Get: the browser lands on a page it can safely reload
+        // rather than on a form post it would re-submit. The process stays up
+        // for exactly that one GET.
+        stopArmed = true;
+        response.writeHead(303, {
+          location: "/stopped",
+          "cache-control": "no-store",
+        });
+        response.end();
+        // A browser that never follows the redirect must not leave the service
+        // running after someone asked it to stop.
+        const abandoned = setTimeout(() => {
+          if (!stopArmed) return;
+          stopArmed = false;
+          void close();
+        }, ABANDONED_STOP_MS);
+        abandoned.unref();
+        return;
       }
+      sendJson({ response, status: 200, value: { stopping: true } });
       // Answered before the listener closes, so the caller learns the request
       // was accepted rather than seeing its connection cut mid-reply.
       response.on("finish", () => {

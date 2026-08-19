@@ -15,16 +15,10 @@ import {
   renderServiceStoppedPage,
   renderServiceWelcomePage,
 } from "./service-page.js";
-import type { ServicePlanRow } from "./service-page.js";
-
 const atMs = Date.parse("2026-08-17T14:41:00.000Z");
-const plans: ReadonlyArray<ServicePlanRow> = [
-  { name: "review front door", href: "/plan/1111111111111111", state: "live" },
-  { name: "retry queue", href: "/plan/2222222222222222", state: "ended" },
-];
 
 const welcome = (): string =>
-  renderServiceWelcomePage({ port: 8790, startedAtMs: atMs, plans });
+  renderServiceWelcomePage({ port: 8790, startedAtMs: atMs });
 
 describe("the service's pages", () => {
   it("should render the same toolbar a review document renders", () => {
@@ -58,14 +52,19 @@ describe("the service's pages", () => {
     const html = renderServiceStopConfirmPage({
       port: 8790,
       startedAtMs: atMs,
-      plans,
       nonce: "nonce-value",
     });
     expect(html).toContain('role="alertdialog"');
     expect(html).toContain('aria-modal="true"');
+    // A defined backdrop, so the page behind an alert is visibly dimmed, and a
+    // raised surface, so the dialog reads as floating through colour.
+    expect(html).toContain("bg-backdrop/70");
+    expect(html).toContain("data-modal-backdrop");
     expect(html).toContain(
-      'class="w-full max-w-lg rounded-xl border border-edge bg-paper p-6 text-ink shadow-floating"',
+      'class="w-full max-w-lg rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating"',
     );
+    // Danger is the destructive action's alone; the dialog carries no tint.
+    expect(html).not.toContain("bg-danger p-6");
     // The destructive and outline button recipes, by value from ui.browser.tsx.
     expect(html).toContain("bg-danger font-semibold text-danger-ink");
     expect(html).toContain("border border-edge bg-transparent font-normal");
@@ -76,7 +75,6 @@ describe("the service's pages", () => {
     const confirm = renderServiceStopConfirmPage({
       port: 8790,
       startedAtMs: atMs,
-      plans,
       nonce: "nonce-value",
     });
     expect(confirm).toContain('method="post"');
@@ -88,11 +86,13 @@ describe("the service's pages", () => {
     const html = renderServiceStopConfirmPage({
       port: 8790,
       startedAtMs: atMs,
-      plans,
       nonce: "n",
     });
-    expect(html).toContain("Plans on this machine stop opening.");
-    expect(html).toContain("big-plan service stop");
+    expect(html).toContain(
+      "Big Plans on this machine will no longer be accessible through the web browser.",
+    );
+    expect(html).toContain("To start the service again, run any");
+    expect(html).toContain("Stopping the service here is the same as running");
     expect(html).toContain("Keep it running");
     // The wordier earlier copy is gone rather than merely demoted.
     expect(html).not.toContain("What changes");
@@ -104,35 +104,34 @@ describe("the service's pages", () => {
   it("should tell a reader of the stopped page one plain thing to do", () => {
     const html = renderServiceStoppedPage();
     expect(html).toContain("The service is stopped.");
+    expect(html).toContain("Reviewing agent plans is kind of a big deal.");
     expect(html).toContain("Start it again to open plans on this machine.");
     expect(html).toContain("big-plan service start");
+    // The page says out loud that it cannot be reloaded, because by the time
+    // anyone tries the process that served it is gone.
+    expect(html).toContain("Reloading it will show a browser connection error");
     // No start control, because nothing is listening to receive one.
     expect(html).not.toContain('action="/start"');
     expect(html).not.toContain('href="/start"');
   });
 
-  it("should list the plans it answers for, and say so when it has none", () => {
+  it("should not list the plans on this machine anywhere", () => {
+    // Ruled a paid upgrade: the free service answers an address it is given
+    // and never becomes a directory of someone's work.
     const html = welcome();
-    expect(html).toContain("Plans on this machine");
-    expect(html).toContain('href="/plan/1111111111111111"');
-    expect(html).toContain("review front door");
-    expect(html).toContain("Open now");
-    expect(html).toContain("retry queue");
-    expect(html).toContain("Ended");
-
-    const empty = renderServiceWelcomePage({
-      port: 8790,
-      startedAtMs: atMs,
-      plans: [],
-    });
-    expect(empty).toContain("None yet.");
+    // The card still says plans are reachable here, which is the ratified
+    // wireframe's line; what is gone is any enumeration of them.
+    expect(html).toContain("Plans on this machine are available here.");
+    expect(html).not.toContain(
+      '<h2 data-authored-prose="">Plans on this machine</h2>',
+    );
+    expect(html).not.toContain("/plan/");
   });
 
   it("should never enumerate plans from an address it does not know", () => {
     // Guessing addresses must not become a way to list someone's work.
     const html = renderPlanUnknownPage();
     expect(html).toContain("This machine has no review at this address.");
-    expect(html).not.toContain("Plans on this machine");
     expect(html).not.toContain("/plan/");
   });
 

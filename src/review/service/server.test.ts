@@ -202,7 +202,9 @@ describe("the service listener", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain("Stop the service?");
-    expect(html).toContain("Plans on this machine stop opening.");
+    expect(html).toContain(
+      "Big Plans on this machine will no longer be accessible through the web browser.",
+    );
     expect(html).toContain('role="alertdialog"');
     expect(html).toContain('name="nonce"');
     // The service is still running: reaching the confirm page changes nothing.
@@ -210,11 +212,14 @@ describe("the service listener", () => {
   });
 
   it("should let a page this process served stop it, without the owner token", async () => {
+    // Post/Redirect/Get: the browser is sent to a page it can land on, so a
+    // refresh never re-submits the stop. The process stays up for exactly that
+    // one GET, then goes.
     const nonce = /name="nonce" type="hidden" value="([^"]+)"/u.exec(
       await (await get("/stop")).text(),
     )?.[1];
     expect(nonce).toBeDefined();
-    const response = await get("/stop", {
+    const posted = await get("/stop", {
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
@@ -222,9 +227,24 @@ describe("the service listener", () => {
       },
       body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
     });
-    expect(response.status).toBe(200);
-    expect(await response.text()).toContain("The service is stopped.");
+    expect(posted.status).toBe(303);
+    expect(posted.headers.get("location")).toBe("/stopped");
+    // Still listening: the redirect target has to be servable.
+    expect((await get("/healthz")).status).toBe(200);
+
+    const landed = await get("/stopped");
+    expect(landed.status).toBe(200);
+    const html = await landed.text();
+    expect(html).toContain("The service is stopped.");
+    expect(html).toContain("Reloading it will show a browser connection error");
     await expect(get("/healthz")).rejects.toThrow();
+  });
+
+  it("should not let anyone stop it by guessing the landing page", async () => {
+    // /stopped is armed by an authenticated stop and disarmed by serving it,
+    // so it is not a credential-free way to end the service.
+    expect((await get("/stopped")).status).toBe(404);
+    expect((await get("/healthz")).status).toBe(200);
   });
 
   it("should refuse a stop carrying a nonce it never issued", async () => {
@@ -253,8 +273,8 @@ describe("the service listener", () => {
       },
       body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
     });
-    expect(response.status).toBe(200);
-    expect(await response.text()).toContain("The service is stopped.");
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/stopped");
   });
 
   it("should still refuse an absent origin claim that came from another site", async () => {
