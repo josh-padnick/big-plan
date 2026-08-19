@@ -101,11 +101,14 @@ const statusMarkFor = (status: WireframeStatus | undefined): ReactNode =>
 const Glyph = ({ name }: { readonly name: string }): JSX.Element => {
   const glyph = wireframeGlyphFor(name);
   return (
+    // The drawn mark hides itself from assistive technology, so this wrapper
+    // deliberately does not: hiding it too would take the placeholder's name
+    // below with it, and "this glyph is not drawn yet" is exactly the fact a
+    // reader who cannot see the drawing has no other way to learn.
     <span
       className="wireframe-glyph"
       data-wireframe-icon={name}
       {...(glyph === undefined ? { "data-wireframe-icon-unnamed": "" } : {})}
-      aria-hidden="true"
     >
       {lucideIconToReact({
         icon: glyph ?? WIREFRAME_PLACEHOLDER_GLYPH,

@@ -2349,6 +2349,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     const rendered = html(render(compiled));
     expect(rendered).toContain('"data-lucide":"settings"');
     expect(rendered).toContain("Workspace settings");
+    // A drawn mark still reaches a screen reader as nothing at all.
+    expect(rendered).toContain('"ariaHidden":"true"');
     expect(rendered).not.toContain("data-wireframe-icon-unnamed");
   });
 
@@ -2371,6 +2373,10 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-lucide":"wireframe-placeholder"');
     expect(rendered).toContain('"data-wireframe-icon-unnamed":""');
     expect(rendered).toContain('"value":"rocket"');
+    // The drawn mark hides itself, but the name beside it must not be hidden
+    // too: a reader who cannot see the drawing has no other way to learn that
+    // this glyph was never drawn.
+    expect(rendered).not.toContain('"wireframe-glyph","ariaHidden"');
   });
 
   it("should keep an icon-only control's words as its name and tooltip", () => {
