@@ -36,6 +36,7 @@ import {
 } from "./shared/agent-model.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
 import { requestIsOutstanding } from "./shared/request-lifecycle.js";
+import { compareTimestamps } from "./shared/timestamp-order.js";
 
 const TEXT_LIMIT = 4000;
 const MESSAGE_LIMIT = 200;
@@ -976,7 +977,7 @@ export const readValidatedAgentRequests = async ({
     }
   }
   acceptedRequests.sort((left, right) => {
-    const chronological = left.createdAt.localeCompare(right.createdAt);
+    const chronological = compareTimestamps(left.createdAt, right.createdAt);
     if (chronological !== 0) return chronological;
     const currentSession =
       Number(left.sessionId === sessionId) -

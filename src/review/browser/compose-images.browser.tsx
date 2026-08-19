@@ -18,6 +18,11 @@ import {
 } from "../shared/review-image.js";
 import { ReviewImage } from "./review-image.browser.js";
 import {
+  insertAtComposerAnchor,
+  rebaseComposerInsertion,
+  type ComposerInsertionAnchor,
+} from "./compose-image-anchor.js";
+import {
   reviewWriteRefusal,
   type ReviewWriteAvailability,
 } from "./review-write-availability.js";
@@ -66,16 +71,8 @@ export const ComposeImages = ({
 }) => {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
-  // What the previous upload in a batch produced, and the reference it added.
-  //
-  // `onBodyChange` schedules a controlled-state update, so the next upload can
-  // run before the textarea carries that reference - and would then splice an
-  // advanced caret into stale text, overwriting it. But the reader may also be
-  // typing while the batch uploads, and that belongs in the composer too. So
-  // the live value is preferred whenever it has caught up, and these are the
-  // fallback for exactly the window where it has not.
-  const chainedBody = useRef(body);
-  const chainedReference = useRef("");
+  const liveBody = useRef(body);
+  const insertionAnchor = useRef<ComposerInsertionAnchor>({ body, offset: 0 });
   const [pending, setPending] = useState(0);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -127,23 +124,21 @@ export const ComposeImages = ({
           "error" in value && value.error ? value.error : "Image upload failed",
         );
       }
-      const live = textarea.current?.value;
-      const current =
-        live !== undefined &&
-        (chainedReference.current === "" ||
-          live.includes(chainedReference.current))
-          ? live
-          : chainedBody.current;
       const reference = buildReviewImageReference({
         alt: value.alt,
         id: value.id,
       });
-      const next = `${current.slice(0, caret)}${reference}${current.slice(caret)}`;
-      chainedBody.current = next;
-      chainedReference.current = reference;
-      onBodyChange(next);
+      insertionAnchor.current = insertAtComposerAnchor({
+        anchor: rebaseComposerInsertion({
+          anchor: insertionAnchor.current,
+          body: liveBody.current,
+        }),
+        reference,
+      });
+      liveBody.current = insertionAnchor.current.body;
+      onBodyChange(insertionAnchor.current.body);
       setError("");
-      return caret + reference.length;
+      return insertionAnchor.current.offset;
     } catch (uploadError: unknown) {
       setError(
         uploadError instanceof Error
@@ -164,10 +159,9 @@ export const ComposeImages = ({
     }
     // The chain starts from what is on screen now; every upload after the
     // first continues from what the one before it produced.
-    chainedBody.current = textarea.current?.value ?? body;
-    chainedReference.current = "";
-    const caret =
-      textarea.current?.selectionStart ?? chainedBody.current.length;
+    liveBody.current = textarea.current?.value ?? body;
+    const caret = textarea.current?.selectionStart ?? liveBody.current.length;
+    insertionAnchor.current = { body: liveBody.current, offset: caret };
     void files.reduce(
       (chain, file) => chain.then((next) => upload(file, next, altOverride)),
       Promise.resolve(caret),
@@ -197,7 +191,14 @@ export const ComposeImages = ({
         value={body}
         maxLength={maxLength}
         placeholder={placeholder}
-        onChange={(event) => onBodyChange(event.target.value)}
+        onChange={(event) => {
+          insertionAnchor.current = rebaseComposerInsertion({
+            anchor: insertionAnchor.current,
+            body: event.target.value,
+          });
+          liveBody.current = event.target.value;
+          onBodyChange(event.target.value);
+        }}
         onPaste={paste}
         onKeyDown={onKeyDown}
       />

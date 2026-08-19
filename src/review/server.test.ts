@@ -40,6 +40,7 @@ import {
   agentMutationJournalPath,
   writeAgentResponseValue,
   writeStoreJson,
+  withReviewStoreLock,
 } from "./store.js";
 import {
   prepareReviewImageAssets,
@@ -926,7 +927,9 @@ describe("review runtime staged decision answers", () => {
         sessionToken,
         path: "/api/review-state",
       });
-      await expect(served.json()).resolves.toMatchObject({ answers: [] });
+      await expect(served.json()).resolves.toMatchObject({
+        answers: [expect.objectContaining({ optionId: GRADUAL_OPTION_ID })],
+      });
       expect(reported).toContainEqual(
         expect.stringContaining("Stored decision answers could not be read"),
       );
@@ -2471,6 +2474,81 @@ describe("review runtime feedback", () => {
       await expect(response.json()).resolves.toEqual({
         error: "An agent request needs a body",
       });
+    }
+  });
+
+  it("should refuse a reply with no valid comment id as client input", async () => {
+    const response = await call({
+      path: "/api/agent-requests",
+      method: "POST",
+      body: { kind: "reply", body: "Please revisit this." },
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: '"commentId" must be text',
+    });
+  });
+
+  it("should report transient exchange contention as a runtime failure", async () => {
+    let releaseLock = (): void => undefined;
+    let markAcquired = (): void => undefined;
+    const acquired = new Promise<void>((settle) => {
+      markAcquired = settle;
+    });
+    const released = new Promise<void>((settle) => {
+      releaseLock = settle;
+    });
+    const held = withReviewStoreLock({
+      lockPath: join(runtime.store.reviewDirectory, ".progress.lock"),
+      change: async () => {
+        markAcquired();
+        await released;
+      },
+      timeoutError: () => new Error("Test failed to hold the progress lock"),
+    });
+    await acquired;
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const commentId = "71cc71cc";
+    try {
+      const response = await call({
+        path: "/api/feedback",
+        method: "POST",
+        body: {
+          comments: [
+            {
+              id: commentId,
+              body: "Keep this feedback despite progress contention.",
+              premiseSnapshot: PLAN_SNAPSHOT,
+              target: { type: "document" },
+            },
+          ],
+        },
+      });
+
+      expect(response.status).toBe(500);
+      expect(
+        (
+          await readAgentExchange({
+            store: runtime.store,
+            sessionId: runtime.sessionId,
+            planId: runtime.planId,
+          })
+        ).requests.some(
+          (request) =>
+            request.kind === "feedback" &&
+            request.comments.some((comment) => comment.id === commentId),
+        ),
+      ).toBe(true);
+      expect(
+        stderr.mock.calls.map(([chunk]) => String(chunk)).join(""),
+      ).toContain("Review request POST /api/feedback failed");
+    } finally {
+      stderr.mockRestore();
+      releaseLock();
+      await held;
     }
   });
 

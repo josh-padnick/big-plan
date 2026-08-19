@@ -695,6 +695,41 @@ test("should report no checkout for a directory that is not in a repository", ()
   }
 });
 
+test("should detect no checkout independently of the caller's Git locale", () => {
+  const previousPath = process.env["PATH"];
+  const previousLocale = process.env["LC_ALL"];
+  const previousGitDirectory = process.env["GIT_DIR"];
+  const fakeBin = mkdtempSync(join(tmpdir(), "big-plan-localized-git-"));
+  const outside = mkdtempSync(join(tmpdir(), "big-plan-localized-no-repo-"));
+  const fakeGit = join(fakeBin, "git");
+  writeFileSync(
+    fakeGit,
+    `#!/bin/sh
+if [ "\${LC_ALL:-}" = C ]; then
+  printf '%s\n' 'fatal: not a git repository' >&2
+else
+  printf '%s\n' 'fatal: kein Git-Repository' >&2
+fi
+exit 128
+`,
+    { mode: 0o755 },
+  );
+  process.env["PATH"] = fakeBin;
+  process.env["LC_ALL"] = "de_DE.UTF-8";
+  delete process.env["GIT_DIR"];
+  try {
+    assert.equal(gitCheckoutIsAvailable(outside), false);
+  } finally {
+    process.env["PATH"] = previousPath;
+    if (previousLocale === undefined) delete process.env["LC_ALL"];
+    else process.env["LC_ALL"] = previousLocale;
+    if (previousGitDirectory === undefined) delete process.env["GIT_DIR"];
+    else process.env["GIT_DIR"] = previousGitDirectory;
+    rmSync(fakeBin, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
 test("should report no checkout when git itself is missing", () => {
   const previous = process.env["PATH"];
   const empty = mkdtempSync(join(tmpdir(), "big-plan-no-git-"));

@@ -215,11 +215,29 @@ export const sendAgentRequest = async (
       value: { requestId, kind: revised.kind, request: revised },
     });
   }
-  store = await (await anchorReviewStore(store)).resolveStore();
+  const requestId = randomId(8);
   const source = await readFile(resolvedPlanPath, "utf8");
   const premiseSnapshot = deriveSnapshotDigest(source);
+  let requestDraft: ReturnType<typeof messageAgentRequest>;
+  try {
+    requestDraft = messageAgentRequest({
+      kind,
+      requestId,
+      sessionId,
+      planId,
+      premiseSnapshot,
+      createdAt: new Date().toISOString(),
+      body: messageBody,
+      ...(kind === "reply" && typeof payload.commentId === "string"
+        ? { commentId: payload.commentId }
+        : {}),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 400, reason: error.message });
+  }
+  store = await (await anchorReviewStore(store)).resolveStore();
   await writeSnapshot({ store, snapshot: premiseSnapshot, source });
-  const requestId = randomId(8);
   const imageReferences = imageReferencesForBodies([messageBody]);
   if (imageReferences.length > MAX_IMAGES_PER_MESSAGE) {
     return refusal({
@@ -244,19 +262,11 @@ export const sendAgentRequest = async (
           : "An image could not be attached",
     });
   }
-  const agentRequest = messageAgentRequest({
-    kind,
-    requestId,
-    sessionId,
-    planId,
-    premiseSnapshot,
-    createdAt: new Date().toISOString(),
-    body: messageBody,
+  const agentRequest = {
+    ...requestDraft,
+    attachmentManifest: attachments,
     attachments,
-    ...(kind === "reply" && typeof payload.commentId === "string"
-      ? { commentId: payload.commentId }
-      : {}),
-  });
+  };
   if (agentRequest.kind === "reply") {
     const sent = await planRenderer.readStoredComments(store.sentPath);
     if (!sent.some((comment) => comment.id === agentRequest.commentId)) {

@@ -681,6 +681,7 @@ describe("agent work loop lifecycle", () => {
       store: review.store,
       requestId,
       references: [{ id: descriptor.id, alt: descriptor.alt }],
+      totalByteLimit: MAX_IMAGE_BYTES,
     });
     const attachment = attachments[0];
     const outsidePath = join(directory, "outside.png");
@@ -733,6 +734,7 @@ describe("agent work loop lifecycle", () => {
       store: review.store,
       requestId,
       references: [{ id: descriptor.id, alt: descriptor.alt }],
+      totalByteLimit: MAX_IMAGE_BYTES,
     });
     const attachmentRoot = join(
       review.store.requestAttachmentsDirectory,
@@ -789,6 +791,7 @@ describe("agent work loop lifecycle", () => {
       store: review.store,
       requestId,
       references: [{ id: descriptor.id, alt: descriptor.alt }],
+      totalByteLimit: MAX_IMAGE_BYTES,
     });
     const attachmentDirectory = review.store.requestAttachmentsDirectory;
     const displacedDirectory = `${attachmentDirectory}.displaced`;
@@ -849,6 +852,7 @@ describe("agent work loop lifecycle", () => {
       store: review.store,
       requestId,
       references: [{ id: descriptor.id, alt: descriptor.alt }],
+      totalByteLimit: MAX_IMAGE_BYTES,
     });
     const request = messageAgentRequest({
       kind: "chat",
@@ -1017,6 +1021,7 @@ describe("agent work loop lifecycle", () => {
       store: review.store,
       requestId: firstId,
       references: [{ id: descriptor.id, alt: descriptor.alt }],
+      totalByteLimit: MAX_IMAGE_BYTES,
     });
     const first = messageAgentRequest({
       kind: "chat",

@@ -806,6 +806,26 @@ export const freezeRequestAttachments = async ({
   readonly totalByteLimit: number;
 }): Promise<ReadonlyArray<ReviewImageAttachment>> => {
   if (!/^[a-f0-9]{16}$/.test(requestId)) throw new Error("Invalid request id");
+  const prepared = await Promise.all(
+    references.map(async (reference) => {
+      const stored = await readReviewImage({ store, id: reference.id });
+      if (stored === undefined)
+        throw new Error(`Unknown or corrupt review image ${reference.id}`);
+      const format = sniffReviewImage(stored.bytes);
+      if (format === undefined)
+        throw new Error(`Unknown or corrupt review image ${reference.id}`);
+      return { reference, stored, format };
+    }),
+  );
+  const totalBytes = prepared.reduce(
+    (total, { stored }) => total + stored.descriptor.byteLength,
+    0,
+  );
+  if (totalBytes > totalByteLimit) {
+    throw new Error(
+      `The images in one message must total ${Math.floor(totalByteLimit / (1024 * 1024))} MiB or less.`,
+    );
+  }
   const temporary = inside({
     base: store.requestAttachmentsDirectory,
     leaf: `.attachments-${requestId}-${randomBytes(6).toString("hex")}`,
@@ -817,20 +837,7 @@ export const freezeRequestAttachments = async ({
   await mkdir(temporary, { recursive: true, mode: DIRECTORY_MODE });
   try {
     const attachments: Array<ReviewImageAttachment> = [];
-    let totalBytes = 0;
-    for (const reference of references) {
-      const stored = await readReviewImage({ store, id: reference.id });
-      if (stored === undefined)
-        throw new Error(`Unknown or corrupt review image ${reference.id}`);
-      const format = sniffReviewImage(stored.bytes);
-      if (format === undefined)
-        throw new Error(`Unknown or corrupt review image ${reference.id}`);
-      totalBytes += stored.descriptor.byteLength;
-      if (totalBytes > totalByteLimit) {
-        throw new Error(
-          `The images in one message must total ${Math.floor(totalByteLimit / (1024 * 1024))} MiB or less.`,
-        );
-      }
+    for (const { reference, stored, format } of prepared) {
       const filename = `image-${reference.id}.${format.extension}`;
       await writeFile(
         inside({ base: temporary, leaf: filename }),

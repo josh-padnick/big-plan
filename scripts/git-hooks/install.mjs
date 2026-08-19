@@ -206,6 +206,7 @@ export const gitCheckoutIsAvailable = (repoRoot) => {
       cwd: repoRoot,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, LC_ALL: "C" },
     });
     return true;
   } catch (error) {
