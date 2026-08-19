@@ -268,7 +268,18 @@ const spawnAndAwaitReady = async ({
 }: {
   readonly port: number;
 }): Promise<ServiceAvailability> => {
-  await ensureServiceToken();
+  // A token that can be neither read nor minted is a start that cannot
+  // happen, and it is a returned reason like every other one: this path
+  // promises the caller a result, never an exception, because the command
+  // asking for it still has a session address to print.
+  try {
+    await ensureServiceToken();
+  } catch (error: unknown) {
+    return {
+      kind: "unavailable",
+      reason: `The Big Plan service could not be started because its token at ${servicePaths().tokenPath} is unavailable: ${String(error)}`,
+    };
+  }
   // A child that exits before answering could not take the port - usually
   // because something else already has it. Waiting out the full deadline for
   // an answer that is never coming only delays the explanation.

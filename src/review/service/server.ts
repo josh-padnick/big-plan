@@ -309,10 +309,13 @@ export const startService = async ({
       }
       stopArmed = false;
       sendHtml({ response, status: 200, html: renderServiceStoppedPage() });
-      // The last thing this process does. Closing after the response finishes
-      // is what makes the page's own warning true: reloading it errors,
-      // because by then nothing is listening.
-      response.on("finish", () => {
+      // The last thing this process does. `close` fires whether the page was
+      // delivered whole or the reader closed the tab halfway through it, and
+      // the stop was authorised either way: the route disarms once, so this
+      // response is the only one that can end the process, and it has to.
+      // Closing after it is what makes the page's own warning true - reloading
+      // it errors, because by then nothing is listening.
+      response.on("close", () => {
         void close();
       });
       return;
@@ -402,8 +405,9 @@ export const startService = async ({
       }
       sendJson({ response, status: 200, value: { stopping: true } });
       // Answered before the listener closes, so the caller learns the request
-      // was accepted rather than seeing its connection cut mid-reply.
-      response.on("finish", () => {
+      // was accepted rather than seeing its connection cut mid-reply - and a
+      // caller that hangs up first still gets the stop it asked for.
+      response.on("close", () => {
         void close();
       });
       return;

@@ -4,11 +4,12 @@
 
 import { createServer } from "node:http";
 import type { Server } from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  ensureServiceRunning,
   ensureServiceToken,
   probeService,
   readServiceToken,
@@ -197,6 +198,24 @@ describe("the service token", () => {
     await ensureServiceToken();
     await writeFile(servicePaths().tokenPath, "\n", "utf8");
     expect(await readServiceToken()).toBe(undefined);
+  });
+});
+
+describe("starting when the token cannot be minted", () => {
+  it("should report why rather than throwing at the caller", async () => {
+    // A directory where the token file belongs: unreadable and unwritable
+    // without touching permissions, which is the shape of a state directory
+    // another user owns. The command asking for a link still has the
+    // session's own address to print, so this must come back as a reason.
+    await mkdir(servicePaths().tokenPath, { recursive: true });
+
+    // Port 1 is reserved and nothing serves it, so a start is attempted.
+    const availability = await ensureServiceRunning({ port: 1 });
+
+    expect(availability.kind).toBe("unavailable");
+    expect(
+      availability.kind === "unavailable" && availability.reason,
+    ).toContain(servicePaths().tokenPath);
   });
 });
 

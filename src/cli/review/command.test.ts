@@ -4,12 +4,13 @@
 
 import { createServer } from "node:http";
 import type { Server } from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { recordGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 import { startReviewRuntime } from "../../review/server.js";
+import { servicePaths } from "../../review/service/paths.js";
 import { serviceVersion } from "../../review/service/version.js";
 import { reviewCommand } from "./command.js";
 
@@ -80,12 +81,16 @@ beforeEach(async () => {
   await recordGuidanceAcknowledgment();
 });
 
+const stopStub = async (): Promise<void> => {
+  if (stub === undefined) return;
+  stub.closeAllConnections();
+  const closing = stub;
+  stub = undefined;
+  await new Promise<void>((settle) => closing.close(() => settle()));
+};
+
 afterEach(async () => {
-  if (stub !== undefined) {
-    stub.closeAllConnections();
-    await new Promise<void>((settle) => stub?.close(() => settle()));
-    stub = undefined;
-  }
+  await stopStub();
   for (const [name, value] of [
     ["BIG_PLAN_STATE_DIR", previousStateDirectory],
     ["BIG_PLAN_PORT", previousPort],
@@ -175,6 +180,30 @@ describe("reviewCommand", () => {
       expect(result).toMatchObject({ custody: "held", link: stable });
       expect(result["help"]).toEqual(
         expect.arrayContaining([expect.stringContaining(stable)]),
+      );
+    } finally {
+      await live.close();
+    }
+  });
+
+  it("should still report held custody when the service token is unusable", async () => {
+    // A directory where the token file belongs: the state directory is fine
+    // for everything else, and a token nobody can mint must cost the reader
+    // the durable link and nothing more.
+    await stopStub();
+    await mkdir(servicePaths().tokenPath, { recursive: true });
+    const planPath = join(tempDirectory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const live = await startReviewRuntime({ planPath });
+    try {
+      const result = await reviewCommand([planPath]);
+
+      expect(result).toMatchObject({ custody: "held", review: live.url });
+      expect(result["link"]).toBe(undefined);
+      expect(result["help"]).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(servicePaths().tokenPath),
+        ]),
       );
     } finally {
       await live.close();

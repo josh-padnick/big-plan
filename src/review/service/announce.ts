@@ -7,6 +7,7 @@
 // is exactly today's behaviour and never worse.
 
 import { ensureServiceRunning } from "./lifecycle.js";
+import type { ServiceAvailability } from "./lifecycle.js";
 import { servicePlanUrl } from "./paths.js";
 import { rememberPlan } from "./registry.js";
 
@@ -33,7 +34,15 @@ export const publishStableReviewLink = async ({
       reason: `This plan could not be registered for a stable link: ${String(error)}`,
     };
   }
-  const availability = await ensureServiceRunning();
+  // Every way this can fail belongs in the returned reason: the command that
+  // asked for a stable link still has the session's own address to print, and
+  // losing that to a state-directory problem would be worse than today.
+  const availability: ServiceAvailability = await ensureServiceRunning().catch(
+    (error: unknown) => ({
+      kind: "unavailable" as const,
+      reason: `The Big Plan service could not be reached for a stable link: ${String(error)}`,
+    }),
+  );
   if (availability.kind === "unavailable") {
     return { kind: "unavailable", reason: availability.reason };
   }

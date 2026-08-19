@@ -6,6 +6,7 @@
 // trusted to review.
 
 import { request as httpRequest } from "node:http";
+import type { Socket } from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -294,6 +295,52 @@ describe("the service listener", () => {
       "Reloading this page will show a browser connection error",
     );
     await expect(get("/healthz")).rejects.toThrow();
+  });
+
+  it("should still stop when the reader leaves before the page arrives", async () => {
+    // The confirmation promised the service stops, and the route disarms as
+    // soon as it is served, so this response is the only thing that can end
+    // the process - however the reader's side of it ends.
+    const nonce = /name="nonce" type="hidden" value="([^"]+)"/u.exec(
+      await (await get("/stop")).text(),
+    )?.[1];
+    const posted = await get("/stop", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "sec-fetch-site": "same-origin",
+      },
+      body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
+    });
+    expect(posted.status).toBe(303);
+
+    let landingSocket: Socket | undefined;
+    await new Promise<void>((settle, fail) => {
+      const landing = httpRequest(
+        {
+          host: "127.0.0.1",
+          port: runtime.port,
+          path: "/stopped",
+          method: "GET",
+        },
+        (response) => {
+          // Gone the moment the headers land, long before the page's last
+          // byte: the reader closed the tab.
+          response.destroy();
+          landingSocket?.destroy();
+          settle();
+        },
+      );
+      landing.on("error", fail);
+      landing.on("socket", (socket: Socket) => {
+        landingSocket = socket;
+      });
+      landing.end();
+    });
+
+    await vi.waitFor(async () => {
+      await expect(get("/healthz")).rejects.toThrow();
+    });
   });
 
   it("should not let anyone stop it by guessing the landing page", async () => {
