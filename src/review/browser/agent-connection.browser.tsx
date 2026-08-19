@@ -257,6 +257,11 @@ const CopyBlock = ({
 const STATUS_CARD_TONE: Record<AgentHealthIndicator, string> = {
   healthy:
     "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]",
+  // A pending primacy question is a request, not a fault, so the card keeps the
+  // warning register rather than the danger one; the roster above it carries
+  // the actual question (BIG-171).
+  "decision-owed":
+    "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]",
   working:
     "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]",
   "read-only":

@@ -21,6 +21,7 @@ import {
   AGENT_STALL_MS,
   AGENT_STALL_WINDOW_LABEL,
 } from "./agent-timing.js";
+import type { AgentPrimacyHealth } from "./agent-primacy.js";
 import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
@@ -126,7 +127,22 @@ export type CurrentAgentActivity =
  * fills a disc.
  */
 export type AgentHealthIndicator =
-  "healthy" | "working" | "read-only" | "stalled" | "error" | "unavailable";
+  | "healthy"
+  | "working"
+  /**
+   * A second agent is attached and the reviewer owes an answer about which one
+   * speaks for the plan.
+   *
+   * It ranks below every fault and above every healthy state, because nothing
+   * is broken - the primary is still answering - but the reviewer is being
+   * asked for something and the toolbar is the only place they will see it
+   * without opening the sidebar (BIG-171).
+   */
+  | "decision-owed"
+  | "read-only"
+  | "stalled"
+  | "error"
+  | "unavailable";
 
 export type AgentHealth = {
   readonly indicator: AgentHealthIndicator;
@@ -150,11 +166,14 @@ export const deriveAgentHealth = ({
   hasAgentRuntime,
   isReadOnly,
   isObservable,
+  primacy = "settled",
 }: {
   readonly activity: CurrentAgentActivity;
   readonly hasAgentRuntime: boolean;
   readonly isReadOnly: boolean;
   readonly isObservable: boolean;
+  /** Whether a second agent has asked to speak for this plan (BIG-171). */
+  readonly primacy?: AgentPrimacyHealth;
 }): AgentHealth => {
   if (!hasAgentRuntime) {
     return { indicator: "unavailable", label: "No agent session" };
@@ -176,6 +195,22 @@ export const deriveAgentHealth = ({
   }
   if (activity.state === "stalled") {
     return { indicator: "stalled", label: "Agent not responding" };
+  }
+  /*
+  A pending primacy question outranks the healthy states and nothing else.
+
+  It sits below every fault because a fault is the worse news and the toolbar
+  has one mark to spend: a reviewer whose agent has disconnected is not helped
+  by being told a second one is waiting to be introduced. It sits above working
+  and idle because otherwise the steady-state mark would stay green while the
+  reviewer owed an answer, and they would never learn it without opening the
+  sidebar (BIG-171).
+  */
+  if (primacy === "decision-owed") {
+    return {
+      indicator: "decision-owed",
+      label: "Second agent needs an answer",
+    };
   }
   if (activity.state === "working") {
     return { indicator: "working", label: "Agent working" };

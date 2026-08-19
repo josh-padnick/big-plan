@@ -14,6 +14,7 @@ import type {
   RuntimeSession,
 } from "../shared/review-wire.js";
 import { AgentConnectionPanel } from "./agent-connection.browser.js";
+import { AgentRoster, type AgentRosterProps } from "./agent-roster.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
 
 export type AgentSurfaceModel = {
@@ -36,6 +37,10 @@ export type AgentSurfaceModel = {
   readonly isDisconnectingAgent: boolean;
   readonly onViewRequest: (requestId: string, kind: string) => void;
   readonly onDisconnect: () => void;
+  /** Every agent attached to this review, and how to answer about them. */
+  readonly agents: AgentRosterProps["agents"];
+  readonly nowMs: number;
+  readonly onAnswerPrimacy: AgentRosterProps["onAnswer"];
 };
 
 export const AgentSurface = ({
@@ -48,6 +53,15 @@ export const AgentSurface = ({
     className="review-feedback-panel grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-3 overflow-x-hidden overflow-y-auto p-3"
     tabIndex={-1}
   >
+    {/* The roster sits above the connection panel: when a second agent is
+        asking for something, that question outranks the standing description
+        of the agent already answering. */}
+    <AgentRoster
+      agents={model.agents}
+      nowMs={model.nowMs}
+      isReadOnly={model.runtimeSession?.authoritative === false}
+      onAnswer={model.onAnswerPrimacy}
+    />
     <AgentConnectionPanel
       activity={model.activity}
       status={model.status}

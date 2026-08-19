@@ -59,6 +59,21 @@ const INDICATOR_PRESENTATION: Record<
     icon: CIRCLE_ICON,
     className: `text-agent-live ${FILLED_MARK}`,
   },
+  /*
+  The captain's rule for this state: a green mark when all is well, a hazard
+  when something needs adjusting, and no third thing in the toolbar.
+
+  It shares the hazard triangle with the error state and separates from it by
+  colour alone, which is the one place this module knowingly departs from its
+  own shape rule. The alternative was a glyph that does not read as "you are
+  being asked for something", and the two states are never reachable at the
+  same moment: a decision is only owed while an agent is attached and answering,
+  which is exactly when the error state cannot be showing.
+  */
+  "decision-owed": {
+    icon: TRIANGLE_ALERT_ICON,
+    className: `text-warning ${OUTLINED_MARK}`,
+  },
   "read-only": {
     icon: LOCK_ICON,
     className: `text-warning ${OUTLINED_MARK}`,
