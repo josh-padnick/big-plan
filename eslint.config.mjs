@@ -484,7 +484,10 @@ export default tseslint.config(
     // the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and it
     // is fenced here because the failure is silent: the markup is valid, the
     // cascade is clean, and only a reader at a narrow width ever sees it.
-    files: ["src/**/*.tsx"],
+    // Server-rendered class strings in `.ts` are fenced alongside the React
+    // views, because the rule is about the layout a string asks for rather
+    // than about which renderer emits it.
+    files: ["src/**/*.ts", "src/**/*.tsx"],
     rules: {
       "no-restricted-syntax": [
         "error",
