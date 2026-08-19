@@ -171,7 +171,7 @@ const renderBulkCollapseControls = (layoutClasses = ""): string =>
 // reads heavier than a hairline.
 const renderCommentDraftControl = (): string =>
   `<span data-comment-draft-control hidden>
-<button class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-edge bg-paper px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-open aria-label="Add review comment" aria-expanded="false">${lucideIconToHtml({ icon: MESSAGE_SQUARE_ICON, className: "size-3.5" })}<span>Comment</span></button>
+<button class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-toolbar-edge bg-paper px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-open aria-label="Add review comment" aria-expanded="false">${lucideIconToHtml({ icon: MESSAGE_SQUARE_ICON, className: "size-3.5" })}<span>Comment</span></button>
 <section class="fixed top-14 right-4 z-20 w-80 max-w-[calc(100vw-2rem)] rounded-xl bg-raised p-4 shadow-floating" data-comment-draft-panel aria-label="Review comment draft" hidden>
 <div class="mb-2 flex items-center justify-between gap-3">
 <p class="text-sm font-semibold">Review comment</p>

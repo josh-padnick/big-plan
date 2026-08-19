@@ -142,22 +142,24 @@ Its greys are warm through their whole range, which is what makes the page read 
 Markup never names a ramp step.
 Markup names a **role**.
 
-| Role          | Meaning                                                          |
-| ------------- | ---------------------------------------------------------------- |
-| `paper`       | The page                                                         |
-| `raised`      | A card, lifted off the page                                      |
-| `surface`     | A quiet separated area: a hover state, a chip, a table head      |
-| `well`        | A recessed area inside a card: a code body, a diff body          |
-| `header`      | A chrome band inside a card                                      |
-| `toolbar`     | The page's own chrome band, above the document                   |
-| `ink`         | Primary text, the thing being read                               |
-| `muted`       | Secondary text, supporting the primary                           |
-| `subtle`      | Tertiary text, a label the reader consults rather than reads     |
-| `edge`        | A hairline, when a border is genuinely the answer                |
-| `edge-strong` | The edge of a control that must read as an input                 |
-| `accent`      | The theme's emphasis colour, for the one thing that matters most |
-| `accent-soft` | A tinted ground for accent content                               |
-| `accent-ink`  | Text on an accent-filled surface                                 |
+| Role                  | Meaning                                                          |
+| --------------------- | ---------------------------------------------------------------- |
+| `paper`               | The page                                                         |
+| `raised`              | A card, lifted off the page                                      |
+| `surface`             | A quiet separated area: a hover state, a chip, a table head      |
+| `well`                | A recessed area inside a card: a code body, a diff body          |
+| `header`              | A chrome band inside a card                                      |
+| `toolbar`             | The page's own chrome band, above the document                   |
+| `ink`                 | Primary text, the thing being read                               |
+| `muted`               | Secondary text, supporting the primary                           |
+| `subtle`              | Tertiary text, a label the reader consults rather than reads     |
+| `edge`                | A hairline, when a border is genuinely the answer                |
+| `edge-strong`         | The edge of a control that must read as an input                 |
+| `toolbar-edge`        | The edge of a control sitting on the toolbar band                |
+| `toolbar-edge-strong` | The same edge, one step firmer, for hover and the open view      |
+| `accent`              | The theme's emphasis colour, for the one thing that matters most |
+| `accent-soft`         | A tinted ground for accent content                               |
+| `accent-ink`          | Text on an accent-filled surface                                 |
 
 Rules:
 
