@@ -30,7 +30,6 @@ import {
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
-import { recordCommittedRevision } from "./change-set-commit.js";
 import {
   appendProgressEvent,
   claimAgentRequest,
@@ -993,12 +992,9 @@ describe("review runtime input contract", () => {
     sessionToken: string,
   ): Promise<
     ReadonlyArray<{
-      readonly inputId: string;
-      readonly kind: "decision" | "change-set";
       readonly label: string;
       readonly isCritical: boolean;
       readonly state: string;
-      readonly detail: string;
     }>
   > => {
     const value: unknown = await (
@@ -1013,12 +1009,9 @@ describe("review runtime input contract", () => {
       throw new Error("Input contract response carried no inputs");
     }
     return value.inputs as ReadonlyArray<{
-      readonly inputId: string;
-      readonly kind: "decision" | "change-set";
       readonly label: string;
       readonly isCritical: boolean;
       readonly state: string;
-      readonly detail: string;
     }>;
   };
 
@@ -1050,7 +1043,6 @@ describe("review runtime input contract", () => {
       expect(await contractOf(target, sessionToken)).toEqual([
         {
           inputId: DECISION_ID,
-          kind: "decision",
           label: "Which release path should we use?",
           isCritical: true,
           state: "unanswered",
@@ -1058,97 +1050,12 @@ describe("review runtime input contract", () => {
         },
         {
           inputId: RENAME_ID,
-          kind: "decision",
           label: "Do we rename the endpoint?",
           isCritical: false,
           state: "unanswered",
           detail: "No answer recorded",
         },
       ]);
-    });
-  });
-
-  it("should list an open change set as a non-critical input", async () => {
-    await withContractRuntime(async ({ target, sessionToken }) => {
-      const before = CONTRACT_PLAN;
-      const after = `${CONTRACT_PLAN}\nThe rollout now includes a recovery checkpoint.\n`;
-      const from = deriveSnapshotDigest(before);
-      const to = deriveSnapshotDigest(after);
-      const changeSetId = "cccccccccccccccc";
-      await Promise.all([
-        writeSnapshot({ store: target.store, snapshot: from, source: before }),
-        writeSnapshot({ store: target.store, snapshot: to, source: after }),
-      ]);
-      await recordCommittedRevision({
-        store: target.store,
-        revision: {
-          requestId: changeSetId,
-          changeSetIds: [changeSetId],
-          baseSnapshot: from,
-          resultSnapshot: to,
-          provenance: "chat",
-          committedAt: "2026-08-18T12:00:00.000Z",
-        },
-      });
-
-      expect(
-        (await contractOf(target, sessionToken)).find(
-          (input) => input.inputId === changeSetId,
-        ),
-      ).toEqual({
-        inputId: changeSetId,
-        kind: "change-set",
-        label: "Plan-wide question",
-        isCritical: false,
-        state: "unanswered",
-        detail: "0 of 1 changes accepted",
-      });
-
-      const diff: unknown = await (
-        await callRuntime({
-          target,
-          sessionToken,
-          path: `/api/snapshot-diff?from=${from}&to=${to}`,
-        })
-      ).json();
-      if (
-        typeof diff !== "object" ||
-        diff === null ||
-        !("places" in diff) ||
-        !Array.isArray(diff.places) ||
-        typeof diff.places[0] !== "object" ||
-        diff.places[0] === null ||
-        !("placeId" in diff.places[0]) ||
-        typeof diff.places[0].placeId !== "string"
-      ) {
-        throw new Error("Snapshot diff carried no review place");
-      }
-      expect(
-        (
-          await callRuntime({
-            target,
-            sessionToken,
-            path: "/api/change-dispositions",
-            method: "POST",
-            body: {
-              op: "accept",
-              from,
-              to,
-              placeIds: [diff.places[0].placeId],
-            },
-          })
-        ).status,
-      ).toBe(200);
-
-      expect(
-        (await contractOf(target, sessionToken)).find(
-          (input) => input.inputId === changeSetId,
-        ),
-      ).toMatchObject({
-        isCritical: false,
-        state: "answered",
-        detail: "1 of 1 changes accepted",
-      });
     });
   });
 

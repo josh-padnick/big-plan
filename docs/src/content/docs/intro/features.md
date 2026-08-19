@@ -8,7 +8,7 @@ Everything on this page is shipped and works today.
 ## Reading experience
 
 - One reading column with coordinated light and dark variants for every colour theme.
-- A `Settings` dialog behind the branding bar's gear, built as a sidebar of settings pages beside the page you pick. `Appearance` and `Color theme` are separate pages there, so neither crowds the other and a later setting joins the sidebar instead of lengthening a page. On wide screens the sidebar stays narrow beside a dominant content pane; on phones it becomes a compact row of pages above a single column.
+- A `Settings` dialog behind the branding bar's gear, built as a sidebar of settings pages beside the page you pick. `Appearance` and `Color theme` are separate pages there, so neither crowds the other and a later setting joins the sidebar instead of lengthening a page. On wide screens the sidebar is a narrow rail beside a dominant content pane; on phones it becomes a compact row of pages above a single column.
 - The `Appearance` page offers `Light`, `Dark`, and `System`. The choice applies immediately, is saved for every review document in this browser, and is applied before the first paint so the other appearance never flashes.
 - The `Color theme` page offers `Default`, `Rosé Pine`, `Nord`, `Catppuccin`, and `Brutalist`. A theme is a palette rather than a mode: each one works in both light and dark, appearance still decides which, and every swatch previews that theme's own shades. The choice also applies immediately, is saved across review documents, and is restored before the first paint. `Default` is Big Plan's warm paper look and is what a document with no saved choice renders. `Brutalist` also squares cards and controls, replaces the soft shadows with hard offset slabs, and sets one weight heavier, so it changes the shape of the reading surface and not only its colours; pill-shaped badges stay round.
 - `System` follows your OS preference, and is the value you get on a first run or when the browser refuses storage.
@@ -30,7 +30,7 @@ Everything on this page is shipped and works today.
 - Sent feedback stays attached to durable threads while the connected coding agent answers, asks for input, declines, warns, or publishes a validated plan revision.
 - **What changed** compares each request's claim-time baseline with its result, keeps later historical and stale-premise diffs reviewable, preserves structured component presentation, and guides the reviewer through accepting each changed place; comment threads then offer resolution.
 - Confirmed decision answers are saved with the review and stay current only while their decision's content is unchanged; they are readable within the review session rather than delivered to the agent, and a standalone rendered document keeps answers for the reading session only.
-- An **Inputs** list names every decision and published change set the review is still waiting for, marks each one answered, not answered, or stale, and marks authored critical decisions while keeping change sets non-critical.
+- An **Inputs** list names what the review is still waiting for - for now, every decision the plan asks - with each one marked answered, not answered, or stale, and the ones the plan's author called critical marked as such.
 - Review state and feedback packages stay in an ignored, owner-only `.big-plan/` directory beside the plan.
 
 See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence model, causal diff behavior, and trust boundaries.

@@ -3,10 +3,10 @@
 // itself. Keeping the response a value is what lets the runtime decide, after
 // the handler has run, whether this session still holds write authority.
 //
-// The stateful objects here replace loose `let` bindings inside the runtime
-// closure that were mutated from places far apart in one very long function.
-// Each is named after the thing it means, because that is the state whose drift
-// breaks a review silently rather than loudly.
+// The four owned objects here were loose `let` bindings inside the runtime
+// closure, mutated from places far apart in one very long function. Each is
+// named after the thing it means, because that is the state whose drift breaks
+// a review silently rather than loudly.
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
@@ -22,7 +22,6 @@ import {
   readChangeDispositions,
   readComments,
   readResolvedCommentIds,
-  readSnapshot,
   readStagedInputs,
   writeChangeDispositions,
   writeStagedInputs,
@@ -36,10 +35,6 @@ import { validateStagedInputs } from "./plan-inputs-store.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
 import { validateChangeDispositions } from "./change-dispositions-store.js";
 import type { StoredChangeDispositions } from "./change-dispositions-store.js";
-import { readCommittedChangeSets } from "./change-set-commit.js";
-import type { ChangeSetInput, ChangeSetPlaces } from "./input-contract.js";
-import { buildSnapshotDiff } from "./snapshot-diff.js";
-import { reviewerMessageLabel } from "./shared/reviewer-markdown.js";
 import {
   MUTATION_STALL_MS,
   ReviewWriteStalled,
@@ -189,19 +184,13 @@ export type DecisionAnswers = {
 };
 
 /**
- * The change dispositions this review has recorded. Each disposition names the
- * two snapshot digests it closed, so its write path needs no current-change-set
- * inventory. The input contract separately joins it to published change sets
- * to enumerate still-open work.
+ * The change dispositions this review has recorded. Unlike the answer record
+ * there is no inventory to join against: a disposition names the two snapshot
+ * digests it closed, so it already refers to exactly one revision's content.
  */
 export type ChangeDispositions = {
   readonly read: () => Promise<StoredChangeDispositions>;
   readonly write: (dispositions: StoredChangeDispositions) => Promise<void>;
-};
-
-/** The published change sets the server-side input inventory can enumerate. */
-export type PlanChangeSets = {
-  readonly list: () => Promise<ReadonlyArray<ChangeSetInput>>;
 };
 
 /** The review's one lifetime policy and its current activity. */
@@ -223,7 +212,6 @@ export type ReviewRouteContext = {
   readonly planRenderer: PlanRenderer;
   readonly decisionAnswers: DecisionAnswers;
   readonly changeDispositions: ChangeDispositions;
-  readonly planChangeSets: PlanChangeSets;
   readonly readerProgress: ReaderProgress;
   readonly writeGate: WriteGate;
   readonly activityClock: ActivityClock;
@@ -537,98 +525,5 @@ export const createActivityClock = (idleTimeoutMs: number): ActivityClock => {
     idleForMs: () => Date.now() - lastActivityAt,
     expiresAtMs: () =>
       idleTimeoutMs > 0 ? lastActivityAt + idleTimeoutMs : undefined,
-  };
-};
-
-/**
- * Owns the enumeration of published change sets and the places inside each one.
- *
- * Places are memoized by their content-pinned snapshot address. A failed read
- * is not memoized because it says nothing durable about that address.
- */
-export const createPlanChangeSets = ({
-  store,
-  resolvedPlanPath,
-  planRenderer,
-}: {
-  readonly store: ReviewStore;
-  readonly resolvedPlanPath: string;
-  readonly planRenderer: PlanRenderer;
-}): PlanChangeSets => {
-  const places = new Map<string, ReadonlyArray<string>>();
-  const placesFor = async ({
-    from,
-    to,
-  }: {
-    readonly from: string;
-    readonly to: string;
-  }): Promise<ChangeSetPlaces> => {
-    const address = `${from}:${to}`;
-    const memoized = places.get(address);
-    if (memoized !== undefined) return { kind: "known", placeIds: memoized };
-    const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
-    let placeIds: ReadonlyArray<string>;
-    try {
-      const [beforeSource, afterSource] = await Promise.all([
-        readSnapshot({ store, snapshot: from }),
-        readSnapshot({ store, snapshot: to }),
-      ]);
-      placeIds = buildSnapshotDiff({
-        from,
-        to,
-        before: renderDocument({
-          markdown: beforeSource,
-          fallbackTitle,
-          identity: {},
-        }).blocks,
-        after: renderDocument({
-          markdown: afterSource,
-          fallbackTitle,
-          identity: {},
-        }).blocks,
-      }).places.map((place) => place.placeId);
-    } catch {
-      return { kind: "unreadable" };
-    }
-    places.set(address, placeIds);
-    return { kind: "known", placeIds };
-  };
-  const threadLabels = async (): Promise<ReadonlyMap<string, string>> => {
-    const comments = [
-      ...(await planRenderer.readStoredComments(store.sentPath)),
-      ...(await planRenderer.readStoredComments(store.draftsPath)),
-    ];
-    return new Map(
-      comments.map((comment) => [
-        comment.id,
-        reviewerMessageLabel(comment.body),
-      ]),
-    );
-  };
-  return {
-    list: async () => {
-      const changeSets = await readCommittedChangeSets({ store });
-      const labels = changeSets.some(
-        (changeSet) => changeSet.provenance !== "chat",
-      )
-        ? await threadLabels()
-        : new Map<string, string>();
-      return Promise.all(
-        changeSets.map(async (changeSet) => ({
-          changeSetId: changeSet.changeSetId,
-          label:
-            (changeSet.provenance === "chat"
-              ? undefined
-              : labels.get(changeSet.changeSetId)) ?? "Plan-wide question",
-          from: changeSet.baseSnapshot,
-          to: changeSet.resultSnapshot,
-          priorResultSnapshots: changeSet.priorResultSnapshots,
-          places: await placesFor({
-            from: changeSet.baseSnapshot,
-            to: changeSet.resultSnapshot,
-          }),
-        })),
-      );
-    },
   };
 };

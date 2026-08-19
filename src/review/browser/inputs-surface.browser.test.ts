@@ -19,7 +19,6 @@ const oneOpenDecision = (): ReturnType<typeof reviewInputStanding> =>
   reviewInputStanding([
     {
       inputId: "quick-decision-do-we-ship-behind-a-flag",
-      kind: "decision",
       label: "Do we ship behind a flag?",
       isCritical: true,
       state: "unanswered",

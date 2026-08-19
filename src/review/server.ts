@@ -118,7 +118,6 @@ import {
   createActivityClock,
   createChangeDispositions,
   createDecisionAnswers,
-  createPlanChangeSets,
   createPlanRenderer,
   createReaderProgress,
   createWriteGate,
@@ -889,15 +888,6 @@ export const startReviewRuntime = async ({
 
   // Every piece of state the routes share is built once, here, and named after
   // what it means. Anything a route may read travels through this record.
-  const planRenderer = createPlanRenderer({
-    store,
-    planId,
-    sessionId,
-    token,
-    resolvedPlanPath,
-    initialSnapshot,
-    isDiffPreview: diffPreviewSource !== undefined,
-  });
   const context: ReviewRouteContext = {
     store,
     planId,
@@ -906,18 +896,21 @@ export const startReviewRuntime = async ({
     agentCommand,
     restartCommand,
     recoveryPrompt,
-    planRenderer,
+    planRenderer: createPlanRenderer({
+      store,
+      planId,
+      sessionId,
+      token,
+      resolvedPlanPath,
+      initialSnapshot,
+      isDiffPreview: diffPreviewSource !== undefined,
+    }),
     decisionAnswers: createDecisionAnswers({
       store,
       resolvedPlanPath,
       reportDiagnostic,
     }),
     changeDispositions: createChangeDispositions({ store }),
-    planChangeSets: createPlanChangeSets({
-      store,
-      resolvedPlanPath,
-      planRenderer,
-    }),
     readerProgress: createReaderProgress({
       initialSnapshot,
       observedResponseIds: (await readCommittedRevisions({ store })).map(
@@ -928,6 +921,8 @@ export const startReviewRuntime = async ({
     activityClock: createActivityClock(idleTimeoutMs),
     reportDiagnostic,
   };
+  const { planRenderer } = context;
+
   /** Writes a route's decided response with the headers its kind carries. */
   const sendRouteResponse = ({
     response,
