@@ -70,6 +70,14 @@ test("accepts a clipping container that keeps its type step's leading", async ()
   assert.equal(result.failed, false);
 });
 
+test("accepts a comment that names the clipping pair it warns against", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      '// The title uses truncate, so never add leading-none - it slices the descenders.\nexport const V = () => <p className="truncate text-sm" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
 test("rejects a clipped leading even under an approved-metric marker", async () => {
   const result = await runAgainst({
     "view.tsx":

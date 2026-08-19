@@ -171,7 +171,10 @@ const RULES = [
 // step's own line height is the fix, so the pair is refused rather than the
 // utility. These run ahead of the approved-metric marker below and ignore it:
 // the marker licenses a value the captain approved over the scale, and clipped
-// text is a defect nobody approves.
+// text is a defect nobody approves. Matching is line-scoped, so a class list
+// Prettier wrapped across lines, or one assembled from two constants, still
+// reproduces the clipping without tripping the guard; widening it to whole
+// files is deliberately out of scope.
 const PAIR_RULES = [
   {
     name: "clipped leading",
@@ -581,16 +584,18 @@ export const checkDesignSystem = async ({
     const lines = (await readFile(module, "utf8")).split("\n");
     let markerReach = 0;
     lines.forEach((line, index) => {
-      for (const rule of PAIR_RULES) {
-        if (rule.parts.every((part) => part.test(line))) {
-          failures.push(
-            `${relative(resolve(sourceRoot, ".."), module)}:${index + 1}: ${rule.name}; ${rule.advice}`,
-          );
-        }
-      }
       const trimmed = line.trim();
       const isComment =
         trimmed === "" || trimmed.startsWith("//") || trimmed.startsWith("*");
+      if (!isComment) {
+        for (const rule of PAIR_RULES) {
+          if (rule.parts.every((part) => part.test(line))) {
+            failures.push(
+              `${relative(resolve(sourceRoot, ".."), module)}:${index + 1}: ${rule.name}; ${rule.advice}`,
+            );
+          }
+        }
+      }
       if (line.includes(APPROVED_MARKER)) {
         markerReach = APPROVED_MARKER_REACH;
         return;
