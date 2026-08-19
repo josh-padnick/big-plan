@@ -4063,6 +4063,8 @@ export const ReviewController = () => {
   const [cancelPendingRequestIds, setCancelPendingRequestIds] = useState<
     ReadonlySet<string>
   >(new Set());
+  /** Whether a disconnect the reviewer confirmed is still in flight. */
+  const [isDisconnectingAgent, setIsDisconnectingAgent] = useState(false);
   const [progress, setProgress] = useState<ReadonlyArray<ProgressEvent>>([]);
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
@@ -6333,6 +6335,11 @@ export const ReviewController = () => {
       return;
     }
     if (identity === null) return;
+    // Held locally for the round trip, because the snapshot cannot answer yet:
+    // the reviewer would otherwise get a live control back for the second and a
+    // half until the next poll, and a second click would send a second
+    // disconnect for an agent already leaving.
+    setIsDisconnectingAgent(true);
     try {
       await requestJson({
         path: "/api/agent-disconnect",
@@ -6346,6 +6353,11 @@ export const ReviewController = () => {
       setStatus("The agent was told to disconnect from this review.");
     } catch (error) {
       setStatus(errorMessage(error));
+    } finally {
+      // Cleared either way. The runtime's own answer takes over from here: a
+      // directive it recorded keeps the control pending, and a refusal has to
+      // give the reviewer their control back rather than stranding it.
+      setIsDisconnectingAgent(false);
     }
   };
 
@@ -7287,6 +7299,7 @@ export const ReviewController = () => {
                       disconnectRequestedAtMs:
                         agent.presence.disconnectRequestedAtMs,
                     }),
+                isDisconnectingAgent,
                 onViewRequest: viewAgentRequest,
                 onDisconnect: () => void disconnectAgent(),
               }}

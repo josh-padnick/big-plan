@@ -2581,6 +2581,17 @@ export const writeAgentHeartbeatEnded = async ({
  * say who ended the session, long after the agent that answered it has gone
  * (BIG-190).
  */
+/**
+ * How many disconnected agents the record remembers.
+ *
+ * One entry per agent the reviewer has taken off this review, and a review that
+ * has been through sixteen of them has long since stopped being able to hear
+ * from the first. The bound exists because the record is never pruned by time -
+ * it is the log's evidence for who ended a session - and an unbounded list in a
+ * long review is a file that only grows.
+ */
+const REMEMBERED_DISCONNECTS = 16;
+
 export const writeAgentDisconnectRequest = async ({
   store,
   directive,
@@ -2588,16 +2599,24 @@ export const writeAgentDisconnectRequest = async ({
   readonly store: ReviewStore;
   readonly directive: AgentDisconnectDirective;
 }): Promise<void> => {
-  await writeStoreJson({ path: store.agentDisconnectPath, value: directive });
+  const kept = (await readAgentDisconnectRequests({ store })).filter(
+    (existing) =>
+      // One standing directive per agent. A reviewer disconnecting the same
+      // agent twice is restating the same decision, not making a second one.
+      existing.writerId === undefined ||
+      existing.writerId !== directive.writerId,
+  );
+  await writeStoreJson({
+    path: store.agentDisconnectPath,
+    value: {
+      directives: [...kept, directive].slice(-REMEMBERED_DISCONNECTS),
+    },
+  });
 };
 
-/** Reads the standing disconnect directive, if the reviewer issued one. */
-export const readAgentDisconnectRequest = async ({
-  store,
-}: {
-  readonly store: ReviewStore;
-}): Promise<AgentDisconnectDirective | undefined> => {
-  const value = await readStoreJson(store.agentDisconnectPath);
+const decodeDisconnectDirective = (
+  value: unknown,
+): AgentDisconnectDirective | undefined => {
   if (
     typeof value !== "object" ||
     value === null ||
@@ -2616,6 +2635,7 @@ export const readAgentDisconnectRequest = async ({
     "claimToken" in value && typeof value.claimToken === "string"
       ? value.claimToken
       : undefined;
+  if (writerId === undefined && claimToken === undefined) return undefined;
   return {
     requestedAtMs: value.requestedAtMs,
     ...(writerId === undefined ? {} : { writerId }),
@@ -2623,23 +2643,53 @@ export const readAgentDisconnectRequest = async ({
   };
 };
 
-/** Reads the directive only where it is about the agent presence names. */
-export const readAgentDisconnectRequestFor = async ({
+/**
+ * Every standing disconnect, oldest first.
+ *
+ * They are kept per agent rather than as one current decision. A reviewer who
+ * disconnects one agent, connects another, and disconnects that one too has
+ * made two decisions, and the first agent may not run another command until
+ * after the second was recorded: a single slot would answer it with an
+ * ordinary claim failure instead of telling it what happened (BIG-190).
+ */
+export const readAgentDisconnectRequests = async ({
   store,
-  presence,
 }: {
   readonly store: ReviewStore;
-  readonly presence: Pick<AgentPresence, "writerId">;
-}): Promise<AgentDisconnectDirective | undefined> => {
-  const directive = await readAgentDisconnectRequest({ store });
-  if (directive === undefined) return undefined;
-  return agentDisconnectAddresses({
-    directive,
-    ...(presence.writerId === undefined ? {} : { writerId: presence.writerId }),
-  })
-    ? directive
-    : undefined;
+}): Promise<ReadonlyArray<AgentDisconnectDirective>> => {
+  const value = await readStoreJson(store.agentDisconnectPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("directives" in value) ||
+    !Array.isArray(value.directives)
+  ) {
+    return [];
+  }
+  return value.directives.flatMap((entry) => {
+    const directive = decodeDisconnectDirective(entry);
+    return directive === undefined ? [] : [directive];
+  });
 };
+
+/** The standing disconnect addressed to one agent, if the reviewer issued one. */
+export const readAgentDisconnectRequestFor = async ({
+  store,
+  writerId,
+  claimToken,
+}: {
+  readonly store: ReviewStore;
+  readonly writerId?: string;
+  readonly claimToken?: string;
+}): Promise<AgentDisconnectDirective | undefined> =>
+  (await readAgentDisconnectRequests({ store })).find((directive) =>
+    agentDisconnectAddresses({
+      directive,
+      ...(writerId === undefined ? {} : { writerId }),
+      ...(claimToken === undefined ? {} : { claimToken }),
+    }),
+  );
 
 /** Reads the coding-agent presence signal without turning stale data into work. */
 export const readAgentPresence = async ({

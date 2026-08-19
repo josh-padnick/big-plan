@@ -1175,7 +1175,9 @@ export const startReviewRuntime = async ({
         // can never explain the departure of an agent it was not about.
         const disconnect = await readAgentDisconnectRequestFor({
           store,
-          presence,
+          ...(presence.writerId === undefined
+            ? {}
+            : { writerId: presence.writerId }),
         });
         await recordAgentConnectionState({
           store,

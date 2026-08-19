@@ -39,9 +39,10 @@ import {
 import {
   agentMutationJournalPath,
   readAgentConnectionEvents,
-  readAgentDisconnectRequest,
+  readAgentDisconnectRequests,
   writeAgentHeartbeat,
   writeAgentHeartbeatEnded,
+  withReviewStoreLock,
   writeAgentResponseValue,
   writeStoreJson,
   withReviewStoreLock,
@@ -5496,6 +5497,33 @@ describe("review runtime agent disconnect", () => {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
 
+  /** Holds the gate `claimAgentRequest` takes first, so a claim cannot land. */
+  const holdPlanClaimLock = (runtimeToHold: ReviewRuntime) => {
+    let acquire = (): void => undefined;
+    let free = (): void => undefined;
+    const acquired = new Promise<void>((settle) => {
+      acquire = settle;
+    });
+    const freed = new Promise<void>((settle) => {
+      free = settle;
+    });
+    const held = withReviewStoreLock({
+      lockPath: join(runtimeToHold.store.reviewDirectory, ".agent-claim.lock"),
+      change: async () => {
+        acquire();
+        await freed;
+      },
+      timeoutError: () => new Error("Timed out holding the plan claim lock"),
+    });
+    return {
+      acquired,
+      release: async () => {
+        free();
+        await held;
+      },
+    };
+  };
+
   const attachAgent = async ({
     writerId,
     state = "waiting",
@@ -5521,8 +5549,8 @@ describe("review runtime agent disconnect", () => {
     const response = await ask({ path: "/api/agent-disconnect" });
     expect(response.status).toBe(409);
     await expect(
-      readAgentDisconnectRequest({ store: disconnected.store }),
-    ).resolves.toBeUndefined();
+      readAgentDisconnectRequests({ store: disconnected.store }),
+    ).resolves.toEqual([]);
   });
 
   it("should address the disconnect to the agent the review names", async () => {
@@ -5530,13 +5558,17 @@ describe("review runtime agent disconnect", () => {
     const response = await ask({ path: "/api/agent-disconnect" });
     expect(response.status).toBe(200);
     await expect(
-      readAgentDisconnectRequest({ store: disconnected.store }),
-    ).resolves.toMatchObject({ writerId: "1111111111111111" });
+      readAgentDisconnectRequests({ store: disconnected.store }),
+    ).resolves.toEqual([
+      expect.objectContaining({ writerId: "1111111111111111" }),
+    ]);
   });
 
   it("should report the directive only while it is about the attached agent", async () => {
     // The card draws its pending state from this, so it has to stop reporting
     // the moment a different agent takes over the presence record.
+    await attachAgent({ writerId: "1111111111111111" });
+    expect((await ask({ path: "/api/agent-disconnect" })).status).toBe(200);
     const own: unknown = await (
       await ask({ path: "/api/agent", method: "GET" })
     ).json();
@@ -5551,6 +5583,33 @@ describe("review runtime agent disconnect", () => {
     expect(next).not.toMatchObject({
       presence: { disconnectRequestedAtMs: expect.any(Number) },
     });
+  });
+
+  it("should decide who to disconnect under the plan's claim gate", async () => {
+    /*
+    The window this closes: the route reads presence and the exchange, sees no
+    claim yet, and writes a directive naming only the loop's writer id - while
+    the loop claims in between. `agent note` and `agent respond` know only their
+    pickup token, so that directive would never reach them and the agent the
+    reviewer just disconnected would keep working (BIG-190).
+
+    Holding the gate the claim path takes proves the route waits for it rather
+    than reading around it.
+    */
+    await attachAgent({ writerId: "5555555555555555" });
+    const gate = holdPlanClaimLock(disconnected);
+    await gate.acquired;
+    let settled = false;
+    const disconnecting = ask({ path: "/api/agent-disconnect" }).then(
+      (response) => {
+        settled = true;
+        return response;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(settled).toBe(false);
+    await gate.release();
+    expect((await disconnecting).status).toBe(200);
   });
 
   it("should record the end as one the reviewer asked for", async () => {
@@ -5624,12 +5683,18 @@ describe("review runtime agent disconnect", () => {
     await expect(response.json()).resolves.toMatchObject({
       releasedRequestIds: [pending.requestId],
     });
+    // One entry per disconnected agent, so the earlier ones can still answer
+    // the agents they addressed.
     await expect(
-      readAgentDisconnectRequest({ store: disconnected.store }),
-    ).resolves.toMatchObject({
-      writerId: "3333333333333333",
-      claimToken: "aaaaaaaaaaaaaaaa",
-    });
+      readAgentDisconnectRequests({ store: disconnected.store }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          writerId: "3333333333333333",
+          claimToken: "aaaaaaaaaaaaaaaa",
+        }),
+      ]),
+    );
     const after = await readAgentExchange({
       store: disconnected.store,
       sessionId: disconnected.sessionId,

@@ -25,6 +25,7 @@ import {
   readAgentCommentHistory,
   readAgentExchange,
   readValidatedAgentResponse,
+  validateAgentRequest,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
@@ -53,14 +54,17 @@ import {
   StagedPlanMutationRejected,
 } from "./staged-plan-mutation.js";
 import {
+  agentMutationJournalPath,
   prepareStore,
   readAgentConnectionEvents,
+  readAgentRequestValue,
   readProgress,
   reviewStoreFor,
   withReviewStoreLock,
   writeAgentRequestValue,
   writeAgentResponseValue,
   writeResolvedCommentIds,
+  writeStoreJson,
 } from "./store.js";
 import {
   buildReviewImageReference,
@@ -2238,6 +2242,7 @@ describe("request mailbox", () => {
 // BIG-190: disconnecting an agent drops the answer it was drafting and keeps the
 // reviewer's message, so the release has to be exactly that and nothing more.
 describe("releasing the claims a disconnected agent held", () => {
+  const CLAIMED_AT = "2026-08-10T12:01:00.000Z";
   const claimed = async () => {
     const { planPath, store } = await preparedReview();
     const request = chatRequest("Why is this ordering right?");
@@ -2248,7 +2253,8 @@ describe("releasing the claims a disconnected agent held", () => {
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
-      now: "2026-08-10T12:01:00.000Z",
+      now: CLAIMED_AT,
+      clock: clockAt(CLAIMED_AT),
     });
     return { planPath, store, request };
   };
@@ -2303,6 +2309,91 @@ describe("releasing the claims a disconnected agent held", () => {
         }),
       ]),
     );
+  });
+
+  it("should leave a request whose answer is already publishing", async () => {
+    // The most expensive regression this function has. That answer is one
+    // atomic rename from the plan and the commit boundary decides it; pulling
+    // the claim out from under it would abandon a revision mid flight, and
+    // `dropUnpublishableStages` would delete the candidate it is publishing.
+    const { store, request } = await claimed();
+    await writeStoreJson({
+      path: agentMutationJournalPath({ store, requestId: request.requestId }),
+      value: {
+        version: 1,
+        requestId: request.requestId,
+        generation: 1,
+        claimedBy: agentA,
+        baseSnapshot: snapshot,
+        resultSnapshot: snapshot,
+        answeredAt: "2026-08-10T12:02:00.000Z",
+      },
+    });
+    await expect(
+      releaseClaimsHeldBy({
+        store,
+        sessionId,
+        planId,
+        claimedBy: agentA,
+        step: "Claim released when the reviewer disconnected the agent",
+        detail: "The answer in flight was dropped",
+      }),
+    ).resolves.toEqual([]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(
+      exchange.requests.find(
+        (candidate) => candidate.requestId === request.requestId,
+      ),
+    ).toMatchObject({ claimedBy: agentA });
+  });
+
+  it("should leave a claim another agent took over in the meantime", async () => {
+    // The candidate list is read without a lock, so a takeover can land between
+    // that read and the release. Stripping it would destroy the staged edits of
+    // an agent that is live and was never disconnected.
+    //
+    // The ordering is forced rather than raced: the release scans, then blocks
+    // on the request lock this test holds, and the takeover is written while it
+    // waits. That is the state a real interleaving produces, made deterministic.
+    const { store, request } = await claimed();
+    const takenOverAt = new Date(
+      Date.parse(CLAIMED_AT) + AGENT_CLAIM_LEASE_MS + 1_000,
+    ).toISOString();
+    const releaseLock = await holdAgentRequestLock({
+      store,
+      requestId: request.requestId,
+    });
+    const releasing = releaseClaimsHeldBy({
+      store,
+      sessionId,
+      planId,
+      claimedBy: agentA,
+      step: "Claim released when the reviewer disconnected the agent",
+      detail: "The answer in flight was dropped",
+      clock: clockAt(takenOverAt),
+    });
+    const stored = await readAgentRequestValue({
+      store,
+      requestId: request.requestId,
+    });
+    await writeAgentRequestValue({
+      store,
+      requestId: request.requestId,
+      value: validateAgentRequest({
+        ...(stored as Record<string, unknown>),
+        claimedBy: agentB,
+        claimedAt: takenOverAt,
+        claimGeneration: 2,
+      }),
+    });
+    await releaseLock();
+    await expect(releasing).resolves.toEqual([]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(
+      exchange.requests.find(
+        (candidate) => candidate.requestId === request.requestId,
+      ),
+    ).toMatchObject({ claimedBy: agentB, claimGeneration: 2 });
   });
 
   it("should leave another agent's claim alone", async () => {

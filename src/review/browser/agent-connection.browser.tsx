@@ -425,6 +425,7 @@ const CurrentActivityCard = ({
   connection,
   nowMs,
   disconnectRequestedAtMs,
+  isDisconnectingAgent,
   onViewRequest,
   onDisconnect,
 }: {
@@ -439,6 +440,8 @@ const CurrentActivityCard = ({
   readonly nowMs: number;
   /** When the reviewer disconnected this agent, if they already have. */
   readonly disconnectRequestedAtMs?: number;
+  /** Whether a disconnect the reviewer confirmed has not been answered yet. */
+  readonly isDisconnectingAgent: boolean;
   readonly onViewRequest: (requestId: string, kind: string) => void;
   readonly onDisconnect: () => void;
 }) => {
@@ -709,7 +712,12 @@ const CurrentActivityCard = ({
           {canDisconnect ? (
             <DisconnectAgentControl
               dropsWork={agentDisconnectDropsWork(activity)}
-              isPending={disconnectRequestedAtMs !== undefined}
+              /* Either the runtime has recorded the directive, or this page is
+                 still waiting to hear that it did. Both are the same fact to a
+                 reader: they have asked, and the agent has not gone yet. */
+              isPending={
+                isDisconnectingAgent || disconnectRequestedAtMs !== undefined
+              }
               onDisconnect={onDisconnect}
             />
           ) : null}
@@ -1043,6 +1051,7 @@ export const AgentConnectionPanel = ({
   isReadOnly,
   replacementUrl,
   disconnectRequestedAtMs,
+  isDisconnectingAgent,
   onViewRequest,
   onDisconnect,
 }: {
@@ -1069,6 +1078,8 @@ export const AgentConnectionPanel = ({
   readonly replacementUrl: string | null;
   /** When the reviewer disconnected the attached agent, if they already have. */
   readonly disconnectRequestedAtMs?: number;
+  /** Whether a disconnect the reviewer confirmed has not been answered yet. */
+  readonly isDisconnectingAgent: boolean;
   readonly onViewRequest: (requestId: string, kind: string) => void;
   readonly onDisconnect: () => void;
 }) => {
@@ -1119,6 +1130,7 @@ export const AgentConnectionPanel = ({
             {...(disconnectRequestedAtMs === undefined
               ? {}
               : { disconnectRequestedAtMs })}
+            isDisconnectingAgent={isDisconnectingAgent}
             onViewRequest={onViewRequest}
             onDisconnect={onDisconnect}
           />

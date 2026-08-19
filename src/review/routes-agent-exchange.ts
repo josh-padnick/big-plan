@@ -22,6 +22,7 @@ import {
   ensureAgentRequest,
   releaseClaimsHeldBy,
   reviseQueuedRequest,
+  withPlanClaimLock,
   type ProgressEventDraft,
 } from "./request-mailbox.js";
 import {
@@ -101,7 +102,10 @@ export const readAgentSnapshot = async (
   // Read against this presence record, so a disconnect the reviewer asked for
   // reports itself only while the agent it addressed is still the one the
   // review names. The browser draws the control's pending state from it.
-  const disconnect = await readAgentDisconnectRequestFor({ store, presence });
+  const disconnect = await readAgentDisconnectRequestFor({
+    store,
+    ...(presence.writerId === undefined ? {} : { writerId: presence.writerId }),
+  });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
   return jsonResponse({
     status: 200,
@@ -386,6 +390,15 @@ export const deleteQueuedAgentRequest = async (
 };
 
 /** Withdraws a request the agent has not answered yet. */
+/** What the claim gate decided: who was disconnected, or why nobody was. */
+type DisconnectDecision =
+  | { readonly refusal: string }
+  | {
+      readonly requestedAtMs: number;
+      readonly claimToken?: string;
+      readonly requestId?: string;
+    };
+
 /**
  * Tells the attached agent to disconnect, and frees the review for the next one.
  *
@@ -404,44 +417,78 @@ export const disconnectAgent = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
   const { store, sessionId, planId } = context;
-  const presence = await readAgentPresence({ store, sessionId });
-  const exchange = await readAgentExchange({ store, sessionId, planId });
-  // The same evidence the card shows the control from: an agent is here if it
-  // is signalling, or if it is holding work. Nothing renews the heartbeat while
-  // a turn runs (BIG-147), so requiring a live signal would refuse a disconnect
-  // in the one state where the reviewer most wants one.
-  const claimed = exchange.requests.find(
-    (request) =>
-      request.claimedBy !== undefined &&
-      request.answeredAt === undefined &&
-      request.canceledAt === undefined,
-  );
-  if (!presence.connected && claimed === undefined) {
-    return refusal({
-      status: 409,
-      reason: "No agent is connected to this review",
-    });
-  }
-  const claimToken = claimed?.claimedBy;
-  if (presence.writerId === undefined && claimToken === undefined) {
-    // A directive addressed to nobody would be a standing order against every
-    // agent that ever attaches, so it is refused rather than written.
-    return refusal({
-      status: 409,
-      reason: "This agent cannot be identified, so it cannot be disconnected",
-    });
-  }
-  const requestedAtMs = Date.now();
-  await writeAgentDisconnectRequest({
+  /*
+  Deciding who to address and recording it are one step against every claim
+  transition on this plan.
+
+  Read them apart and a pickup landing in between is addressed by neither name:
+  the read sees no claim so the directive carries only the loop's writer id,
+  while `agent note` and `agent respond` know only their pickup token, so the
+  agent the reviewer just disconnected keeps working and publishes. Taking the
+  gate `claimAgentRequest` already takes means the claim is either visible here
+  and named, or taken afterwards - and a loop that claims afterwards rechecks
+  this directive before it hands the work over (BIG-190).
+  */
+  const decision = await withPlanClaimLock<DisconnectDecision>({
     store,
-    directive: {
-      requestedAtMs,
-      ...(presence.writerId === undefined
-        ? {}
-        : { writerId: presence.writerId }),
-      ...(claimToken === undefined ? {} : { claimToken }),
+    change: async (claimStore): Promise<DisconnectDecision> => {
+      const presence = await readAgentPresence({
+        store: claimStore,
+        sessionId,
+      });
+      const exchange = await readAgentExchange({
+        store: claimStore,
+        sessionId,
+        planId,
+      });
+      // The same evidence the card shows the control from: an agent is here if
+      // it is signalling, or if it is holding work. Nothing renews the heartbeat
+      // while a turn runs (BIG-147), so requiring a live signal would refuse a
+      // disconnect in the one state where the reviewer most wants one.
+      const claimed = exchange.requests.find(
+        (request) =>
+          request.claimedBy !== undefined &&
+          request.answeredAt === undefined &&
+          request.canceledAt === undefined,
+      );
+      if (!presence.connected && claimed === undefined) {
+        return { refusal: "No agent is connected to this review" };
+      }
+      const claimToken = claimed?.claimedBy;
+      if (presence.writerId === undefined && claimToken === undefined) {
+        // A directive addressed to nobody would be a standing order against
+        // every agent that ever attaches, so it is refused rather than written.
+        return {
+          refusal:
+            "This agent cannot be identified, so it cannot be disconnected",
+        };
+      }
+      const requestedAtMs = Date.now();
+      await writeAgentDisconnectRequest({
+        store: claimStore,
+        directive: {
+          requestedAtMs,
+          ...(presence.writerId === undefined
+            ? {}
+            : { writerId: presence.writerId }),
+          ...(claimToken === undefined ? {} : { claimToken }),
+        },
+      });
+      return {
+        requestedAtMs,
+        ...(claimToken === undefined ? {} : { claimToken }),
+        ...(claimed === undefined ? {} : { requestId: claimed.requestId }),
+      };
     },
   });
+  if ("refusal" in decision) {
+    return refusal({ status: 409, reason: decision.refusal });
+  }
+  const { requestedAtMs } = decision;
+  const claimToken = "claimToken" in decision ? decision.claimToken : undefined;
+  // Released outside the claim gate, in the order `claimAgentRequest`
+  // established: that call takes this gate and then each request lock, so
+  // taking a request lock while still holding the gate would invert it.
   const released =
     claimToken === undefined
       ? []
@@ -464,7 +511,7 @@ export const disconnectAgent = async (
       state: "done",
       detail:
         "The agent is told at its next command; the review is free for another agent now",
-      ...(claimed === undefined ? {} : { requestId: claimed.requestId }),
+      ...("requestId" in decision ? { requestId: decision.requestId } : {}),
     },
     failureMessage: `Review progress update failed after requesting an agent disconnect for session ${sessionId}`,
   });

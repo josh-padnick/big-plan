@@ -28,6 +28,7 @@ import {
   AgentClaimCanceled,
   appendProgressEvent,
   claimAgentRequest,
+  releaseClaimsHeldBy,
   RetryableAgentClaimRejected,
 } from "./request-mailbox.js";
 import {
@@ -35,7 +36,7 @@ import {
   deriveReviewPlanId,
   prepareStore,
   randomId,
-  readAgentDisconnectRequest,
+  readAgentDisconnectRequestFor,
   readSnapshot,
   reviewStoreFor,
   writeAgentPrompt,
@@ -47,7 +48,6 @@ import {
 import type { ReviewStore } from "./store.js";
 import { SPAWNER_PPID, spawnerIsGone } from "./agent-spawner.js";
 import {
-  agentDisconnectAddresses,
   AGENT_DISCONNECTED_HELP,
   AGENT_DISCONNECTED_MESSAGE,
   type AgentDisconnectDirective,
@@ -187,17 +187,12 @@ const acknowledgeDisconnect = async ({
   /** The request this session was holding, when it was holding one. */
   readonly requestId?: string;
 }): Promise<AgentDisconnectDirective | undefined> => {
-  const directive = await readAgentDisconnectRequest({ store });
-  if (
-    directive === undefined ||
-    !agentDisconnectAddresses({
-      directive,
-      ...(writerId === undefined ? {} : { writerId }),
-      ...(claimToken === undefined ? {} : { claimToken }),
-    })
-  ) {
-    return undefined;
-  }
+  const directive = await readAgentDisconnectRequestFor({
+    store,
+    ...(writerId === undefined ? {} : { writerId }),
+    ...(claimToken === undefined ? {} : { claimToken }),
+  });
+  if (directive === undefined) return undefined;
   const endedWriterId = directive.writerId ?? writerId;
   if (endedWriterId !== undefined) {
     await writeAgentHeartbeatEnded({
@@ -587,12 +582,21 @@ const nextWork = async ({
     reason: AGENT_DISCONNECTED_MESSAGE,
     help: [...AGENT_DISCONNECTED_HELP],
   });
-  const wasDisconnected = async (heldRequestId?: string): Promise<boolean> =>
+  const wasDisconnected = async ({
+    heldRequestId,
+    pickupToken,
+  }: {
+    readonly heldRequestId?: string;
+    /** The token this pass claimed under, once it has claimed. */
+    readonly pickupToken?: string;
+  } = {}): Promise<boolean> =>
     (await acknowledgeDisconnect({
       store: session.store,
       sessionId: session.sessionId,
       writerId,
-      ...(agentToken === undefined ? {} : { claimToken: agentToken }),
+      ...((pickupToken ?? agentToken) === undefined
+        ? {}
+        : { claimToken: pickupToken ?? agentToken }),
       ...(heldRequestId === undefined ? {} : { requestId: heldRequestId }),
     })) !== undefined;
   if (await wasDisconnected()) return disconnectedResult();
@@ -688,7 +692,8 @@ const nextWork = async ({
     });
     const pickup = pickupProgress(request);
     await endWhenSpawnerIsGone();
-    if (await wasDisconnected(request.requestId)) return disconnectedResult();
+    if (await wasDisconnected({ heldRequestId: request.requestId }))
+      return disconnectedResult();
     // Written before the claim on purpose: preparing a pickup reads the plan,
     // writes a baseline snapshot, and takes locks, and the reviewer should see
     // the agent working through that window rather than idle. The claim can
@@ -747,6 +752,31 @@ const nextWork = async ({
         );
       }
       request = authority.value;
+      /*
+      Asked again now that this pass owns a claim, and asked under the token
+      that claim carries.
+
+      The check before the claim cannot be the last one. The disconnect route
+      names the pickup token when it can see one, and until the claim lands
+      there is nothing for it to name - so a directive written in that gap
+      carries only this loop's writer id, which `agent note` and `agent
+      respond` never learn. Without this the agent the reviewer just
+      disconnected would be handed the work anyway and would publish it
+      (BIG-190). The claim is handed straight back, because a request left
+      under a claim nobody will answer waits out its whole lease.
+      */
+      if (await wasDisconnected({ pickupToken: claimedBy })) {
+        await releaseClaimsHeldBy({
+          store: session.store,
+          sessionId: session.sessionId,
+          planId: session.planId,
+          claimedBy,
+          step: "Claim released when the reviewer disconnected the agent",
+          detail:
+            "The agent was disconnected as it picked this up, so the message went back in the queue for the next agent",
+        }).catch(() => undefined);
+        return disconnectedResult();
+      }
     } catch (error: unknown) {
       await markWorkingOn(undefined);
       if (error instanceof RetryableAgentClaimRejected) {

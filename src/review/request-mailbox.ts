@@ -201,7 +201,13 @@ export const withResolvedCommentLock = async <TResult>({
       new AgentExchangeRejected("The request mailbox is unavailable"),
   });
 
-const withPlanClaimLock = async <TResult>({
+/**
+ * The plan-wide claim gate.
+ *
+ * Exported so the disconnect route can decide, against a plan whose claim state
+ * cannot move underneath it, whether the agent it is disconnecting holds work.
+ */
+export const withPlanClaimLock = async <TResult>({
   store,
   change,
 }: {
@@ -800,6 +806,17 @@ export const releaseClaimsHeldBy = async ({
             store: lockedStore,
             requestId,
           });
+          // The candidate list was read without a lock, and `claimAgentRequest`
+          // takes this same request lock to hand a lapsed claim to a new agent.
+          // Without this test, a takeover landing in that gap would have its
+          // claim stripped and its staged edits deleted by a disconnect aimed
+          // at the agent it replaced - work destroyed for an agent that is
+          // still live and was never disconnected.
+          if (current.claimedBy !== claimedBy) {
+            throw new AgentExchangeRejected(
+              "Another agent now holds the claim on this request",
+            );
+          }
           await assertRequestIsWithdrawable({
             store: lockedStore,
             request: current,

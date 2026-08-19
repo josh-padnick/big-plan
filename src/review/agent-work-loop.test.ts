@@ -2091,16 +2091,17 @@ describe("agent work loop lifecycle", () => {
         planPath,
         shouldWait: true,
       });
-      let writerId: string | undefined;
-      while (writerId === undefined) {
-        await new Promise((settle) => setTimeout(settle, 25));
-        writerId = (
-          await reviewStore.readAgentPresence({
+      const writerId = await vi.waitFor(
+        async () => {
+          const presence = await reviewStore.readAgentPresence({
             store: review.store,
             sessionId: review.sessionId,
-          })
-        ).writerId;
-      }
+          });
+          expect(presence.writerId).toEqual(expect.any(String));
+          return presence.writerId as string;
+        },
+        { timeout: 8_000, interval: 25 },
+      );
       await reviewStore.writeAgentDisconnectRequest({
         store: review.store,
         directive: { writerId, requestedAtMs: Date.now() },
@@ -2125,8 +2126,8 @@ describe("agent work loop lifecycle", () => {
       // to say who ended the session, and it is inert against every later agent
       // because none of them writes this writer id.
       await expect(
-        reviewStore.readAgentDisconnectRequest({ store: review.store }),
-      ).resolves.toMatchObject({ writerId });
+        reviewStore.readAgentDisconnectRequests({ store: review.store }),
+      ).resolves.toEqual([expect.objectContaining({ writerId })]);
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
@@ -2139,33 +2140,36 @@ describe("agent work loop lifecycle", () => {
     const source = "# Plan\n\nStop narrating once you are off.\n";
     await writeFile(planPath, source);
     const review = await startReviewRuntime({ planPath });
-    const request = messageAgentRequest({
-      kind: "chat",
-      requestId: "dddddddddddddddd",
-      sessionId: review.sessionId,
-      planId: review.planId,
-      premiseSnapshot: deriveSnapshotDigest(source),
-      createdAt: "2026-08-12T12:00:00.000Z",
-      body: "Answer this before you are disconnected.",
-    });
-    await writeAgentRequest({ store: review.store, request });
-    await claimAgentRequest({
-      store: review.store,
-      activeSessionId: review.sessionId,
-      requestId: request.requestId,
-      claimedBy: "ffff2222ffff2222",
-      baselineSnapshot: request.premiseSnapshot,
-      now: new Date().toISOString(),
-    });
-    await reviewStore.writeAgentDisconnectRequest({
-      store: review.store,
-      directive: {
-        writerId: "1111111111111111",
-        claimToken: "ffff2222ffff2222",
-        requestedAtMs: Date.now(),
-      },
-    });
+    // Every write below is inside the try: one of them failing outside it would
+    // leave this runtime holding custody of the plan and its directory on disk,
+    // and the next test in this file to start a runtime would fail for that.
     try {
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "dddddddddddddddd",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Answer this before you are disconnected.",
+      });
+      await writeAgentRequest({ store: review.store, request });
+      await claimAgentRequest({
+        store: review.store,
+        activeSessionId: review.sessionId,
+        requestId: request.requestId,
+        claimedBy: "ffff2222ffff2222",
+        baselineSnapshot: request.premiseSnapshot,
+        now: new Date().toISOString(),
+      });
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: {
+          writerId: "1111111111111111",
+          claimToken: "ffff2222ffff2222",
+          requestedAtMs: Date.now(),
+        },
+      });
       // Told at its next command rather than at publication: a harness that
       // learns this from a rejected answer has already paid for a whole turn,
       // and cannot tell the refusal from a race worth retrying.
