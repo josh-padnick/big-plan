@@ -68,6 +68,27 @@ const reply = (author = "josh-padnick") => ({
 
 const signOff = comment(`review-triage: complete ${HEAD}`);
 
+/**
+ * CodeRabbit's conversation comment for a review that raised nothing, reduced
+ * to the shape the gate reads: the bot's own bookkeeping spans, the summary
+ * line it asserts, and the collapsed detail around it.
+ */
+const cleanReviewComment = (author = "coderabbitai[bot]") =>
+  comment(
+    [
+      "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->",
+      "<!-- recent_review_start -->",
+      "",
+      "No actionable comments were generated in the recent review. 🎉",
+      "",
+      "<details>",
+      "<summary>ℹ️ Recent review info</summary>",
+      "</details>",
+      "<!-- recent_review_end -->",
+    ].join("\n"),
+    author,
+  );
+
 const report = (verdict) => verdict.details.join("\n");
 
 test("a pull request with no review names the two ways to get one", () => {
@@ -76,6 +97,107 @@ test("a pull request with no review names the two ways to get one", () => {
   assert.match(verdict.title, /No accepted review/);
   assert.match(report(verdict), /CodeRabbit, Greptile, Devin/);
   assert.match(report(verdict), /adversarial-review: complete/);
+});
+
+test("a review that found nothing counts, though GitHub records no review", () => {
+  // The PR #174 shape. CodeRabbit reviewed and raised nothing, so it submitted
+  // no review and opened no thread; the whole record of it is the conversation
+  // comment below. Reading that as "no review happened" fails the gate on a
+  // pull request that got the best outcome the review credit could buy, and
+  // sends the agent back to spend another credit - three times, there.
+  const verdict = evaluateReviewTriage(
+    snapshot({ issueComments: [cleanReviewComment(), signOff] }),
+  );
+  assert.equal(verdict.conclusion, "success");
+  assert.match(report(verdict), /Reviewer: CodeRabbit/);
+  assert.match(report(verdict), /Inline findings: 0/);
+});
+
+test("only the reviewer itself can report its own clean review", () => {
+  // Otherwise the author satisfies the review requirement by typing the
+  // reviewer's sentence, which is a review nobody ran and nobody paid for.
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [cleanReviewComment("josh-padnick"), signOff],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /No accepted review/);
+});
+
+test("a clean-review line quoted or fenced by the reviewer does not count", () => {
+  // Reviewer bots quote earlier context back, so the same suppression rules
+  // that guard the markers have to guard this line too.
+  const quoted = comment(
+    [
+      "> No actionable comments were generated in the recent review.",
+      "",
+      "```",
+      "No actionable comments were generated in the recent review.",
+      "```",
+      "",
+      "<!-- No actionable comments were generated in the recent review. -->",
+    ].join("\n"),
+    "coderabbitai[bot]",
+  );
+  const verdict = evaluateReviewTriage(
+    snapshot({ issueComments: [quoted, signOff] }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /No accepted review/);
+});
+
+test("a reviewer comment that reports no review outcome does not count", () => {
+  // "Review finished." acknowledges the command, not the outcome, and the bot
+  // posts it even for a run it then abandons.
+  const acknowledgement = comment(
+    "<details>\n<summary>✅ Action performed</summary>\n\nReview finished.\n\n</details>",
+    "coderabbitai[bot]",
+  );
+  const verdict = evaluateReviewTriage(
+    snapshot({ issueComments: [acknowledgement, signOff] }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /No accepted review/);
+});
+
+test("a reviewer with no observed clean-review wording still needs an attestation", () => {
+  // Greptile carries no pattern, because nobody has read its clean-review
+  // comment on a real pull request yet. Guessing one would either never match
+  // or count a review that never ran, so the gate says so instead.
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [cleanReviewComment("greptile-apps[bot]"), signOff],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /No accepted review/);
+});
+
+test("a clean-review report is named among the things to retract", () => {
+  // The bot counts twice over here: once for the review it submitted with a
+  // finding, once for the later run that raised nothing. Dismissing the review
+  // and resolving the thread leaves the report still counting, so the recovery
+  // has to name it or the reader retracts everything and stays stuck.
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        cleanReviewComment(),
+        signOff,
+        comment(
+          `adversarial-review: complete ${HEAD} by claude-opus-5\nfindings: 0`,
+        ),
+      ],
+      reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+      reviewThreads: [thread([finding(), reply()])],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+  assert.match(
+    report(verdict),
+    /that report\n\s+counts on its own, so delete it too/,
+  );
 });
 
 test("a triaged review with a matching sign-off passes", () => {

@@ -10,9 +10,15 @@
 //      adversarial-review attestation from our own agent when reviewer credits
 //      are gone. Exactly one, because BIG-143 buys one review per pull request;
 //      two reviews mean one of them was never paid for or never triaged.
-//      A reviewer counts while it has either a review it has not taken back or
-//      an unresolved inline thread, so dismissing a review drops it from the
-//      count only once every finding it left is resolved.
+//      A reviewer counts while it has either a review it has not taken back,
+//      an unresolved inline thread, or a conversation comment reporting that it
+//      reviewed and found nothing to raise. Dismissing a review therefore drops
+//      a reviewer from the count only once every finding it left is resolved.
+//      The clean-review case is there because GitHub records a review only when
+//      the reviewer had something to say: a bot that reviews and finds nothing
+//      submits no review at all, and reading that as "no review happened" both
+//      denies the best outcome the credit bought and sends the agent back to
+//      request another one, which is what happened three times on PR #174.
 //   b. Every inline finding that reviewer raised is resolved, which here means
 //      a written reply from somebody other than the reviewer. Resolved is this
 //      gate's word, not GitHub's: ticking GitHub's resolve checkbox resolves
@@ -50,22 +56,39 @@
  * because a GitHub App's bot login is not stable across installations. Adding a
  * reviewer is a one-line change here; the gate is deliberately reviewer-agnostic
  * so BIG-143's credit-based picker can choose between them without touching it.
+ *
+ * `cleanReview` is the exception to that reviewer-agnosticism, and it is not
+ * decoration. A reviewer that finds something submits a GitHub review, which the
+ * gate reads structurally; a reviewer that finds NOTHING submits no review at
+ * all and reports the outcome only in its conversation comment. Without a
+ * pattern for that comment the gate cannot tell a clean review from an absent
+ * one, so it names the reviewer's own prose - the one thing that distinguishes
+ * them - and matches it only on a comment the reviewer itself wrote.
+ *
+ * A pattern belongs here only after it has been READ on a real pull request.
+ * Guessing a reviewer's wording would either never match, leaving the blind spot
+ * open, or match too widely and count a review that never ran. CodeRabbit's line
+ * was observed on PR #174; Greptile and Devin carry none until theirs is seen,
+ * and until then a clean review from either still needs an attestation.
  */
 export const REVIEW_BOTS = [
   {
     id: "coderabbit",
     label: "CodeRabbit",
     logins: ["coderabbitai[bot]", "coderabbitai"],
+    cleanReview: [/^No actionable comments were generated\b/i],
   },
   {
     id: "greptile",
     label: "Greptile",
     logins: ["greptile-apps[bot]", "greptileai[bot]", "greptile[bot]"],
+    cleanReview: [],
   },
   {
     id: "devin",
     label: "Devin",
     logins: ["devin-ai-integration[bot]", "devin[bot]"],
+    cleanReview: [],
   },
 ];
 
@@ -412,11 +435,22 @@ export const collectAttestations = (snapshot) => {
 };
 
 /**
- * Identifies which accepted reviews exist. A bot counts while it holds either a
- * review it has not taken back or an unresolved inline thread; an attestation
- * counts once it is well-formed. All attestations collapse into one identity
- * because they all stand for the same thing, our own agent reviewing in a bot's
- * place.
+ * True when this comment is the reviewer itself reporting a review that found
+ * nothing to raise. Only the reviewer's own comment is read, so no other author
+ * can assert a review on its behalf, and only asserted lines count, so a human
+ * or a bot quoting the sentence back does not conjure a review either.
+ */
+const reportsCleanReview = (comment, bot) =>
+  assertedLines(comment.body).some((line) =>
+    (bot.cleanReview ?? []).some((pattern) => pattern.test(line.trim())),
+  );
+
+/**
+ * Identifies which accepted reviews exist. A bot counts while it holds a review
+ * it has not taken back, an unresolved inline thread, or its own report of a
+ * review that raised nothing; an attestation counts once it is well-formed. All
+ * attestations collapse into one identity because they all stand for the same
+ * thing, our own agent reviewing in a bot's place.
  *
  * The unresolved-thread half is what makes the two-review recovery honest.
  * Dismissing a review that left findings would otherwise drop the reviewer from
@@ -426,6 +460,20 @@ export const collectAttestations = (snapshot) => {
  */
 export const identifyReviews = (snapshot) => {
   const byBot = new Map();
+  // Every clean-review report is collected, not just the first one that decides
+  // the count, because the retraction advice has to name the comment a reader
+  // must delete however the bot also came to count.
+  const cleanReviews = new Map();
+  for (const comment of snapshot.issueComments) {
+    const bot = botFor(comment.author);
+    if (
+      bot !== null &&
+      !cleanReviews.has(bot.id) &&
+      reportsCleanReview(comment, bot)
+    ) {
+      cleanReviews.set(bot.id, { bot, url: comment.url });
+    }
+  }
   for (const review of snapshot.reviews) {
     if (!COUNTED_REVIEW_STATES.has((review.state ?? "").toUpperCase())) {
       continue;
@@ -433,6 +481,11 @@ export const identifyReviews = (snapshot) => {
     const bot = botFor(review.author);
     if (bot !== null) {
       byBot.set(bot.id, bot);
+    }
+  }
+  for (const [id, reported] of cleanReviews) {
+    if (!byBot.has(id)) {
+      byBot.set(id, reported.bot);
     }
   }
   for (const thread of snapshot.reviewThreads) {
@@ -446,7 +499,11 @@ export const identifyReviews = (snapshot) => {
   }
   const attestations = collectAttestations(snapshot);
   const usable = attestations.filter((one) => one.problems.length === 0);
-  const accepted = [...byBot.values()].map((bot) => ({ kind: "bot", bot }));
+  const accepted = [...byBot.values()].map((bot) => ({
+    kind: "bot",
+    bot,
+    cleanReviewUrl: cleanReviews.get(bot.id)?.url ?? null,
+  }));
   if (usable.length > 0) {
     accepted.push({
       kind: "adversarial",
@@ -562,6 +619,12 @@ export const evaluateReviewTriage = (snapshot) => {
             `  - ${one.bot.label}: reply in every thread it opened, saying what you`,
             "    did, and then dismiss its review. Dismissing alone is not enough - a",
             "    reviewer keeps counting while any of its inline threads is unresolved.",
+            ...(one.cleanReviewUrl === null
+              ? []
+              : [
+                  "    It also reported a review that raised nothing, and that report",
+                  `    counts on its own, so delete it too. ${one.cleanReviewUrl}`,
+                ]),
           ]
         : [
             `  - ${ADVERSARIAL_REVIEWER.label} by ${one.attestation.agent}: delete that`,

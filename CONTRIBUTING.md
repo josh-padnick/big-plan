@@ -105,7 +105,9 @@ Sign off last, after every finding has a reply and after the final push.
 1. Get one review.
    Any of CodeRabbit, Greptile, or Devin counts; the gate does not care which, so BIG-143's credit-based picker can choose freely.
    Exactly one, because one review per pull request is the budget, and a second review means one of the two was never triaged.
-   A reviewer counts while it holds either a review it has not taken back or an unresolved inline thread, so dismissing a review drops that reviewer only once every finding it left is resolved.
+   A reviewer counts while it holds a review it has not taken back, an unresolved inline thread, or its own conversation comment reporting a review that raised nothing, so dismissing a review drops that reviewer only once every finding it left is resolved.
+   That third case exists because GitHub records a review only when the reviewer had something to say: a reviewer that reviews and finds nothing submits no review at all, and its comment is the only record that the review happened.
+   Do not request a second review when a reviewer has already reported a clean one - the credit is spent and the gate counts it.
 2. Resolve every inline finding.
    Reply in the thread saying what you did: the commit that fixes it, or the reason you decline it.
    A thread is resolved, in this gate's sense, once a comment by somebody other than the reviewer exists in it.
@@ -138,7 +140,10 @@ findings: <n>
 
 The sha must be a commit on this pull request, and the number of findings declared must not exceed the number of disposition lines.
 Post at most one accepted review per pull request: an attestation posted while a bot has already reviewed fails the gate.
-Clear it by deleting the attestation comment, or by resolving the bot's findings and then dismissing its review - dismissal alone leaves the bot counted while any of its threads is unresolved.
+Clear it by deleting the attestation comment, or by resolving the bot's findings and then dismissing its review - dismissal alone leaves the bot counted while any of its threads is unresolved, and leaves it counted outright while its own clean-review comment stands.
+The failing check names every part of a reviewer that still counts, so read it rather than guessing which one is left.
+
+Credits gone is the test, not silence: a reviewer that reported a review raising nothing already counts, and attesting on top of that is the second review the gate refuses.
 
 ### The override rule
 
