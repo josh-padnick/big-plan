@@ -355,6 +355,28 @@ describe("applyPrimacyHandoff", () => {
     ).toBe("old");
   });
 
+  it("should leave another observer's pending question standing", () => {
+    // The surface asks one question at a time, so a request cleared here is a
+    // question the reviewer never gets to answer and an agent that waits for
+    // a prompt that never comes.
+    const three = [
+      ...agents,
+      agent({
+        writerId: "other",
+        role: "observer",
+        attachedAtMs: NOW - 50,
+        requestedPrimacyAtMs: NOW - 50,
+      }),
+    ];
+    const next = applyPrimacyHandoff({ agents: three, writerId: "new" });
+    expect(pendingPrimacyRequest({ agents: next, nowMs: NOW })?.writerId).toBe(
+      "other",
+    );
+    expect(agentPrimacyHealth({ agents: next, nowMs: NOW })).toBe(
+      "decision-owed",
+    );
+  });
+
   it("should clear the request so the toolbar leaves its hazard state", () => {
     const next = applyPrimacyHandoff({ agents, writerId: "new" });
     expect(agentPrimacyHealth({ agents: next, nowMs: NOW })).toBe("settled");

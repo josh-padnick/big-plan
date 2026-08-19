@@ -2781,6 +2781,7 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
   }
   const requestedPrimacyAtMs = record["requestedPrimacyAtMs"];
   const claimToken = record["claimToken"];
+  const inheritedDraftPath = record["inheritedDraftPath"];
   const model = decodeAgentModelIdentity(record["model"]);
   return {
     writerId,
@@ -2793,6 +2794,9 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
       : {}),
     ...(typeof claimToken === "string" && claimToken !== ""
       ? { claimToken }
+      : {}),
+    ...(typeof inheritedDraftPath === "string" && inheritedDraftPath !== ""
+      ? { inheritedDraftPath }
       : {}),
     ...(model === undefined ? {} : { model }),
   };
@@ -3027,15 +3031,23 @@ export const grantAgentPrimacy = async ({
   store,
   sessionId,
   writerId,
+  inheritedDraftPath,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
+  /** The outgoing agent's draft, when the reviewer chose to carry it over. */
+  readonly inheritedDraftPath?: string;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withAgentRoster({
     store,
     sessionId,
-    change: (agents) => applyPrimacyHandoff({ agents, writerId }),
+    change: (agents) =>
+      applyPrimacyHandoff({
+        agents,
+        writerId,
+        ...(inheritedDraftPath === undefined ? {} : { inheritedDraftPath }),
+      }),
   });
 
 /** Applies the reviewer's answer: leave this agent where it is. */

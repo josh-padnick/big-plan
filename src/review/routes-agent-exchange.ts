@@ -14,7 +14,11 @@ import {
   deriveSnapshotDigest,
   messageAgentRequest,
   readAgentExchange,
+  readValidatedAgentRequests,
+  requestIsTerminal,
 } from "./agent-exchange.js";
+import { readMutationStage } from "./staged-plan-mutation.js";
+import type { ReviewStore } from "./store.js";
 import {
   appendProgressEvent,
   cancelAgentRequest,
@@ -658,6 +662,41 @@ export const cancelPendingAgentRequest = async (
 };
 
 /**
+ * The candidate file the current holder has been editing, if there is one.
+ *
+ * Read before the claim is released, because the claim is what names the stage
+ * the file lives in. Returns nothing when no claim is open or the stage was
+ * never created, so the reviewer's choice degrades to "there was nothing to
+ * carry" rather than to a broken path in the next agent's work item.
+ */
+const outgoingDraftPath = async ({
+  store,
+  sessionId,
+  planId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+}): Promise<string | undefined> => {
+  const held = (
+    await readValidatedAgentRequests({ store, sessionId, planId })
+  ).find(
+    (request) => !requestIsTerminal(request) && request.claimedBy !== undefined,
+  );
+  if (held?.claimedBy === undefined) return undefined;
+  try {
+    const stage = await readMutationStage({
+      store,
+      requestId: held.requestId,
+      claimedBy: held.claimedBy,
+    });
+    return stage.candidatePath;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * Applies the reviewer's answer about which agent speaks for this plan.
  *
  * The three answers are one route because they are one decision with three
@@ -701,12 +740,33 @@ export const answerAgentPrimacy = async (
   than letting it finish. Released first, so that by the time the roster names
   a new primary there is no lease left for it to wait behind.
   */
+  /*
+  The reviewer may hand the outgoing agent's unpublished draft to the new
+  primary. It is resolved here, before the release, because the release is what
+  frees the claim that names the stage the draft lives in.
+
+  Carrying it over is deliberately a pointer and not a seed: the new primary
+  still starts from the last published revision, and the draft is one more
+  input it may read. Seeding the candidate with another model's half-finished
+  work would publish it by default, which is the opposite of what the toggle
+  promises.
+  */
+  const carryWorkInProgress = payload.carryWorkInProgress === true;
+  const inheritedDraftPath =
+    answer === "primary" && carryWorkInProgress
+      ? await outgoingDraftPath({ store, sessionId, planId })
+      : undefined;
   if (answer === "primary") {
     await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
   }
   const agents =
     answer === "primary"
-      ? await grantAgentPrimacy({ store, sessionId, writerId })
+      ? await grantAgentPrimacy({
+          store,
+          sessionId,
+          writerId,
+          ...(inheritedDraftPath === undefined ? {} : { inheritedDraftPath }),
+        })
       : answer === "observer"
         ? await declineAgentPrimacy({ store, sessionId, writerId })
         : await detachAgentFromRoster({ store, sessionId, writerId });

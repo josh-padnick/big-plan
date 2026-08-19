@@ -20,7 +20,7 @@ import {
 import { agentClientDisplayName } from "../shared/agent-identity-catalog.js";
 import { compactDurationLabel } from "../shared/time-label.js";
 import { Icon } from "./icon.browser.js";
-import { Button } from "./ui.browser.js";
+import { AlertDialog, Button } from "./ui.browser.js";
 
 /** What the reviewer can answer about one agent. */
 export type PrimacyAnswer = "primary" | "observer" | "disconnect";
@@ -293,15 +293,18 @@ export const AgentRoster = ({
 /**
  * The confirmation the reviewer sees before primacy actually moves.
  *
- * It is a modal alert rather than inline card content at the reviewer's own
- * instruction, and because the act is consequential: the agent mid-answer stops
- * being able to publish. The consequences are bullets rather than a paragraph
- * so none of them can be skimmed past.
+ * Built on the shared `AlertDialog` rather than hand-rolled markup, which is
+ * what makes it genuinely modal: focus moves in and is restored on close, Tab
+ * is contained, and Escape dismisses. A dialog that only claims `aria-modal`
+ * lets a keyboard reader tab straight out of it and gives them no way out
+ * without a pointer.
  *
- * The work-in-progress toggle defaults off. A half-formed draft from another
- * model can mislead as easily as it helps, so carrying it over is a choice the
- * reviewer makes rather than one the product makes for them, and the copy says
- * it arrives as reference rather than as something that publishes itself.
+ * The consequences are the dialog's evidence slot, and the work-in-progress
+ * toggle sits with them because it is a fact about what the answer will do.
+ * It defaults off: a half-formed draft from another model can mislead as
+ * easily as it helps, so carrying it over is a choice the reviewer makes, and
+ * the copy says it arrives as reference rather than as something that
+ * publishes itself.
  */
 export const PrimacyHandoffDialog = ({
   agent,
@@ -318,70 +321,52 @@ export const PrimacyHandoffDialog = ({
 }) => {
   const [carryWorkInProgress, setCarryWorkInProgress] = useState(false);
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
-      data-review-agent-dialog="handoff"
+    <AlertDialog
+      open
+      tone="neutral"
+      title={`Make ${agentModelLabel(agent)} the primary?`}
+      description={
+        primary === undefined
+          ? `${agentModelLabel(agent)} answers your comments from now on.`
+          : `${agentModelLabel(primary)} is answering you right now.`
+      }
+      actionLabel="Make primary"
+      onAction={() => onConfirm({ carryWorkInProgress })}
+      onCancel={onCancel}
     >
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="review-handoff-title"
-        className="grid w-full max-w-md gap-3 rounded-lg border border-edge bg-raised p-4 shadow-floating"
-      >
-        <h2 id="review-handoff-title" className="m-0 text-base text-ink">
-          Make {agentModelLabel(agent)} the primary?
-        </h2>
+      <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
+        What happens
+      </p>
+      <ul className="m-0 grid list-disc gap-1 pl-4 text-xs text-ink marker:text-muted">
+        <li>
+          {agentModelLabel(agent)} answers the open comment and every comment
+          after it.
+        </li>
         {primary === undefined ? null : (
-          <p className="m-0 text-xs text-muted">
-            {agentModelLabel(primary)} is answering you right now.
-          </p>
+          <li>{agentModelLabel(primary)} becomes the observer.</li>
         )}
-        <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
-          What happens
-        </p>
-        <ul className="m-0 grid list-disc gap-1 pl-4 text-xs text-ink marker:text-muted">
-          <li>
-            {agentModelLabel(agent)} answers the open comment and every comment
-            after it.
-          </li>
-          {primary === undefined ? null : (
-            <li>{agentModelLabel(primary)} becomes the observer.</li>
-          )}
-          <li>No submitted comments are lost.</li>
-        </ul>
-        {primary === undefined ? null : (
-          <label className="flex items-start gap-2 text-xs text-ink">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={carryWorkInProgress}
-              onChange={(event) =>
-                setCarryWorkInProgress(event.currentTarget.checked)
-              }
-            />
-            <span className="min-w-0">
-              Give {agentModelLabel(agent)} the work in progress
-              <span className="block text-2xs text-muted">
-                It arrives as reference to read, never as something that
-                publishes itself. Left off, the draft stays with{" "}
-                {agentModelLabel(primary)} and never reaches the plan.
-              </span>
+        <li>No submitted comments are lost.</li>
+      </ul>
+      {primary === undefined ? null : (
+        <label className="flex items-start gap-2 text-xs text-ink">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={carryWorkInProgress}
+            onChange={(event) =>
+              setCarryWorkInProgress(event.currentTarget.checked)
+            }
+          />
+          <span className="min-w-0">
+            Give {agentModelLabel(agent)} the work in progress
+            <span className="block text-2xs text-muted">
+              It arrives as reference to read, never as something that publishes
+              itself. Left off, the draft stays with {agentModelLabel(primary)}{" "}
+              and never reaches the plan.
             </span>
-          </label>
-        )}
-        <div className="flex flex-wrap justify-end gap-2 pt-1">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => onConfirm({ carryWorkInProgress })}
-          >
-            Make primary
-          </Button>
-        </div>
-      </div>
-    </div>
+          </span>
+        </label>
+      )}
+    </AlertDialog>
   );
 };

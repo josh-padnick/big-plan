@@ -114,6 +114,15 @@ export type AttachedAgent = {
    * publication.
    */
   readonly claimToken?: string;
+  /**
+   * A displaced agent's unpublished draft, handed to this agent as reference.
+   *
+   * Set only when the reviewer chose to carry it over. It is a path to read,
+   * never a candidate to publish: the new primary starts from the last
+   * published revision like any other pickup, and this is one more input it
+   * may consult.
+   */
+  readonly inheritedDraftPath?: string;
   readonly model?: AgentModelIdentity;
 };
 
@@ -338,15 +347,38 @@ export const roleForArrivingAgent = ({
 export const applyPrimacyHandoff = ({
   agents,
   writerId,
+  inheritedDraftPath,
 }: {
   readonly agents: ReadonlyArray<AttachedAgent>;
   /** The observer the reviewer chose. */
   readonly writerId: string;
+  /** The outgoing agent's draft, when the reviewer chose to carry it over. */
+  readonly inheritedDraftPath?: string;
 }): ReadonlyArray<AttachedAgent> =>
   agents.map((agent) => {
-    const { requestedPrimacyAtMs: _dropped, ...rest } = agent;
-    if (agent.writerId === writerId) return { ...rest, role: "primary" };
-    return agent.role === "primary" ? { ...rest, role: "observer" } : rest;
+    /*
+    Only the two agents this answer was about are touched.
+
+    An answer about one observer says nothing about another. Clearing every
+    request would delete a third agent's question along with the answered one,
+    and because the surface shows one question at a time, that agent would then
+    sit attached and unasked forever - waiting on a prompt the reviewer was
+    never given the chance to see.
+    */
+    if (agent.writerId === writerId) {
+      const { requestedPrimacyAtMs: _granted, ...rest } = agent;
+      return {
+        ...rest,
+        role: "primary",
+        ...(inheritedDraftPath === undefined ? {} : { inheritedDraftPath }),
+      };
+    }
+    if (agent.role !== "primary") return agent;
+    // The outgoing primary never asked for anything, but strip the field
+    // anyway: a stale request on a demoted agent would re-raise a question
+    // nobody posed.
+    const { requestedPrimacyAtMs: _demoted, ...rest } = agent;
+    return { ...rest, role: "observer" };
   });
 
 /**

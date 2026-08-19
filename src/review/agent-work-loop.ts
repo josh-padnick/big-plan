@@ -1194,10 +1194,27 @@ const nextWork = async ({
         state: "live",
       },
     }).catch(() => undefined);
+    /*
+    The previous agent's draft, when the reviewer chose to hand it over.
+
+    Offered as a path to read beside the candidate, never merged into it. The
+    candidate is still this claim's own copy of the last published revision, so
+    an inherited draft can inform the answer without publishing itself - which
+    is exactly what the reviewer was promised when they ticked the box.
+    */
+    const inheritedDraft = (
+      await readAgentRoster({
+        store: session.store,
+        sessionId: session.sessionId,
+      }).catch(() => [])
+    ).find((agent) => agent.writerId === writerId)?.inheritedDraftPath;
     return {
       pending: true,
       plan: session.planPath,
       candidate_plan: stage.candidatePath,
+      ...(inheritedDraft === undefined
+        ? {}
+        : { previous_agent_draft: inheritedDraft }),
       claim_generation: stage.generation,
       work: request,
       history,
@@ -1223,6 +1240,11 @@ const nextWork = async ({
         "For a feedback batch, note each transition as Comment i of N - slide title",
         "Return exactly one outcome per requested comment",
         "Open every work.attachments path with the harness image-viewing capability before choosing an outcome",
+        ...(inheritedDraft === undefined
+          ? []
+          : [
+              "The reviewer handed you previous_agent_draft, another agent's unfinished draft: read it as reference, keep only what you agree with, and never copy it into candidate_plan wholesale",
+            ]),
       ],
     };
   }

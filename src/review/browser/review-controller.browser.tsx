@@ -6360,9 +6360,11 @@ export const ReviewController = () => {
   const submitPrimacyAnswer = async ({
     writerId,
     answer,
+    carryWorkInProgress = false,
   }: {
     readonly writerId: string;
     readonly answer: PrimacyAnswer;
+    readonly carryWorkInProgress?: boolean;
   }) => {
     const refusal = reviewWriteRefusal({
       path: "agent-primacy",
@@ -6378,7 +6380,7 @@ export const ReviewController = () => {
         path: "/api/agent-primacy",
         identity,
         method: "POST",
-        body: { writerId, answer },
+        body: { writerId, answer, carryWorkInProgress },
       });
       acceptAgentSnapshot(
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
@@ -7444,11 +7446,12 @@ export const ReviewController = () => {
                       nowMs: agentProjectionNowMs,
                     })}
                     onCancel={() => setPendingHandoff(null)}
-                    onConfirm={() => {
+                    onConfirm={({ carryWorkInProgress }) => {
                       setPendingHandoff(null);
                       void submitPrimacyAnswer({
                         writerId: requested.writerId,
                         answer: "primary",
+                        carryWorkInProgress,
                       });
                     }}
                   />

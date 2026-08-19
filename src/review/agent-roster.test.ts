@@ -323,6 +323,36 @@ describe("the reviewer's answer", () => {
     expect(pendingPrimacyRequest({ agents, nowMs })).toBeUndefined();
   });
 
+  it("should hand the outgoing agent's draft over only when asked", async () => {
+    const store = await twoAgents();
+    const plain = await grantAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+    });
+    expect(
+      plain.find((agent) => agent.writerId === "second")?.inheritedDraftPath,
+    ).toBeUndefined();
+  });
+
+  it("should record the carried draft against the new primary alone", async () => {
+    const store = await twoAgents();
+    const agents = await grantAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+      inheritedDraftPath: "/stage/1/candidate.mdx",
+    });
+    expect(
+      agents.find((agent) => agent.writerId === "second")?.inheritedDraftPath,
+    ).toBe("/stage/1/candidate.mdx");
+    // The demoted agent keeps no pointer to a draft it is no longer answering
+    // from; the path it wrote is its own and it still has it.
+    expect(
+      agents.find((agent) => agent.writerId === "first")?.inheritedDraftPath,
+    ).toBeUndefined();
+  });
+
   it("should drop a disconnected agent without inventing a successor", async () => {
     const store = await twoAgents();
     const agents = await detachAgentFromRoster({
