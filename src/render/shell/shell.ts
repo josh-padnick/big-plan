@@ -454,7 +454,7 @@ const MOBILE_FOLD_CONTROL_CLASSES = "float-right mr-5 mb-1";
 // approved-metric: the mobile bar's hairline shadow, which lifts the sticky bar
 // off the text scrolling under it without the weight of a resting shadow.
 const MOBILE_TOC_BAR_CLASSES =
-  "sticky top-11 z-40 h-11 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden";
+  "sticky top-11 z-40 h-11 border-b border-edge bg-toolbar text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] wide:hidden";
 
 const renderMobileToc = ({
   nav,
