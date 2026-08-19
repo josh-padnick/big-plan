@@ -92,6 +92,8 @@ The launcher and the gear are drawn because the toolbar carries them, and a cont
       <TopBar title="Checkout rewrite">
         <Button label="Search this plan" icon="search" iconOnly />
         <Button label="Plan actions" icon="more" iconOnly />
+        <Button label="Review settings" icon="settings" iconOnly />
+        <Button label="Accept plan" icon="done" emphasis="primary" />
       </TopBar>
       <AppContent>
         <Row gap="md">
@@ -103,7 +105,29 @@ The launcher and the gear are drawn because the toolbar carries them, and a cont
             </List>
           </Panel>
           <Panel title="What changes">
-            <Text text="The palette opened over the middle of the page, and the page behind it is still readable because nothing about it became unavailable." />
+            <Row justify="between">
+              <Group>
+                <Icon name="terminal" label="Command" size="sm" />
+                <Text text="big-plan render plan.mdx review.html" role="helper" />
+              </Group>
+              <Group>
+                <Button label="Copy command" icon="copy" iconOnly />
+              </Group>
+            </Row>
+            <Row gap="sm" align="center">
+              <Icon name="tip" label="Tip" size="sm" labelled />
+              <Text text="The rendered file carries the whole review with it." role="helper" />
+            </Row>
+            <Divider />
+            <Row justify="between">
+              <Group>
+                <Icon name="lock" label="Locked" size="sm" />
+                <Text text="Locked while the agent holds the claim" role="muted" />
+              </Group>
+              <Group>
+                <Button label="Comment on this section" icon="comment" />
+              </Group>
+            </Row>
           </Panel>
         </Row>
       </AppContent>
@@ -134,6 +158,8 @@ The launcher and the gear are drawn because the toolbar carries them, and a cont
       <TopBar title="Checkout rewrite">
         <Button label="Search this plan" icon="search" iconOnly />
         <Button label="Plan actions" icon="more" iconOnly />
+        <Button label="Review settings" icon="settings" iconOnly />
+        <Button label="Accept plan" icon="done" emphasis="primary" />
       </TopBar>
       <AppContent>
         <Row gap="md">
@@ -145,7 +171,29 @@ The launcher and the gear are drawn because the toolbar carries them, and a cont
             </List>
           </Panel>
           <Panel title="What changes">
-            <Text text="The page is dimmed because it is genuinely unavailable until the question above it is answered." />
+            <Row justify="between">
+              <Group>
+                <Icon name="terminal" label="Command" size="sm" />
+                <Text text="big-plan render plan.mdx review.html" role="helper" />
+              </Group>
+              <Group>
+                <Button label="Copy command" icon="copy" iconOnly />
+              </Group>
+            </Row>
+            <Row gap="sm" align="center">
+              <Icon name="tip" label="Tip" size="sm" labelled />
+              <Text text="The rendered file carries the whole review with it." role="helper" />
+            </Row>
+            <Divider />
+            <Row justify="between">
+              <Group>
+                <Icon name="lock" label="Locked" size="sm" />
+                <Text text="Locked while the agent holds the claim" role="muted" />
+              </Group>
+              <Group>
+                <Button label="Comment on this section" icon="comment" />
+              </Group>
+            </Row>
           </Panel>
         </Row>
       </AppContent>
@@ -205,6 +253,8 @@ The palette and the confirmation are the same element carrying two different set
 
 `backdrop` answers whether the page is still available: the palette leaves it `clear` because nothing about the page became unusable, and the confirmation dims it because the reader has to answer before anything else can happen.
 `kind` answers what the surface is: the palette is an ordinary `dialog`, and the confirmation is an `alert`, which is what guards a removal that does not come back.
+
+The page underneath is the same page on all three screens - the same toolbar, the same sections, the same panel - so the only thing that changes when a surface opens is the surface.
 
 Both surfaces center over the page, which is what an overlay draws and what a quick search and a confirmation both do in a real product.
 A menu hanging under one toolbar button is a different shape, so this document draws the launcher as the control it is rather than borrowing a centered surface to stand in for it.
