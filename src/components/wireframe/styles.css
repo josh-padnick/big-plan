@@ -2136,8 +2136,13 @@ marks and a plan diff never jitters.
     z-index: 2;
     padding: 1.5rem;
   }
+  /* The shared neutral-black backdrop, so a dim darkens in both themes. An ink
+     wash would lighten the page in dark mode, which is the opposite of a
+     scrim. It is lighter than the product's own modal backdrop on purpose: a
+     reviewer has to keep seeing what the interruption covers, which is the
+     whole reason the page is drawn under it. */
   .wireframe-overlay[data-wireframe-backdrop="dim"] {
-    background: color-mix(in srgb, var(--color-ink) 42%, transparent);
+    background: color-mix(in srgb, var(--color-backdrop) 45%, transparent);
   }
   /* The dialog itself is opaque paper on top of that dim, and it is bounded to
      a readable measure: a confirmation stretched across a 1200px artboard stops
