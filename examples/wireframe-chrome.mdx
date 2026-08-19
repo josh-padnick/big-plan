@@ -139,8 +139,8 @@ A gear is `icon="settings"`, and `iconOnly` keeps the words as the control's acc
       </AppContent>
     </AppShell>
     <Overlay kind="alert" title="Delete Checkout rewrite?">
-      <Text text="The plan and its two open comments go with it." />
-      <Text text="Nothing restores them afterwards." role="helper" />
+      <Text text="The plan moves to Recently deleted, where you can restore it for thirty days." />
+      <Text text="Its two open comments are removed now, and those do not come back." role="helper" />
       <Row justify="end">
         <Group>
           <Button label="Keep the plan" emphasis="tertiary" navigateTo="review" />
@@ -189,6 +189,9 @@ A gear is `icon="settings"`, and `iconOnly` keeps the words as the control's acc
 
 ## What each screen settles
 
-The launcher screen and the confirmation screen differ in exactly one authored attribute, and that attribute is the whole argument: a menu leaves the page available, and a destructive confirmation does not.
+The launcher and the confirmation are the same element carrying two different settings, and each setting answers its own question.
 
-Drawing both as ordinary panels in the column would have hidden that difference behind an arrangement neither surface actually has.
+`backdrop` answers whether the page is still available: the menu leaves it `clear` because nothing about the page became unusable, and the confirmation dims it because the reader has to answer before anything else can happen.
+`kind` answers what the surface is: the menu is an ordinary `dialog`, and the confirmation is an `alert`, which is what guards a removal that does not come back.
+
+Drawing either as an ordinary panel in the column would have hidden both answers behind an arrangement neither surface actually has.

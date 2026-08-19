@@ -2143,10 +2143,19 @@ marks and a plan diff never jitters.
   .wireframe-overlay[data-wireframe-backdrop="dim"] {
     background: color-mix(in srgb, var(--color-backdrop) 45%, transparent);
   }
+  /* A clear backdrop says the page stays usable, so the sheet of nothing over
+     it must not swallow the taps that prove it. The dim variant keeps them on
+     purpose: there, being unable to reach the page is the point. */
+  .wireframe-overlay[data-wireframe-backdrop="clear"] {
+    pointer-events: none;
+  }
   /* The dialog itself is opaque paper on top of that dim, and it is bounded to
      a readable measure: a confirmation stretched across a 1200px artboard stops
      reading as an interruption and starts reading as another page region. */
   .wireframe-overlay-surface {
+    /* The surface itself is always reachable, including inside a clear overlay
+       whose backdrop passes input through. */
+    pointer-events: auto;
     box-sizing: border-box;
     /* Sized to what it holds, then clamped. A confirmation that is two lines
        long should not draw the same box a form does, and neither should reach

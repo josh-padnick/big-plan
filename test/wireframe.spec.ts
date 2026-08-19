@@ -781,8 +781,18 @@ test("should draw marks, a two-ended toolbar, and a surface that covers the page
       boxOf(overlay),
       boxOf(screen.locator(".wireframe-artboard")),
     ]);
+    // Size alone would pass an overlay the right shape sitting off to one
+    // side, which leaves part of the page it calls unavailable exposed.
     expect(overlayBox.width).toBeGreaterThanOrEqual(artboardBox.width - 2);
     expect(overlayBox.height).toBeGreaterThanOrEqual(artboardBox.height - 2);
+    expect(overlayBox.x).toBeLessThanOrEqual(artboardBox.x + 2);
+    expect(overlayBox.y).toBeLessThanOrEqual(artboardBox.y + 2);
+    expect(overlayBox.x + overlayBox.width).toBeGreaterThanOrEqual(
+      artboardBox.x + artboardBox.width - 2,
+    );
+    expect(overlayBox.y + overlayBox.height).toBeGreaterThanOrEqual(
+      artboardBox.y + artboardBox.height - 2,
+    );
     await expect(
       screen.getByRole("alertdialog", { name: "Delete Checkout rewrite?" }),
     ).toBeVisible();
