@@ -2780,6 +2780,7 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
     return undefined;
   }
   const requestedPrimacyAtMs = record["requestedPrimacyAtMs"];
+  const claimToken = record["claimToken"];
   const model = decodeAgentModelIdentity(record["model"]);
   return {
     writerId,
@@ -2789,6 +2790,9 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
     ...(typeof requestedPrimacyAtMs === "number" &&
     Number.isFinite(requestedPrimacyAtMs)
       ? { requestedPrimacyAtMs }
+      : {}),
+    ...(typeof claimToken === "string" && claimToken !== ""
+      ? { claimToken }
       : {}),
     ...(model === undefined ? {} : { model }),
   };
@@ -2880,12 +2884,22 @@ export const attachAgentToRoster = async ({
   store,
   sessionId,
   writerId,
+  adoptClaimToken,
   model,
   now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
+  /**
+   * A pickup token this process is resuming.
+   *
+   * A restarted connection loop is the same agent with a new process, so it
+   * adopts the registration its predecessor left rather than arriving as a
+   * stranger. Without this, resuming would demote the plan's own primary to an
+   * observer of itself and strand the request it still holds.
+   */
+  readonly adoptClaimToken?: string;
   readonly model?: AgentModelIdentity;
   readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
@@ -2893,10 +2907,24 @@ export const attachAgentToRoster = async ({
     store,
     sessionId,
     change: (agents) => {
-      const live = agents.filter(
-        (agent) =>
-          agent.writerId === writerId || agentIsLive({ agent, nowMs: now }),
-      );
+      const adopted =
+        adoptClaimToken === undefined
+          ? undefined
+          : agents.find((agent) => agent.claimToken === adoptClaimToken);
+      const live = agents
+        .filter(
+          (agent) =>
+            agent.writerId === writerId ||
+            agent.writerId === adopted?.writerId ||
+            agentIsLive({ agent, nowMs: now }),
+        )
+        // The predecessor's record becomes this process's record, keeping the
+        // role, the attachment time, and the token that identifies the work.
+        .map((agent) =>
+          adopted !== undefined && agent.writerId === adopted.writerId
+            ? { ...agent, writerId }
+            : agent,
+        );
       const existing = live.find((agent) => agent.writerId === writerId);
       if (existing !== undefined) {
         return live.map((agent) =>
@@ -2911,17 +2939,58 @@ export const attachAgentToRoster = async ({
             : agent,
         );
       }
+      const role = roleForArrivingAgent({ agents: live, nowMs: now });
       return [
         ...live,
         {
           writerId,
-          role: roleForArrivingAgent({ agents: live, nowMs: now }),
+          role,
           attachedAtMs: now,
           signalAtMs: now,
+          /*
+          Arriving as an observer is itself the request to be primary.
+
+          Requiring a separate flag would mean the pasted connect prompt never
+          carries it, so a second agent would attach in silence and the reviewer
+          would never be asked - which is the confusion this change exists to
+          end. Showing up is the ask; the reviewer's answer is what settles it.
+
+          Only a new arrival raises it. A refresh above leaves the field alone,
+          so "leave it as observer" stays answered instead of being re-asked
+          twice a second by the same loop.
+          */
+          ...(role === "observer" ? { requestedPrimacyAtMs: now } : {}),
           ...(model === undefined ? {} : { model }),
         },
       ];
     },
+  });
+
+/**
+ * Links one loop's registration to the pickup token it claimed with.
+ *
+ * `agent note` and `agent respond` are separate processes that know their token
+ * and not their loop, so without this they cannot ask what role they hold and a
+ * displaced agent learns of its displacement only when publication is refused.
+ */
+export const recordAgentClaimToken = async ({
+  store,
+  sessionId,
+  writerId,
+  claimToken,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+  readonly claimToken: string;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) =>
+      agents.map((agent) =>
+        agent.writerId === writerId ? { ...agent, claimToken } : agent,
+      ),
   });
 
 /** Records that one attached agent has asked to become the primary. */

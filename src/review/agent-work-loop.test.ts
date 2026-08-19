@@ -41,6 +41,10 @@ import {
 } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
+import {
+  pendingPrimacyRequest,
+  selectPrimaryAgent,
+} from "./shared/agent-primacy.js";
 import { MAX_IMAGE_BYTES, reviewImageId } from "./shared/review-image.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
 import { readProgress } from "./store.js";
@@ -1426,7 +1430,18 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should serialize concurrent waiting pickups until the holder answers", async () => {
+  /*
+  Replaces the pre-BIG-171 race this test used to encode.
+
+  Two concurrent public pickups used to select the same unclaimed request and
+  be serialized by the plan-claim lock, with the loser taking the next request
+  once the holder answered. That is the interleaving the observer model
+  removes: a second loop no longer competes for work at all, so the guarantee
+  worth proving here is that it attaches, waits, and takes nothing until the
+  reviewer says so. The claim lock itself is unchanged and still proven in
+  request-mailbox.test.ts.
+  */
+  it("should attach a second concurrent loop as an observer that takes no work", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-race-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nOne agent works this plan at a time.\n";
@@ -1454,134 +1469,206 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request: firstRequest });
     await writeAgentRequest({ store: review.store, request: secondRequest });
 
-    let releaseLock: (() => Promise<void>) | undefined;
     try {
-      releaseLock = await holdAgentRequestLock({
-        store: review.store,
-        requestId: firstRequest.requestId,
-      });
-      const firstPickup = runAgentWorkLoopAction({
+      const firstPickup = await runAgentWorkLoopAction({
         kind: "next",
         planPath,
         shouldWait: true,
         executablePath,
-        modelName: "Race agent one",
+        modelName: "claude-opus-5",
       });
-      await vi.waitFor(
-        async () => {
-          expect(
-            await reviewStore.readAgentPresence({
-              store: review.store,
-              sessionId: review.sessionId,
-            }),
-          ).toMatchObject({
-            state: "working",
-            requestId: firstRequest.requestId,
-          });
-        },
-        { timeout: 5_000 },
-      );
-      const firstPresence = await reviewStore.readAgentPresence({
-        store: review.store,
-        sessionId: review.sessionId,
-      });
-      if (firstPresence.updatedAtMs === undefined) {
-        throw new Error("The first pickup did not persist its heartbeat time");
-      }
-      await vi.waitFor(
-        () => {
-          expect(Date.now()).toBeGreaterThan(firstPresence.updatedAtMs ?? 0);
-        },
-        { timeout: 5_000 },
-      );
-      const secondPickup = runAgentWorkLoopAction({
-        kind: "next",
-        planPath,
-        shouldWait: true,
-        executablePath,
-        modelName: "Race agent two",
-      });
-      await vi.waitFor(
-        async () => {
-          expect(
-            await reviewStore.readAgentPresence({
-              store: review.store,
-              sessionId: review.sessionId,
-            }),
-          ).toMatchObject({
-            state: "working",
-            requestId: firstRequest.requestId,
-            updatedAtMs: expect.any(Number),
-          });
-          expect(
-            (
-              await reviewStore.readAgentPresence({
-                store: review.store,
-                sessionId: review.sessionId,
-              })
-            ).updatedAtMs,
-          ).toBeGreaterThan(firstPresence.updatedAtMs ?? 0);
-        },
-        { timeout: 5_000 },
-      );
-      // The persisted heartbeat barrier proves both public pickups selected the
-      // same unclaimed request. Without plan-level serialization, both promises
-      // resolve before either response; that counterfactual was verified.
-      await releaseLock();
-      releaseLock = undefined;
-      const firstSettled = await Promise.race([
-        firstPickup.then((pickup) => ({ pickup, waiting: secondPickup })),
-        secondPickup.then((pickup) => ({ pickup, waiting: firstPickup })),
-      ]);
-      expect(firstSettled.pickup).toMatchObject({
+      expect(firstPickup).toMatchObject({
         pending: true,
         work: { requestId: firstRequest.requestId },
       });
-      await vi.waitFor(
-        async () => {
-          expect(
-            await reviewStore.readAgentPresence({
-              store: review.store,
-              sessionId: review.sessionId,
-            }),
-          ).toMatchObject({ state: "waiting" });
-        },
-        { timeout: 5_000 },
-      );
-      if (
-        typeof firstSettled.pickup.agent_token !== "string" ||
-        typeof firstSettled.pickup.response_file !== "string"
-      ) {
-        throw new Error(
-          "The first pickup did not return its response contract",
-        );
-      }
-      await writeFile(
-        firstSettled.pickup.response_file,
-        JSON.stringify({
-          requestId: firstRequest.requestId,
-          message: "The first request is answered.",
-        }),
-      );
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "respond",
-          planPath,
-          responsePath: firstSettled.pickup.response_file,
-          executablePath,
-          agentToken: firstSettled.pickup.agent_token,
-        }),
-      ).resolves.toMatchObject({ responded: firstRequest.requestId });
-      await expect(firstSettled.waiting).resolves.toMatchObject({
-        pending: true,
-        work: { requestId: secondRequest.requestId },
+
+      // A second connector arrives while the first holds the plan. It is told
+      // its role rather than handed the queued request.
+      const secondPickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        modelName: "gpt-5-6-sol",
       });
+      expect(secondPickup).toMatchObject({ pending: false, role: "observer" });
+      expect(secondPickup["work"]).toBeUndefined();
+
+      // The reviewer, not the arriving agent, is the one being asked.
+      const roster = await reviewStore.readAgentRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      const nowMs = Date.now();
+      expect(selectPrimaryAgent({ agents: roster, nowMs })?.model?.name).toBe(
+        "claude-opus-5",
+      );
+      expect(
+        pendingPrimacyRequest({ agents: roster, nowMs })?.model?.name,
+      ).toBe("gpt-5-6-sol");
+
+      // The queued request is still queued: nothing took it.
+      const stillQueued = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        stillQueued.requests.find(
+          (request) => request.requestId === secondRequest.requestId,
+        )?.claimedBy,
+      ).toBeUndefined();
     } finally {
-      await releaseLock?.();
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 20_000);
+
+  it("should let a promoted observer pick up work, and tell the displaced agent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-handoff-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nPrimacy moves only when the reviewer says so.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "abababababababab",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-19T12:00:00.000Z",
+        body: "Answer this.",
+      }),
+    });
+    try {
+      const incumbent = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "claude-opus-5",
+      });
+      const incumbentToken = incumbent["agent_token"];
+      if (typeof incumbentToken !== "string") {
+        throw new Error("The incumbent did not return its token");
+      }
+      // While it holds the plan, its own notes are accepted.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Reading the request",
+          executablePath,
+          agentToken: incumbentToken,
+        }),
+      ).resolves.toMatchObject({ noted: "Reading the request" });
+
+      await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        modelName: "gpt-5-6-sol",
+      });
+      const observer = pendingPrimacyRequest({
+        agents: await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+        nowMs: Date.now(),
+      });
+      if (observer === undefined) {
+        throw new Error("The arriving agent did not ask to be the primary");
+      }
+
+      // The reviewer answers.
+      await reviewStore.grantAgentPrimacy({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: observer.writerId,
+      });
+
+      // The displaced agent learns at its very next command, in a code its
+      // harness can branch on, rather than at publication.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Still working",
+          executablePath,
+          agentToken: incumbentToken,
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "primacy-lost",
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should keep a resuming loop as the primary rather than demoting it", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA restart is the same agent.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "abababababababab",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-19T12:00:00.000Z",
+        body: "Answer this.",
+      }),
+    });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "claude-opus-5",
+      });
+      const token = pickup["agent_token"];
+      if (typeof token !== "string") {
+        throw new Error("The pickup did not return its token");
+      }
+      // A new process resuming the same pickup must not become an observer of
+      // itself, which would strand the request it still holds.
+      const resumed = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        agentToken: token,
+        modelName: "claude-opus-5",
+      });
+      expect(resumed).toMatchObject({
+        pending: true,
+        work: { requestId: "abababababababab" },
+      });
+      const roster = await reviewStore.readAgentRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(roster).toHaveLength(1);
+      expect(
+        selectPrimaryAgent({ agents: roster, nowMs: Date.now() }),
+      ).toBeDefined();
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
 
   it.each(["answered", "canceled"] as const)(
     "should move past a request %s during pickup preparation",

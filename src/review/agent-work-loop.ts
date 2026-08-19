@@ -34,10 +34,13 @@ import {
 } from "./request-mailbox.js";
 import {
   anchorReviewStore,
+  attachAgentToRoster,
   deriveReviewPlanId,
   prepareStore,
   randomId,
   readAgentDisconnectRequestFor,
+  readAgentRoster,
+  recordAgentClaimToken,
   readSnapshot,
   reviewStoreFor,
   writeAgentPrompt,
@@ -46,6 +49,12 @@ import {
   writeSnapshot,
   ReviewStorePathRejected,
 } from "./store.js";
+import {
+  agentForClaimToken,
+  agentModelLabel,
+  selectPrimaryAgent,
+  type AgentRole,
+} from "./shared/agent-primacy.js";
 import type { ReviewStore } from "./store.js";
 import { SPAWNER_PPID, spawnerIsGone } from "./agent-spawner.js";
 import {
@@ -150,7 +159,23 @@ export type AgentWorkLoopErrorCode =
    * the only safe answer to a typo is to try again - which is exactly the churn
    * a disconnected agent must not do (BIG-190).
    */
-  | "agent-disconnected";
+  | "agent-disconnected"
+  /**
+   * This session is no longer the primary for the plan.
+   *
+   * It earns its own code because a harness has to tell it apart from a bad
+   * flag. Before this existed, losing primacy and mistyping an argument both
+   * arrived as `invalid-input`, so the only safe thing a harness could do was
+   * retry - which is exactly the churn a displaced loop must not do.
+   */
+  | "primacy-lost";
+
+export class AgentPrimacyLost extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentPrimacyLost";
+  }
+}
 
 export class AgentWorkLoopRejected extends Error {
   readonly code: AgentWorkLoopErrorCode;
@@ -394,6 +419,52 @@ const failDisconnected = (): never => {
     AGENT_DISCONNECTED_MESSAGE,
     "agent-disconnected",
     [...AGENT_DISCONNECTED_HELP],
+  );
+};
+
+/**
+ * Refuses a command from a session that is not the plan's primary.
+ *
+ * Checked before the work rather than at publication. A displaced agent used to
+ * find out only when its response was rejected, after paying for a whole turn;
+ * telling it at its next command is the difference between a harness that stops
+ * and one that churns (BIG-171).
+ *
+ * A roster with no live primary at all does not refuse. The reviewer may be
+ * mid decision, or every agent may have just been reaped, and stopping the one
+ * agent still working on the strength of an empty roster would invent a
+ * displacement nobody performed.
+ */
+const assertSessionIsPrimary = async ({
+  store,
+  sessionId,
+  claimToken,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly claimToken: string;
+}): Promise<void> => {
+  const agents = await readAgentRoster({ store, sessionId });
+  const primary = selectPrimaryAgent({ agents, nowMs: Date.now() });
+  if (primary === undefined) return;
+  const acting = agentForClaimToken({ agents, claimToken });
+  // A token no registration claims is not evidence of displacement. It is an
+  // older loop, a build that never registered, or a roster this session has
+  // reaped; the claim checks below still fence it, and inventing a primacy
+  // failure here would refuse work nobody took away.
+  if (acting === undefined || acting.writerId === primary.writerId) return;
+  failPrimacyLost(agentModelLabel(primary));
+};
+
+/** Refuses a command from a session that no longer owns the plan. */
+const failPrimacyLost = (holder: string): never => {
+  throw new AgentWorkLoopRejected(
+    `This session is no longer the primary for this review; ${holder} is`,
+    "primacy-lost",
+    [
+      "Stop this loop; it cannot claim, note, or respond while it is an observer",
+      "The reviewer decides who the primary is, from Agent Status in the review",
+    ],
   );
 };
 
@@ -791,6 +862,43 @@ const nextWork = async ({
       ...(heldRequestId === undefined ? {} : { requestId: heldRequestId }),
     })) !== undefined;
   if (await wasDisconnected()) return disconnectedResult();
+  /*
+  This loop's standing with the plan, refreshed on every pass.
+
+  Registration is what makes primacy a fact rather than a race: the first live
+  loop owns the plan and every later one attaches as an observer, so arriving
+  can no longer take a turn away from an agent that is mid answer (BIG-171).
+  Arriving as an observer is also the request the reviewer answers, so a second
+  agent showing up is what raises the question rather than a flag nobody pastes.
+  */
+  const refreshRoster = async (): Promise<AgentRole> => {
+    const agents = await attachAgentToRoster({
+      store: session.store,
+      sessionId: session.sessionId,
+      writerId,
+      // A resume is this agent continuing after a restart, not a newcomer.
+      ...(agentToken === undefined ? {} : { adoptClaimToken: agentToken }),
+      ...(model === undefined ? {} : { model }),
+    });
+    return (
+      agents.find((agent) => agent.writerId === writerId)?.role ?? "observer"
+    );
+  };
+  const observerResult = (): Record<string, unknown> => ({
+    pending: false,
+    role: "observer",
+    plan: session.planPath,
+    review: session.url,
+    reason:
+      "Another agent is the primary for this review, so this session cannot answer the reviewer yet",
+    help: [
+      "The reviewer has been asked whether to make this agent the primary",
+      "Run again with --wait to keep observing until they answer",
+      "Reading the plan and the review is allowed; claiming, noting, and responding are not",
+    ],
+  });
+  let role = await refreshRoster();
+  if (role === "observer" && !shouldWait) return observerResult();
   let request: AgentRequest | undefined;
   if (agentToken !== undefined) {
     const ownedRequest = resumeRequests?.find(
@@ -810,10 +918,15 @@ const nextWork = async ({
     request = ownedRequest;
   }
   while (true) {
-    request ??= nextPendingAgentRequest(snapshot, {
-      claimedBy,
-      nowMs: Date.now(),
-    });
+    // An observer never selects work. It keeps its registration fresh so the
+    // reviewer's card stays truthful, and waits for them to answer.
+    request ??=
+      role === "observer"
+        ? undefined
+        : nextPendingAgentRequest(snapshot, {
+            claimedBy,
+            nowMs: Date.now(),
+          });
     while (request === undefined && shouldWait) {
       await endWhenSpawnerIsGone();
       if (await wasDisconnected()) return disconnectedResult();
@@ -841,17 +954,22 @@ const nextWork = async ({
         };
       }
       await wait(500);
+      role = await refreshRoster();
       snapshot = await readAgentExchange({
         store: session.store,
         sessionId: session.sessionId,
         planId: session.planId,
       });
-      request = nextPendingAgentRequest(snapshot, {
-        claimedBy,
-        nowMs: Date.now(),
-      });
+      request =
+        role === "observer"
+          ? undefined
+          : nextPendingAgentRequest(snapshot, {
+              claimedBy,
+              nowMs: Date.now(),
+            });
     }
     if (request === undefined) {
+      if (role === "observer") return observerResult();
       return {
         pending: false,
         plan: session.planPath,
@@ -1045,6 +1163,14 @@ const nextWork = async ({
       if (error instanceof AgentExchangeRejected) return fail(error.message);
       return fail(`Cannot open this claim's plan candidate: ${String(error)}`);
     }
+    // The loop and the token it claimed with are linked here, so the separate
+    // `note` and `respond` processes can ask what role they are acting under.
+    await recordAgentClaimToken({
+      store: session.store,
+      sessionId: session.sessionId,
+      writerId,
+      claimToken: claimedBy,
+    }).catch(() => undefined);
     const respondCommand = agentRespondCommand({
       executablePath: binPath,
       planPath: session.planPath,
@@ -1129,6 +1255,11 @@ const respond = async ({
   ) {
     failDisconnected();
   }
+  await assertSessionIsPrimary({
+    store: session.store,
+    sessionId: session.sessionId,
+    claimToken: agentToken,
+  });
   const snapshot = await readAgentExchange({
     store: session.store,
     sessionId: session.sessionId,
@@ -1372,6 +1503,11 @@ const note = async ({
   ) {
     failDisconnected();
   }
+  await assertSessionIsPrimary({
+    store: session.store,
+    sessionId: session.sessionId,
+    claimToken: agentToken,
+  });
   const snapshot = await readAgentExchange({
     store: session.store,
     sessionId: session.sessionId,

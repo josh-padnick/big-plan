@@ -13,6 +13,7 @@
 // primary, and whether the reviewer is being asked to decide something.
 
 import { AGENT_STALL_MS } from "./agent-timing.js";
+import { agentModelDisplayName } from "./agent-identity-catalog.js";
 import type { AgentModelIdentity } from "./agent-model.js";
 
 /**
@@ -104,7 +105,58 @@ export type AttachedAgent = {
   readonly signalAtMs: number;
   /** When it asked to become the primary, if it has. */
   readonly requestedPrimacyAtMs?: number;
+  /**
+   * The pickup token this loop last claimed with.
+   *
+   * It is what lets `agent note` and `agent respond` - separate processes that
+   * know their token and not their loop - find out whose role they are acting
+   * under, so a displaced agent can be told at its next command instead of at
+   * publication.
+   */
+  readonly claimToken?: string;
   readonly model?: AgentModelIdentity;
+};
+
+/** The attached agent acting under one pickup token, if it is still attached. */
+export const agentForClaimToken = ({
+  agents,
+  claimToken,
+}: {
+  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly claimToken: string;
+}): AttachedAgent | undefined =>
+  agents.find((agent) => agent.claimToken === claimToken);
+
+/**
+ * How many characters of a writer id are worth showing.
+ *
+ * Enough to separate two agents in one review, and no more. The id is a
+ * disambiguator, not an identifier the reader is expected to use, so it earns
+ * a glance rather than a line.
+ */
+const SHORT_WRITER_ID_LENGTH = 6;
+
+/**
+ * Names one attached agent well enough to tell it from another.
+ *
+ * The model alone is not an identity here. Two connectors running the same
+ * model is the ordinary case - a reviewer opening a second terminal - and a
+ * card offering "Make GPT-5.6-sol the primary" beside another GPT-5.6-sol asks
+ * them to choose between two identical labels. The short writer id is what
+ * makes the choice answerable.
+ *
+ * An agent that declared no model is named by its id alone rather than by an
+ * invented word like "Unknown agent": the id is true, and the placeholder
+ * would only look like a name.
+ */
+export const agentModelLabel = (
+  agent: Pick<AttachedAgent, "writerId" | "model">,
+): string => {
+  const short = `…${agent.writerId.slice(0, SHORT_WRITER_ID_LENGTH)}`;
+  const name = agent.model?.name;
+  return name === undefined
+    ? short
+    : `${agentModelDisplayName(name)} (${short})`;
 };
 
 /** True while an attached agent's own signal is recent enough to count. */

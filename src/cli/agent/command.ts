@@ -250,11 +250,12 @@ export const agentCommand = async (
     if (error instanceof AxiError) throw error;
     if (!(error instanceof AgentWorkLoopRejected)) throw error;
     /*
-    Being disconnected is its own code because a harness has to be able to branch
-    on it. Reported as INVALID_INPUT it was indistinguishable from a mistyped
-    flag, so the only safe response was to retry - which is the churn a
-    disconnected loop must not do (BIG-190). The usage block is withheld for it:
-    the command was well formed, and printing usage would suggest otherwise.
+    Being disconnected (BIG-190) and losing primacy (BIG-171) each get their own
+    code because a harness has to be able to branch on them. Reported as
+    INVALID_INPUT they were indistinguishable from a mistyped flag, so the only
+    safe response was to retry - which is the churn a disconnected loop and a
+    displaced loop must not do. The usage block is withheld for both: the
+    command was well formed, and printing usage would suggest otherwise.
     */
     const code =
       error.code === "validation-error"
@@ -263,11 +264,15 @@ export const agentCommand = async (
           ? "SOURCE_MOVED"
           : error.code === "agent-disconnected"
             ? "AGENT_DISCONNECTED"
-            : "INVALID_INPUT";
+            : error.code === "primacy-lost"
+              ? "PRIMACY_LOST"
+             : "INVALID_INPUT";
     throw new AxiError(
       error.message,
       code,
-      error.details.length === 0 && error.code !== "agent-disconnected"
+      error.details.length === 0 &&
+      error.code !== "agent-disconnected" &&
+      error.code !== "primacy-lost"
         ? [USAGE]
         : [...error.details],
     );

@@ -146,6 +146,53 @@ describe("attachAgentToRoster", () => {
     });
   });
 
+  it("should treat arriving as an observer as the request itself", async () => {
+    const store = await temporaryStore();
+    await attachAgentToRoster({ store, sessionId: SESSION, writerId: "first" });
+    const agents = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+    });
+    expect(pendingPrimacyRequest({ agents, nowMs: Date.now() })?.writerId).toBe(
+      "second",
+    );
+  });
+
+  it("should not re-ask a question the reviewer already answered", async () => {
+    const store = await temporaryStore();
+    await attachAgentToRoster({ store, sessionId: SESSION, writerId: "first" });
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+    });
+    await declineAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+    });
+    // The observer keeps heartbeating; that must not reopen the question.
+    const agents = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+    });
+    expect(
+      pendingPrimacyRequest({ agents, nowMs: Date.now() }),
+    ).toBeUndefined();
+  });
+
+  it("should not raise a request for the agent that owns the plan", async () => {
+    const store = await temporaryStore();
+    const agents = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "first",
+    });
+    expect(agents[0]?.requestedPrimacyAtMs).toBeUndefined();
+  });
+
   it("should read an empty roster for a different session", async () => {
     const store = await temporaryStore();
     await attachAgentToRoster({ store, sessionId: SESSION, writerId: "first" });
