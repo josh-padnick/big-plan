@@ -497,6 +497,23 @@ marks and a plan diff never jitters.
     min-height: 0;
   }
 
+  /* A run of elements that travels together hugs what it holds, which is the
+     whole point of it: a Row distributes space between its children, so a
+     title and a set of controls each take half the bar unless each side is one
+     item. Two Groups in a Row with justify="between" therefore settle at the
+     two ends the product puts them at, and nothing in between is invented. */
+  .wireframe-group {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+  /* A two-group bar keeps its trailing group at the end even when the bar has
+     to wrap. Space-between distributes within each line, so a wrapped trailing
+     group would otherwise snap back to the start - which reads as a layout
+     that gave up rather than as the toolbar the author declared. */
+  .wireframe-row.justify-between > .wireframe-group:nth-child(2):last-child {
+    margin-inline-start: auto;
+  }
+
   /* Regions share a row; controls and copy keep their own size. Authors never
      choose width tokens. A direct record collection becomes the master pane,
      Rail owns secondary width, and the remaining pane becomes primary. */

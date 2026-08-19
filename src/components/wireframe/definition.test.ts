@@ -2523,4 +2523,70 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     });
     expect(diagnostics).toEqual([]);
   });
+  it("should let a Row anchor one Group at each end", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              attributes: { justify: "between" },
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({ name: "Heading", attributes: { text: "Plans" } }),
+                  ],
+                }),
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Workspace settings",
+                        icon: "settings",
+                        iconOnly: true,
+                      },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(html(render(compiled))).toContain("wireframe-group");
+  });
+
+  it("should keep a top bar's controls away from its title", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "TopBar",
+              attributes: { title: "Checkout rewrite" },
+              children: [
+                element({
+                  name: "Button",
+                  attributes: {
+                    label: "Search this plan",
+                    icon: "search",
+                    iconOnly: true,
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(html(render(compiled))).toContain("wireframe-top-bar-actions");
+  });
 });

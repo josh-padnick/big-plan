@@ -201,6 +201,14 @@ const WireframeElement = ({
           />
         </div>
       );
+    case "Group":
+      return (
+        <div
+          className={`wireframe-group flex flex-wrap ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]}`}
+        >
+          <WireframeElements nodes={node.children} />
+        </div>
+      );
     case "Panel": {
       const conversation = conversationPartsFor(node.children);
       return (
@@ -322,7 +330,13 @@ const WireframeElement = ({
           {node.title === undefined ? null : (
             <p className="wireframe-brand">{node.title}</p>
           )}
-          <WireframeElements nodes={node.children} />
+          {/* A product's top bar names where the reader is on the left and
+              keeps its controls on the right; clustering everything against
+              the title is the one arrangement no real application uses.
+              Authors who want a different split write Groups inside a Row. */}
+          <div className="wireframe-top-bar-actions ml-auto flex flex-wrap items-center gap-2">
+            <WireframeElements nodes={node.children} />
+          </div>
         </div>
       );
     case "BottomBar":

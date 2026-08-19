@@ -391,6 +391,16 @@ export type WireframeNode =
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
+      // A run of elements that travel together as one item of a Row. Without
+      // it a Row distributes space between every child equally, so a title and
+      // its actions each take half the bar instead of settling at the two
+      // ends the product puts them at.
+      readonly element: "Group";
+      readonly gap: WireframeSpace;
+      readonly align: WireframeAlign;
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
       readonly element: "Panel";
       readonly title?: string;
       readonly eyebrow?: string;

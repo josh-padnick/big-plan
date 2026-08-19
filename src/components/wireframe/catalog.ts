@@ -91,6 +91,11 @@ const ROW_SCHEMA = {
   justify: { kind: "enum", values: WIREFRAME_JUSTIFICATIONS },
 } satisfies ComponentAttributeSchema;
 
+const GROUP_SCHEMA = {
+  gap: { kind: "enum", values: WIREFRAME_SPACES },
+  align: { kind: "enum", values: WIREFRAME_ALIGNMENTS },
+} satisfies ComponentAttributeSchema;
+
 const PANEL_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
   eyebrow: { kind: "string", nonEmpty: true },
@@ -365,6 +370,29 @@ const CATALOG = {
         gap: validated.gap ?? "md",
         align: validated.align ?? "stretch",
         justify: validated.justify ?? "start",
+        children,
+      };
+    },
+  },
+  Group: {
+    category: "layout",
+    acceptsChildren: true,
+    summary:
+      'A run of elements that travel together as one item of a Row. Two Groups inside <Row justify="between"> put one set at the start and the other at the end, which is how a real toolbar carries its title on the left and its controls on the right.',
+    example:
+      '<Row justify="between"><Group><Heading text="Plans" /></Group><Group><Button icon="settings" label="Settings" iconOnly /></Group></Row>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Group",
+        attributes,
+        position,
+        diagnostics,
+        schema: GROUP_SCHEMA,
+      });
+      return {
+        element: "Group",
+        gap: validated.gap ?? "sm",
+        align: validated.align ?? "center",
         children,
       };
     },
