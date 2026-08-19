@@ -70,7 +70,7 @@ export const STYLESHEET_BUDGETS = {
     // controls with their touch floor, a surface drawn over the page with its
     // dim or clear backdrop and its alert variant, and the run of elements
     // that hugs its contents so a toolbar can anchor two ends.
-    declarations: 1068,
+    declarations: 1067,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,

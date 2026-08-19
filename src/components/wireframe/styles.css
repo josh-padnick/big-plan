@@ -504,7 +504,6 @@ marks and a plan diff never jitters.
      two ends the product puts them at, and nothing in between is invented. */
   .wireframe-group {
     flex: 0 0 auto;
-    min-width: 0;
   }
   /* A two-group bar keeps its trailing group at the end even when the bar has
      to wrap. Space-between distributes within each line, so a wrapped trailing
