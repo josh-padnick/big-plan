@@ -294,7 +294,7 @@ export const InputsSurface = () => {
   return (
     <div
       id="review-panel-inputs"
-      className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 grid content-start gap-3"
+      className="review-feedback-panel grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-3 overflow-x-hidden overflow-y-auto p-3"
       role="tabpanel"
       aria-labelledby="review-tab-inputs"
     >

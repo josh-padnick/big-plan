@@ -40,7 +40,7 @@ export const AgentSurface = ({
 }) => (
   <div
     id="review-panel-agent"
-    className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 grid content-start gap-3"
+    className="review-feedback-panel grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-3 overflow-x-hidden overflow-y-auto p-3"
     tabIndex={-1}
   >
     <AgentConnectionPanel
