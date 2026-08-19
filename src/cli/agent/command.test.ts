@@ -176,7 +176,13 @@ describe("agent command connector model identity", () => {
           sessionId: review.sessionId,
         });
         expect(presence).toMatchObject({ connected: true });
-        expect(presence).not.toHaveProperty("model");
+        // The heartbeat names the connector too, so an idle agent is still
+        // identifiable; the claim remains authoritative for work in flight.
+        if (expectedModel === undefined) {
+          expect(presence).not.toHaveProperty("model");
+        } else {
+          expect(presence).toMatchObject({ model: expectedModel });
+        }
         const exchange = await readAgentExchange({
           store: review.store,
           sessionId: review.sessionId,

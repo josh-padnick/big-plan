@@ -26,7 +26,7 @@ describe("request status strip", () => {
 });
 
 // BIG-147. Past the recovery horizon the strip's own copy sends the reviewer to
-// the Agent tab, so it has to carry the route there, and it must not read like
+// Agent Status, so it has to carry the route there, and it must not read like
 // an agent that fell quiet ninety seconds ago.
 describe("an abandoned request", () => {
   const abandoned = {
@@ -34,7 +34,7 @@ describe("an abandoned request", () => {
     label: "No longer reporting",
     headline: "No progress for 40m",
     detail:
-      "The agent has reported nothing for far longer than a turn takes. Connect a coding agent from the Agent tab to pick this up; doing so takes the work over, so the original agent's answer will no longer be accepted.",
+      "The agent has reported nothing for far longer than a turn takes. Connect a coding agent from Agent Status to pick this up; doing so takes the work over, so anything the original agent has in flight is dropped rather than delivered.",
     tone: "danger",
   } as const;
   const quietTurn = {

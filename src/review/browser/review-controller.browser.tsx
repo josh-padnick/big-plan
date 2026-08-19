@@ -17,6 +17,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -25,7 +26,6 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { ACTIVITY_ICON } from "../../icons/lucide/activity.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
@@ -44,13 +44,16 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   AGENT_STALL_MS,
-  deriveAgentHealthLabel,
+  agentHasEverConnected,
+  deriveAgentHealth,
   deriveCurrentAgentActivity,
+  type CurrentAgentActivity,
   heldWorkQuiet,
   projectAgentConnectionState,
   selectClaimedAgentRequest,
   type AgentStatus,
 } from "../shared/agent-status.js";
+import { selectAgentModelIdentity } from "../shared/agent-model.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
 import {
@@ -102,7 +105,11 @@ import {
   type RuntimeSession,
   type StagedDecisionAnswer,
 } from "../shared/review-wire.js";
-import { AgentHealthAlert } from "./agent-connection.browser.js";
+import {
+  AGENT_STATUS_LABEL,
+  AGENT_STATUS_TRIGGER_ID,
+  AgentStatusTrigger,
+} from "./agent-status.browser.js";
 import { AgentSurface } from "./agent-surface.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
 import { InputsSurface } from "./inputs-surface.browser.js";
@@ -204,6 +211,7 @@ import {
   Toaster,
   Tooltip,
   toast,
+  WorkingMark,
 } from "./ui.browser.js";
 
 const BODY_LIMIT = 4000;
@@ -367,16 +375,50 @@ type SelectionControlState = {
   readonly left: number;
 };
 
-type FeedbackTab = "comments" | "chat" | "inputs" | "agent";
+type FeedbackTab = "comments" | "chat" | "inputs";
 // Inputs is a live-runtime tab because its whole content is the runtime's
 // derived contract; a document opened without one has nothing to show there.
 const LIVE_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = [
   "comments",
   "chat",
   "inputs",
-  "agent",
 ];
 const STATIC_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = ["comments", "chat"];
+
+/**
+ * Which body the one fixed sidebar is showing. Diagnosis replaces the feedback
+ * it would otherwise block rather than adding a surface beside it, so these are
+ * alternatives in one slot. Each toolbar control owns its own view: pressing
+ * the pressed one closes the sidebar, and neither ever opens the other's body.
+ */
+type SidebarView = "feedback" | "agent";
+
+/** Closing the feedback sidebar has to put focus back here, from wherever it closed. */
+const FEEDBACK_TRIGGER_ID = "review-feedback-trigger";
+
+/*
+Every state's badge is written copy, because the badge is user-facing and a
+state name is not. The record is exhaustive over the union, so a state added
+later has to be given words here rather than leaking its identifier - which is
+how "offline" and "errored" came to sit in lowercase beside "Offline".
+*/
+const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
+  working: "Working",
+  waiting: "Queued",
+  stalled: "Warning",
+  errored: "Error",
+  disconnected: "Offline",
+  offline: "Unreachable",
+  idle: "Connected",
+  "never-connected": "",
+};
+
+// Both toolbar controls read as buttons rather than links: a transparent
+// ground with a real border at rest, and a pressed ground when their view is
+// open. The pressed look is neutral, not accent - it says "this is the open
+// one", which is not the kind of thing that should shout in colour.
+const TOOLBAR_CONTROL_CLASS =
+  "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border border-edge bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:border-edge-strong hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-edge-strong aria-expanded:bg-raised aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:min-h-8";
 const FEEDBACK_TAB_CLASS =
   "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>span]:min-w-5 [&>span]:justify-center [&>span]:bg-[var(--annotation-bg)] [&>span]:text-2xs [&>span]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
@@ -2368,10 +2410,7 @@ const ContextualCommentSummary = ({
       aria-label={statusIconLabel ?? status}
     >
       {statusSpinner ? (
-        <span
-          className="inline-block size-2.5 animate-spin rounded-full border-[1.5px] border-current border-r-transparent motion-reduce:animate-none"
-          aria-hidden="true"
-        />
+        <WorkingMark className="size-2.5" />
       ) : statusIcon === undefined ? null : (
         <Icon icon={statusIcon} />
       )}
@@ -3946,6 +3985,8 @@ export const ReviewController = () => {
     useState<SelectionControlState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [tab, setTab] = useState<FeedbackTab>("comments");
+  const sidebarRef = useRef<HTMLElement>(null);
+  const [sidebarView, setSidebarView] = useState<SidebarView>("feedback");
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSendingChat, setIsSendingChat] = useState(false);
@@ -4037,7 +4078,6 @@ export const ReviewController = () => {
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(
     null,
   );
-  const [agentAttentionKey, setAgentAttentionKey] = useState(0);
   const [associationActive, setAssociationActive] = useState(false);
   const [status, setStatus] = useState(
     identity === null
@@ -4821,10 +4861,75 @@ export const ReviewController = () => {
       document.querySelector<HTMLElement>(`#review-tab-${next}`)?.focus(),
     );
   };
-  const showAgentSetup = () => {
+  // The two bodies own separate scroll containers, so a swap would otherwise
+  // return the reader to the top of the feedback they were in the middle of.
+  // Position is the only continuity the swap cannot inherit for free: drafts,
+  // composer text, chat body, search text, and the selected tab all survive
+  // because neither body holds that state.
+  const feedbackScrollTop = useRef(0);
+  const feedbackPanel = (): HTMLElement | null =>
+    sidebarRef.current?.querySelector<HTMLElement>(".review-feedback-panel") ??
+    null;
+  const openAgentSidebar = useCallback(() => {
+    setSidebarView("agent");
     setIsOpen(true);
-    selectFeedbackTab("agent");
-    setAgentAttentionKey((current) => current + 1);
+  }, []);
+  /*
+  One slot holds either body, so choosing a tab is never enough on its own: a
+  path that means "show the reviewer their feedback" has to claim the slot for
+  feedback as well, or the tab changes behind agent diagnosis and the thread the
+  reader was sent to never appears.
+
+  Two entry points because the two intents differ. Selecting the body is what a
+  path does when it decides which feedback the reader would see next; opening it
+  is what a path does when it is showing them something now.
+  */
+  const selectFeedbackBody = useCallback((next: FeedbackTab) => {
+    setSidebarView("feedback");
+    setTab(next);
+  }, []);
+  const openFeedbackSidebar = useCallback(
+    (next: FeedbackTab) => {
+      selectFeedbackBody(next);
+      setIsOpen(true);
+    },
+    [selectFeedbackBody],
+  );
+  // Each control owns its own view. Pressing the one that is already pressed
+  // closes the sidebar; it never hands the slot to the other body, which is
+  // what made Agent Status look like it was opening Feedback.
+  /*
+  Closing a sidebar hands focus back to the control that opened it. Without
+  that, React unmounts the aside and focus falls to the document body, so a
+  keyboard reader who closes the panel loses their place and tabs from the top
+  of the plan to get back. Both bodies do it, because both are opened the same
+  way and a reader should not have to know which one they were in.
+  */
+  const closeAgentSidebar = useCallback(() => {
+    setIsOpen(false);
+    document.getElementById(AGENT_STATUS_TRIGGER_ID)?.focus();
+  }, []);
+  const closeFeedbackSidebar = useCallback(() => {
+    setIsOpen(false);
+    document.getElementById(FEEDBACK_TRIGGER_ID)?.focus();
+  }, []);
+  const toggleAgentSidebar = () => {
+    if (isOpen && sidebarView === "agent") closeAgentSidebar();
+    else {
+      if (isOpen && sidebarView === "feedback") {
+        feedbackScrollTop.current = feedbackPanel()?.scrollTop ?? 0;
+      }
+      openAgentSidebar();
+    }
+  };
+  const toggleFeedbackSidebar = () => {
+    if (isOpen && sidebarView === "feedback") {
+      feedbackScrollTop.current = feedbackPanel()?.scrollTop ?? 0;
+      closeFeedbackSidebar();
+      return;
+    }
+    setSidebarView("feedback");
+    setIsOpen(true);
   };
   const handleFeedbackTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     let index = feedbackTabs.indexOf(tab);
@@ -4838,6 +4943,29 @@ export const ReviewController = () => {
     const next = feedbackTabs[index];
     if (next !== undefined) selectFeedbackTab(next);
   };
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    if (sidebarView === "agent") {
+      document.querySelector<HTMLElement>("#review-panel-agent")?.focus();
+      return;
+    }
+    const panel = feedbackPanel();
+    if (panel !== null) panel.scrollTop = feedbackScrollTop.current;
+  }, [isOpen, sidebarView]);
+
+  // Escape leaves diagnosis the way the toolbar control does. An open composer
+  // owns Escape first, because dismissing it is the nearer intent.
+  useEffect(() => {
+    if (!isOpen || sidebarView !== "agent" || compose !== null) return;
+    const leaveAgentSidebar = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      closeAgentSidebar();
+    };
+    document.addEventListener("keydown", leaveAgentSidebar);
+    return () => document.removeEventListener("keydown", leaveAgentSidebar);
+  }, [closeAgentSidebar, compose, isOpen, sidebarView]);
 
   useEffect(() => {
     rootElement.toggleAttribute("data-review-kernel-open", isOpen);
@@ -5588,13 +5716,11 @@ export const ReviewController = () => {
   const beginTarget = useCallback(
     (target: CommentTarget, rect: Pick<DOMRect, "top">) => {
       if (runtimeSession?.authoritative === false) {
-        setIsOpen(true);
-        setTab("agent");
+        openAgentSidebar();
         return;
       }
       if (detachedComposer !== null) {
-        setIsOpen(true);
-        setTab("comments");
+        openFeedbackSidebar("comments");
         return;
       }
       if (
@@ -5620,6 +5746,8 @@ export const ReviewController = () => {
       composeBody,
       detachedComposer,
       displayedSnapshot,
+      openAgentSidebar,
+      openFeedbackSidebar,
       runtimeSession?.authoritative,
     ],
   );
@@ -5819,8 +5947,7 @@ export const ReviewController = () => {
           target: block === null ? { type: "document" } : targetForBlock(block),
         };
         stageReviewComment(comment);
-        setIsOpen(true);
-        setTab("comments");
+        openFeedbackSidebar("comments");
         setStatus(
           payload.submit === "now"
             ? "Submitting component feedback."
@@ -5842,7 +5969,13 @@ export const ReviewController = () => {
       };
       if (previous === undefined) delete feedbackWindow.bigPlan.feedback;
     };
-  }, [displayedSnapshot, isHydrated, sendComments, stageReviewComment]);
+  }, [
+    displayedSnapshot,
+    isHydrated,
+    openFeedbackSidebar,
+    sendComments,
+    stageReviewComment,
+  ]);
 
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;
@@ -5856,7 +5989,7 @@ export const ReviewController = () => {
     stageReviewComment(comment);
     setCompose(null);
     setComposeBody("");
-    setTab("comments");
+    selectFeedbackBody("comments");
     setStatus("Comment staged locally.");
     if (submitRightAway) void sendComments([comment]);
   };
@@ -6161,6 +6294,20 @@ export const ReviewController = () => {
     cancelPendingRequestIds,
     now: agentProjectionNowMs,
   });
+  const displayedAgentIdentity = selectAgentModelIdentity({
+    ...(claimedRequest?.claimedModel === undefined
+      ? {}
+      : { claimed: claimedRequest.claimedModel }),
+    ...(claimedRequest === undefined
+      ? {}
+      : { claimedRequestId: claimedRequest.requestId }),
+    ...(agent.presence.model === undefined
+      ? {}
+      : { presence: agent.presence.model }),
+    ...(agent.presence.requestId === undefined
+      ? {}
+      : { presenceRequestId: agent.presence.requestId }),
+  });
   const threadProjections = projectCommentThreads({
     comments: sent,
     requests: agent.requests,
@@ -6222,6 +6369,7 @@ export const ReviewController = () => {
     now: agentProjectionNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
     ...(agentEndedAtMs === undefined ? {} : { endedAtMs: agentEndedAtMs }),
+    everConnected: agentHasEverConnected({ events: agentConnection.events }),
   });
   const chatRequests = agent.requests.filter(
     (request) => request.kind === "chat",
@@ -6248,7 +6396,7 @@ export const ReviewController = () => {
         status={statusForRequest(request, "chat")}
         activity={activityForRequest(request)}
         onStatus={setStatus}
-        onShowAgent={showAgentSetup}
+        onShowAgent={openAgentSidebar}
         onCancelRequest={(requestId) => void cancelRequest(requestId)}
         currentSnapshot={currentSnapshot}
       />
@@ -6316,17 +6464,14 @@ export const ReviewController = () => {
       }),
     );
   }, [isOpen, threadProjections]);
-  const agentHealthLabel = agentStatusIsAvailable
-    ? deriveAgentHealthLabel({
-        activity: currentAgentActivity,
-        hasAgentRuntime: identity !== null,
-        isReadOnly: runtimeSession?.authoritative === false,
-      })
-    : null;
-  const isAgentWorking = currentAgentActivity.state === "working";
-  const agentSessionLabel = isAgentWorking
-    ? "Agent working"
-    : "Agent session active";
+  // One derivation feeds both the toolbar control and the sidebar it opens, so
+  // the two can never disagree about the agent's state.
+  const agentHealth = deriveAgentHealth({
+    activity: currentAgentActivity,
+    hasAgentRuntime: identity !== null,
+    isReadOnly: runtimeSession?.authoritative === false,
+    isObservable: agentStatusIsAvailable,
+  });
   const threadIsOpen = ({
     commentId,
     kind,
@@ -6406,7 +6551,7 @@ export const ReviewController = () => {
   };
   const viewAgentRequest = (requestId: string, kind: string) => {
     if (kind === "chat") {
-      setTab("chat");
+      openFeedbackSidebar("chat");
       return;
     }
     const request = agent.requests.find(
@@ -6429,7 +6574,19 @@ export const ReviewController = () => {
         open: true,
       }),
     );
-    setTab("comments");
+    openFeedbackSidebar("comments");
+    // Bring the commented block to the top of the reading column rather than
+    // wherever the least scrolling would leave it. "Nearest" parks a block that
+    // is below the fold at the very bottom edge, which reads as the page having
+    // scrolled past the thing the reader asked to see; the shared scroll margin
+    // keeps it clear of the branding bar.
+    const planBlock = targetElement(comment.target);
+    if (planBlock !== null) {
+      (displayedStandIn(planBlock) ?? planBlock).scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         document
@@ -6626,55 +6783,21 @@ export const ReviewController = () => {
         ? null
         : createPortal(
             <>
-              {agentHealthLabel === null ? (
-                identity !== null && agentConnected ? (
-                  <Tooltip label={agentSessionLabel}>
-                    <button
-                      type="button"
-                      className="inline-flex size-11 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-surface focus-visible:bg-surface focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent wide:size-8"
-                      aria-label={agentSessionLabel}
-                      onClick={() => {
-                        setIsOpen(true);
-                        setTab("agent");
-                      }}
-                    >
-                      <span
-                        className={`review-agent-active-indicator inline-flex size-2.5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--diff-add-c)_34%,transparent)] ${isAgentWorking ? "review-agent-active-indicator--working" : ""}`}
-                        aria-hidden="true"
-                      >
-                        <span className="size-1.5 rounded-full bg-[var(--diff-add-c)]" />
-                      </span>
-                    </button>
-                  </Tooltip>
-                ) : null
-              ) : (
-                <AgentHealthAlert
-                  label={agentHealthLabel}
-                  // The activity's own tone decides this, so a quiet turn does
-                  // not raise a danger-red alarm about an agent that is
-                  // working. Warning and danger must stay distinguishable by
-                  // their labels - "Agent not responding" against "Agent
-                  // disconnected" - and never by colour alone, so a later
-                  // change must not give the warning variant the danger glyph
-                  // to make the two look consistent.
-                  tone={
-                    runtimeSession?.authoritative === false ||
-                    currentAgentActivity.tone === "warning"
-                      ? "warning"
-                      : "danger"
-                  }
-                  onOpen={() => {
-                    setIsOpen(true);
-                    setTab("agent");
-                  }}
+              {identity === null ? null : (
+                <AgentStatusTrigger
+                  status={agentHealth}
+                  className={TOOLBAR_CONTROL_CLASS}
+                  isSelected={isOpen && sidebarView === "agent"}
+                  onToggle={toggleAgentSidebar}
                 />
               )}
               <button
                 type="button"
-                className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-accent aria-expanded:bg-accent-wash aria-expanded:text-accent aria-expanded:shadow-raised wide:min-h-8 [&>svg]:size-4"
-                aria-expanded={isOpen}
-                aria-controls="big-plan-feedback-rail"
-                onClick={() => setIsOpen((current) => !current)}
+                id={FEEDBACK_TRIGGER_ID}
+                className={`${TOOLBAR_CONTROL_CLASS} [&>svg]:size-4`}
+                aria-expanded={isOpen && sidebarView === "feedback"}
+                aria-controls="big-plan-feedback-sidebar"
+                onClick={toggleFeedbackSidebar}
               >
                 <Icon icon={MESSAGE_SQUARE_ICON} />
                 Feedback
@@ -6693,48 +6816,51 @@ export const ReviewController = () => {
           )}
       {isOpen ? (
         <aside
-          id="big-plan-feedback-rail"
+          ref={sidebarRef}
+          id="big-plan-feedback-sidebar"
           className="fixed top-11 right-0 bottom-0 z-40 flex w-[min(22rem,100vw)] min-w-0 max-w-full flex-col overflow-hidden border-l border-edge bg-paper text-ink shadow-floating"
-          aria-label="Feedback"
+          aria-label={sidebarView === "agent" ? AGENT_STATUS_LABEL : "Feedback"}
         >
           <div className="flex flex-none items-stretch border-b border-edge bg-paper">
-            <div
-              className="flex min-w-0 flex-1 items-stretch gap-1 pt-1.5 pl-2"
-              role="tablist"
-              aria-label="Feedback views"
-              onKeyDown={handleFeedbackTabKeyDown}
-            >
-              <button
-                id="review-tab-comments"
-                type="button"
-                className={FEEDBACK_TAB_CLASS}
-                role="tab"
-                aria-controls="review-panel-comments"
-                aria-selected={tab === "comments"}
-                tabIndex={tab === "comments" ? 0 : -1}
-                onClick={() => setTab("comments")}
+            {sidebarView === "agent" ? (
+              <div className="flex-1" />
+            ) : (
+              <div
+                className="flex min-w-0 flex-1 items-stretch gap-1 pt-1.5 pl-2"
+                role="tablist"
+                aria-label="Feedback views"
+                onKeyDown={handleFeedbackTabKeyDown}
               >
-                <Icon icon={MESSAGE_SQUARE_ICON} />
-                Comments
-                {unresolvedDrafts.length > 0 ? (
-                  <Badge size="compact">{unresolvedDrafts.length}</Badge>
-                ) : null}
-              </button>
-              <button
-                id="review-tab-chat"
-                type="button"
-                className={FEEDBACK_TAB_CLASS}
-                role="tab"
-                aria-controls="review-panel-chat"
-                aria-selected={tab === "chat"}
-                tabIndex={tab === "chat" ? 0 : -1}
-                onClick={() => setTab("chat")}
-              >
-                <Icon icon={MESSAGES_SQUARE_ICON} />
-                Chat
-              </button>
-              {identity === null ? null : (
-                <>
+                <button
+                  id="review-tab-comments"
+                  type="button"
+                  className={FEEDBACK_TAB_CLASS}
+                  role="tab"
+                  aria-controls="review-panel-comments"
+                  aria-selected={tab === "comments"}
+                  tabIndex={tab === "comments" ? 0 : -1}
+                  onClick={() => setTab("comments")}
+                >
+                  <Icon icon={MESSAGE_SQUARE_ICON} />
+                  Comments
+                  {unresolvedDrafts.length > 0 ? (
+                    <Badge size="compact">{unresolvedDrafts.length}</Badge>
+                  ) : null}
+                </button>
+                <button
+                  id="review-tab-chat"
+                  type="button"
+                  className={FEEDBACK_TAB_CLASS}
+                  role="tab"
+                  aria-controls="review-panel-chat"
+                  aria-selected={tab === "chat"}
+                  tabIndex={tab === "chat" ? 0 : -1}
+                  onClick={() => setTab("chat")}
+                >
+                  <Icon icon={MESSAGES_SQUARE_ICON} />
+                  Chat
+                </button>
+                {identity === null ? null : (
                   <button
                     id="review-tab-inputs"
                     type="button"
@@ -6748,33 +6874,27 @@ export const ReviewController = () => {
                     <Icon icon={CIRCLE_QUESTION_MARK_ICON} />
                     Inputs
                   </button>
-                  <button
-                    id="review-tab-agent"
-                    type="button"
-                    className={FEEDBACK_TAB_CLASS}
-                    role="tab"
-                    aria-controls="review-panel-agent"
-                    aria-selected={tab === "agent"}
-                    tabIndex={tab === "agent" ? 0 : -1}
-                    onClick={() => setTab("agent")}
-                  >
-                    <Icon icon={ACTIVITY_ICON} />
-                    Agent
-                  </button>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
             <Button
               variant="ghost"
               size="compactIcon"
               className="mr-2 ml-auto min-h-0 self-center"
-              aria-label="Close feedback"
-              onClick={() => setIsOpen(false)}
+              aria-label={
+                sidebarView === "agent"
+                  ? `Close ${AGENT_STATUS_LABEL}`
+                  : "Close feedback"
+              }
+              onClick={() => {
+                if (sidebarView === "agent") closeAgentSidebar();
+                else closeFeedbackSidebar();
+              }}
             >
               <Icon icon={X_ICON} />
             </Button>
           </div>
-          {tab === "comments" ? (
+          {sidebarView === "feedback" && tab === "comments" ? (
             <CommentsSurface
               model={{
                 query: commentQuery,
@@ -6812,7 +6932,7 @@ export const ReviewController = () => {
                               activity={activityForRequest(activeBatchRequest)}
                               surface="thread"
                               commentCount={activeBatchCommentIds.length}
-                              onShowAgent={showAgentSetup}
+                              onShowAgent={openAgentSidebar}
                               onCancelRequest={() =>
                                 void cancelRequest(activeBatchRequest.requestId)
                               }
@@ -6870,7 +6990,7 @@ export const ReviewController = () => {
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
                     submitAvailability={commentSubmitAvailability}
-                    onShowAgent={showAgentSetup}
+                    onShowAgent={openAgentSidebar}
                     onAssociate={setAssociatedTarget}
                     identity={identity}
                     currentSnapshot={currentSnapshot}
@@ -6908,7 +7028,7 @@ export const ReviewController = () => {
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
                     submitAvailability={commentSubmitAvailability}
-                    onShowAgent={showAgentSetup}
+                    onShowAgent={openAgentSidebar}
                     onAssociate={setAssociatedTarget}
                     identity={identity}
                     currentSnapshot={currentSnapshot}
@@ -6952,7 +7072,7 @@ export const ReviewController = () => {
                       onJump={() => jumpTo(comment)}
                       onAssociate={setAssociatedTarget}
                       onReplySent={setStatus}
-                      onShowAgent={showAgentSetup}
+                      onShowAgent={openAgentSidebar}
                       onCancelRequest={(requestId) =>
                         void cancelRequest(requestId)
                       }
@@ -7006,7 +7126,7 @@ export const ReviewController = () => {
               }}
             />
           ) : null}
-          {tab === "chat" ? (
+          {sidebarView === "feedback" && tab === "chat" ? (
             <ChatSurface
               model={{
                 hasRuntime: identity !== null,
@@ -7033,30 +7153,36 @@ export const ReviewController = () => {
               }}
             />
           ) : null}
-          {tab === "inputs" && identity !== null ? <InputsSurface /> : null}
-          {tab === "agent" && identity !== null ? (
+          {sidebarView === "feedback" &&
+          tab === "inputs" &&
+          identity !== null ? (
+            <InputsSurface />
+          ) : null}
+          {sidebarView === "agent" && identity !== null ? (
             <AgentSurface
               model={{
                 activity: currentAgentActivity,
+                status: agentHealth,
                 presenceState: agentProjection.state,
-                connected: agentConnected,
                 heldWork: agentHeldWork,
+                connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
                 ...(agentEndedAtMs === undefined
                   ? {}
                   : { endedAtMs: agentEndedAtMs }),
-                modelName: claimedRequest?.claimedModel?.name,
+                modelName: displayedAgentIdentity?.name,
+                modelEffort: displayedAgentIdentity?.effort,
+                modelClient: displayedAgentIdentity?.client,
+                sessionUrl: displayedAgentIdentity?.sessionUrl,
+                sessionId: displayedAgentIdentity?.sessionId,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
-                agentCommand: agent.agentCommand,
-                plan: agent.plan,
                 runtimeSession,
-                attentionKey: agentAttentionKey,
                 onViewRequest: viewAgentRequest,
               }}
             />
           ) : null}
-          {tab === "comments" ? (
+          {sidebarView === "feedback" && tab === "comments" ? (
             <div className="review-feedback-status flex flex-none flex-col items-stretch gap-2 border-t border-edge bg-paper p-3 text-xs text-subtle">
               <Button
                 className="w-full px-3! py-2! text-xs"
@@ -7170,8 +7296,8 @@ export const ReviewController = () => {
                     <button
                       type="button"
                       className="m-0 inline-flex min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left text-xs font-semibold text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      aria-label={`${currentAgentActivity.headline} — view Agent tab`}
-                      onClick={showAgentSetup}
+                      aria-label={`${currentAgentActivity.headline} - open ${AGENT_STATUS_LABEL}`}
+                      onClick={openAgentSidebar}
                     >
                       {currentAgentActivity.tone === "danger" ? (
                         <span
@@ -7184,13 +7310,15 @@ export const ReviewController = () => {
                       ) : null}
                       {currentAgentActivity.headline}
                     </button>
-                    <Badge tone="secondary" size="compact">
-                      {currentAgentActivity.state === "disconnected"
-                        ? "Offline"
-                        : currentAgentActivity.state === "stalled"
-                          ? "Warning"
-                          : currentAgentActivity.state}
-                    </Badge>
+                    {/* A session that has never had an agent needs no badge
+                        saying so: the line beside it already says none has
+                        connected, and a badge repeating it turns the ordinary
+                        starting condition into something that looks flagged. */}
+                    {currentAgentActivity.state === "never-connected" ? null : (
+                      <Badge tone="secondary" size="compact">
+                        {AGENT_STATE_BADGE_LABEL[currentAgentActivity.state]}
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-1 mb-0 text-xs text-support">
                     {currentAgentActivity.state === "working"
@@ -7247,7 +7375,7 @@ export const ReviewController = () => {
               onJump={() => jumpTo(comment)}
               onSubmit={() => void sendComments([comment])}
               submitAvailability={commentSubmitAvailability}
-              onShowAgent={showAgentSetup}
+              onShowAgent={openAgentSidebar}
               onAssociate={setAssociatedTarget}
               identity={identity}
               currentSnapshot={currentSnapshot}
@@ -7289,7 +7417,7 @@ export const ReviewController = () => {
                 onJump={() => jumpTo(comment)}
                 onAssociate={setAssociatedTarget}
                 onReplySent={setStatus}
-                onShowAgent={showAgentSetup}
+                onShowAgent={openAgentSidebar}
                 onCancelRequest={(requestId) => void cancelRequest(requestId)}
                 onDelete={() =>
                   setPendingDelete({
@@ -7333,7 +7461,7 @@ export const ReviewController = () => {
           onBodyChange={setComposeBody}
           onSave={saveComment}
           onSubmitRightAwayChange={setSubmitRightAway}
-          onShowAgent={showAgentSetup}
+          onShowAgent={openAgentSidebar}
         />
       ) : (
         createPortal(
@@ -7357,7 +7485,7 @@ export const ReviewController = () => {
             onBodyChange={setComposeBody}
             onSave={saveComment}
             onSubmitRightAwayChange={setSubmitRightAway}
-            onShowAgent={showAgentSetup}
+            onShowAgent={openAgentSidebar}
           />,
           inlineComposeHost,
         )

@@ -1,26 +1,34 @@
-// Renders the legacy agent-health surface from truthful runtime facts. The
+// Renders the Agent Status sidebar's body from truthful runtime facts. The
 // review kernel owns polling and navigation; this module owns only the visual
 // projection and local disclosure/copy interactions.
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { BrandIcon } from "../../icons/brand-icon.js";
 import { CLAUDE_ICON } from "../../icons/brands/claude.js";
 import { GROK_ICON } from "../../icons/brands/grok.js";
+import { MISTRAL_ICON } from "../../icons/brands/mistral.js";
 import { OPENAI_ICON } from "../../icons/brands/openai.js";
-import { BOT_ICON } from "../../icons/lucide/bot.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
-import { TERMINAL_ICON } from "../../icons/lucide/terminal.js";
-import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
+import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
 import {
+  agentClientDisplayName,
+  agentModelDisplayName,
   agentModelVendor,
   type AgentModelVendor,
-} from "../shared/agent-model-icon.js";
+} from "../shared/agent-identity-catalog.js";
+import { agentSessionAffordance } from "../shared/agent-session-link.js";
 import {
   AGENT_SESSION_ENDED_REASON,
-  type CurrentAgentActivity,
-  type HeldWorkQuiet,
+  agentHasEverConnected,
+} from "../shared/agent-status.js";
+import type {
+  AgentHealth,
+  AgentHealthIndicator,
+  CurrentAgentActivity,
+  HeldWorkQuiet,
 } from "../shared/agent-status.js";
 import type { BrowserConnectionEvent } from "../shared/review-wire.js";
 import {
@@ -29,33 +37,43 @@ import {
 } from "../shared/time-label.js";
 import { BrandIconView, Icon } from "./icon.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
+import { Badge, WorkingMark } from "./ui.browser.js";
 
 const VENDOR_ICONS: Record<AgentModelVendor, BrandIcon> = {
   openai: OPENAI_ICON,
   claude: CLAUDE_ICON,
   grok: GROK_ICON,
+  mistral: MISTRAL_ICON,
 };
 
-/** Picks the reported model's own mark, or a generic mark when unrecognized. */
+/**
+ * Draws the reported model's own mark, or nothing at all.
+ *
+ * A model the catalog has no faithful mark for shows its name alone. The
+ * generic robot that used to stand in was a placeholder in the literal sense:
+ * it occupied the space a mark would occupy while identifying nobody.
+ */
 const ModelIcon = ({ modelName }: { readonly modelName: string }) => {
   const vendor = agentModelVendor(modelName);
-  return vendor === undefined ? (
-    <Icon icon={BOT_ICON} />
-  ) : (
+  return vendor === undefined ? null : (
     <BrandIconView icon={VENDOR_ICONS[vendor]} />
   );
 };
 
-const Spinner = () => (
+// The comment glyph that heads the subject block; it names what the block is
+// about, so it travels with the label rather than being set at each call.
+const SubjectMark = () => (
   <span
-    className="inline-block size-3 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
+    className="inline-flex shrink-0 items-center [&>svg]:size-3.5"
     aria-hidden="true"
-  />
+  >
+    <Icon icon={MESSAGE_SQUARE_ICON} />
+  </span>
 );
 
 // Keep human-readable elapsed time independent from the slower network poll.
-// This component exists only while the Agent tab is mounted, so the local
-// tick cannot make the rest of the review workspace rerender every second.
+// This runs only while the Agent Status body is mounted, so the local tick
+// cannot make the rest of the review workspace rerender every second.
 const useSecondClock = (): number => {
   const [nowMs, setNowMs] = useState(Date.now);
   useEffect(() => {
@@ -64,26 +82,6 @@ const useSecondClock = (): number => {
   }, []);
   return nowMs;
 };
-
-export const AgentHealthAlert = ({
-  label,
-  tone,
-  onOpen,
-}: {
-  readonly label: string;
-  readonly tone: "warning" | "danger";
-  readonly onOpen: () => void;
-}) => (
-  <button
-    type="button"
-    className={`inline-flex min-h-11 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-1 text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-8 [&>svg]:size-4 ${tone === "warning" ? "text-warning" : "text-danger"}`}
-    aria-label={`${label} — open agent connection status`}
-    onClick={onOpen}
-  >
-    <Icon icon={TRIANGLE_ALERT_ICON} />
-    {label}
-  </button>
-);
 
 const ReadOnlySessionCard = ({
   replacementUrl,
@@ -102,7 +100,7 @@ const ReadOnlySessionCard = ({
       <strong className="min-w-0 flex-1 text-sm text-ink">
         This review was replaced
       </strong>
-      <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
+      <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-semibold">
         Read only
       </span>
     </div>
@@ -126,13 +124,15 @@ const ReadOnlySessionCard = ({
   </article>
 );
 
-const CopyBlock = ({
-  value,
-  label,
-}: {
-  readonly value: string;
-  readonly label: string;
-}) => {
+/*
+Copying one string, with the outcome shown on the control that did it.
+
+Three surfaces need this now - the recovery payload, a session identifier that
+cannot be linked, and the session id in the details - and each needs the same
+three states and the same failure wording. The behaviour lives here; the shape
+of the control is the caller's.
+*/
+const useCopyToClipboard = (value: string) => {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
   const copy = async () => {
@@ -148,75 +148,259 @@ const CopyBlock = ({
     }
     window.setTimeout(() => setCopied(false), 1_500);
   };
-  const buttonLabel = failed
+  return { copied, failed, copy };
+};
+
+/** Names a copy control by what it does and what just happened. */
+const copyControlLabel = ({
+  label,
+  copied,
+  failed,
+}: {
+  readonly label: string;
+  readonly copied: boolean;
+  readonly failed: boolean;
+}): string =>
+  failed
     ? "Copy failed — select and copy manually"
     : copied
       ? `${label} copied`
       : `Copy ${label}`;
+
+/** A bare copy control, for a value already shown beside it. */
+const CopyIdentifierControl = ({ value }: { readonly value: string }) => {
+  const { copied, failed, copy } = useCopyToClipboard(value);
   return (
-    <div className="relative min-w-0">
-      <pre className="m-0 min-w-0 overflow-x-auto rounded-md border border-edge bg-surface p-3 pr-12 font-mono text-xs whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
-        <code>{value}</code>
-      </pre>
+    <button
+      type="button"
+      className="inline-flex shrink-0 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
+      aria-label={copyControlLabel({
+        label: "agent session identifier",
+        copied,
+        failed,
+      })}
+      data-review-agent-session-copy={value}
+      onClick={() => void copy()}
+    >
+      <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
+    </button>
+  );
+};
+
+const CopyBlock = ({
+  value,
+  label,
+}: {
+  readonly value: string;
+  readonly label: string;
+}) => {
+  const { copied, failed, copy } = useCopyToClipboard(value);
+  const buttonLabel = copyControlLabel({ label, copied, failed });
+  // The control floats in the payload's own corner rather than being absolutely
+  // positioned over it. A float reserves exactly its own width on exactly the
+  // lines it covers, so no line runs underneath it at sidebar width and no
+  // fixed padding has to be guessed against a label that changes with state.
+  // It is unselectable so copying the payload by hand never picks it up.
+  //
+  // The payload itself takes the floor of the scale, at the captain's
+  // measurement: it is copied far more often than it is read, and the step
+  // exists for exactly this.
+  return (
+    <pre className="m-0 min-w-0 overflow-x-auto rounded-md border border-edge bg-surface p-3 font-mono text-3xs whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
       <button
         type="button"
-        className="absolute top-2 right-2 inline-flex cursor-pointer items-center gap-1 rounded-sm border border-edge bg-surface px-1.5 py-1 text-2xs text-muted hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
+        className="float-right mb-1 ml-2 inline-flex cursor-pointer items-center justify-center gap-1 rounded-sm border border-edge bg-surface px-1.5 py-1 font-sans text-2xs text-muted select-none hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
         aria-label={buttonLabel}
         onClick={() => void copy()}
       >
         <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
-        {failed ? "Copy failed" : copied ? "Copied" : "Copy"}
+        {/*
+        The label changes under the reader's cursor, and the control is floated
+        into the payload, so a label that grows reflows the text it sits in -
+        the line breaks move at the moment of a successful copy, which reads as
+        the page reacting badly to being used. The widest label is rendered
+        once, invisibly and unclickably, to hold the width; the visible label is
+        stacked on top of it. Reserving the width in the layout is what makes
+        this stable across fonts rather than a guess in pixels.
+        */}
+        <span className="grid">
+          <span
+            className="invisible col-start-1 row-start-1"
+            aria-hidden="true"
+          >
+            Copy failed
+          </span>
+          <span className="col-start-1 row-start-1">
+            {failed ? "Copy failed" : copied ? "Copied" : "Copy"}
+          </span>
+        </span>
       </button>
-    </div>
+      <code>{value}</code>
+    </pre>
   );
+};
+
+const STATUS_CARD_TONE: Record<AgentHealthIndicator, string> = {
+  healthy:
+    "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]",
+  working:
+    "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]",
+  "read-only":
+    "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]",
+  stalled:
+    "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]",
+  error:
+    "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]",
+  unavailable: "border-edge bg-raised text-muted",
+};
+
+/** The wall-clock time the log prints beside each event. */
+const formatClockTime = (atMs: number): string =>
+  new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(atMs));
+
+/**
+ * The connection facts worth stating beside the status: when this connection
+ * started and how long it has held, plus how unstable it has been. "Last
+ * signal" is deliberately absent - on a live connection it always says "just
+ * now", which tells a reviewer nothing they cannot already see.
+ */
+export const summarizeAgentConnection = ({
+  events,
+}: {
+  readonly events: ReadonlyArray<BrowserConnectionEvent>;
+}): {
+  readonly everConnected: boolean;
+  readonly sinceAtMs: number | undefined;
+  readonly quietPeriods: number;
+  readonly resumed: number;
+} => {
+  const ordered = events
+    .map((event) => ({ ...event, atMs: Date.parse(event.at) }))
+    .filter((event) => Number.isFinite(event.atMs))
+    .sort((left, right) => left.atMs - right.atMs);
+  // A gap in the signal is a quiet period, not an observed disconnection. The
+  // runtime records an edge whenever the heartbeat ages out, and nothing renews
+  // it while a turn runs, so counting these as disconnects and reconnects put
+  // events in the reviewer's log that never happened (BIG-147).
+  let quietPeriods = 0;
+  let resumed = 0;
+  let hasConnected = false;
+  ordered.forEach((event, index) => {
+    if (!event.connected && ordered[index - 1]?.connected) quietPeriods += 1;
+    if (
+      event.connected &&
+      hasConnected &&
+      ordered[index - 1]?.connected === false
+    )
+      resumed += 1;
+    if (event.connected) hasConnected = true;
+  });
+  // The current run started at the last transition into the present state.
+  const latest = ordered.at(-1);
+  return {
+    everConnected: agentHasEverConnected({ events }),
+    sinceAtMs: latest === undefined ? undefined : latest.atMs,
+    quietPeriods,
+    resumed,
+  };
 };
 
 const CurrentActivityCard = ({
   activity,
+  status,
   modelName,
+  modelEffort,
+  modelClient,
+  sessionUrl,
+  sessionId,
+  connection,
   nowMs,
-  attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
+  readonly status: AgentHealth;
   readonly modelName?: string;
+  readonly modelEffort?: string;
+  readonly modelClient?: string;
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
+  readonly connection: ReturnType<typeof summarizeAgentConnection>;
   readonly nowMs: number;
-  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
-  const cardRef = useRef<HTMLElement>(null);
-  const [isAttentionActive, setIsAttentionActive] = useState(false);
-  useEffect(() => {
-    if (attentionKey === 0) return;
-    const card = cardRef.current;
-    if (card === null) return;
-    card.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-      block: "nearest",
-    });
-    card.focus({ preventScroll: true });
-    setIsAttentionActive(true);
-    const timer = window.setTimeout(() => setIsAttentionActive(false), 1_200);
-    return () => window.clearTimeout(timer);
-  }, [attentionKey]);
   const body =
     activity.state === "working" ? activity.latestStep : activity.supporting;
   // A live connection is the fact a reviewer checks this card for; what the
   // agent happens to be doing is the detail underneath it. Only the working
-  // state buries the connection behind the activity, so only it is retitled,
-  // and its activity joins the request it is working on one line down.
-  const title =
-    activity.state === "working" ? "Agent connected" : activity.headline;
+  // state buries the connection behind the activity, so only it is retitled.
+  const title = activity.state === "working" ? status.label : activity.headline;
   const targetLabel =
-    activity.state !== "disconnected" && "targetLabel" in activity
+    activity.state !== "disconnected" &&
+    activity.state !== "never-connected" &&
+    "targetLabel" in activity
       ? activity.targetLabel
       : undefined;
-  const secondary =
-    activity.state === "working"
-      ? [activity.headline, targetLabel].filter(Boolean).join(" · ")
-      : (targetLabel ?? "");
+  // What the agent is doing and which thread it is doing it to are two facts,
+  // not one label. Joining them put a thread name in a section-title face and
+  // read as though the status itself were called "start here, disconnected".
+  const workHeadline =
+    activity.state === "working" ? activity.headline : undefined;
+  // The subject of the work is the thing to click, so it is derived once here
+  // rather than assembled in the markup: a thread name when there is one, the
+  // work itself when there is not, and nothing needs a separate link.
+  const subjectLabel =
+    targetLabel !== undefined && targetLabel !== ""
+      ? targetLabel
+      : activity.state === "working"
+        ? workHeadline
+        : undefined;
+  // Whether there is an agent for an identity to belong to. A session with none
+  // has nothing to report and no gap to explain.
+  // "Since" alone made the reader carry the card's state down to the row and
+  // apply it themselves. The label states it.
+  const sinceLabel =
+    activity.state === "disconnected"
+      ? "Disconnected since"
+      : activity.state === "offline"
+        ? "Unreachable since"
+        : "Connected since";
+  /*
+  What the connector said about itself, in the order a reader asks it: which
+  tool, which model, how hard it was told to think. Each segment is independent,
+  because each is declared independently, and the catalog decides how a declared
+  id is written - never this component, and never by re-casing what it was
+  handed.
+  */
+  const identitySegments = [
+    modelClient === undefined
+      ? undefined
+      : { key: "client", text: agentClientDisplayName(modelClient) },
+    modelName === undefined
+      ? undefined
+      : { key: "model", text: agentModelDisplayName(modelName) },
+    modelEffort === undefined
+      ? undefined
+      : { key: "effort", text: modelEffort },
+  ].filter((segment) => segment !== undefined);
+  const sessionAffordance = agentSessionAffordance({
+    ...(sessionUrl === undefined ? {} : { sessionUrl }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+  });
+  // Since and Events describe a connection at rest; the session identifies the
+  // agent whatever it is doing. The working card carries the second without the
+  // first, and every other state carries both.
+  const showsSinceAndEvents =
+    activity.state !== "working" &&
+    connection.sinceAtMs !== undefined &&
+    connection.everConnected;
+  const showsConnectionFacts =
+    showsSinceAndEvents || sessionAffordance.kind === "identifier";
+  const requestId = "requestId" in activity ? activity.requestId : undefined;
+  const requestKind = "requestId" in activity ? activity.requestKind : "";
   const footerLabel =
     "updatedAtMs" in activity
       ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
@@ -225,175 +409,176 @@ const CurrentActivityCard = ({
         : null;
   return (
     <article
-      ref={cardRef}
-      className={`grid min-w-0 gap-2 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted outline-offset-2 transition-[outline-color] focus-visible:outline-2 focus-visible:outline-accent motion-reduce:scroll-auto ${isAttentionActive ? "outline-2 outline-accent" : "outline-transparent"}`}
+      className={`grid min-w-0 gap-1.5 rounded-lg border p-3 text-xs leading-[1.45] ${STATUS_CARD_TONE[status.indicator]}`}
       data-review-current-activity={activity.state}
-      data-review-attention={isAttentionActive ? "true" : undefined}
-      tabIndex={-1}
     >
-      <div className="flex min-w-0 items-center gap-2">
+      {/* Six pixels rather than eight: the mark is round and the title starts
+          with a letter, so the measured gap reads wider than it is. */}
+      <div className="flex min-w-0 items-center gap-1.5">
         {activity.state === "working" ? (
-          <Spinner />
-        ) : (
-          <span
-            className="size-2 shrink-0 rounded-full border-2 border-current opacity-70"
-            aria-hidden="true"
-          />
-        )}
+          /* Sized to the mark the thread chips show, so the card's heading does
+             not say the same thing more quietly than a chip does. */
+          <WorkingMark className="size-3" />
+        ) : null}
         <strong className="min-w-0 flex-1 text-sm text-ink">{title}</strong>
-        <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
-          {activity.state === "stalled"
-            ? "warning"
-            : activity.state === "disconnected"
-              ? "offline"
-              : activity.state}
-        </span>
       </div>
-      {modelName === undefined ? null : (
+      {/*
+      Identity is shown only where it exists, segment by segment. A session that
+      declared nothing renders nothing here: a line saying so would occupy the
+      space an answer occupies while carrying none, and the reader who wants to
+      know which agent this is learns more from the absence than from being told
+      about it.
+      */}
+      {identitySegments.length === 0 ? null : (
         <span
           className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
-          data-review-agent-model={modelName}
+          {...(modelName === undefined
+            ? {}
+            : { "data-review-agent-model": modelName })}
+          {...(modelEffort === undefined
+            ? {}
+            : { "data-review-agent-effort": modelEffort })}
+          {...(modelClient === undefined
+            ? {}
+            : { "data-review-agent-client": modelClient })}
         >
-          <ModelIcon modelName={modelName} />
-          <span className="truncate">{modelName}</span>
+          {modelName === undefined ? null : <ModelIcon modelName={modelName} />}
+          {identitySegments.map((segment, index) => (
+            <Fragment key={segment.key}>
+              {index === 0 ? null : (
+                /* The separator carries its own even spacing rather than
+                   inheriting the row's gap on one side only. */
+                <span aria-hidden="true" className="shrink-0 opacity-50">
+                  ·
+                </span>
+              )}
+              <span
+                className={
+                  segment.key === "effort"
+                    ? "shrink-0 font-normal text-muted"
+                    : "min-w-0 truncate"
+                }
+              >
+                {segment.text}
+              </span>
+            </Fragment>
+          ))}
         </span>
       )}
-      {secondary === "" ? null : (
-        <strong className="text-2xs uppercase tracking-caps text-ink">
-          {secondary}
-        </strong>
+      {/*
+      A link only where one can actually be followed. Big Plan decides that from
+      the interfaces it knows, not from the declaration: an address it cannot
+      place is offered as a string to copy, which is useful in whatever tool it
+      belongs to and never sends the reader nowhere.
+      */}
+      {sessionAffordance.kind === "link" ? (
+        <a
+          className="inline-flex w-fit items-center gap-1 text-2xs font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          href={sessionAffordance.href}
+          target="_blank"
+          rel="noreferrer noopener"
+          data-review-agent-session-url={sessionAffordance.href}
+          data-review-agent-session-interface={sessionAffordance.interfaceId}
+        >
+          Open the agent's chat
+        </a>
+      ) : null}
+      {workHeadline === undefined || subjectLabel === undefined ? null : (
+        <p className="m-0 text-ink [overflow-wrap:anywhere]">{workHeadline}</p>
       )}
-      <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
-      {footerLabel !== null || "requestId" in activity ? (
-        <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
-          {footerLabel === null ? null : (
-            <span className="text-muted">{footerLabel}</span>
-          )}
-          {"requestId" in activity ? (
+      {subjectLabel === undefined ? (
+        <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
+      ) : (
+        /* The request is a thing inside the card rather than another paragraph
+           of it: one border, one step of ground away from the card it sits in,
+           and no rule above, which would draw the same separation twice. */
+        <div
+          className="grid min-w-0 gap-1 rounded-md border border-current/25 bg-[color-mix(in_srgb,currentColor_6%,transparent)] p-2"
+          data-review-agent-target={targetLabel ?? subjectLabel}
+        >
+          {requestId === undefined ? (
+            <p className="m-0 flex min-w-0 items-center gap-1.5 font-semibold text-ink">
+              <SubjectMark />
+              <span className="min-w-0 truncate">{subjectLabel}</span>
+            </p>
+          ) : (
             <button
               type="button"
-              className="ml-auto cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onClick={() =>
-                onViewRequest(activity.requestId, activity.requestKind)
-              }
+              className="flex min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left font-semibold text-ink hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={() => onViewRequest(requestId, requestKind)}
             >
-              View thread →
+              <SubjectMark />
+              <span className="min-w-0 truncate">{subjectLabel}</span>
             </button>
+          )}
+          <p className="m-0 text-muted [overflow-wrap:anywhere]">{body}</p>
+        </div>
+      )}
+      {/*
+      The facts about the connection, under the card's first rule in every
+      state. A working card carries only the session: how long the agent has
+      been connected and how often the signal has lapsed are questions about a
+      connection at rest, and asking them beside live work reads as doubt about
+      work that is visibly happening.
+      */}
+      {showsConnectionFacts ? (
+        <dl className="m-0 grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 border-t border-current/20 pt-1.5 text-2xs">
+          {showsSinceAndEvents && connection.sinceAtMs !== undefined ? (
+            <div className="min-w-0">
+              {/* The label says which transition the time belongs to, so the
+                  row reads as a sentence about this state rather than as a
+                  field whose meaning the reader has to infer from the card. */}
+              <dt className="font-semibold">{sinceLabel}</dt>
+              <dd className="m-0 text-ink [overflow-wrap:anywhere]">
+                {formatClockTime(connection.sinceAtMs)}
+                {" ("}
+                {compactDurationLabel({
+                  start: connection.sinceAtMs,
+                  end: Math.max(nowMs, connection.sinceAtMs),
+                }) ?? "just now"}
+                {")"}
+              </dd>
+            </div>
           ) : null}
-        </div>
+          {sessionAffordance.kind === "identifier" ? (
+            /* The one place a session identifier is offered. It cannot be
+               followed, so it belongs with the facts a reader consults rather
+               than beside the state they are reading - and having it here is
+               what lets the card above it carry no copy control at all. */
+            <div className="min-w-0">
+              <dt className="font-semibold">Agent session</dt>
+              <dd className="m-0 flex min-w-0 items-center gap-1 text-ink">
+                <span
+                  className="min-w-0 truncate"
+                  data-review-agent-session-id={sessionAffordance.value}
+                >
+                  {sessionAffordance.value}
+                </span>
+                {/* The row truncates because the identifier is long and not for
+                    reading; the control hands over the whole of it. */}
+                <CopyIdentifierControl value={sessionAffordance.value} />
+              </dd>
+            </div>
+          ) : null}
+          {showsSinceAndEvents ? (
+            <div className="min-w-0">
+              <dt className="font-semibold">Events</dt>
+              <dd className="m-0 grid text-ink [overflow-wrap:anywhere]">
+                <span>
+                  {connection.quietPeriods} quiet{" "}
+                  {connection.quietPeriods === 1 ? "period" : "periods"}
+                </span>
+                <span>{connection.resumed} resumed</span>
+              </dd>
+            </div>
+          ) : null}
+        </dl>
       ) : null}
-    </article>
-  );
-};
-
-export type ConnectionHealthReading = {
-  readonly state: "connected" | "ended" | "quiet";
-  readonly headline: string;
-  readonly badge: string;
-  readonly connection: string;
-  readonly signalTerm: string;
-  /** The instant this card's second label dates itself from. */
-  readonly signalAtMs: number;
-};
-
-/**
- * Names what the connection card reports, from presence alone.
- *
- * A quiet heartbeat is an absence of signal, not an observed disconnection, so
- * this card reports the signal and leaves the verdict alone. Nothing renews the
- * plan-wide heartbeat while a turn runs, and the activity card - which does
- * know whether work was picked up - is what names a stall (BIG-147). The one
- * exception is an end the agent's own loop reported, which is an observation
- * and is named as one.
- */
-export const connectionHealthReading = ({
-  connected,
-  heartbeatAt,
-  endedAtMs,
-}: {
-  readonly connected: boolean;
-  readonly heartbeatAt: number;
-  readonly endedAtMs?: number;
-}): ConnectionHealthReading => {
-  if (connected) {
-    return {
-      state: "connected",
-      headline: "Agent connected",
-      badge: "online",
-      connection: "Healthy",
-      signalTerm: "Last signal",
-      signalAtMs: heartbeatAt,
-    };
-  }
-  if (endedAtMs !== undefined) {
-    return {
-      state: "ended",
-      headline: "Agent session ended",
-      badge: "ended",
-      connection: "Session ended",
-      signalTerm: "Ended",
-      signalAtMs: endedAtMs,
-    };
-  }
-  return {
-    state: "quiet",
-    headline: "No recent agent signal",
-    badge: "quiet",
-    connection: "No signal",
-    signalTerm: "Last signal",
-    signalAtMs: heartbeatAt,
-  };
-};
-
-const ConnectionHealthCard = ({
-  connected,
-  heartbeatAt,
-  endedAtMs,
-  nowMs,
-}: {
-  readonly connected: boolean;
-  readonly heartbeatAt: number;
-  readonly endedAtMs?: number;
-  readonly nowMs: number;
-}) => {
-  const reading = connectionHealthReading({
-    connected,
-    heartbeatAt,
-    ...(endedAtMs === undefined ? {} : { endedAtMs }),
-  });
-  return (
-    <article
-      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]" : "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"}`}
-      data-review-connection-health={reading.state}
-    >
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className="size-2 shrink-0 rounded-full border-2 border-current opacity-70"
-          aria-hidden="true"
-        />
-        <strong className="min-w-0 flex-1 text-sm text-ink">
-          {reading.headline}
-        </strong>
-        <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
-          {reading.badge}
-        </span>
-      </div>
-      <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 border-t border-current/20 pt-2">
-        <div className="min-w-0">
-          <dt className="text-2xs font-bold uppercase tracking-caps opacity-80">
-            Connection
-          </dt>
-          <dd className="m-0 text-ink">{reading.connection}</dd>
+      {footerLabel === null ? null : (
+        <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-1.5 text-2xs">
+          <span className="text-muted">{footerLabel}</span>
         </div>
-        <div className="min-w-0">
-          <dt className="text-2xs font-bold uppercase tracking-caps opacity-80">
-            {reading.signalTerm}
-          </dt>
-          <dd className="m-0 text-ink [overflow-wrap:anywhere]">
-            {relativeSignalLabel({ now: nowMs, at: reading.signalAtMs })}
-          </dd>
-        </div>
-      </dl>
+      )}
     </article>
   );
 };
@@ -422,15 +607,21 @@ const AgentPresenceLoadingCard = () => (
   </article>
 );
 
-const AnotherViewTip = () => (
-  <aside className="mt-3 flex min-w-0 gap-2 rounded-md border border-edge bg-surface px-3 py-2 text-xs text-muted">
-    <Icon icon={TERMINAL_ICON} />
-    <p className="m-0 min-w-0 [overflow-wrap:anywhere]">
-      <strong className="text-ink">Another view:</strong> inspect the agent chat
-      or terminal for another view of progress. This does not restore the review
-      connection.
-    </p>
-  </aside>
+// A tip, not an affordance: card chrome kept inviting a click that does not
+// exist, so this is a line of advice with a mark beside it and nothing to press.
+const AgentActivityTip = () => (
+  <p className="m-0 flex min-w-0 gap-1.5 text-xs text-muted [&>span>svg]:size-3.5">
+    <span
+      className="mt-px inline-flex shrink-0 items-center"
+      aria-hidden="true"
+    >
+      <Icon icon={LIGHTBULB_ICON} />
+    </span>
+    <span className="min-w-0 [overflow-wrap:anywhere]">
+      You can see all agent activity directly in the terminal or chat the agent
+      runs in.
+    </span>
+  </p>
 );
 
 export type ConnectionLogRowReading = {
@@ -611,7 +802,7 @@ const ConnectionLog = ({
           </span>
         </span>
         <span
-          className="rounded-full border border-edge px-1.5 py-px text-2xs font-bold leading-[1.2] uppercase tracking-caps text-muted"
+          className="rounded-full border border-edge px-1.5 py-px text-2xs font-semibold leading-[1.2] text-muted"
           aria-label={`${ordered.length} event${ordered.length === 1 ? "" : "s"}`}
         >
           {ordered.length}
@@ -662,11 +853,11 @@ const ConnectionLog = ({
             </div>
           </dl>
           {Array.from(groups).map(([date, rows]) => (
-            <section key={date} className="[&+section]:mt-3">
-              <h3 className="mt-0 mb-1.5 text-2xs font-bold uppercase tracking-caps text-muted">
+            <section key={date} className="mt-2 [&+section]:mt-3">
+              <h3 className="mt-0 mb-1 border-b border-edge pb-1 text-2xs font-semibold text-muted">
                 {date}
               </h3>
-              <ol className="m-0 grid list-none gap-1 p-0">
+              <ol className="m-0 grid list-none gap-1.5 p-0">
                 {rows.map((event) => {
                   const index = ordered.indexOf(event);
                   const next = ordered[index + 1];
@@ -687,7 +878,7 @@ const ConnectionLog = ({
                   return (
                     <li
                       key={event.eventId ?? event.at}
-                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-0.5 py-2 leading-none first:pt-1 last:pb-0"
+                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-0.5 py-1 leading-none first:pt-0.5 last:pb-0 [&>*]:min-h-4 [&_*]:leading-[1.2]"
                       data-review-connection-event={
                         event.connected
                           ? "connected"
@@ -713,9 +904,13 @@ const ConnectionLog = ({
                         {reading.label}
                       </strong>
                       {event === latest ? (
-                        <span className="rounded-full border border-edge px-1.5 py-px text-2xs font-bold leading-[1.2] uppercase tracking-caps">
+                        <Badge
+                          size="compact"
+                          tone="secondary"
+                          className="h-4 py-0"
+                        >
                           Current
-                        </span>
+                        </Badge>
                       ) : null}
                       <span
                         className="col-start-3 col-end-5 text-2xs text-muted"
@@ -745,23 +940,33 @@ const ConnectionLog = ({
 
 export const AgentConnectionPanel = ({
   activity,
+  status,
   presenceState,
   connected,
   heldWork,
   heartbeatAt,
   endedAtMs,
   modelName,
+  modelEffort,
+  modelClient,
+  sessionUrl,
+  sessionId,
   connectionLog,
   recoveryPrompt,
-  agentCommand,
   isReadOnly,
   replacementUrl,
-  attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
+  readonly status: AgentHealth;
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
+  readonly modelName?: string;
+  readonly modelEffort?: string;
+  readonly modelClient?: string;
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
+  readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   /**
    * What held work says about the quiet. It chooses this section's copy and
    * nothing else: while it explains the quiet the section names the takeover
@@ -774,16 +979,36 @@ export const AgentConnectionPanel = ({
   readonly heartbeatAt: number;
   /** When the agent's own loop reported the session ending, if it did. */
   readonly endedAtMs?: number;
-  readonly modelName?: string;
-  readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
-  readonly agentCommand: string;
   readonly isReadOnly: boolean;
   readonly replacementUrl: string | null;
-  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
+  /*
+  The recovery section opens itself the moment the agent goes, and stays open
+  or closed as the reader leaves it after that. It is controlled rather than
+  given an initial `open`, because this card re-renders every second and an
+  uncontrolled attribute would be re-asserted on the next tick, reopening a
+  section the reader had just closed. The effect fires on the transition into
+  disconnected rather than on every render, so closing it stays closed while
+  the agent is still gone.
+  */
+  const agentIsGone =
+    activity.state === "disconnected" || activity.state === "offline";
+  const [recoveryIsOpen, setRecoveryIsOpen] = useState(agentIsGone);
+  useEffect(() => {
+    // Follows the transition, not the render: the section opens when the agent
+    // goes and closes when one arrives, and a reader who toggles it in between
+    // keeps their choice until the state changes under them again.
+    setRecoveryIsOpen(agentIsGone);
+  }, [agentIsGone]);
+  const connection = summarizeAgentConnection({ events: connectionLog });
+  // The activity already answers "has an agent ever been here", and answers it
+  // on more evidence than the log alone: a claim counts even when the log lost
+  // the edge. Asking it here keeps the section's words and the card's headline
+  // from ever disagreeing.
+  const neverConnected = activity.state === "never-connected";
   const presenceIsObservable = presenceState === "observable";
   const agentStatusIsAvailable =
     presenceIsObservable || presenceState === "agent-unavailable";
@@ -793,73 +1018,39 @@ export const AgentConnectionPanel = ({
     activity.state !== "offline" &&
     activity.state !== "disconnected";
   return (
-    <section className="min-w-0" aria-labelledby="agent-connection-heading">
-      <h2
-        id="agent-connection-heading"
-        className="m-0 mb-3 text-sm font-bold text-ink"
-      >
-        Agent Connection
-      </h2>
+    <section className="min-w-0">
       {agentStatusIsAvailable ? (
-        <>
-          <ConnectionHealthCard
-            connected={isConnected}
-            heartbeatAt={heartbeatAt}
-            {...(endedAtMs === undefined ? {} : { endedAtMs })}
+        isReadOnly ? (
+          <ReadOnlySessionCard replacementUrl={replacementUrl} />
+        ) : (
+          <CurrentActivityCard
+            activity={activity}
+            status={status}
+            modelName={modelName}
+            modelEffort={modelEffort}
+            modelClient={modelClient}
+            sessionUrl={sessionUrl}
+            sessionId={sessionId}
+            connection={connection}
             nowMs={currentNowMs}
+            onViewRequest={onViewRequest}
           />
-          <section
-            className="mt-4"
-            aria-labelledby="agent-current-status-heading"
-          >
-            <h3
-              id="agent-current-status-heading"
-              className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted"
-            >
-              Current status
-            </h3>
-            {isReadOnly ? (
-              <ReadOnlySessionCard replacementUrl={replacementUrl} />
-            ) : (
-              <CurrentActivityCard
-                activity={activity}
-                modelName={modelName}
-                nowMs={currentNowMs}
-                attentionKey={attentionKey}
-                onViewRequest={onViewRequest}
-              />
-            )}
-          </section>
-        </>
+        )
       ) : presenceState === "loading" ? (
         <AgentPresenceLoadingCard />
       ) : (
         <AgentPresenceUnavailableCard />
       )}
-      <AnotherViewTip />
-      {/*
-       * The gate is exactly this, and it must not be simplified further:
-       * read-only, or a runtime that cannot be reached, hides the recovery
-       * section. Agent presence never hides it.
-       *
-       * This is the only place the recovery prompt and the connector command
-       * are rendered, and every "connect an agent" link in the review routes
-       * here, so an agent falling quiet must not make the reviewer's route back
-       * vanish - held work and the recovery horizon change only the copy. A
-       * runtime that is itself offline is a different question: the connector
-       * command would be advice about a dead endpoint, printed under a card
-       * that already says the review session is offline, while every other
-       * surface for that state tells the reviewer to restart `big-plan review`.
-       *
-       * All of the safety therefore lives in the copy. While a claim still
-       * explains the quiet, an agent may genuinely be mid-turn, and under
-       * adr/0002 connecting a session takes that claim over and discards what
-       * the first agent was doing - so the reviewer is told that before they
-       * copy anything, rather than nudged into it (BIG-147).
-       */}
+      {/* Always present with respect to the AGENT: a section that comes and
+          goes as an agent connects and drops teaches the reader it might not be
+          there when they need it. Withheld only when the review session itself
+          is unreachable, where a reconnect instruction would point at a URL
+          that is already dead. */}
       {isReadOnly || !agentStatusIsAvailable ? null : (
         <details
           className="group mt-3 rounded-md border border-edge text-xs text-muted"
+          open={recoveryIsOpen}
+          onToggle={(event) => setRecoveryIsOpen(event.currentTarget.open)}
           data-review-agent-recovery={
             heldWork === "explained" ? "takeover" : "plain"
           }
@@ -869,23 +1060,36 @@ export const AgentConnectionPanel = ({
               <Icon icon={CHEVRON_RIGHT_ICON} />
             </span>
             {heldWork === "explained"
-              ? "Connect an agent and take over this work"
-              : "Reconnect your agent"}
+              ? "Connect a new agent"
+              : neverConnected
+                ? "Connect your agent"
+                : "Reconnect your agent"}
           </summary>
           <div className="grid gap-2 border-t border-edge px-3 py-3">
             {heldWork === "explained" ? (
+              /*
+              The consequence is stated as the code behaves, not as it would be
+              kinder to say. A quiet agent keeps its answer - a lapsed lease is
+              not a rejection (BIG-147) - but a DISPLACED one does not: taking
+              the claim rewrites its holder, and the mailbox refuses a response
+              from an agent that no longer holds it. Softening this to "its
+              answer still arrives" would be the product lying about itself in
+              the one place a reader is deciding whether to act.
+              */
               <p className="m-0">
-                An agent picked this work up and may still be working on it, and
-                it may finish on its own. Connecting a session below takes the
-                work over, so whatever that agent was doing is discarded and its
-                answer will no longer be accepted. Your comments are safe either
-                way.
+                An agent is already connected to this session and may still be
+                working on it. If you wish, you can replace that agent with a
+                different one. The agent connected now would stop being able to
+                answer, so anything it has in flight is dropped rather than
+                delivered. All comments are safe.
               </p>
             ) : null}
             <p className="m-0">
               {heldWork === "explained"
-                ? "To take over anyway, paste this exact prompt into your coding agent:"
-                : "To reconnect this running review, paste this exact prompt into your coding agent:"}
+                ? "To connect a new agent anyway, paste this exact prompt into your coding agent:"
+                : neverConnected
+                  ? "To connect this running review, paste this exact prompt into your coding agent:"
+                  : "To reconnect this running review, paste this exact prompt into your coding agent:"}
             </p>
             <CopyBlock
               value={
@@ -894,21 +1098,22 @@ export const AgentConnectionPanel = ({
               }
               label="recovery prompt"
             />
-            <p className="m-0">
-              Or run this exact connector command yourself from the Big Plan
-              repository:
-            </p>
-            <CopyBlock value={agentCommand} label="connector command" />
           </div>
         </details>
       )}
+      <div className="mt-3">
+        <AgentActivityTip />
+      </div>
       {isReadOnly || !agentStatusIsAvailable ? null : (
-        <ConnectionLog
-          connected={isConnected}
-          heartbeatAt={heartbeatAt}
-          events={connectionLog}
-          nowMs={currentNowMs}
-        />
+        <>
+          <hr className="mt-3 border-0 border-t border-edge" />
+          <ConnectionLog
+            connected={isConnected}
+            heartbeatAt={endedAtMs ?? heartbeatAt}
+            events={connectionLog}
+            nowMs={currentNowMs}
+          />
+        </>
       )}
     </section>
   );

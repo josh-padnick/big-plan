@@ -82,14 +82,42 @@ on:
         description: Pull request number to judge
         required: true
 
-# One judgment per pull request and workflow ref at a time. Pull request events
-# run the workflow from the pull request ref, while issue comments run it from
-# the default branch. Separate lanes keep a default-branch comment run from
-# canceling the pull request's judge check. Within either lane, a burst settles
-# on the newest event.
+# One judgment per pull request at a time, but only among the runs that can
+# afford to be cancelled. The two trigger classes are not symmetric, and that
+# asymmetry is what this group has to respect.
+#
+# issue_comment and workflow_dispatch run against the default branch, so their
+# head sha is main's and this job's own conclusion never lands on the pull
+# request. Everything they say, they say through the two check runs the script
+# publishes. Cancelling one costs nothing a reader can see, which is exactly
+# what "settle on the newest state" wants.
+#
+# pull_request and the two review events run against the pull request's own
+# ref, so their head sha is the pull request's head, and GitHub publishes this
+# job's conclusion as a check run named `judge` on it. Cancelling one of those
+# turns it red, and no later run repairs it: the conversation triggers publish
+# review-triage and validation-attestation, never `judge`. So the pull request
+# is left carrying a permanent red check the gate never meant to publish, from
+# a cancellation whose only explanation is a concurrency annotation.
+#
+# That is not hypothetical. Measured on 2026-08-18: a comment on pull request
+# #131 cancelled that pull request's own pull_request run one second after it
+# started, and on #169 five head-ref runs landed on one head sha and four were
+# cancelled. Note what the second case rules out - keying the group by head sha
+# would not have saved them, because they shared a sha. Only a group they
+# cannot share does.
+#
+# So head-ref runs get a group of their own, per run, and are never cancelled.
+# Two of them can now publish out of order. That race is real and it is the
+# lesser harm: both runs read live pull request state seconds apart and publish
+# the same two idempotent checks, and the next event corrects any disagreement,
+# whereas a cancelled `judge` is a red check nothing ever corrects.
 concurrency:
-  group: merge-gates-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull-request }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: >-
+    merge-gates-${{ github.event.pull_request
+    && format('head-{0}', github.run_id)
+    || format('conversation-{0}', github.event.issue.number || inputs.pull-request) }}
+  cancel-in-progress: ${{ !github.event.pull_request }}
 
 jobs:
   judge:

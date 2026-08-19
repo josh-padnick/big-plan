@@ -76,6 +76,7 @@ No step between two steps exists.
 
 | Step        | Size | Line height | Use                                 |
 | ----------- | ---- | ----------- | ----------------------------------- |
+| `text-3xs`  | 10px | 1.4         | Copied payload, never read prose    |
 | `text-2xs`  | 11px | 1.45        | All-caps kicker, micro label        |
 | `text-xs`   | 12px | 1.5         | Dense control text, code chrome     |
 | `text-sm`   | 14px | 1.55        | Table cell, caption, secondary line |
@@ -86,6 +87,9 @@ No step between two steps exists.
 | `text-3xl`  | 30px | 1.2         | Part title                          |
 | `text-4xl`  | 36px | 1.15        | Document title                      |
 | `text-5xl`  | 48px | 1.05        | Reserved                            |
+
+`text-3xs` is the floor and the one step with a rule of its own: it is for a payload copied far more often than it is read, where fitting the value on one line beats comfortable reading.
+Nothing meant to be read may take it.
 
 Line height is a property of the step, not a call-site decision.
 It peaks at the reading size and tightens in both directions.
@@ -170,7 +174,7 @@ Rules:
    A palette that needs to restate a role has found a missing ramp step; add the step instead.
    `--edge-strong-c` has its own two steps for exactly that reason: a strong edge and a secondary text colour want the same lightness in the warm greys and nothing like it anywhere else.
    `--ink-c` is the first exception: a guest palette's light primary text is its own mid-dark colour, which cannot also serve as the dark hunk band on `--grey-925`.
-   The comment-surface roles are the second: the product palette paints the thread band and the working ring with approved local colours, so a guest palette restates them from its own greys or the commenting chrome stays warm paper inside a themed document.
+   The comment-surface roles are the second: the product palette paints the thread band with approved local colours, so a guest palette restates them from its own greys or the commenting chrome stays warm paper inside a themed document.
    The `--syntax-*` token hues are the third, restated in `src/render/markdown/syntax-highlighting.css`: a token hue is a distinction between kinds of code, so it takes the palette's own accents rather than a ramp position these ramps hold.
 2. **A theme is an adaptation, not a port.**
    A terminal palette names a foreground, a background, and eight accents.

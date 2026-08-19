@@ -195,7 +195,11 @@ describe("review wire contract", () => {
     ).toEqual([]);
   });
 
-  it("should carry model identity with the claim instead of presence", () => {
+  // The heartbeat may be written by a different, waiting agent than the one
+  // holding the claim, so the claim stays authoritative for work in flight.
+  // Presence still names the attached connector, which is the only source when
+  // nothing is claimed at all; the reader prefers the claim wherever both exist.
+  it("should keep the claim authoritative over a competing heartbeat", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),
       presence: {
@@ -227,7 +231,9 @@ describe("review wire contract", () => {
     expect(decoded.requests[0]).toMatchObject({
       claimedModel: { name: "Grok 4.6" },
     });
-    expect(decoded.presence).not.toHaveProperty("model");
+    expect(decoded.presence).toMatchObject({
+      model: { name: "Wrong waiting agent" },
+    });
   });
 
   it("should carry a reported session end to the browser", () => {

@@ -86,6 +86,10 @@ export type AgentWorkLoopAction =
       readonly executablePath: string;
       readonly shouldWait: boolean;
       readonly modelName?: string;
+      readonly modelEffort?: string;
+      readonly modelClient?: string;
+      readonly sessionUrl?: string;
+      readonly sessionId?: string;
       readonly agentToken?: string;
     }
   | {
@@ -101,6 +105,10 @@ export type AgentWorkLoopAction =
       readonly detail: string;
       readonly agentToken: string;
       readonly modelName?: string;
+      readonly modelEffort?: string;
+      readonly modelClient?: string;
+      readonly sessionUrl?: string;
+      readonly sessionId?: string;
     };
 
 export type AgentWorkLoopErrorCode = "invalid-input" | "validation-error";
@@ -373,6 +381,10 @@ Reviewer image references included in a changed candidate are materialized into 
       "Run codex or claude in the plan repository to start a real coding-agent session",
       "Alternatively paste agent_prompt into an already-open coding-agent session",
       "Keep that session running so browser replies return to the same conversation loop",
+      // Asked here as well as in the recovery prompt, because an agent reaching
+      // this output has connected some other way and would otherwise never be
+      // told that the reviewer cannot see which model it is.
+      "Export BIG_PLAN_AGENT_MODEL as your API's exact model id (e.g. grok-4.6), plus BIG_PLAN_AGENT_EFFORT, BIG_PLAN_AGENT_CLIENT, and BIG_PLAN_AGENT_SESSION_URL - or BIG_PLAN_AGENT_SESSION when your conversation has an id but no link - where you know them, so the reviewer sees which agent is connected",
     ],
   };
 };
@@ -382,17 +394,29 @@ const nextWork = async ({
   shouldWait,
   executablePath,
   modelName,
+  modelEffort,
+  modelClient,
+  sessionUrl,
+  sessionId,
   agentToken,
 }: {
   readonly planPath: string;
   readonly shouldWait: boolean;
   readonly executablePath: string;
   readonly modelName?: string;
+  readonly modelEffort?: string;
+  readonly modelClient?: string;
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
   readonly agentToken?: string;
 }): Promise<Record<string, unknown>> => {
-  const model = decodeAgentModelIdentity(
-    modelName === undefined ? undefined : { name: modelName },
-  );
+  const model = decodeAgentModelIdentity({
+    ...(modelName === undefined ? {} : { name: modelName }),
+    ...(modelEffort === undefined ? {} : { effort: modelEffort }),
+    ...(modelClient === undefined ? {} : { client: modelClient }),
+    ...(sessionUrl === undefined ? {} : { sessionUrl }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+  });
   let session: Awaited<ReturnType<typeof readPlanSession>>;
   try {
     session = await readPlanSession(planPath);
@@ -479,6 +503,7 @@ const nextWork = async ({
         sessionId: session.sessionId,
         state: "waiting",
         writerId,
+        ...(model === undefined ? {} : { model }),
       });
       const liveness = await reviewSessionIsAvailable({
         store: session.store,
@@ -545,6 +570,7 @@ const nextWork = async ({
       state: "working",
       requestId: request.requestId,
       writerId,
+      ...(model === undefined ? {} : { model }),
     });
     const selectedRequest = request;
     try {
@@ -921,16 +947,28 @@ const note = async ({
   planPath,
   detail,
   modelName,
+  modelEffort,
+  modelClient,
+  sessionUrl,
+  sessionId,
   agentToken,
 }: {
   readonly planPath: string;
   readonly detail: string;
   readonly modelName?: string;
+  readonly modelEffort?: string;
+  readonly modelClient?: string;
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
   readonly agentToken: string;
 }): Promise<Record<string, unknown>> => {
-  const model = decodeAgentModelIdentity(
-    modelName === undefined ? undefined : { name: modelName },
-  );
+  const model = decodeAgentModelIdentity({
+    ...(modelName === undefined ? {} : { name: modelName }),
+    ...(modelEffort === undefined ? {} : { effort: modelEffort }),
+    ...(modelClient === undefined ? {} : { client: modelClient }),
+    ...(sessionUrl === undefined ? {} : { sessionUrl }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+  });
   const message = detail.trim();
   if (message === "" || message.length > 160) {
     return fail("Progress must be between 1 and 160 characters");
@@ -997,6 +1035,10 @@ const note = async ({
     sessionId: session.sessionId,
     state: "working",
     requestId: renewed.requestId,
+    // The presence record is replaced whole, so a heartbeat that omits the
+    // declaration erases it. Identity outlives the request it was declared on,
+    // and a note is not a reason for the card to stop naming the agent.
+    ...(model === undefined ? {} : { model }),
   }).catch(() => undefined);
   return { noted: message, requestId: renewed.requestId };
 };
@@ -1019,6 +1061,18 @@ export const runAgentWorkLoopAction = async (
       ...(action.modelName === undefined
         ? {}
         : { modelName: action.modelName }),
+      ...(action.modelEffort === undefined
+        ? {}
+        : { modelEffort: action.modelEffort }),
+      ...(action.modelClient === undefined
+        ? {}
+        : { modelClient: action.modelClient }),
+      ...(action.sessionUrl === undefined
+        ? {}
+        : { sessionUrl: action.sessionUrl }),
+      ...(action.sessionId === undefined
+        ? {}
+        : { sessionId: action.sessionId }),
     });
   }
   if (action.kind === "respond") {
@@ -1034,5 +1088,15 @@ export const runAgentWorkLoopAction = async (
     detail: action.detail,
     agentToken: action.agentToken,
     ...(action.modelName === undefined ? {} : { modelName: action.modelName }),
+    ...(action.modelEffort === undefined
+      ? {}
+      : { modelEffort: action.modelEffort }),
+    ...(action.modelClient === undefined
+      ? {}
+      : { modelClient: action.modelClient }),
+    ...(action.sessionUrl === undefined
+      ? {}
+      : { sessionUrl: action.sessionUrl }),
+    ...(action.sessionId === undefined ? {} : { sessionId: action.sessionId }),
   });
 };

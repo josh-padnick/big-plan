@@ -153,7 +153,7 @@ const RULES = [
     allowed: new Set(),
     permit: (value) => /^[0-9.]+em$/.test(value),
     advice:
-      "pick a type step: text-2xs, xs, sm, base, lg, xl, 2xl, 3xl, 4xl, 5xl",
+      "pick a type step: text-3xs, 2xs, xs, sm, base, lg, xl, 2xl, 3xl, 4xl, 5xl",
   },
   {
     name: "tracking",

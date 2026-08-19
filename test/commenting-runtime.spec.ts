@@ -31,6 +31,9 @@ import {
 import { renderDocument } from "../src/render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
 import {
+  agentSidebar,
+  agentStatusIndicator,
+  agentStatusTrigger,
   boxOf,
   expect,
   stageComment,
@@ -2640,19 +2643,35 @@ test("should expire a held connected snapshot when the reviewer returns", async 
     now,
   });
   await page.clock.runFor(1_600);
-  await expect(
-    page.getByRole("button", { name: "Agent session active" }),
-  ).toBeVisible();
+  await expect(agentStatusTrigger(page)).toBeVisible();
 
   await page.clock.setSystemTime(now + 6 * 60 * 60_000);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  const connectionLost = page.getByRole("button", {
-    name: /Agent disconnected/u,
-  });
+  const connectionLost = agentStatusTrigger(page);
   await expect(connectionLost).toBeVisible();
   await connectionLost.click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  await expect(rail).toContainText("No agent signal for 6h 00m");
+  // The card no longer measures the silence; it names the state and leaves
+  // "since" to say when the agent was last here.
+  await expect(agentSidebar(page)).toContainText("The agent has disconnected.");
+  // The label names the transition its time belongs to, so the row reads as a
+  // statement about this state rather than as a field to interpret.
+  await expect(agentSidebar(page)).toContainText("Disconnected since");
+  // Elapsed time is a parenthetical of the timestamp, not a second value.
+  await expect(
+    agentSidebar(page)
+      .locator("dd")
+      .filter({ hasText: /\(.+\)/u })
+      .first(),
+  ).toBeVisible();
+  // Losing the agent is the moment the recovery instruction is wanted, so the
+  // section opens itself rather than waiting to be found. It stays a
+  // collapsible: closing it holds while the agent is still gone.
+  const recovery = agentSidebar(page).locator(
+    "details[data-review-agent-recovery]",
+  );
+  await expect(recovery).toHaveAttribute("open", "");
+  await recovery.locator("summary").click();
+  await expect(recovery).not.toHaveAttribute("open", "");
 });
 
 test("should show the active claim's model despite a competing heartbeat", async ({
@@ -2681,7 +2700,11 @@ test("should show the active claim's model despite a competing heartbeat", async
     activeSessionId: session.sessionId,
     requestId: request.requestId,
     claimedBy: "abababababababab",
-    model: { name: "Grok 4.6" },
+    model: {
+      name: "grok-4.6",
+      client: "grok-cli 0.2.99",
+      sessionUrl: "https://grok.com/chat/42",
+    },
     baselineSnapshot: request.premiseSnapshot,
     now: new Date().toISOString(),
   });
@@ -2690,7 +2713,11 @@ test("should show the active claim's model despite a competing heartbeat", async
     JSON.stringify({
       sessionId: session.sessionId,
       state: "waiting",
-      model: { name: "Wrong waiting agent" },
+      model: {
+        name: "Wrong waiting agent",
+        effort: "max",
+        client: "wrong-cli 1.0",
+      },
       updatedAtMs: Date.now(),
     }),
   );
@@ -2703,16 +2730,33 @@ test("should show the active claim's model despite a competing heartbeat", async
       });
       return snapshot.requests[0]?.claimedModel?.name;
     })
-    .toBe("Grok 4.6");
-  await page.getByRole("button", { name: "Agent working" }).click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
+    .toBe("grok-4.6");
+  await agentStatusTrigger(page).click();
+  const rail = agentSidebar(page);
   const modelBadge = rail.locator("[data-review-agent-model]");
   await expect(modelBadge).toBeVisible();
+  // The declared id is canonical; the catalog owns how it is written.
   await expect(modelBadge).toContainText("Grok 4.6");
+  await expect(modelBadge).not.toContainText("grok-4.6");
+  // Client, model, and effort read as one line, in the order a reader asks.
+  await expect(modelBadge).toContainText("Grok CLI");
+  await expect(modelBadge).not.toContainText("0.2.99");
   await expect(modelBadge).not.toContainText("Wrong waiting agent");
   await expect(modelBadge.locator("svg")).toHaveAttribute(
     "viewBox",
     "0 0 34 33",
+  );
+  // A claim is one declaration. Its missing effort is not filled from the
+  // competing heartbeat, because that would compose an agent nobody declared.
+  await expect(modelBadge).not.toContainText("max");
+  await expect(modelBadge).not.toHaveAttribute("data-review-agent-effort");
+  // A declared URL is the one segment that becomes an affordance.
+  const chatLink = rail.getByRole("link", { name: "Open the agent's chat" });
+  await expect(chatLink).toHaveAttribute("href", "https://grok.com/chat/42");
+  await expect(chatLink).toHaveAttribute("rel", /noreferrer/u);
+  await expect(chatLink).toHaveAttribute(
+    "data-review-agent-session-interface",
+    "grok-web",
   );
 
   await writeAgentHeartbeat({
@@ -2761,18 +2805,18 @@ test("should keep progress-only requests waiting in chat and agent status", asyn
     },
   });
 
-  const sessionButton = page.getByRole("button", {
-    name: "Agent session active",
-  });
+  const sessionButton = agentStatusTrigger(page);
   await expect(sessionButton).toBeVisible();
   await sessionButton.click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const rail = agentSidebar(page);
   await expect(
     rail.locator("[data-review-current-activity='waiting']"),
   ).toContainText("Waiting for agent");
-  await rail.getByRole("tab", { name: "Chat" }).click();
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  const feedbackRail = page.getByRole("complementary", { name: "Feedback" });
+  await feedbackRail.getByRole("tab", { name: "Chat" }).click();
   await expect(
-    rail.locator("li").filter({ hasText: request.body }),
+    feedbackRail.locator("li").filter({ hasText: request.body }),
   ).toContainText("Waiting for an agent");
 });
 
@@ -2814,17 +2858,17 @@ test("should keep answered requests terminal when their response is unavailable"
     state: "waiting",
   });
 
-  const sessionButton = page.getByRole("button", {
-    name: "Agent session active",
-  });
+  const sessionButton = agentStatusTrigger(page);
   await expect(sessionButton).toBeVisible();
   await sessionButton.click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const rail = agentSidebar(page);
   await expect(
     rail.locator("[data-review-current-activity='idle']"),
   ).toContainText("Agent connected");
-  await rail.getByRole("tab", { name: "Chat" }).click();
-  const exchange = rail.locator("li").filter({ hasText: request.body });
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  const feedback = page.getByRole("complementary", { name: "Feedback" });
+  await feedback.getByRole("tab", { name: "Chat" }).click();
+  const exchange = feedback.locator("li").filter({ hasText: request.body });
   await expect(exchange).toContainText("The agent has answered");
   await expect(exchange).not.toContainText("Waiting");
 });
@@ -3480,23 +3524,123 @@ test.describe("a resolve the runtime refuses", () => {
   });
 });
 
+test("should align an agent request target at the top of the reading column", async ({
+  page,
+  reviewRuntimeScrollUrl,
+}) => {
+  await page.goto(reviewRuntimeScrollUrl);
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const targetHeading = page.getByRole("heading", {
+    name: "Scroll regression target",
+  });
+  const target = page.locator("[data-slide]").filter({ has: targetHeading });
+  await target.hover();
+  await target.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/ });
+  const submitRightAway = composer.getByRole("switch", {
+    name: "Submit right away",
+  });
+  if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+    await submitRightAway.click();
+  }
+  await composer
+    .getByLabel("Add a comment")
+    .fill("Show this below-fold target.");
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const feedback = page.getByRole("complementary", { name: "Feedback" });
+  const sent = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await feedback
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await sent).ok()).toBe(true);
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = nextPendingAgentRequest(exchange, agentViewer());
+  if (request === undefined || request.kind !== "feedback") {
+    throw new Error("The scroll journey did not create a feedback request");
+  }
+  await claimAgentRequest({
+    store,
+    activeSessionId: session.sessionId,
+    requestId: request.requestId,
+    claimedBy: agentSessionId,
+    baselineSnapshot: request.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
+
+  const statusTrigger = agentStatusTrigger(page);
+  await expect(statusTrigger).toHaveAccessibleName(
+    "Agent Status: Agent working",
+  );
+  await statusTrigger.click();
+  const activeWork = agentSidebar(page).locator(
+    "[data-review-current-activity='working']",
+  );
+  await expect(activeWork).toBeVisible();
+  await page.evaluate(() => window.scrollTo({ top: 0 }));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  const viewportHeight = page.viewportSize()?.height ?? 0;
+  expect(
+    await target.evaluate((element) => element.getBoundingClientRect().top),
+  ).toBeGreaterThan(viewportHeight);
+
+  await activeWork.getByRole("button").first().click();
+  await expect
+    .poll(async () => {
+      const top = await target.evaluate(
+        (element) => element.getBoundingClientRect().top,
+      );
+      return top < 0
+        ? `above:${Math.round(top)}`
+        : top >= viewportHeight / 2
+          ? `below:${Math.round(top)}`
+          : "positioned";
+    })
+    .toBe("positioned");
+  await expect(agentSidebar(page)).toHaveCount(0);
+  await expect(feedback).toBeVisible();
+});
+
 test("should restore and submit staged comments through the local review runtime", async ({
   page,
   reviewRuntimeUrl,
 }, testInfo) => {
   await page.goto(reviewRuntimeUrl);
 
-  const agentStatus = page.getByRole("button", {
-    name: /Agent session active|open agent connection status/u,
-  });
+  const agentStatus = agentStatusTrigger(page);
   const feedbackAction = page.getByRole("button", {
     name: "Feedback",
     exact: true,
   });
   const settingsAction = page.getByRole("button", { name: "Open settings" });
   await expect(agentStatus).toBeVisible();
+  // The control draws exactly one state mark, and with no agent connected it is
+  // not the working one. Asserting the mark exists first keeps the second
+  // assertion from passing because nothing was drawn at all.
+  await expect(agentStatus.locator("[data-review-agent-status]")).toHaveCount(
+    1,
+  );
   await expect(
-    agentStatus.locator(".review-agent-active-indicator--working"),
+    agentStatus.locator('[data-review-agent-status="working"]'),
   ).toHaveCount(0);
   await expect(feedbackAction).toBeVisible();
   await expect(settingsAction).toBeVisible();
@@ -3524,6 +3668,10 @@ test("should restore and submit staged comments through the local review runtime
     ];
   });
   expect(toolbarGaps).toEqual([4, 4]);
+  const agentStatusWidth = Math.round(
+    (await agentStatus.boundingBox())?.width ?? 0,
+  );
+  expect(agentStatusWidth).toBeGreaterThan(0);
 
   await stageComment(page, "Clarify the failure boundary.");
   await stageComment(page, "Name the operator recovery path.");
@@ -3732,9 +3880,7 @@ test("should restore and submit staged comments through the local review runtime
     planId: session.planId,
   });
   await rm(store.agentHeartbeatPath, { force: true });
-  await expect(
-    page.getByRole("button", { name: /Agent disconnected/u }),
-  ).toBeVisible();
+  await expect(agentStatusTrigger(page)).toBeVisible();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   const blockedSummary = page.locator(
     ".review-contextual-summary[data-review-sent-thread='queued']",
@@ -3757,31 +3903,83 @@ test("should restore and submit staged comments through the local review runtime
   ).toBeVisible();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
 
-  await rail.getByRole("tab", { name: "Agent" }).click();
-  await expect(rail.getByText("Current status", { exact: true })).toBeVisible();
-  const currentActivity = rail.locator("[data-review-current-activity]");
+  await agentStatusTrigger(page).click();
+  const agentRail = agentSidebar(page);
+  await expect(
+    agentRail.getByText("Current status", { exact: true }),
+  ).toHaveCount(0);
+  const currentActivity = agentRail.locator("[data-review-current-activity]");
+  // No agent has attached to this session, so the card must not report a
+  // connection that ended, and must not date one with a "since".
   await expect(currentActivity).toHaveAttribute(
     "data-review-current-activity",
-    "disconnected",
+    "never-connected",
   );
-  await expect(currentActivity).toContainText("The agent is disconnected");
+  await expect(currentActivity).toContainText(
+    "No agent has connected to this session yet.",
+  );
+  await expect(currentActivity).not.toContainText("Since");
   await expect(currentActivity).not.toContainText("1 · Details");
+  // Nothing here is a request, so the card offers nothing to open.
+  await expect(currentActivity.getByRole("button")).toHaveCount(0);
+  await expect(agentRail.getByText("offline", { exact: true })).toHaveCount(0);
+  // Nothing has connected, so the section offers to connect rather than to
+  // reconnect; it is present either way.
   await expect(
-    currentActivity.getByRole("button", { name: "View thread →" }),
-  ).toHaveCount(0);
-  await expect(currentActivity.getByText("offline")).toHaveCSS(
-    "text-transform",
-    "uppercase",
-  );
-  const connectionLog = rail
+    agentRail.getByText("Connect your agent", { exact: true }),
+  ).toBeVisible();
+  // Item 4: one payload, not two - the connector command below it is gone.
+  await expect(agentRail.locator("pre")).toHaveCount(1);
+  // The control is floated into the payload, so a label that grows would move
+  // the payload's line breaks at the moment a copy succeeds. Its width is
+  // reserved by the widest label it can ever show.
+  await agentRail
+    .locator("details[data-review-agent-recovery] > summary")
+    .click();
+  const copyControl = agentRail.getByRole("button", { name: /^Copy / });
+  const copyWidth = async () =>
+    Math.round((await copyControl.boundingBox())?.width ?? 0);
+  const restingWidth = await copyWidth();
+  expect(restingWidth).toBeGreaterThan(0);
+  await copyControl.evaluate((node: HTMLElement) => {
+    const label = node.querySelector("span > span:last-child");
+    // Throwing rather than skipping: a missing label would otherwise leave the
+    // width unchanged and let the assertion below pass without testing
+    // anything, so the contract would lose its cover silently.
+    if (label === null) throw new Error("copy control has no visible label");
+    label.textContent = "Copy failed";
+  });
+  expect(await copyWidth()).toBe(restingWidth);
+  const connectionLog = agentRail
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary");
   await expect(connectionLog.locator("svg")).toHaveCount(1);
   await connectionLog.click();
-  const currentConnectionEvent = rail.locator(
+  const currentConnectionEvent = agentRail.locator(
     "[data-review-connection-current]",
   );
   await expect(currentConnectionEvent).toHaveCSS("line-height", "12px");
+  // The current entry carries a badge on its title line and every other entry
+  // does not, so the title line is the one place these states could drift
+  // apart. Every entry must put the same distance between its title and its
+  // description, whatever else sits on that line.
+  const titleGaps = await agentRail
+    .locator("[data-review-connection-event]")
+    .evaluateAll((rows) =>
+      rows.map((row) => {
+        const title = row.querySelector("strong");
+        const description = row.querySelector(
+          "[data-review-connection-duration]",
+        );
+        if (title === null || description === null) return null;
+        return Math.round(
+          description.getBoundingClientRect().top -
+            title.getBoundingClientRect().bottom,
+        );
+      }),
+    );
+  expect(titleGaps.length).toBeGreaterThan(0);
+  expect(new Set(titleGaps)).toEqual(new Set([2]));
   const currentDuration = currentConnectionEvent.locator(
     "[data-review-connection-duration]",
   );
@@ -3836,6 +4034,7 @@ test("should restore and submit staged comments through the local review runtime
     expect(current).toBeGreaterThan(previous);
     expect(current - previous).toBeLessThanOrEqual(2);
   }
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
   await rail.getByRole("tab", { name: "Comments" }).click();
   const selectedThread = rail
     .locator("[data-review-comment-id]")
@@ -3866,17 +4065,23 @@ test("should restore and submit staged comments through the local review runtime
   await expect(selectedTitle).toHaveCSS("text-decoration-line", "none");
   await rail
     .getByRole("button", {
-      name: /view Agent tab$/u,
+      name: /open Agent Status$/u,
     })
     .click();
-  await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
-    "aria-selected",
+  await expect(agentStatusTrigger(page)).toHaveAttribute(
+    "aria-expanded",
     "true",
   );
-  await expect(rail.locator("[data-review-current-activity]")).toHaveAttribute(
-    "data-review-attention",
-    "true",
+  // Opening the sidebar shows the status card; it does not ring it. A ring
+  // means the keyboard is here, and clicking a control is not that.
+  const openedCard = agentSidebar(page).locator(
+    "[data-review-current-activity]",
   );
+  await expect(openedCard).toBeVisible();
+  expect(
+    await openedCard.evaluate((card) => getComputedStyle(card).outlineStyle),
+  ).toBe("none");
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
   await rail.getByRole("tab", { name: "Comments" }).click();
   await expect(reply).toBeVisible();
   await selectedTitle.click();
@@ -3913,6 +4118,11 @@ test("should restore and submit staged comments through the local review runtime
     sessionId: session.sessionId,
     state: "working",
     requestId: request.requestId,
+    model: {
+      name: "claude-opus-5",
+      client: "claude-code 2.1.217",
+      sessionId: "e08e45b4-4e2e-412a-9f3c-1a2b3c4d5e6f",
+    },
     now: Date.now() - 10_000,
   });
   await appendProgressEvent({
@@ -3927,117 +4137,127 @@ test("should restore and submit staged comments through the local review runtime
     },
   });
 
-  await expect(
-    page.getByRole("button", { name: /Agent disconnected/u }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Agent working" }),
-  ).toBeVisible();
-  const workingAgent = page.getByRole("button", { name: "Agent working" });
-  const workingIndicator = workingAgent.locator(
-    ".review-agent-active-indicator--working",
+  const workingAgent = agentStatusTrigger(page);
+  await expect(workingAgent).toHaveAccessibleName(
+    "Agent Status: Agent working",
   );
-  // Read the shipped pseudo-element through the browser so this test observes
-  // the rendered orbit contract rather than its stylesheet implementation.
-  const readOrbitPresentation = () =>
-    workingIndicator.evaluate((indicator) => {
-      const style = getComputedStyle(indicator, "::before");
+  expect(Math.round((await workingAgent.boundingBox())?.width ?? 0)).toBe(
+    agentStatusWidth,
+  );
+  const workingMark = agentStatusIndicator(page);
+  await expect(workingMark).toHaveAttribute(
+    "data-review-agent-status",
+    "working",
+  );
+  // Working separates itself from merely connected by motion, so this reads the
+  // shipped animation rather than a class name. It is the product's one working
+  // mark - a rotating circle with a gap - the same mark the batch headers and
+  // the thread chips show, so a reader learns it once.
+  const readMark = () =>
+    workingMark.evaluate((mark) => {
+      const spinner = mark.firstElementChild;
+      if (spinner === null) return null;
+      const style = getComputedStyle(spinner);
+
       return {
-        animationDuration: style.animationDuration,
         animationName: style.animationName,
-        backgroundImage: style.backgroundImage,
-        bottom: style.bottom,
-        height: style.height,
-        left: style.left,
-        maskImage: style.maskImage,
-        right: style.right,
-        top: style.top,
-        transform: style.transform,
-        width: style.width,
+        animationIterationCount: style.animationIterationCount,
+        animationTimingFunction: style.animationTimingFunction,
+        borderRadius: style.borderTopLeftRadius,
+        // The gap is one transparent side of an otherwise drawn ring.
+        transparentSides: [
+          style.borderTopColor,
+          style.borderRightColor,
+          style.borderBottomColor,
+          style.borderLeftColor,
+        ].filter((colour) => colour.endsWith(", 0)")).length,
+        // The laid-out box, not the bounding box: this mark is rotating, so
+        // its axis-aligned bounds breathe between the square and its diagonal.
+        size: [style.width, style.height],
       };
     });
-  // A rotating matrix has unit scale and no translation at every sampled frame.
-  const readRotationMatrix = () =>
-    workingIndicator.evaluate((indicator) => {
-      const matrix = new DOMMatrix(
-        getComputedStyle(indicator, "::before").transform,
-      );
-      return {
-        scaleX: Math.hypot(matrix.a, matrix.b),
-        scaleY: Math.hypot(matrix.c, matrix.d),
-        translateX: matrix.e,
-        translateY: matrix.f,
-      };
-    });
-  const lightOrbit = await readOrbitPresentation();
-  expect(lightOrbit).toMatchObject({
-    animationDuration: "1.6s",
-    bottom: "-2.5px",
-    height: "15px",
-    left: "-2.5px",
-    right: "-2.5px",
-    top: "-2.5px",
-    width: "15px",
-  });
-  expect(lightOrbit.animationName).not.toBe("none");
-  expect(lightOrbit.backgroundImage).toContain("295deg");
-  expect(lightOrbit.backgroundImage).toContain("rgb(230, 230, 230)");
-  expect(lightOrbit.backgroundImage).toContain("360deg");
-  expect(lightOrbit.maskImage).toContain("calc(50% - 1px)");
-  const firstRotation = await readRotationMatrix();
-  await expect
-    .poll(async () => (await readOrbitPresentation()).transform)
-    .not.toBe(lightOrbit.transform);
-  const nextRotation = await readRotationMatrix();
-  for (const rotation of [firstRotation, nextRotation]) {
-    expect(rotation.scaleX).toBeCloseTo(1, 5);
-    expect(rotation.scaleY).toBeCloseTo(1, 5);
-    expect(rotation.translateX).toBe(0);
-    expect(rotation.translateY).toBe(0);
-  }
-  await page.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-light.png"),
-  });
-  await workingAgent.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-light-detail.png"),
+  expect(await readMark()).toMatchObject({
+    animationName: "spin",
+    animationIterationCount: "infinite",
+    animationTimingFunction: "linear",
+    transparentSides: 1,
+    // A step larger than the connected dot, at the captain's measurement: a
+    // ring encloses space where a disc fills it, so equal diameters do not read
+    // as equal weight.
+    size: ["10px", "10px"],
   });
 
   await page.emulateMedia({ colorScheme: "dark" });
-  await expect
-    .poll(async () => (await readOrbitPresentation()).backgroundImage)
-    .toContain("rgb(69, 69, 69)");
-  await page.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-dark.png"),
-  });
+  expect((await readMark())?.animationName).toBe("spin");
   await workingAgent.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-dark-detail.png"),
+    path: testInfo.outputPath("agent-working-fade-dark.png"),
+  });
+  // Readers who ask the OS for less motion get the mark without the fade.
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  // Reduced motion slows the mark rather than stopping it: a static ring reads
+  // as a shape, and this mark is only on screen while work is in flight.
+  expect((await readMark())?.animationName).toBe("spin");
+  expect(
+    await workingMark.evaluate((mark) => {
+      const spinner = mark.firstElementChild;
+      return spinner === null
+        ? null
+        : getComputedStyle(spinner).animationDuration;
+    }),
+  ).toBe("2.4s");
+  await workingAgent.screenshot({
+    path: testInfo.outputPath("agent-working-fade-reduced-motion.png"),
   });
 
-  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  const reducedMotionOrbit = await readOrbitPresentation();
-  expect(reducedMotionOrbit.animationName).toBe("none");
-  expect(reducedMotionOrbit.transform).toBe("none");
-  expect(reducedMotionOrbit).toMatchObject({
-    backgroundImage: lightOrbit.backgroundImage,
-    bottom: lightOrbit.bottom,
-    height: lightOrbit.height,
-    left: lightOrbit.left,
-    maskImage: lightOrbit.maskImage,
-    right: lightOrbit.right,
-    top: lightOrbit.top,
-    width: lightOrbit.width,
-  });
-  await workingAgent.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-reduced-motion.png"),
-  });
   await page.emulateMedia({
     colorScheme: "light",
     reducedMotion: "no-preference",
   });
-  await rail.getByRole("tab", { name: "Agent" }).click();
-  const activeWork = rail.locator("[data-review-current-activity='working']");
-  await expect(activeWork).toContainText("Responding to a comment");
+  await agentStatusTrigger(page).click();
+  const activeWork = agentSidebar(page).locator(
+    "[data-review-current-activity='working']",
+  );
+  await expect(activeWork).toContainText("Agent working");
   await expect(activeWork).toContainText("Reviewing the shared feedback batch");
+  // The working card carries the session and nothing else about the
+  // connection: the request, then the identifier, then when it last spoke.
+  expect(
+    await activeWork.evaluate((card) =>
+      [...card.children].map((child) => child.tagName),
+    ),
+  ).toEqual(["DIV", "SPAN", "P", "DIV", "DL", "DIV"]);
+  await expect(activeWork.locator("dt")).toHaveText(["Agent session"]);
+  await expect(
+    activeWork.getByRole("button", { name: /^Copy agent session identifier/u }),
+  ).toBeVisible();
+
+  // Opening the request is a request to see the reviewer's own feedback, so the
+  // sidebar claims its slot for the feedback body. Setting the tab alone left
+  // agent diagnosis on screen and the thread the reader asked for invisible.
+  await activeWork.getByRole("button").first().click();
+  await expect(agentSidebar(page)).toHaveCount(0);
+  await expect(rail).toBeVisible();
+  await expect(rail.getByRole("tab", { name: "Comments" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(
+    rail
+      .locator("[data-review-comment-id]")
+      .filter({ hasText: "Clarify the failure boundary." }),
+  ).toBeVisible();
+
+  // Re-pressing the pressed control closes its window; it never hands the slot
+  // to the other body.
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  await expect(rail).toHaveCount(0);
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
   await rail.getByRole("tab", { name: "Chat" }).click();
   await rail
     .getByPlaceholder("Ask about the plan as a whole…")
@@ -4077,20 +4297,36 @@ test("should restore and submit staged comments through the local review runtime
   await expect(threadActivity).toContainText(
     "Reviewing the shared feedback batch",
   );
-  await rail.getByRole("tab", { name: "Agent" }).click();
+  await agentStatusTrigger(page).click();
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,
     state: "working",
     requestId: request.requestId,
   });
-  await rail
+  await agentSidebar(page)
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary")
     .click();
+  // Closing a sidebar from its own control hands focus back to the toolbar
+  // control that opened it. Without that the aside unmounts and focus falls to
+  // the document body, so a keyboard reader tabs from the top of the plan to
+  // get back. Both bodies owe the reader the same thing.
+  await agentSidebar(page)
+    .getByRole("button", { name: "Close Agent Status" })
+    .click();
+  await expect(agentSidebar(page)).toHaveCount(0);
+  await expect(agentStatusTrigger(page)).toBeFocused();
+  const feedbackTrigger = page.getByRole("button", {
+    name: "Feedback",
+    exact: true,
+  });
+  await feedbackTrigger.click();
   await rail.getByRole("tab", { name: "Comments" }).click();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
+  await expect(rail).toHaveCount(0);
+  await expect(feedbackTrigger).toBeFocused();
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,
@@ -4313,11 +4549,11 @@ test("should restore and submit staged comments through the local review runtime
   ).toBe(true);
   expect(
     await sentThread.evaluate((thread) => {
-      const rail = thread.closest("#big-plan-feedback-rail");
-      if (rail === null) throw new Error("The feedback rail is missing");
+      const sidebar = thread.closest("#big-plan-feedback-sidebar");
+      if (sidebar === null) throw new Error("The feedback sidebar is missing");
       return (
         Math.ceil(thread.getBoundingClientRect().right) <=
-        Math.ceil(rail.getBoundingClientRect().right)
+        Math.ceil(sidebar.getBoundingClientRect().right)
       );
     }),
   ).toBe(true);
@@ -6588,9 +6824,9 @@ test("should mark a superseded review as read-only and link to its replacement",
     });
     await expect(readOnly).toBeVisible();
     await readOnly.click();
-    const rail = page.getByRole("complementary", { name: "Feedback" });
-    await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
-      "aria-selected",
+    const rail = agentSidebar(page);
+    await expect(agentStatusTrigger(page)).toHaveAttribute(
+      "aria-expanded",
       "true",
     );
     await expect(rail).toContainText("This review was replaced");
@@ -8201,12 +8437,11 @@ test.describe("recovery section visibility", () => {
     );
     const runtime = await startReviewRuntime({ planPath });
     const recoveryPanel = page.locator("[data-review-agent-recovery]");
+    // The agent surface has its own control in viewer chrome now; it is no
+    // longer a tab inside the feedback sidebar.
     const openAgentTab = async () => {
-      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-      await page
-        .getByRole("complementary", { name: "Feedback" })
-        .getByRole("tab", { name: "Agent" })
-        .click();
+      await agentStatusTrigger(page).click();
+      await expect(agentSidebar(page)).toBeVisible();
     };
     try {
       await page.goto(runtime.url);
@@ -8218,7 +8453,7 @@ test.describe("recovery section visibility", () => {
       await page.route("**/api/agent", (route) => route.abort());
       await page.reload();
       await openAgentTab();
-      const rail = page.getByRole("complementary", { name: "Feedback" });
+      const rail = agentSidebar(page);
       await expect(
         rail.locator("[data-review-connection-health='unobservable']"),
       ).toBeVisible({ timeout: 10_000 });

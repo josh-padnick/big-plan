@@ -546,7 +546,7 @@ describe("thread projection", () => {
 
   // BIG-147. Nothing renews the plan-wide heartbeat while a turn runs, so a
   // second message sent during one used to read "Blocked - no agent connected"
-  // while the Agent tab correctly said an agent was holding work. That told the
+  // while Agent Status correctly said an agent was holding work. That told the
   // reviewer their message was undeliverable when it was merely behind a turn.
   it("should queue a message sent during a quiet turn rather than call it blocked", () => {
     const held = request({

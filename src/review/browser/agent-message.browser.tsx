@@ -26,7 +26,7 @@ import {
 import { Icon } from "./icon.browser.js";
 import { ReviewImage } from "./review-image.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
-import { Badge, Button, Tooltip } from "./ui.browser.js";
+import { Badge, Button, Tooltip, WorkingMark } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
@@ -283,12 +283,7 @@ export const ReviewerMessagePreview = ({
   );
 };
 
-const Spinner = () => (
-  <span
-    className="inline-block size-[0.72rem] shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent [animation-duration:700ms] motion-reduce:[animation-duration:1.8s]"
-    aria-hidden="true"
-  />
-);
+const Spinner = () => <WorkingMark className="size-[0.72rem]" />;
 
 const STATUS_TONES = {
   neutral:
@@ -305,7 +300,7 @@ const STATUS_TONES = {
 /**
  * The past-horizon reading, which the vocabulary marks by tone rather than by a
  * stage of its own: a claim quiet past the recovery horizon has stopped
- * explaining anything, so its copy sends the reviewer to the Agent tab and the
+ * explaining anything, so its copy sends the reviewer to Agent Status and the
  * surfaces here have to carry that route and read differently from an ordinary
  * quiet turn (BIG-147).
  */

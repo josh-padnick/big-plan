@@ -47,7 +47,11 @@ import {
   type ReviewImageAttachment,
   type ReviewImageDescriptor,
 } from "./shared/review-image.js";
-import { AGENT_STALL_MS } from "./shared/agent-status.js";
+import {
+  decodeAgentModelIdentity,
+  type AgentModelIdentity,
+} from "./shared/agent-model.js";
+import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import {
   isProgressState,
   isProgressStepCode,
@@ -2293,6 +2297,7 @@ export type AgentPresence = {
    * inferring from and an end it was told about.
    */
   readonly endedAtMs?: number;
+  readonly model?: AgentModelIdentity;
 };
 
 /** The heartbeat lock stayed held for the whole waiting budget. */
@@ -2342,21 +2347,39 @@ const withAgentHeartbeatLock = async ({
   }
 };
 
-/** The writer the stored heartbeat currently names, if it names one. */
-const storedHeartbeatWriterId = async (
-  store: ReviewStore,
-): Promise<string | undefined> => {
+type StoredHeartbeatContinuity = {
+  readonly writerId?: string;
+  readonly model?: AgentModelIdentity;
+};
+
+/** Reads facts an omitted heartbeat field must carry forward in one session. */
+const storedHeartbeatContinuity = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<StoredHeartbeatContinuity> => {
   const value = await readStoreJson(store.agentHeartbeatPath);
   if (
     typeof value !== "object" ||
     value === null ||
     Array.isArray(value) ||
-    !("writerId" in value) ||
-    typeof value.writerId !== "string"
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId
   ) {
-    return undefined;
+    return {};
   }
-  return value.writerId;
+  const writerId =
+    "writerId" in value && typeof value.writerId === "string"
+      ? value.writerId
+      : undefined;
+  const model =
+    "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
+  return {
+    ...(writerId === undefined ? {} : { writerId }),
+    ...(model === undefined ? {} : { model }),
+  };
 };
 
 /**
@@ -2385,6 +2408,7 @@ export const writeAgentHeartbeat = async ({
   state,
   requestId,
   writerId,
+  model,
   now = Date.now(),
   lockAttempts,
 }: {
@@ -2393,6 +2417,8 @@ export const writeAgentHeartbeat = async ({
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly writerId?: string;
+  /** Which model is running the connector. */
+  readonly model?: AgentModelIdentity;
   readonly now?: number;
   readonly lockAttempts?: number;
 }): Promise<boolean> =>
@@ -2400,7 +2426,23 @@ export const writeAgentHeartbeat = async ({
     store,
     lockAttempts,
     change: async () => {
-      const writer = writerId ?? (await storedHeartbeatWriterId(store));
+      const stored = await storedHeartbeatContinuity({ store, sessionId });
+      const writer = writerId ?? stored.writerId;
+      /*
+      Identity carries forward within one agent's session, never across agents.
+
+      A write that names no model is a continuation - `agent note` renewing a
+      claim, say - so it keeps what that agent already declared rather than
+      erasing it. But a DIFFERENT writer arriving with nothing to declare has
+      declared nothing, and inheriting the last agent's identity would show a
+      reader the wrong agent's name at the moment a new one took over, which is
+      the one thing this whole surface exists not to do.
+      */
+      const isSameWriter =
+        writerId === undefined || stored.writerId === undefined
+          ? true
+          : writerId === stored.writerId;
+      const declaredModel = model ?? (isSameWriter ? stored.model : undefined);
       await writeStoreJson({
         path: store.agentHeartbeatPath,
         value: {
@@ -2408,6 +2450,7 @@ export const writeAgentHeartbeat = async ({
           state,
           ...(requestId === undefined ? {} : { requestId }),
           ...(writer === undefined ? {} : { writerId: writer }),
+          ...(declaredModel === undefined ? {} : { model: declaredModel }),
           updatedAtMs: now,
         },
       });
@@ -2502,6 +2545,20 @@ export const readAgentPresence = async ({
   ) {
     return { connected: false, state: "waiting" };
   }
+  /*
+  Identity outlives the signal that carried it.
+
+  Who the agent is and whether it answered recently are two different questions,
+  and this record answers both. Expiring the whole record on the freshness check
+  made the second answer erase the first: nothing renews the plan-wide heartbeat
+  during a long working turn (BIG-147), so an agent that was mid-answer stopped
+  being anyone at all, and the card that should have said which agent had gone
+  quiet said nothing instead. What it declared about itself stays until another
+  agent declares something else.
+  */
+  const model =
+    "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
+  const identity = model === undefined ? {} : { model };
   // An end the loop observed needs no aging: the question aging answers has
   // already been answered, by the only process that could answer it.
   if (value.state === "ended") {
@@ -2509,6 +2566,7 @@ export const readAgentPresence = async ({
       connected: false,
       state: "waiting",
       updatedAtMs: value.updatedAtMs,
+      ...identity,
       endedAtMs:
         "endedAtMs" in value &&
         typeof value.endedAtMs === "number" &&
@@ -2522,6 +2580,7 @@ export const readAgentPresence = async ({
       connected: false,
       state: "waiting",
       updatedAtMs: value.updatedAtMs,
+      ...identity,
     };
   }
   const requestId =
@@ -2534,6 +2593,7 @@ export const readAgentPresence = async ({
     connected: true,
     state: value.state,
     ...(requestId === undefined ? {} : { requestId }),
+    ...identity,
     updatedAtMs: value.updatedAtMs,
   };
 };
