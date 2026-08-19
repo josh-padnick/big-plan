@@ -17,8 +17,7 @@ import { expect, test, type Page } from "./fixtures";
 const openSection = (
   page: Page,
   name: "Appearance" | "Color theme" | "Approval message",
-) =>
-  page.getByRole("tab", { name, exact: true }).click();
+) => page.getByRole("tab", { name, exact: true }).click();
 
 // A colour with no alpha component is fully opaque. The previous pattern
 // anchored on the last number before the closing parenthesis, so `rgb(0, 0, 0)`
@@ -896,9 +895,12 @@ test("should keep the approval message the reviewer wrote across a reload", asyn
   sampleViewerUrl,
 }) => {
   await page.goto(sampleViewerUrl);
-  await page.evaluate((keys) => {
-    for (const key of keys) localStorage.removeItem(key);
-  }, [PREFERENCES_STORAGE_KEY, APPROVAL_MESSAGE_STORAGE_KEY]);
+  await page.evaluate(
+    (keys) => {
+      for (const key of keys) localStorage.removeItem(key);
+    },
+    [PREFERENCES_STORAGE_KEY, APPROVAL_MESSAGE_STORAGE_KEY],
+  );
   await page.reload();
   const settings = page.getByRole("button", { name: "Open settings" });
   const message = page.getByRole("textbox", { name: "Message", exact: true });
@@ -940,7 +942,33 @@ test("should keep the approval message the reviewer wrote across a reload", asyn
     await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
   });
 
+  await test.step("a stored note the contract cannot honour shows as the default", async () => {
+    // The delivered settings script carries its own copy of the fail-closed
+    // rule, because a script inside a template string imports nothing. Seed
+    // each way a record can be unusable and assert the field still offers a
+    // note to send rather than an empty box or a truncated one.
+    for (const corrupt of [
+      "not json",
+      '{"version":2,"message":"from a future build"}',
+      '{"version":1,"message":7}',
+      '{"version":1,"message":"   "}',
+    ]) {
+      await page.evaluate(
+        ([key, value]) => localStorage.setItem(key, value),
+        [APPROVAL_MESSAGE_STORAGE_KEY, corrupt],
+      );
+      await page.reload();
+      await settings.click();
+      await openSection(page, "Approval message");
+      await expect(message, `storage: ${corrupt}`).toHaveValue(
+        DEFAULT_APPROVAL_MESSAGE,
+      );
+      await page.keyboard.press("Escape");
+    }
+  });
+
   await test.step("the appearance choice still applies and persists beside it", async () => {
+    await settings.click();
     await openSection(page, "Appearance");
     await page.getByRole("radio", { name: "Dark" }).check();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
