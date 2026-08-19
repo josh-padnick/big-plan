@@ -57,6 +57,14 @@ import {
   type AgentDisconnectDirective,
 } from "./shared/agent-disconnect.js";
 import {
+  agentIsLive,
+  applyPrimacyDeclined,
+  applyPrimacyHandoff,
+  roleForArrivingAgent,
+  writersAreContending,
+  type AttachedAgent,
+} from "./shared/agent-primacy.js";
+import {
   isProgressState,
   isProgressStepCode,
   type ProgressState,
@@ -126,6 +134,8 @@ export type ReviewStore = {
   readonly agentHeartbeatPath: string;
   readonly agentDisconnectPath: string;
   readonly agentHeartbeatLockPath: string;
+  readonly agentRosterPath: string;
+  readonly agentRosterLockPath: string;
 };
 
 /**
@@ -540,6 +550,19 @@ export const reviewStoreFor = ({
     agentHeartbeatLockPath: inside({
       base: agentDirectory,
       leaf: ".agent-heartbeat.lock",
+    }),
+    // Who is attached, and which one of them is the primary. This is one file
+    // rather than a record per agent because the roster's whole job is to
+    // answer a question about the set - exactly one primary - and a reader
+    // assembling that answer from separate files would have to reason about
+    // seeing a promotion without its matching demotion.
+    agentRosterPath: inside({
+      base: agentDirectory,
+      leaf: "agent-roster.json",
+    }),
+    agentRosterLockPath: inside({
+      base: agentDirectory,
+      leaf: ".agent-roster.lock",
     }),
   });
 };
@@ -2405,6 +2428,8 @@ const withAgentHeartbeatLock = async ({
 
 type StoredHeartbeatContinuity = {
   readonly writerId?: string;
+  readonly displacedWriterId?: string;
+  readonly updatedAtMs?: number;
   readonly model?: AgentModelIdentity;
 };
 
@@ -2430,10 +2455,22 @@ const storedHeartbeatContinuity = async ({
     "writerId" in value && typeof value.writerId === "string"
       ? value.writerId
       : undefined;
+  const displacedWriterId =
+    "displacedWriterId" in value && typeof value.displacedWriterId === "string"
+      ? value.displacedWriterId
+      : undefined;
+  const updatedAtMs =
+    "updatedAtMs" in value &&
+    typeof value.updatedAtMs === "number" &&
+    Number.isFinite(value.updatedAtMs)
+      ? value.updatedAtMs
+      : undefined;
   const model =
     "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
   return {
     ...(writerId === undefined ? {} : { writerId }),
+    ...(displacedWriterId === undefined ? {} : { displacedWriterId }),
+    ...(updatedAtMs === undefined ? {} : { updatedAtMs }),
     ...(model === undefined ? {} : { model }),
   };
 };
@@ -2499,6 +2536,24 @@ export const writeAgentHeartbeat = async ({
           ? true
           : writerId === stored.writerId;
       const declaredModel = model ?? (isSameWriter ? stored.model : undefined);
+      /*
+      Who this write displaced, carried so the next write can tell a handover
+      from a fight.
+
+      A changed writer alone proves nothing: a fresh connector replacing a dead
+      one changes it too. Only a writer coming BACK - reclaiming the record that
+      displaced it, while that record is still fresh - proves two live loops,
+      because nothing dead reclaims anything (BIG-171). Recording the displaced
+      name here is what makes that return trip visible, and it costs no read:
+      the stored record is already open under this lock.
+
+      A write that keeps the same writer carries the displacement forward
+      untouched, so one loop refreshing twice a second cannot erase the evidence
+      before its rival's next write lands.
+      */
+      const displacedWriterId = isSameWriter
+        ? stored.displacedWriterId
+        : stored.writerId;
       await writeStoreJson({
         path: store.agentHeartbeatPath,
         value: {
@@ -2506,6 +2561,7 @@ export const writeAgentHeartbeat = async ({
           state,
           ...(requestId === undefined ? {} : { requestId }),
           ...(writer === undefined ? {} : { writerId: writer }),
+          ...(displacedWriterId === undefined ? {} : { displacedWriterId }),
           ...(declaredModel === undefined ? {} : { model: declaredModel }),
           updatedAtMs: now,
         },
@@ -2678,6 +2734,280 @@ export const readAgentDisconnectRequestFor = async ({
       ...(writerId === undefined ? {} : { writerId }),
     }),
   );
+
+/**
+ * Reports whether this presence write proved a second connection loop is live.
+ *
+ * The roster below is the ordinary evidence, because each agent signs its own
+ * record and liveness is then observed rather than inferred. This exists for
+ * the case the roster cannot cover: a loop that is writing the shared
+ * heartbeat without having registered. It reads the record this write is about
+ * to replace, so it costs nothing beyond the read the write already does.
+ */
+export const agentPresenceIsContended = async ({
+  store,
+  sessionId,
+  writerId,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+  readonly now?: number;
+}): Promise<boolean> => {
+  const stored = await storedHeartbeatContinuity({ store, sessionId });
+  return writersAreContending({ stored, writerId, nowMs: now });
+};
+
+const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Readonly<Record<string, unknown>>;
+  const writerId = record["writerId"];
+  const role = record["role"];
+  const attachedAtMs = record["attachedAtMs"];
+  const signalAtMs = record["signalAtMs"];
+  if (
+    typeof writerId !== "string" ||
+    writerId === "" ||
+    (role !== "primary" && role !== "observer") ||
+    typeof attachedAtMs !== "number" ||
+    !Number.isFinite(attachedAtMs) ||
+    typeof signalAtMs !== "number" ||
+    !Number.isFinite(signalAtMs)
+  ) {
+    return undefined;
+  }
+  const requestedPrimacyAtMs = record["requestedPrimacyAtMs"];
+  const model = decodeAgentModelIdentity(record["model"]);
+  return {
+    writerId,
+    role,
+    attachedAtMs,
+    signalAtMs,
+    ...(typeof requestedPrimacyAtMs === "number" &&
+    Number.isFinite(requestedPrimacyAtMs)
+      ? { requestedPrimacyAtMs }
+      : {}),
+    ...(model === undefined ? {} : { model }),
+  };
+};
+
+/**
+ * Reads the roster of agents attached to this review.
+ *
+ * A record that does not decode disappears rather than throwing, on the same
+ * rule the rest of this store follows: a malformed file must not be able to
+ * stop a reviewer from seeing the agents that are fine. A roster belonging to
+ * another session is not this session's roster and reads as empty.
+ */
+export const readAgentRoster = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<ReadonlyArray<AttachedAgent>> => {
+  const value = await readStoreJson(store.agentRosterPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("agents" in value) ||
+    !Array.isArray(value.agents)
+  ) {
+    return [];
+  }
+  return value.agents
+    .map(asAttachedAgent)
+    .filter((agent): agent is AttachedAgent => agent !== undefined);
+};
+
+/**
+ * Runs one change against the roster under its own lock.
+ *
+ * Every mutation goes through here because the invariant is about the set, not
+ * about any one agent: exactly one primary. A caller that read the roster,
+ * decided, and wrote it back outside this lock could promote an observer whose
+ * primary another caller had just replaced, and the file would then name two.
+ */
+const withAgentRoster = async ({
+  store,
+  sessionId,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly change: (
+    agents: ReadonlyArray<AttachedAgent>,
+  ) => ReadonlyArray<AttachedAgent>;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withReviewStoreLock({
+    lockPath: store.agentRosterLockPath,
+    change: async () => {
+      const next = change(await readAgentRoster({ store, sessionId }));
+      await writeStoreJson({
+        path: store.agentRosterPath,
+        value: { sessionId, agents: next },
+      });
+      return next;
+    },
+    timeoutError: () =>
+      new Error("Another process is updating the agent roster"),
+  });
+
+/**
+ * Registers this connection loop, or refreshes the registration it already has.
+ *
+ * The role is decided here rather than by the caller, because it is a fact
+ * about the set: the first live agent owns the plan and every later one
+ * observes. An arriving loop can therefore never take primacy by arriving,
+ * which is the behavior this whole change exists to remove (BIG-171).
+ *
+ * A refresh keeps the role, the attachment time, and any pending request. Only
+ * the signal moves, so a long working turn cannot demote the agent running it,
+ * and a reviewer's answer cannot be undone by the next heartbeat.
+ *
+ * Agents that have been silent past the stall window are dropped in the same
+ * step. Reaping on write rather than on a timer keeps the roster honest with no
+ * scheduler, and it means a departed primary frees the role for the next
+ * arrival instead of holding it forever.
+ */
+export const attachAgentToRoster = async ({
+  store,
+  sessionId,
+  writerId,
+  model,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+  readonly model?: AgentModelIdentity;
+  readonly now?: number;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) => {
+      const live = agents.filter(
+        (agent) =>
+          agent.writerId === writerId || agentIsLive({ agent, nowMs: now }),
+      );
+      const existing = live.find((agent) => agent.writerId === writerId);
+      if (existing !== undefined) {
+        return live.map((agent) =>
+          agent.writerId === writerId
+            ? {
+                ...agent,
+                signalAtMs: now,
+                // A refresh that declares nothing keeps what this agent
+                // already said about itself; it never inherits another's.
+                ...(model === undefined ? {} : { model }),
+              }
+            : agent,
+        );
+      }
+      return [
+        ...live,
+        {
+          writerId,
+          role: roleForArrivingAgent({ agents: live, nowMs: now }),
+          attachedAtMs: now,
+          signalAtMs: now,
+          ...(model === undefined ? {} : { model }),
+        },
+      ];
+    },
+  });
+
+/** Records that one attached agent has asked to become the primary. */
+export const requestAgentPrimacy = async ({
+  store,
+  sessionId,
+  writerId,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+  readonly now?: number;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) =>
+      agents.map((agent) =>
+        agent.writerId === writerId && agent.role === "observer"
+          ? {
+              ...agent,
+              requestedPrimacyAtMs: agent.requestedPrimacyAtMs ?? now,
+            }
+          : agent,
+      ),
+  });
+
+/** Applies the reviewer's answer: make this observer the primary. */
+export const grantAgentPrimacy = async ({
+  store,
+  sessionId,
+  writerId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) => applyPrimacyHandoff({ agents, writerId }),
+  });
+
+/** Applies the reviewer's answer: leave this agent where it is. */
+export const declineAgentPrimacy = async ({
+  store,
+  sessionId,
+  writerId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) => applyPrimacyDeclined({ agents, writerId }),
+  });
+
+/**
+ * Removes one agent from the roster at the reviewer's request.
+ *
+ * Dropping the record is the whole mechanism: the agent's next command finds no
+ * registration and is told it is no longer attached. Big Plan has no way to
+ * stop a process on the reviewer's machine, and claiming otherwise on the
+ * button would be a promise the product cannot keep.
+ *
+ * A disconnected primary leaves the role empty rather than handing it to an
+ * observer. Who answers the reviewer is the reviewer's decision, and inventing
+ * a successor here would make it silently.
+ */
+export const detachAgentFromRoster = async ({
+  store,
+  sessionId,
+  writerId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) => agents.filter((agent) => agent.writerId !== writerId),
+  });
 
 /** Reads the coding-agent presence signal without turning stale data into work. */
 export const readAgentPresence = async ({
