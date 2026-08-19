@@ -3,6 +3,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -71,22 +72,26 @@ export const ComposeImages = ({
 }) => {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
-  const liveBody = useRef(body);
+  const captureActive = useRef(false);
+  const bodyGeneration = useRef(0);
   const insertionAnchor = useRef<ComposerInsertionAnchor>({ body, offset: 0 });
-  const [pending, setPending] = useState(0);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     if (autoFocus) textarea.current?.focus();
   }, [autoFocus]);
+  useLayoutEffect(() => {
+    if (body === insertionAnchor.current.body) return;
+    bodyGeneration.current += 1;
+    insertionAnchor.current = { body, offset: body.length };
+  }, [body]);
   const references = extractReviewImageReferences(body);
-  // Returns where the caret should sit for the next upload in the chain. A
-  // batch that reused one offset spliced each reference in front of the last,
-  // so a paste or drop of several images landed them in reverse order.
   const upload = async (
     file: File,
-    caret: number,
+    captureGeneration: number,
     altOverride?: string,
-  ): Promise<number> => {
+  ): Promise<void> => {
+    if (captureGeneration !== bodyGeneration.current) return;
     // Nothing typed is touched: only the digest reference this would have
     // inserted is withheld, so the composer keeps exactly what it had.
     const refusal = reviewWriteRefusal({
@@ -95,18 +100,17 @@ export const ComposeImages = ({
     });
     if (refusal !== undefined) {
       setError(refusal);
-      return caret;
+      return;
     }
-    if (identity === null) return caret;
+    if (identity === null) return;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
       setError("Use PNG, JPEG, or WebP images.");
-      return caret;
+      return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
       setError("Each image must be 10 MiB or smaller.");
-      return caret;
+      return;
     }
-    setPending((value) => value + 1);
     try {
       const response = await fetch("/api/review-images", {
         method: "POST",
@@ -124,48 +128,52 @@ export const ComposeImages = ({
           "error" in value && value.error ? value.error : "Image upload failed",
         );
       }
+      if (captureGeneration !== bodyGeneration.current) return;
       const reference = buildReviewImageReference({
         alt: value.alt,
         id: value.id,
       });
       insertionAnchor.current = insertAtComposerAnchor({
-        anchor: rebaseComposerInsertion({
-          anchor: insertionAnchor.current,
-          body: liveBody.current,
-        }),
+        anchor: insertionAnchor.current,
         reference,
       });
-      liveBody.current = insertionAnchor.current.body;
       onBodyChange(insertionAnchor.current.body);
       setError("");
-      return insertionAnchor.current.offset;
     } catch (uploadError: unknown) {
       setError(
         uploadError instanceof Error
           ? uploadError.message
           : "Image upload failed",
       );
-      return caret;
-    } finally {
-      setPending((value) => value - 1);
     }
   };
   const capture = (files: ReadonlyArray<File>, altOverride?: string) => {
+    if (captureActive.current) {
+      setError("Wait for the current image upload to finish.");
+      return;
+    }
     if (references.length + files.length > MAX_IMAGES_PER_MESSAGE) {
       setError(
         `A message can contain at most ${MAX_IMAGES_PER_MESSAGE} images.`,
       );
       return;
     }
-    // The chain starts from what is on screen now; every upload after the
-    // first continues from what the one before it produced.
-    liveBody.current = textarea.current?.value ?? body;
-    const caret = textarea.current?.selectionStart ?? liveBody.current.length;
-    insertionAnchor.current = { body: liveBody.current, offset: caret };
-    void files.reduce(
-      (chain, file) => chain.then((next) => upload(file, next, altOverride)),
-      Promise.resolve(caret),
-    );
+    captureActive.current = true;
+    setPending(true);
+    const currentBody = textarea.current?.value ?? body;
+    const caret = textarea.current?.selectionStart ?? currentBody.length;
+    const captureGeneration = bodyGeneration.current;
+    insertionAnchor.current = { body: currentBody, offset: caret };
+    void (async () => {
+      try {
+        for (const file of files) {
+          await upload(file, captureGeneration, altOverride);
+        }
+      } finally {
+        captureActive.current = false;
+        setPending(false);
+      }
+    })();
   };
   const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.items).flatMap((item) => {
@@ -196,7 +204,6 @@ export const ComposeImages = ({
             anchor: insertionAnchor.current,
             body: event.target.value,
           });
-          liveBody.current = event.target.value;
           onBodyChange(event.target.value);
         }}
         onPaste={paste}
@@ -242,7 +249,7 @@ export const ComposeImages = ({
         <p className="m-0 text-2xs text-muted">Markdown and images supported</p>
       </div>
       <div className="mt-1 flex items-center gap-2">
-        {pending > 0 ? (
+        {pending ? (
           <span className="text-2xs text-muted">Uploading…</span>
         ) : null}
         {error ? (
