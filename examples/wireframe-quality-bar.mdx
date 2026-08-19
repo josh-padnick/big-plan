@@ -972,9 +972,9 @@ The phone uses a one-column list-to-detail push with compact navigation, comfort
         />
       </List>
       <BottomBar>
-        <Button label="▤ Inbox" emphasis="primary" />
-        <Button label="＋ New" />
-        <Button label="⚙ Settings" />
+        <Button label="Inbox" icon="inbox" emphasis="primary" />
+        <Button label="New" icon="add" />
+        <Button label="Settings" icon="settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -982,12 +982,20 @@ The phone uses a one-column list-to-detail push with compact navigation, comfort
   <Screen id="quality-phone-ticket" name="Phone · Ticket" device="phone">
     <Stack gap="sm">
       <TopBar title="#4821">
+        <Group>
+          <Button
+            label="Inbox"
+            icon="back"
+            emphasis="tertiary"
+            navigateTo="quality-phone-inbox"
+          />
+        </Group>
         <Button
-          label="‹ Inbox"
+          label="More actions"
+          icon="more"
+          iconOnly
           emphasis="tertiary"
-          navigateTo="quality-phone-inbox"
         />
-        <Button label="•••" emphasis="tertiary" />
       </TopBar>
       <Heading text="Cannot complete checkout" level="2" />
       <Text text="Northwind · Priority · Open" role="helper" />
@@ -1007,12 +1015,13 @@ The phone uses a one-column list-to-detail push with compact navigation, comfort
       <Button label="Send reply" emphasis="primary" />
       <BottomBar>
         <Button
-          label="▤ Inbox"
+          label="Inbox"
+          icon="inbox"
           emphasis="primary"
           navigateTo="quality-phone-inbox"
         />
-        <Button label="＋ New" />
-        <Button label="⚙ Settings" />
+        <Button label="New" icon="add" />
+        <Button label="Settings" icon="settings" />
       </BottomBar>
     </Stack>
   </Screen>

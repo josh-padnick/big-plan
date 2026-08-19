@@ -75,6 +75,7 @@ export type WireframeIconName =
   | "file"
   | "folder"
   | "help"
+  | "inbox"
   | "info"
   | "lock"
   | "more"
@@ -110,6 +111,7 @@ export const WIREFRAME_ICON_NAMES: ReadonlyArray<WireframeIconName> = [
   "file",
   "folder",
   "help",
+  "inbox",
   "info",
   "lock",
   "more",

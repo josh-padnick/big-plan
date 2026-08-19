@@ -6,10 +6,14 @@ Copy marks on a snippet, a settings gear and an actions launcher in the toolbar,
 
 ## The reviewer's toolbar
 
-The toolbar carries the plan's identity on the left and the controls on the right, which is the split every real application uses and the one a row of loose children cannot produce on its own.
+The toolbar carries the plan's identity on the left and the controls on the right, which is the split every real application uses.
 
-A `Row` distributes space between its children, so a title and three buttons each take a quarter of the bar.
-Wrapping each side in a `Group` makes the row two items, and `justify="between"` sends them to the two ends.
+A `TopBar` reads that way on its own: the title leads, and every loose control trails.
+Nothing in this bar is grouped, because a `Group` inside a `TopBar` means something else - it draws ahead of the title, which is where a phone puts its back control and where a desktop bar wants nothing.
+
+The panel rows further down need that split spelled out.
+A `Row` distributes space between its children, so a mark, a line of copy, and a button each take a third of it.
+Wrapping each side in a `Group` makes the row two items, and `justify="between"` sends them to the two ends: the command and its copy control, then the lock and its comment action.
 
 The marks are named rather than typed.
 A gear is `icon="settings"`, and `iconOnly` keeps the words as the control's accessible name and tooltip instead of drawing them.

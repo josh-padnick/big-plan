@@ -23,6 +23,7 @@ import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
 import { LOCK_ICON } from "../../icons/lucide/lock.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
+import { MESSAGES_SQUARE_ICON } from "../../icons/lucide/messages-square.js";
 import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { MINUS_ICON } from "../../icons/lucide/minus.js";
 import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
@@ -60,6 +61,7 @@ const WIREFRAME_GLYPHS = {
   file: FILE_ICON,
   folder: FOLDER_ICON,
   help: CIRCLE_QUESTION_MARK_ICON,
+  inbox: MESSAGES_SQUARE_ICON,
   info: INFO_ICON,
   lock: LOCK_ICON,
   more: ELLIPSIS_ICON,
