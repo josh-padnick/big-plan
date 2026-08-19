@@ -2565,6 +2565,52 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(html(render(compiled))).toContain("wireframe-group");
   });
 
+  it("should draw a top bar's Group ahead of its title and loose controls after", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { device: "phone" },
+          children: [
+            element({
+              name: "TopBar",
+              attributes: { title: "#4821" },
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: { label: "Inbox", icon: "back" },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Button",
+                  attributes: {
+                    label: "More actions",
+                    icon: "more",
+                    iconOnly: true,
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    // The back control has to reach the reader before the title, which is the
+    // only thing this slot exists for.
+    expect(rendered.indexOf("wireframe-top-bar-leading")).toBeLessThan(
+      rendered.indexOf("wireframe-brand"),
+    );
+    expect(rendered.indexOf("wireframe-brand")).toBeLessThan(
+      rendered.indexOf("wireframe-top-bar-actions"),
+    );
+  });
+
   it("should keep a top bar's controls away from its title", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

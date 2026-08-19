@@ -648,8 +648,9 @@ const CATALOG = {
     // Stack is allowed so authors can group the bar with the page body.
     allowedParents: ["AppShell", "Screen", "Stack"],
     summary:
-      "A strip across the top of a shell or a screen for the title and actions.",
-    example: '<TopBar title="Dashboard">...</TopBar>',
+      "A strip across the top of a shell or a screen. The title leads and loose controls trail, which is how a desktop or tablet bar reads. A Group leads too, before the title, which is how a phone draws the back control iOS puts there.",
+    example:
+      '<TopBar title="Dashboard"><Button label="Settings" icon="settings" iconOnly /></TopBar>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "TopBar",

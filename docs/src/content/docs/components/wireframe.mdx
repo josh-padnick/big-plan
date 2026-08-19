@@ -123,7 +123,7 @@ Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single co
 
 A `Screen` holds at most one `Overlay`, needs page content beside it, and the overlay needs at least one `Button` to leave by.
 The one-filled-action rule counts an overlay as its own layer, so a dialog may carry its own primary action while the page beneath keeps one too.
-`TopBar` puts its title at the start and its children at the end; use `Group` inside a `Row` for any other split.
+`TopBar` puts its title at the start and loose children at the end. A `Group` child leads instead, drawn before the title, which is how a phone bar carries the back control iOS puts there; use `Group`s inside a `Row` for any other split.
 The compiler blocks multiple `PageHeader`s on one screen, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, more than one filled work action per screen, and ambiguous Stepper progress.
 A `ChoiceGroup` is the mechanically owned simple-decision path: it holds two to five `ChoiceCard`s, starts unselected on the initial screen, gives every option its own destination that visibly selects the same title and consequence, reveals a primary continuation only after selection, and cannot share a tablet row with a competing region.
 A Stepper must contain exactly one current step in `done` → `current` → `todo` order, while each Step label names only the task because the primitive draws its own number or completion mark.
@@ -166,7 +166,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `AppShell`         | Holds only `Sidebar`, optional `TopBar`, and `AppContent`; unavailable on phone.                                                           |
 | `Sidebar`          | Optional `brand` and `mode`; valid only directly in `AppShell`.                                                                           |
 | `AppContent`       | Main product region; valid only directly in `AppShell`.                                                                                   |
-| `TopBar`           | Optional `title`; valid in `AppShell`, `Screen`, or `Stack`.                                                                               |
+| `TopBar`           | Optional `title`; valid in `AppShell`, `Screen`, or `Stack`. Title and any `Group` children lead; loose children trail.                     |
 | `BottomBar`        | Phone tab strip; valid in `Screen` or `Stack`.                                                                                            |
 | `PageHeader`       | Required `title`, optional `description` and `badge`.                                                                                      |
 | `SegmentedControl` | Holds only `Button` children; mark its selected mode with `emphasis="primary"`.                                                          |

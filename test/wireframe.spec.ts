@@ -793,18 +793,31 @@ test("should draw marks, a two-ended toolbar, and a surface that covers the page
 // whatever the stylesheet last said - and a padding change that shrinks it
 // below what a finger can hit looks identical in the source and nearly
 // identical in the drawing.
-test("should hold the touch floor under an icon-only control", async ({
+test("should hold the touch floor and the leading control on a phone bar", async ({
   page,
   wireframeFormFactorsViewerUrl,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(wireframeFormFactorsViewerUrl);
 
-  const control = page
-    .locator('[data-wireframe-screen="m-ticket"]')
-    .locator("[data-wireframe-icon-only]")
-    .first();
-  const box = await boxOf(control);
-  expect(box.width).toBeGreaterThanOrEqual(44);
-  expect(box.height).toBeGreaterThanOrEqual(44);
+  const screen = page.locator('[data-wireframe-screen="m-ticket"]');
+
+  await test.step("an icon-only control stays reachable by a finger", async () => {
+    const box = await boxOf(
+      screen.locator("[data-wireframe-icon-only]").first(),
+    );
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  });
+
+  await test.step("the back control is drawn before the title, as a phone puts it", async () => {
+    const bar = screen.locator(".wireframe-top-bar");
+    const [leading, title, actions] = await Promise.all([
+      boxOf(bar.locator(".wireframe-top-bar-leading")),
+      boxOf(bar.locator(".wireframe-brand")),
+      boxOf(bar.locator(".wireframe-top-bar-actions")),
+    ]);
+    expect(leading.x + leading.width).toBeLessThanOrEqual(title.x);
+    expect(title.x + title.width).toBeLessThanOrEqual(actions.x);
+  });
 });

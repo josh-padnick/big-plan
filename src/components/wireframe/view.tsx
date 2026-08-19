@@ -324,21 +324,39 @@ const WireframeElement = ({
           <WireframeElements nodes={node.children} />
         </div>
       );
-    case "TopBar":
+    case "TopBar": {
+      const leadingBarItems = node.children.filter(
+        (child) => child.element === "Group",
+      );
+      const trailingBarItems = node.children.filter(
+        (child) => child.element !== "Group",
+      );
       return (
         <div className="wireframe-top-bar flex flex-wrap items-center gap-3">
+          {/* A product's top bar names where the reader is on the left and
+              keeps its controls on the right, and clustering everything
+              against the title is the one arrangement no real application
+              uses. But a bar has two leading jobs, not one: a phone puts its
+              back control before the title, which no amount of trailing
+              placement can express. So a Group leads and loose controls
+              trail - grouped items travel with the identity, which is what a
+              Group means everywhere else in the vocabulary. */}
+          {leadingBarItems.length === 0 ? null : (
+            <div className="wireframe-top-bar-leading flex flex-wrap items-center gap-2">
+              <WireframeElements nodes={leadingBarItems} />
+            </div>
+          )}
           {node.title === undefined ? null : (
             <p className="wireframe-brand">{node.title}</p>
           )}
-          {/* A product's top bar names where the reader is on the left and
-              keeps its controls on the right; clustering everything against
-              the title is the one arrangement no real application uses.
-              Authors who want a different split write Groups inside a Row. */}
-          <div className="wireframe-top-bar-actions ml-auto flex flex-wrap items-center gap-2">
-            <WireframeElements nodes={node.children} />
-          </div>
+          {trailingBarItems.length === 0 ? null : (
+            <div className="wireframe-top-bar-actions ml-auto flex flex-wrap items-center gap-2">
+              <WireframeElements nodes={trailingBarItems} />
+            </div>
+          )}
         </div>
       );
+    }
     case "BottomBar":
       return (
         <div
