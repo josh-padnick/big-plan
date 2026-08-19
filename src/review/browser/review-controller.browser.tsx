@@ -1954,6 +1954,14 @@ const threadAnchorContainer = (target: HTMLElement): HTMLElement =>
   target.parentElement ??
   target;
 
+// Whether the spot the thread remembers is still occupied. A lens hides the
+// block it replays but renders its copy in the same spot, so the remembered
+// distance still describes where that content sits. A collapse leaves nothing
+// behind at all: the card shrinks to its header, and the distance then names a
+// gap below the card rather than a place inside it.
+const targetHoldsItsPlace = (target: HTMLElement): boolean =>
+  isRendered(target) || displayedStandIn(target) !== null;
+
 const useThreadHosts = (
   comments: ReadonlyArray<ReviewComment>,
   isOpen: boolean,
@@ -1987,6 +1995,12 @@ const useThreadHosts = (
       an anchor that is not on screen - one inside a collapsed slide, say -
       stores the difference between two all-zero rects, which reads back as a
       real measurement of zero.
+
+      For the same reason it is not applied once nothing occupies the place it
+      measures. A collapse hides the body but keeps the card, so the card still
+      measures while the distance inside it names a gap that has closed, and
+      adding it would draw the thread below the collapsed card beside unrelated
+      content. Level with the card is the whole answer until the target is back.
       */
       if (isRendered(anchor) && isRendered(container)) {
         targetOffsets.set(
@@ -2052,11 +2066,12 @@ const useThreadHosts = (
           "[data-slide], [data-quick-summary]",
         );
         // The offset places the thread level with the target inside the card,
-        // so it only applies when the card itself is what got measured. A
-        // collapsed anchor is represented by an ancestor row instead, and that
-        // row's top is the whole answer.
+        // so it only applies when the card itself is what got measured and the
+        // target still holds its place inside it. A collapsed anchor is
+        // represented by an ancestor row instead, and that row's top is the
+        // whole answer.
         const targetOffset =
-          anchor.element === container
+          anchor.element === container && targetHoldsItsPlace(target)
             ? (targetOffsets.get(comment.id) ?? 0)
             : 0;
         const desiredTop =
@@ -2100,10 +2115,7 @@ const useThreadHosts = (
       const target = targetElement(comment.target);
       if (target !== null) {
         observer.observe(target);
-        const anchor =
-          target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
-          target.parentElement;
-        if (anchor !== null) observer.observe(anchor);
+        observer.observe(threadAnchorContainer(target));
       }
     }
     window.addEventListener("resize", position, { passive: true });
