@@ -414,6 +414,36 @@ const WireframeElement = ({
           )}
         </div>
       );
+    case "Overlay":
+      return (
+        <div
+          className="wireframe-overlay absolute inset-0 flex items-center justify-center"
+          data-wireframe-overlay={node.kind}
+          data-wireframe-backdrop={node.backdrop}
+        >
+          <div
+            className="wireframe-overlay-surface flex flex-col gap-3"
+            role={node.kind === "alert" ? "alertdialog" : "dialog"}
+            aria-modal="true"
+            {...(node.title === undefined ? {} : { "aria-label": node.title })}
+          >
+            {node.title === undefined ? null : (
+              <h4 className="wireframe-overlay-title flex min-w-0 items-center gap-2">
+                {node.kind === "alert" ? (
+                  <span className="wireframe-overlay-mark" aria-hidden="true">
+                    {lucideIconToReact({
+                      icon: TRIANGLE_ALERT_ICON,
+                      hidden: false,
+                    })}
+                  </span>
+                ) : null}
+                <span className="min-w-0">{node.title}</span>
+              </h4>
+            )}
+            <WireframeElements nodes={node.children} />
+          </div>
+        </div>
+      );
     case "Icon":
       return (
         <span

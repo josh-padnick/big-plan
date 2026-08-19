@@ -2417,4 +2417,110 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       'Button "Copy command" is iconOnly with no icon, so it would draw nothing; give it icon="..." or remove iconOnly',
     ]);
   });
+  it("should draw an overlay over the page with alert semantics", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Text", attributes: { text: "The page" } }),
+            element({
+              name: "Overlay",
+              attributes: { kind: "alert", title: "Delete this plan?" },
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Keep the plan" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-overlay":"alert"');
+    expect(rendered).toContain('"data-wireframe-backdrop":"dim"');
+    expect(rendered).toContain('"role":"alertdialog"');
+    expect(rendered).toContain('"ariaModal":"true"');
+  });
+
+  it("should report an overlay with no page under it and no way out", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Overlay",
+              attributes: { title: "Nowhere" },
+              children: [
+                element({ name: "Text", attributes: { text: "Trapped" } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      "Overlay needs at least one Button so the surface it opens has a visible way out",
+      'Screen "home" is an Overlay with no page under it; draw the screen it interrupts so a reviewer can see what the interruption covers',
+    ]);
+  });
+
+  it("should report a second overlay because one screen shows one moment", () => {
+    const overlay = (title: string): ScopedChild =>
+      element({
+        name: "Overlay",
+        attributes: { title },
+        children: [element({ name: "Button", attributes: { label: "Close" } })],
+      });
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Text", attributes: { text: "The page" } }),
+            overlay("First"),
+            overlay("Second"),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home" draws 2 Overlays; one screen shows one moment, so give the second one its own Screen',
+    ]);
+  });
+
+  it("should count an overlay's filled action as its own layer", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Button",
+              attributes: { label: "Accept plan", emphasis: "primary" },
+            }),
+            element({
+              name: "Overlay",
+              attributes: { kind: "alert", title: "Delete this plan?" },
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Keep it", emphasis: "tertiary" },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Delete it", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+  });
 });

@@ -62,12 +62,14 @@ Implementation principles:
 - Reveal inspectors progressively: keep core properties visible; collapse Related, Activity, and Customer detail until needed.
 - In create/edit flows, group entered facts in the primary column and all routing metadata in one secondary group. Show duplicate suggestions only when results exist, preserve the draft while reviewing a match, validate required fields inline, and warn or save a draft on Cancel.
 - Give every opened surface a visible way out. A proposal form, expanded figure, thread, dialog, drawer, or temporary mode needs Cancel, Close, Escape, or an equally clear return path.
+- Draw a surface that sits above the page as an `Overlay`, never as one more panel in the column. A confirmation or dialog authored as page content tells the reviewer that the page underneath is still available when it is not, which is exactly the fact the drawing existed to settle. `backdrop="dim"` says the page is unavailable until this surface is answered; `backdrop="clear"` says the reader may still see and use it. An overlay centers over the page it covers, so it draws a dialog, a confirmation, or a sheet; a control anchored to one row or one button belongs in the page beside that anchor.
+- Show one moment per screen. An overlay and the page beneath it are one moment; a second overlay is a second `Screen`, and so is the state after the overlay is answered.
 - Give each review action one owner. Whole-screen comments belong to the screen or slide; element comments belong to selected elements in the expanded mode. Do not add a second floating whole-figure action that competes with the owner.
 - State whether visual variations configure one component or represent different components. One concept gets one named owner; presentation experiments must not make the product model ambiguous.
 
-Reject a simple choice drawn as list/detail, mixed jobs, titles that announce the future, repeated instructions, sentence-sized next buttons, primary actions that exit instead of advance, duplicate routes, unearned detail panes, redundant panes, doubled completion headlines, receipt-like endings that never say what the user learned, inescapable temporary surfaces, duplicate comment routes, ambiguous component ownership, and list/preview pairs that repeat the same facts.
+Reject a simple choice drawn as list/detail, mixed jobs, titles that announce the future, repeated instructions, sentence-sized next buttons, primary actions that exit instead of advance, duplicate routes, unearned detail panes, redundant panes, doubled completion headlines, receipt-like endings that never say what the user learned, inescapable temporary surfaces, confirmations and dialogs drawn as page content, duplicate comment routes, ambiguous component ownership, and list/preview pairs that repeat the same facts.
 
-Compilation blocks multiple `PageHeader`s and multiple filled work actions. The title and button wording still require review.
+Compilation blocks multiple `PageHeader`s and multiple filled work actions, counting an overlay's actions as its own layer rather than the page's. It also blocks a second `Overlay` on one screen, an `Overlay` with no page under it, and an `Overlay` holding no `Button` to leave by. The title and button wording still require review.
 
 ## L · Layout follows attention
 
@@ -104,8 +106,13 @@ Implementation principles:
 - On a sparse tablet flow, use the available canvas through larger type, taller cards, generous but grouped spacing, and decisive contrast. Quiet graph paper behind the interactive region with a light surface; never shrink a desktop form and float it in the iPad.
 - Optimize for scanning before reading. Headings, amounts, states, shapes, and actions should explain the screen in five seconds.
 - Use decoration only to identify content, communicate state, reinforce the emotional goal, or explain an unfinished visual decision.
+- Draw an icon the product actually shows as an `Icon`, or as `icon` on the `Button` that owns it, never as a character typed into a label. A mark typed into copy is not a mark a reviewer can judge: it takes the label's size instead of its own, it cannot be told apart from the words around it, and it reaches a screen reader as part of the sentence. Give each meaning one named glyph and reuse it on every screen, so the drawing reads as one system.
+- Keep the two owners separate. `Icon` is a mark that identifies or annotates and is never clickable; anything a person clicks is a `Button` carrying the same named glyph. One drawn affordance never has two ways to be authored.
+- Reach for `iconOnly` only where the product would: a toolbar of marks a user already recognizes, a close control, a copy affordance beside the thing it copies. An icon-only control still carries its `label`, which becomes its accessible name and its tooltip, so hiding the words never hides the meaning. A row of unrecognizable icon-only controls is worse than a row of short labels.
+- Size an icon by its job rather than by taste: `sm` rides a line of metadata, `md` stands with body copy, and `lg` is the one mark a screen is about or a target a finger reaches for. The steps are multiples of the artboard's own body type, so the same authored size is correct on every device.
+- A meaning the named set does not hold draws a crossed placeholder carrying that name, which is a prompt rather than a finished drawing: pick a named meaning, or say plainly in the surrounding prose that the mark is still undecided. Never work around it by typing a character that looks close.
 
-Reject equal-weight regions, a simple tablet choice split into columns, thin-line pseudo-selection, graph paper louder than the decision, a shrunken desktop form floating in an iPad, four squeezed full-screen panes, card walls, floating metadata or actions, cramped comparison headers, criteria styled like option titles, definitions that read as answers, comment borders crossing text, repeated anchored context, detached tray actions, unrelated dependencies, recommendation/value ambiguity, oversized empty panels, nonparallel choices, decorative filler, and anything visually louder than its importance.
+Reject equal-weight regions, a simple tablet choice split into columns, thin-line pseudo-selection, graph paper louder than the decision, a shrunken desktop form floating in an iPad, four squeezed full-screen panes, card walls, floating metadata or actions, cramped comparison headers, criteria styled like option titles, definitions that read as answers, comment borders crossing text, repeated anchored context, detached tray actions, unrelated dependencies, recommendation/value ambiguity, oversized empty panels, nonparallel choices, decorative filler, icons typed into labels as characters, unlabelled icon-only controls, placeholder glyphs left in a delivered plan, and anything visually louder than its importance.
 
 Defaults keep panels plain, derive dominant panes, and give secondary width to `Rail`. The derivation names exactly one collection per row - the first pane holding a `List` or `Table` - so a detail pane that also holds a list (properties, context, a checklist) stays the primary surface instead of becoming a second bounded column. That derivation is device-independent: a tablet master/detail row is proportioned the same way a desktop one is. Compilation blocks equal desktop thirds and four-or-more outlined sibling panels; lint blocks a Row past its device's column budget; a ramp test keeps the type roles a visible step apart; geometry tests block cramped panes, overlap, manufactured dead bands, painted type below the legibility floor, and a primary surface less than a third wider than the panes beside it.
 
@@ -134,7 +141,7 @@ Implementation principles:
 - Show the whole comment lifecycle. Staged comments navigate back to their targets; submitted threads collapse to one-line outcome chips after a response, expand in place, use the reply box as the per-comment chat, and keep plan-wide chat in the Chat surface.
 - Keep edit and remove easy to find on the author's own comment; confirmation belongs immediately before removal.
 - Make counts live and labels unconfusable. Update after create, edit, delete, submit, and response; keep only a precise persistent signal such as `Needs your answer 2`, never an ambiguous or stale `Comments 2` alert.
-- Confirm destructive actions with alert-dialog semantics immediately before they execute. Deleting authored content in an edit review remains visible as a struck-through diff; it never disappears silently.
+- Confirm destructive actions with alert-dialog semantics immediately before they execute, drawn as `Overlay kind="alert"` over the page the action would change. Name the consequence in the surface - what goes with it, and whether it can be undone - rather than leaving the button label to carry it. `kind="dialog"` is the ordinary task surface; reserve the alert for the irreversible one. Deleting authored content in an edit review remains visible as a struck-through diff; it never disappears silently.
 - Use idiomatic focus paint: a border-color shift plus a soft low-opacity halo, not a thick double perimeter. When a dialog or expanded mode closes, move focus to a sensible container or prior control rather than stranding it on the exit trigger.
 - Preserve context across mode changes. Entering or exiting maximize, a drawer, or a comment mode keeps the document scroll position, selected target, active screen, and relevant internal scroll.
 - Render controls only when their state and anchor are valid. No unexplained dot, empty pill, or footer hover line may appear on load; fix the state cause rather than hiding it after a delay.
@@ -203,7 +210,7 @@ Device presets own widths, fixed tablet ratio, shell availability, type roles, f
 4. **Probe every lifecycle:** have a fresh reviewer adversarially select whole and partial text, add/view/edit/delete/submit/revisit comments, enter/exit expanded modes, zoom in/out, change screens, and verify focus, scroll, markers, counts, labels, and escape routes. Incorporate confirmed findings before presentation.
 5. **Push the fix down:** when the interface allowed the defect, repair the primitive or diagnostic rather than one example.
 
-## Seven paste-ready patterns
+## Eight paste-ready patterns
 
 Simple tablet choice:
 
@@ -416,12 +423,43 @@ Phone list → detail:
 <Screen id="ticket" name="Ticket" device="phone">
   <Stack>
     <TopBar title="Ticket">
-      <Button label="‹ Inbox" navigateTo="inbox" />
+      <Button label="Inbox" icon="back" navigateTo="inbox" />
     </TopBar>
     <Text text="Checkout freeze" />
     <BottomBar>
       <Button label="Inbox" emphasis="primary" navigateTo="inbox" />
     </BottomBar>
   </Stack>
+</Screen>
+```
+
+Destructive confirmation over a page:
+
+```mdx
+<Screen id="plans" name="Plans" device="desktop" url="app.example.com/plans">
+  <PageHeader title="Plans">
+    <Button label="Search plans" icon="search" iconOnly />
+    <Button label="Workspace settings" icon="settings" iconOnly />
+  </PageHeader>
+  <Panel title="Plans">
+    <List>
+      <ListItem label="Checkout rewrite" meta="Draft" selected />
+    </List>
+  </Panel>
+  <Overlay kind="alert" title="Delete Checkout rewrite?">
+    <Text text="The plan and its two open comments go with it. This cannot be undone." />
+    <Row gap="sm" justify="end">
+      <Button
+        label="Keep the plan"
+        emphasis="tertiary"
+        navigateTo="plans-kept"
+      />
+      <Button
+        label="Delete plan"
+        emphasis="destructive"
+        navigateTo="plans-deleted"
+      />
+    </Row>
+  </Overlay>
 </Screen>
 ```

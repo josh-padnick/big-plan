@@ -196,6 +196,35 @@ export const WIREFRAME_MEASURES: ReadonlyArray<WireframeMeasure> = [
 ];
 
 /**
+ * What an overlay is.
+ *
+ * A modal and an alert are not the same surface. An alert interrupts to ask
+ * about something the reader is about to do and cannot be dismissed by
+ * ignoring it; a dialog is an ordinary task surface that happens to sit above
+ * the page. Drawing both the same way is how a wireframe ends up arguing for a
+ * destructive confirmation that nobody can tell apart from a settings sheet.
+ */
+export type WireframeOverlayKind = "dialog" | "alert";
+
+export const WIREFRAME_OVERLAY_KINDS: ReadonlyArray<WireframeOverlayKind> = [
+  "dialog",
+  "alert",
+];
+
+/**
+ * Whether the page beneath an overlay is dimmed.
+ *
+ * Dimming says the page is unavailable until this surface is answered. A clear
+ * backdrop says the opposite: the surface is layered over content the reader is
+ * still meant to see and use, as a popover, menu, or toast is. The choice is
+ * the author's because it is a product decision, not a drawing style.
+ */
+export type WireframeOverlayBackdrop = "dim" | "clear";
+
+export const WIREFRAME_OVERLAY_BACKDROPS: ReadonlyArray<WireframeOverlayBackdrop> =
+  ["dim", "clear"];
+
+/**
  * How much chrome a region draws around itself.
  *
  * Outlining every region makes controls, panels, and page structure compete
@@ -405,6 +434,17 @@ export type WireframeNode =
       // Mutually exclusive modes presented as one control. Children stay
       // buttons so the selected mode remains explicit in the authored model.
       readonly element: "SegmentedControl";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      // A surface drawn on top of the page rather than in it. It is the only
+      // element that leaves the screen's own flow, which is why it belongs to
+      // the screen directly: an overlay covers a page, so there has to be a
+      // page under it.
+      readonly element: "Overlay";
+      readonly title?: string;
+      readonly kind: WireframeOverlayKind;
+      readonly backdrop: WireframeOverlayBackdrop;
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {

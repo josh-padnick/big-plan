@@ -687,6 +687,42 @@ const checkStepperState = ({
   }
 };
 
+/**
+ * An overlay covers a page, and exactly one at a time.
+ *
+ * Two stacked modals is not a design a reviewer can judge; it is what a
+ * drawing shows when a screen tried to depict two moments at once, and each of
+ * those moments is its own Screen. An overlay with nothing under it is the same
+ * mistake from the other side: the page it is meant to interrupt was never
+ * drawn, so the reviewer cannot see what the interruption costs.
+ */
+const checkOverlay = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const overlays = screen.children.filter((node) => node.element === "Overlay");
+  if (overlays.length === 0) {
+    return;
+  }
+  if (overlays.length > 1) {
+    diagnostics.add({
+      message: `Screen "${screen.id}" draws ${overlays.length} Overlays; one screen shows one moment, so give the second one its own Screen`,
+      position,
+    });
+  }
+  if (overlays.length === screen.children.length) {
+    diagnostics.add({
+      message: `Screen "${screen.id}" is an Overlay with no page under it; draw the screen it interrupts so a reviewer can see what the interruption covers`,
+      position,
+    });
+  }
+};
+
 /** A phone uses its compact shell primitives, never a stacked desktop shell. */
 const checkPhoneShell = ({
   screen,
@@ -711,7 +747,67 @@ const checkPhoneShell = ({
   }
 };
 
-/** A screen has one filled action; a send action beside a composer counts. */
+/** The filled actions one layer draws; a send action beside a composer counts. */
+const filledActionsIn = (
+  nodes: ReadonlyArray<WireframeNode>,
+): ReadonlySet<WireframeNode> => {
+  const filled = new Set<WireframeNode>(
+    workActionButtons(nodes).filter(
+      (node) => node.element === "Button" && node.emphasis === "primary",
+    ),
+  );
+  const sendActions = (
+    candidates: ReadonlyArray<WireframeNode>,
+  ): ReadonlyArray<WireframeNode> =>
+    workActionButtons(candidates).filter(
+      (node) => node.element === "Button" && /^send(?:\s|$)/iu.test(node.label),
+    );
+  const markComposerSends = ({
+    nodes: layer,
+    ancestors,
+  }: {
+    readonly nodes: ReadonlyArray<WireframeNode>;
+    readonly ancestors: ReadonlyArray<ReadonlyArray<WireframeNode>>;
+  }): void => {
+    if (layer.some((candidate) => candidate.element === "TextArea")) {
+      const container = [layer, ...ancestors].find(
+        (candidate) => sendActions(candidate).length > 0,
+      );
+      sendActions(container ?? []).forEach((candidate) =>
+        filled.add(candidate),
+      );
+    }
+    for (const node of layer) {
+      const children = childNodes(node);
+      if (children.length > 0) {
+        markComposerSends({
+          nodes: children,
+          ancestors: [layer, ...ancestors],
+        });
+      }
+    }
+  };
+  if (nodes.some((candidate) => candidate.element === "TextArea")) {
+    sendActions(nodes).forEach((candidate) => filled.add(candidate));
+  }
+  nodes.forEach((node) => {
+    const children = childNodes(node);
+    if (children.length > 0) {
+      markComposerSends({ nodes: children, ancestors: [] });
+    }
+  });
+  return filled;
+};
+
+/**
+ * Each layer of a screen has one filled action.
+ *
+ * An overlay is counted on its own rather than with the page it covers,
+ * because only one of the two layers is answerable at a time: the page's
+ * primary action is exactly what the overlay took away. Counting them together
+ * would force an author to demote the confirm button on a dialog, which is the
+ * opposite of the honest drawing.
+ */
 const checkOneFilledAction = ({
   screen,
   position,
@@ -721,59 +817,31 @@ const checkOneFilledAction = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const filled = new Set<WireframeNode>(
-    workActionButtons(screen.children).filter(
-      (node) => node.element === "Button" && node.emphasis === "primary",
-    ),
-  );
-  const sendActions = (
-    nodes: ReadonlyArray<WireframeNode>,
-  ): ReadonlyArray<WireframeNode> =>
-    workActionButtons(nodes).filter(
-      (node) => node.element === "Button" && /^send(?:\s|$)/iu.test(node.label),
-    );
-  const markComposerSends = ({
-    nodes,
-    ancestors,
-  }: {
+  const overlays = screen.children.filter((node) => node.element === "Overlay");
+  const layers: ReadonlyArray<{
+    readonly where: string;
     readonly nodes: ReadonlyArray<WireframeNode>;
-    readonly ancestors: ReadonlyArray<ReadonlyArray<WireframeNode>>;
-  }): void => {
-    if (nodes.some((candidate) => candidate.element === "TextArea")) {
-      const container = [nodes, ...ancestors].find(
-        (candidate) => sendActions(candidate).length > 0,
+  }> = [
+    {
+      where: "",
+      nodes: screen.children.filter((node) => node.element !== "Overlay"),
+    },
+    ...overlays.map((overlay) => ({
+      where: " Overlay",
+      nodes: childNodes(overlay),
+    })),
+  ];
+  for (const layer of layers) {
+    const filled = filledActionsIn(layer.nodes);
+    if (filled.size > 1) {
+      const labels = [...filled].flatMap((node) =>
+        node.element === "Button" ? [node.label] : [],
       );
-      sendActions(container ?? []).forEach((candidate) =>
-        filled.add(candidate),
-      );
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} draws ${filled.size} filled actions (${labels.join(", ")}); keep one primary action, counting a composer's Send button`,
+        position,
+      });
     }
-    for (const node of nodes) {
-      const children = childNodes(node);
-      if (children.length > 0) {
-        markComposerSends({
-          nodes: children,
-          ancestors: [nodes, ...ancestors],
-        });
-      }
-    }
-  };
-  if (screen.children.some((candidate) => candidate.element === "TextArea")) {
-    sendActions(screen.children).forEach((candidate) => filled.add(candidate));
-  }
-  screen.children.forEach((node) => {
-    const children = childNodes(node);
-    if (children.length > 0) {
-      markComposerSends({ nodes: children, ancestors: [] });
-    }
-  });
-  if (filled.size > 1) {
-    const labels = [...filled].flatMap((node) =>
-      node.element === "Button" ? [node.label] : [],
-    );
-    diagnostics.add({
-      message: `Screen "${screen.id}" draws ${filled.size} filled actions (${labels.join(", ")}); keep one primary action, counting a composer's Send button`,
-      position,
-    });
   }
 };
 
@@ -852,6 +920,7 @@ const compileScreen = ({
   checkOneClearJob({ screen, position: child.position, diagnostics });
   checkStepperState({ screen, position: child.position, diagnostics });
   checkPhoneShell({ screen, position: child.position, diagnostics });
+  checkOverlay({ screen, position: child.position, diagnostics });
   checkOneFilledAction({ screen, position: child.position, diagnostics });
   return screen;
 };

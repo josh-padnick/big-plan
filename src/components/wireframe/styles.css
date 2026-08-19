@@ -429,6 +429,11 @@ marks and a plan diff never jitters.
   .wireframe-artboard {
     display: flex;
     box-sizing: border-box;
+    /* An Overlay is the one element that leaves the screen's own flow, and the
+       page it covers is the artboard - not the canvas, whose height follows its
+       content. Anchoring here is what makes a dimmed backdrop reach the frame's
+       edges on a screen whose content stops short of them. */
+    position: relative;
     width: var(--wf-width);
     /* Letterforms carry the sketch; the strokes only frame it. The font stops
        at the artboard's edge: the caption, the screen switcher, and the
@@ -1096,6 +1101,7 @@ marks and a plan diff never jitters.
       :is(
         .wireframe-app-shell,
         .wireframe-center,
+        .wireframe-overlay,
         .wireframe-page-header,
         .wireframe-list,
         .wireframe-table,
@@ -1111,6 +1117,7 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-text:not(
       .wireframe-center *,
+      .wireframe-overlay *,
       .wireframe-row[data-wireframe-workspace] *
     ) {
     max-width: var(--wf-prose-measure);
@@ -2099,6 +2106,62 @@ marks and a plan diff never jitters.
     border: 0;
     border-top: 2px dashed var(--wf-stroke-soft);
     margin: 0;
+  }
+
+  /* A surface drawn over the page.
+
+     It is positioned against the artboard rather than the canvas so the
+     backdrop always reaches the frame's edges, and it is the only element in
+     the drawing that leaves the flow - which is exactly what a modal does in
+     the product it depicts. A dimmed backdrop says the page underneath is
+     unavailable; a clear one says the reader may still see and use it. */
+  .wireframe-overlay {
+    z-index: 2;
+    padding: 1.5rem;
+  }
+  .wireframe-overlay[data-wireframe-backdrop="dim"] {
+    background: color-mix(in srgb, var(--color-ink) 42%, transparent);
+  }
+  /* The dialog itself is opaque paper on top of that dim, and it is bounded to
+     a readable measure: a confirmation stretched across a 1200px artboard stops
+     reading as an interruption and starts reading as another page region. */
+  .wireframe-overlay-surface {
+    box-sizing: border-box;
+    /* Sized to what it holds, then clamped. A confirmation that is two lines
+       long should not draw the same box a form does, and neither should reach
+       across a 1200px artboard: past a readable measure an interruption stops
+       reading as an interruption and starts reading as another page region. */
+    width: max-content;
+    max-width: min(30rem, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 1rem 1.25rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch-alt);
+    background: var(--color-paper);
+    box-shadow: 5px 7px 0 -1px var(--wf-stroke-soft);
+  }
+  .wireframe-overlay[data-wireframe-overlay="alert"]
+    > .wireframe-overlay-surface {
+    border-color: var(--callout-danger-c);
+  }
+  .wireframe-overlay-title {
+    font-size: var(--wf-text-title);
+  }
+  .wireframe-overlay-mark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    color: var(--callout-danger-c);
+  }
+  .wireframe-overlay-mark > svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+  /* An overlay's own actions end the interruption, so they sit together at its
+     end rather than at the start of the surface the way page content does. */
+  .wireframe-overlay-surface > .wireframe-row {
+    margin-top: 0.25rem;
   }
 
   /* The crossed rectangle every wireframe uses for art nobody has drawn yet. */

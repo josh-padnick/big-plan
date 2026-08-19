@@ -24,6 +24,8 @@ import {
   WIREFRAME_DIRECTIONS,
   WIREFRAME_FIELD_KINDS,
   WIREFRAME_MEDIA_SHAPES,
+  WIREFRAME_OVERLAY_BACKDROPS,
+  WIREFRAME_OVERLAY_KINDS,
   WIREFRAME_SPACES,
   WIREFRAME_STATUSES,
   WIREFRAME_STEP_STATES,
@@ -122,6 +124,21 @@ const ICON_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
   labelled: { kind: "booleanShorthand" },
   size: { kind: "enum", values: WIREFRAME_ICON_SIZES },
+} satisfies ComponentAttributeSchema;
+
+// An overlay's exit is often a Button inside a Row of actions rather than a
+// direct child, so the search reaches the whole surface.
+const holdsButton = (nodes: ReadonlyArray<WireframeNode>): boolean =>
+  nodes.some(
+    (node) =>
+      node.element === "Button" ||
+      ("children" in node && holdsButton(node.children)),
+  );
+
+const OVERLAY_SCHEMA = {
+  title: { kind: "string", nonEmpty: true },
+  kind: { kind: "enum", values: WIREFRAME_OVERLAY_KINDS },
+  backdrop: { kind: "enum", values: WIREFRAME_OVERLAY_BACKDROPS },
 } satisfies ComponentAttributeSchema;
 
 const EMPTY_SCHEMA = {} satisfies ComponentAttributeSchema;
@@ -501,6 +518,41 @@ const CATALOG = {
         schema: EMPTY_SCHEMA,
       });
       return { element: "SegmentedControl", children };
+    },
+  },
+  Overlay: {
+    category: "surface",
+    acceptsChildren: true,
+    allowedParents: ["Screen"],
+    summary:
+      'A surface drawn over the page: a dialog, a confirmation, a menu, a toast. kind="alert" is the interruption that guards a destructive or irreversible action and draws its own alert mark; kind="dialog" is an ordinary task surface. backdrop="dim" says the page is unavailable until this is answered, and backdrop="clear" says it is not. It holds any drawing elements, belongs directly to a Screen, and needs the page it covers beside it.',
+    example:
+      '<Overlay kind="alert" title="Delete this view?">...<Button label="Delete view" emphasis="destructive" />...</Overlay>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Overlay",
+        attributes,
+        position,
+        diagnostics,
+        schema: OVERLAY_SCHEMA,
+      });
+      // Every opened surface owes the reader a way out, and an overlay is the
+      // surface where forgetting it traps them: the page underneath is covered,
+      // so a drawing with no control on top is a screen nobody can leave.
+      if (!holdsButton(children)) {
+        diagnostics.add({
+          message:
+            "Overlay needs at least one Button so the surface it opens has a visible way out",
+          position,
+        });
+      }
+      return {
+        element: "Overlay",
+        ...(validated.title === undefined ? {} : { title: validated.title }),
+        kind: validated.kind ?? "dialog",
+        backdrop: validated.backdrop ?? "dim",
+        children,
+      };
     },
   },
   AppShell: {
