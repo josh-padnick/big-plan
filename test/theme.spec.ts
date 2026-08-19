@@ -238,7 +238,7 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
       };
     });
     expect(layout.railLeftOfPane).toBe(true);
-    // One column, one row per setting: the rail grows downward beside the
+    // One column, one row per setting: the sidebar grows downward beside the
     // page, whatever it has grown to hold.
     expect(layout.tabColumns).toBe(1);
     expect(layout.tabRows).toBe(layout.tabCount);
@@ -923,6 +923,29 @@ test("should keep the approval message the reviewer wrote across a reload", asyn
     await settings.click();
     await openSection(page, "Approval message");
     await expect(message).toHaveValue(written);
+  });
+
+  await test.step("emptying the field shows the wording an approval would carry", async () => {
+    // A blank note is not a covering note, so it removes the record rather
+    // than storing one. Reopening the sheet has to show what that record now
+    // resolves to, not the blank text the reviewer left behind.
+    await message.fill("   ");
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(key),
+        APPROVAL_MESSAGE_STORAGE_KEY,
+      ),
+    ).toBeNull();
+    await page.keyboard.press("Escape");
+    await settings.click();
+    await openSection(page, "Approval message");
+    await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(key),
+        APPROVAL_MESSAGE_STORAGE_KEY,
+      ),
+    ).toBeNull();
   });
 
   await test.step("Reset to default restores the standard wording, and that survives too", async () => {

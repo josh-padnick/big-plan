@@ -70,9 +70,9 @@ export const PREFERENCES_SCRIPT = `<script>
     } catch (_) {}
   };
 
-  // The field shows what an approval would actually carry, so a stored note the
-  // contract cannot honour - unreadable, over-long, or blank - shows as the
-  // default rather than as itself. src/render/preferences.ts owns that rule and
+  // The field shows what an approval would actually carry every time the sheet
+  // opens, so a stored note the contract cannot honour - unreadable,
+  // over-long, or blank - shows as the default rather than as itself. src/render/preferences.ts owns that rule and
   // src/review/shared/approval-message.ts is the island's copy of it; this is
   // the same rule again, because the delivered script imports neither.
   const storedMessage = () => {
@@ -250,6 +250,7 @@ export const PREFERENCES_SCRIPT = `<script>
     openButton.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       isolate();
+      messageInput.value = storedMessage();
       // The sidebar is where reading the sheet starts, so the open dialog hands
       // the keyboard to the selected item rather than to a control inside a
       // panel the reviewer may not be looking at.
@@ -284,7 +285,6 @@ export const PREFERENCES_SCRIPT = `<script>
   showSection(selectedSection().getAttribute("data-preferences-section"));
   syncGroup(modes, "data-preference-mode", currentMode());
   syncGroup(palettes, "data-preference-palette", currentPalette());
-  messageInput.value = storedMessage();
   control.hidden = false;
   openButton.addEventListener("click", (event) => {
     event.preventDefault();
