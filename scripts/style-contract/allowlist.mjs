@@ -63,7 +63,12 @@ export const STYLESHEET_BUDGETS = {
   "src/components/database-table-schema/styles.css": { declarations: 47 },
   "src/components/flow-diagram/styles.css": { declarations: 467 },
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },
-  "src/components/wireframe/styles.css": { declarations: 1012 },
+  "src/components/wireframe/styles.css": {
+    // Raised for the icon vocabulary: a glyph sized on the artboard's own type
+    // ramp in three steps, the placeholder a meaning outside the named set
+    // draws, and icon-carrying and icon-only controls with their touch floor.
+    declarations: 1049,
+  },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,
     // and the general edges its controls take. BIG-214 adds dedicated subtle

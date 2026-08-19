@@ -629,6 +629,30 @@ marks and a plan diff never jitters.
   .wireframe .items-end > .wireframe-badge {
     align-self: flex-end;
   }
+  /* A control that carries a mark keeps the mark and the words on one line,
+     with the glyph slightly tighter to the label than the label is to the
+     control's edge, so the pair reads as one action rather than as two
+     things sharing a box. */
+  .wireframe-button[data-wireframe-has-icon] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+  /* An icon-only control is square, because a wide box around one mark reads as
+     a button whose label failed to render. It keeps the same 44px floor every
+     other touch target keeps, so a toolbar of marks on tablet or phone is
+     reachable rather than merely drawn. */
+  .wireframe-button[data-wireframe-icon-only] {
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0.3rem;
+  }
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    .wireframe-button[data-wireframe-icon-only] {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
   .wireframe-button:hover {
     background: var(--wf-fill);
   }
@@ -1985,6 +2009,66 @@ marks and a plan diff never jitters.
   .wireframe-status-mark[data-wireframe-status="blocked"] {
     color: var(--callout-danger-c);
   }
+  /* A glyph, at the size of the type it stands with.
+
+     Every icon in the drawing is sized in `em` against the artboard's own body
+     step, which is redeclared per device, so one authored size draws correctly
+     on a phone at 1:1 and on a desktop artboard painted at five-eighths without
+     an author ever thinking about it. Three steps, each a ratio a reader sees:
+     riding a metadata line, standing with body copy, and being the thing a
+     finger reaches for. */
+  .wireframe-glyph {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.35em;
+    /* The stroke is a shade lighter than the copy beside it: a mark drawn at
+       full ink weight beside 14px letterforms reads as the loudest thing on
+       the screen, which is almost never what an icon is for. */
+    color: color-mix(in srgb, currentColor 78%, transparent);
+  }
+  .wireframe-glyph > svg {
+    width: 1.5em;
+    height: 1.5em;
+  }
+  /* A meaning the set does not draw. The crossed box is the same language
+     ImagePlaceholder uses one size up, and the requested name rides beside it,
+     so the drawing says what it is missing instead of showing a mark that is
+     quietly wrong. */
+  .wireframe-glyph[data-wireframe-icon-unnamed] {
+    color: var(--color-muted);
+  }
+  .wireframe-glyph-name {
+    font-size: var(--wf-text-meta);
+    letter-spacing: 0.02em;
+  }
+  .wireframe-icon {
+    display: inline-flex;
+    flex: none;
+    align-self: center;
+    align-items: center;
+    gap: 0.4em;
+    font-size: var(--wf-text-body);
+  }
+  .wireframe-icon[data-wireframe-size="sm"] > .wireframe-glyph > svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+  .wireframe-icon[data-wireframe-size="lg"] > .wireframe-glyph > svg {
+    width: 2.25em;
+    height: 2.25em;
+  }
+  .wireframe-icon-label {
+    min-width: 0;
+  }
+  /* A stack aligns its children to its own edge, and a mark standing alone in
+     one is a mark, not a full-width row. */
+  .wireframe-stack > .wireframe-icon,
+  .wireframe-panel-body > .wireframe-icon,
+  .wireframe-canvas > .wireframe-icon {
+    align-self: flex-start;
+  }
+
   .wireframe-badge[data-wireframe-tone="info"] {
     border-color: var(--callout-note-c);
     color: var(--callout-note-c);

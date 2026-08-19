@@ -15,6 +15,10 @@ import type {
   WireframeStatus,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
+import {
+  WIREFRAME_PLACEHOLDER_GLYPH,
+  wireframeGlyphFor,
+} from "./view-glyphs.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
@@ -90,6 +94,32 @@ const StatusMark = ({
 
 const statusMarkFor = (status: WireframeStatus | undefined): ReactNode =>
   status === undefined ? null : <StatusMark status={status} />;
+
+// A named glyph, or the crossed placeholder for a meaning the set does not
+// hold. Every icon in the drawing goes through here, so a standalone mark and
+// the same mark inside a button can never drift apart.
+const Glyph = ({ name }: { readonly name: string }): JSX.Element => {
+  const glyph = wireframeGlyphFor(name);
+  return (
+    <span
+      className="wireframe-glyph"
+      data-wireframe-icon={name}
+      {...(glyph === undefined ? { "data-wireframe-icon-unnamed": "" } : {})}
+      aria-hidden="true"
+    >
+      {lucideIconToReact({
+        icon: glyph ?? WIREFRAME_PLACEHOLDER_GLYPH,
+        hidden: false,
+      })}
+      {/* A glyph nobody drew says so, in the words the author asked for.
+          Substituting a nearby mark would put a wrong screen in front of a
+          reviewer who reads the drawing rather than the source. */}
+      {glyph === undefined ? (
+        <span className="wireframe-glyph-name">{name}</span>
+      ) : null}
+    </span>
+  );
+};
 
 // A direct record collection makes its Panel the master pane. Rail is the only
 // authored width primitive; the Row owns every other workspace proportion.
@@ -230,11 +260,27 @@ const WireframeElement = ({
           type="button"
           className="wireframe-button"
           data-wireframe-emphasis={node.emphasis}
+          {...(node.icon === undefined
+            ? {}
+            : { "data-wireframe-has-icon": "" })}
+          {...(node.iconOnly
+            ? // An icon-only control keeps its words where the product keeps
+              // them: as the accessible name and the hover tooltip. Hiding the
+              // label from the drawing never hides it from the reader.
+              {
+                "data-wireframe-icon-only": "",
+                "aria-label": node.label,
+                title: node.label,
+              }
+            : {})}
           {...(node.navigateTo === undefined
             ? {}
             : { "data-wireframe-navigate": node.navigateTo })}
         >
-          {node.label}
+          {node.icon === undefined ? null : <Glyph name={node.icon} />}
+          {node.iconOnly ? null : (
+            <span className="wireframe-button-label">{node.label}</span>
+          )}
         </button>
       );
     case "SegmentedControl":
@@ -367,6 +413,21 @@ const WireframeElement = ({
             <span className="wireframe-metric-note">{node.detail}</span>
           )}
         </div>
+      );
+    case "Icon":
+      return (
+        <span
+          className="wireframe-icon"
+          data-wireframe-size={node.size}
+          {...(node.labelled ? { "data-wireframe-labelled": "" } : {})}
+        >
+          <Glyph name={node.name} />
+          {node.labelled ? (
+            <span className="wireframe-icon-label">{node.label}</span>
+          ) : (
+            <span className="sr-only">{node.label}</span>
+          )}
+        </span>
       );
     case "Badge":
       return (

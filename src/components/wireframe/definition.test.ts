@@ -200,6 +200,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                   element: "Button",
                   label: "Start lesson",
                   emphasis: "secondary",
+                  iconOnly: false,
                   navigateTo: "lesson",
                 },
               ],
@@ -2329,5 +2330,91 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"tagName":"button"');
     expect(rendered).toContain('"tagName":"h4"');
     expect(rendered).toContain('"type":"button"');
+  });
+  it("should draw a named glyph for a mark and keep its meaning readable", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Icon",
+              attributes: { name: "settings", label: "Workspace settings" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-lucide":"settings"');
+    expect(rendered).toContain("Workspace settings");
+    expect(rendered).not.toContain("data-wireframe-icon-unnamed");
+  });
+
+  it("should draw the placeholder carrying the name when the set has no such glyph", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Icon",
+              attributes: { name: "rocket", label: "Ship it" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-lucide":"wireframe-placeholder"');
+    expect(rendered).toContain('"data-wireframe-icon-unnamed":""');
+    expect(rendered).toContain('"value":"rocket"');
+  });
+
+  it("should keep an icon-only control's words as its name and tooltip", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Button",
+              attributes: {
+                label: "Copy command",
+                icon: "copy",
+                iconOnly: true,
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-lucide":"copy"');
+    expect(rendered).toContain('"ariaLabel":"Copy command"');
+    expect(rendered).toContain('"title":"Copy command"');
+    expect(rendered).not.toContain("wireframe-button-label");
+  });
+
+  it("should report an icon-only control that would draw nothing", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Button",
+              attributes: { label: "Copy command", iconOnly: true },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Button "Copy command" is iconOnly with no icon, so it would draw nothing; give it icon="..." or remove iconOnly',
+    ]);
   });
 });

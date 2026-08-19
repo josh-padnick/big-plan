@@ -43,6 +43,110 @@ export const WIREFRAME_EMPHASES: ReadonlyArray<WireframeEmphasis> = [
   "destructive",
 ];
 
+/**
+ * The meanings a wireframe can draw as a mark.
+ *
+ * The set is named by what an icon means rather than by what it looks like,
+ * because an author writing a screen is thinking "close this panel" rather than
+ * "draw an x", and because one meaning drawing one mark on every screen of
+ * every plan is the repetition that makes a drawing read as one system.
+ *
+ * It is a vocabulary rather than a constraint: an author may write any name,
+ * and one this set does not hold draws a labelled placeholder instead. A
+ * nearby-looking substitute would be the single dishonest option, because a
+ * reviewer reads the drawing and cannot see that the mark is wrong.
+ */
+export type WireframeIconName =
+  | "add"
+  | "back"
+  | "chevron"
+  | "close"
+  | "collapse"
+  | "comment"
+  | "copy"
+  | "database"
+  | "delete"
+  | "done"
+  | "down"
+  | "drag"
+  | "edit"
+  | "error"
+  | "expand"
+  | "file"
+  | "folder"
+  | "help"
+  | "info"
+  | "lock"
+  | "more"
+  | "refresh"
+  | "remove"
+  | "search"
+  | "settings"
+  | "star"
+  | "table"
+  | "terminal"
+  | "tip"
+  | "undo"
+  | "up"
+  | "waiting"
+  | "warning";
+
+export const WIREFRAME_ICON_NAMES: ReadonlyArray<WireframeIconName> = [
+  "add",
+  "back",
+  "chevron",
+  "close",
+  "collapse",
+  "comment",
+  "copy",
+  "database",
+  "delete",
+  "done",
+  "down",
+  "drag",
+  "edit",
+  "error",
+  "expand",
+  "file",
+  "folder",
+  "help",
+  "info",
+  "lock",
+  "more",
+  "refresh",
+  "remove",
+  "search",
+  "settings",
+  "star",
+  "table",
+  "terminal",
+  "tip",
+  "undo",
+  "up",
+  "waiting",
+  "warning",
+];
+
+/**
+ * How big a standalone icon is drawn.
+ *
+ * The steps borrow the space scale's own words, so an author who already knows
+ * `gap="sm"` knows `size="sm"`, and each one is a multiple of the artboard's
+ * body type rather than a fixed pixel size: an icon drawn on a phone at 1:1 and
+ * the same icon on a desktop artboard painted at five-eighths both land beside
+ * text of their own device's size. Three steps, not five, because an icon has
+ * exactly three jobs - riding a line of metadata, standing with body copy, or
+ * being the thing a finger reaches for - and a fourth step would only invite
+ * hand-tuning a mark that should match the type beside it.
+ */
+export type WireframeIconSize = "sm" | "md" | "lg";
+
+export const WIREFRAME_ICON_SIZES: ReadonlyArray<WireframeIconSize> = [
+  "sm",
+  "md",
+  "lg",
+];
+
 export type WireframeMediaShape = "square" | "wide" | "tall";
 
 export const WIREFRAME_MEDIA_SHAPES: ReadonlyArray<WireframeMediaShape> = [
@@ -280,8 +384,18 @@ export type WireframeNode =
     }
   | {
       readonly element: "Button";
+      // What the control does, always. An icon-only control still carries it,
+      // because the label is what reaches a screen reader and what a reviewer
+      // needs in order to argue about the action rather than about the picture.
       readonly label: string;
       readonly emphasis: WireframeEmphasis;
+      // A named glyph drawn before the label. Product toolbars are full of
+      // controls a person recognizes by their mark, and a wireframe that spells
+      // every one of them out in words stops depicting the product.
+      readonly icon?: string;
+      // Whether the glyph stands alone. The label stays the accessible name and
+      // the tooltip, so hiding the words never hides the meaning.
+      readonly iconOnly: boolean;
       // The screen this button moves the prototype to. Every target is
       // resolved against the wireframe's own screens before rendering, so a
       // rendered document can never offer a dead action.
@@ -356,6 +470,19 @@ export type WireframeNode =
       readonly element: "Badge";
       readonly label: string;
       readonly tone: WireframeTone;
+    }
+  | {
+      // A glyph standing on its own, as a mark rather than a control. Anything
+      // a person clicks is a Button carrying the same named glyph, so one
+      // drawn affordance never has two ways to be authored.
+      readonly element: "Icon";
+      readonly name: string;
+      // What the mark means. Always present, and always reaching assistive
+      // technology, because a glyph nobody has named is a decision nobody made.
+      readonly label: string;
+      // Whether the meaning is also drawn as words beside the mark.
+      readonly labelled: boolean;
+      readonly size: WireframeIconSize;
     }
   | { readonly element: "Divider"; readonly label?: string }
   | {

@@ -17,6 +17,8 @@ import {
   WIREFRAME_ALIGNMENTS,
   WIREFRAME_EMPHASES,
   WIREFRAME_HEADING_LEVELS,
+  WIREFRAME_ICON_NAMES,
+  WIREFRAME_ICON_SIZES,
   WIREFRAME_JUSTIFICATIONS,
   WIREFRAME_MEASURES,
   WIREFRAME_DIRECTIONS,
@@ -107,7 +109,19 @@ const TEXT_SCHEMA = {
 const BUTTON_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
   emphasis: { kind: "enum", values: WIREFRAME_EMPHASES },
+  icon: { kind: "string", nonEmpty: true },
+  iconOnly: { kind: "booleanShorthand" },
   navigateTo: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+// The named glyphs, read as prose so one authoring message can list them.
+const ICON_NAME_LIST = WIREFRAME_ICON_NAMES.join(", ");
+
+const ICON_SCHEMA = {
+  name: { kind: "string", required: true, nonEmpty: true },
+  label: { kind: "string", required: true, nonEmpty: true },
+  labelled: { kind: "booleanShorthand" },
+  size: { kind: "enum", values: WIREFRAME_ICON_SIZES },
 } satisfies ComponentAttributeSchema;
 
 const EMPTY_SCHEMA = {} satisfies ComponentAttributeSchema;
@@ -417,8 +431,7 @@ const CATALOG = {
   Button: {
     category: "content",
     acceptsChildren: false,
-    summary:
-      "An action. Give it navigateTo to move the prototype to another screen.",
+    summary: `An action. icon draws a named glyph before the label, and iconOnly draws that glyph alone while label stays the accessible name and the tooltip. Give it navigateTo to move the prototype to another screen. Named glyphs: ${ICON_NAME_LIST}.`,
     example: '<Button label="Start lesson" navigateTo="loan-lesson" />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
@@ -428,13 +441,46 @@ const CATALOG = {
         diagnostics,
         schema: BUTTON_SCHEMA,
       });
+      // A control drawn with neither words nor a mark is a blank box, which is
+      // the one thing an author cannot have meant. The label is never dropped,
+      // so this is only ever about what the button draws.
+      if (validated.iconOnly === true && validated.icon === undefined) {
+        diagnostics.add({
+          message: `Button "${validated.label ?? ""}" is iconOnly with no icon, so it would draw nothing; give it icon="..." or remove iconOnly`,
+          position,
+        });
+      }
       return {
         element: "Button",
         label: validated.label ?? "",
         emphasis: validated.emphasis ?? "secondary",
+        ...(validated.icon === undefined ? {} : { icon: validated.icon }),
+        iconOnly: validated.iconOnly === true && validated.icon !== undefined,
         ...(validated.navigateTo === undefined
           ? {}
           : { navigateTo: validated.navigateTo }),
+      };
+    },
+  },
+  Icon: {
+    category: "content",
+    acceptsChildren: false,
+    summary: `A glyph standing on its own as a mark - a tip marker, a lock beside a field, a chevron at the end of a row. label always says what it means and always reaches assistive technology; labelled also draws those words beside it. Anything a person clicks is a Button with the same icon, never this. A name outside the set draws a crossed placeholder carrying that name rather than a nearby glyph that would be wrong. Named glyphs: ${ICON_NAME_LIST}.`,
+    example: '<Icon name="tip" label="Tip" size="sm" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Icon",
+        attributes,
+        position,
+        diagnostics,
+        schema: ICON_SCHEMA,
+      });
+      return {
+        element: "Icon",
+        name: validated.name ?? "",
+        label: validated.label ?? "",
+        labelled: validated.labelled === true,
+        size: validated.size ?? "md",
       };
     },
   },
