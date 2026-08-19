@@ -466,6 +466,29 @@ describe("the service listener", () => {
     ).toBe(404);
   });
 
+  it("should finish closing even while a client holds a request open", async () => {
+    // A parked request is not idle, so waiting for it would mean never
+    // settling: a listener-less process, and the record of it left on disk.
+    const parked = httpRequest({
+      host: "127.0.0.1",
+      port: runtime.port,
+      path: "/stop",
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "content-length": "100",
+      },
+    });
+    parked.on("error", () => {});
+    await new Promise<void>((settle) => {
+      parked.write("nonce=", () => settle());
+    });
+
+    await runtime.close();
+
+    await expect(get("/healthz")).rejects.toThrow();
+  });
+
   it("should leave no record behind when an HTTP stop ends it", async () => {
     // The advisory record names a pid and a port. The HTTP stop is the path
     // both the CLI and the browser use, so a record that outlived it would

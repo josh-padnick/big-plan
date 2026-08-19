@@ -44,6 +44,10 @@ const PLAN_ROUTE = /^\/plan\/([a-z0-9]+)\/?$/;
 // abandoned stop is still a stop.
 const ABANDONED_STOP_MS = 10_000;
 
+// How long a connection that is not idle gets to finish before it is dropped,
+// matching the session runtime's own shutdown grace.
+const SHUTDOWN_GRACE_MS = 100;
+
 /** What `GET /healthz` answers, and the only thing that proves identity. */
 export const SERVICE_PRODUCT = "big-plan-service";
 
@@ -435,10 +439,23 @@ export const startService = async ({
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
-    await new Promise<void>((settle) => {
+    // The session runtime's shutdown shape: idle connections go at once and
+    // the rest are forced shut after the grace, because a client parked
+    // mid-request is not idle and would otherwise keep this from ever
+    // settling - leaving a listener-less process and a record of it on disk.
+    const closedServer = new Promise<void>((settle) => {
       server.close(() => settle());
-      server.closeIdleConnections();
     });
+    server.closeIdleConnections();
+    const forceClose = setTimeout(() => {
+      server.closeAllConnections();
+    }, SHUTDOWN_GRACE_MS);
+    forceClose.unref();
+    try {
+      await closedServer;
+    } finally {
+      clearTimeout(forceClose);
+    }
     try {
       await onClosed?.();
     } catch {

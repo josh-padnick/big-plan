@@ -22,12 +22,17 @@ let previousStateDirectory: string | undefined;
 let listener: Server | undefined;
 
 const listenWith = async (
-  handler: (path: string) => { readonly status: number; readonly body: string },
+  handler: (path: string) => {
+    readonly status: number;
+    readonly body: string;
+    readonly headers?: Readonly<Record<string, string>>;
+  },
 ): Promise<number> => {
   const server = createServer((request, response) => {
     const answer = handler(request.url ?? "/");
     response.writeHead(answer.status, {
       "content-type": "application/json; charset=utf-8",
+      ...answer.headers,
     });
     response.end(answer.body);
   });
@@ -145,6 +150,18 @@ describe("probing the port", () => {
       await new Promise<void>((settle) => listener?.close(() => settle()));
       listener = undefined;
     }
+  });
+
+  it("should never follow a redirect off the socket it connected to", async () => {
+    // A listener holding the port could otherwise point the probe at any host
+    // in the world, have it return a valid health record, and be adopted as
+    // our service - which is what "never adopted" has to rule out.
+    const port = await listenWith(() => ({
+      status: 302,
+      body: "",
+      headers: { location: "https://plans.evil.example/healthz" },
+    }));
+    expect((await probeService({ port })).kind).toBe("foreign");
   });
 
   it("should treat an error response as foreign", async () => {

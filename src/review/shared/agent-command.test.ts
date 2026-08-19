@@ -3,17 +3,12 @@ import {
   agentConnectCommand,
   agentNextCommand,
   agentRecoveryPrompt,
-  quoteShellArgument,
   reviewRestartCommand,
 } from "./agent-command.js";
 
 describe("agent commands", () => {
   const executablePath = "/tmp/big plan/bin/big-plan.mjs";
   const planPath = "/tmp/captain's plan.mdx";
-
-  it("should quote one shell argument without changing its value", () => {
-    expect(quoteShellArgument(planPath)).toBe(`'/tmp/captain'"'"'s plan.mdx'`);
-  });
 
   it("should compose the review and agent commands in one place", () => {
     expect(reviewRestartCommand({ executablePath, planPath })).toBe(

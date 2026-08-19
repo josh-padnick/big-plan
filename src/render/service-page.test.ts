@@ -232,6 +232,19 @@ describe("the service's pages", () => {
     expect(interrupted).not.toContain("ended normally");
   });
 
+  it("should hand over a command that runs for a path with a space in it", () => {
+    // The page exists to give the reader the one command that restarts the
+    // review; unquoted, the shell would split this path into two arguments.
+    const html = renderPlanNeverStartedPage({
+      planPath: "/work/My Plans/plan.mdx",
+    });
+    expect(html).toContain("big-plan review '/work/My Plans/plan.mdx'");
+    // An ordinary path still reads exactly as it was ratified.
+    expect(
+      renderPlanNeverStartedPage({ planPath: "/work/plan.mdx" }),
+    ).toContain("big-plan review /work/plan.mdx");
+  });
+
   it("should escape a plan path and a stop reason read from disk", () => {
     const html = renderPlanNeverStartedPage({
       planPath: '/work/<script>alert("x")</script>.mdx',

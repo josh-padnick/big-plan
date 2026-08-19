@@ -1,10 +1,9 @@
 // Owns the shell commands and recovery text for a live review and its coding
-// agent. Callers provide paths; this module owns command shape and shell
-// quoting so browser guidance and runtime output cannot drift apart.
+// agent. Callers provide paths; this module owns command shape so browser
+// guidance and runtime output cannot drift apart, and quotes every path
+// through the repository's one shell-quoting owner.
 
-/** Quotes trusted text as one literal POSIX-shell argument. */
-export const quoteShellArgument = (value: string): string =>
-  `'${value.replaceAll("'", `'"'"'`)}'`;
+import { quoteShellArgument } from "../../shell-quoting/quote.js";
 
 export const agentConnectCommand = ({
   executablePath,

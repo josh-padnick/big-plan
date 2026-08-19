@@ -12,6 +12,7 @@
 
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
+import { connect } from "node:net";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { servicePaths, servicePort } from "./paths.js";
@@ -29,6 +30,9 @@ const FILE_MODE = 0o600;
 const READY_TIMEOUT_MS = 5_000;
 const READY_POLL_MS = 100;
 const PROBE_TIMEOUT_MS = 750;
+// A loopback connect either lands or refuses immediately; this only bounds a
+// listener that accepts and then says nothing.
+const CONNECT_TIMEOUT_MS = 500;
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -77,13 +81,20 @@ export const probeService = async ({
   let response: Response;
   try {
     response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+      // Never followed: a listener holding this port could otherwise answer
+      // with a redirect, have any host in the world return a health record,
+      // and be adopted as our service. Identity is only ever read from the
+      // socket we connected to on loopback, and a redirect is not that - it
+      // arrives here as a non-ok status and is refused below like any other
+      // answer this product would not have given.
+      redirect: "manual",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
   } catch {
     // Refused, reset, or timed out: nothing is answering here.
     return { kind: "absent" };
   }
-  if (!response.ok) return { kind: "foreign" };
+  if (!response.ok || response.redirected) return { kind: "foreign" };
   let parsed: unknown;
   try {
     parsed = await response.json();
@@ -218,17 +229,58 @@ export type ServiceAvailability =
     }
   | { readonly kind: "unavailable"; readonly reason: string };
 
+// Whether anything at all holds the port, asked of the socket rather than of
+// a tool: a listener that speaks no HTTP answers no probe, and it is exactly
+// that listener the failure has to be able to name.
+const portIsHeld = async ({
+  port,
+}: {
+  readonly port: number;
+}): Promise<boolean> =>
+  new Promise((settle) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const finish = (held: boolean): void => {
+      socket.destroy();
+      settle(held);
+    };
+    socket.setTimeout(CONNECT_TIMEOUT_MS, () => finish(false));
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+  });
+
+// Why a start that never answered failed. A held port is the case the fixed-
+// port policy exists for, and it has to say so with the occupier and the
+// override rather than as a timeout the reader cannot act on.
+const startFailureReason = async ({
+  port,
+}: {
+  readonly port: number;
+}): Promise<string> =>
+  (await portIsHeld({ port }))
+    ? foreignPortMessage({
+        port,
+        occupier: await describePortOccupier({ port }),
+      })
+    : `The Big Plan service did not start on port ${port} in time, so stable review links are unavailable.`;
+
 const spawnAndAwaitReady = async ({
   port,
 }: {
   readonly port: number;
 }): Promise<ServiceAvailability> => {
   await ensureServiceToken();
+  // A child that exits before answering could not take the port - usually
+  // because something else already has it. Waiting out the full deadline for
+  // an answer that is never coming only delays the explanation.
+  let childExited = false;
   try {
     const child = spawn(process.execPath, [serviceEntryPoint()], {
       detached: true,
       stdio: "ignore",
       env: process.env,
+    });
+    child.once("exit", () => {
+      childExited = true;
     });
     child.unref();
   } catch (error: unknown) {
@@ -240,7 +292,8 @@ const spawnAndAwaitReady = async ({
 
   // Two commands racing this are benign: the loser's child exits on
   // EADDRINUSE and both polls adopt the survivor, because adoption is decided
-  // by what answers `/healthz` rather than by who spawned it.
+  // by what answers `/healthz` rather than by who spawned it. That is why a
+  // child that exited is still followed by one more probe before giving up.
   const deadline = Date.now() + READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
     await wait(READY_POLL_MS);
@@ -257,11 +310,9 @@ const spawnAndAwaitReady = async ({
         }),
       };
     }
+    if (childExited) break;
   }
-  return {
-    kind: "unavailable",
-    reason: `The Big Plan service did not start on port ${port} in time, so stable review links are unavailable.`,
-  };
+  return { kind: "unavailable", reason: await startFailureReason({ port }) };
 };
 
 /**
@@ -366,9 +417,12 @@ export const stopService = async ({
     const response = await fetch(`http://127.0.0.1:${port}/stop`, {
       method: "POST",
       headers: { "x-big-plan-service-token": token },
+      // The owner token rides on this request, and a redirect is followed
+      // with the header intact, so a redirect is refused rather than chased.
+      redirect: "manual",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    if (!response.ok) {
+    if (!response.ok || response.redirected) {
       return {
         kind: "refused",
         stillServing: true,

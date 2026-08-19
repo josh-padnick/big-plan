@@ -27,7 +27,7 @@ import {
 } from "../../review/server.js";
 import { ReviewCustodyHeld } from "../../review/session-authority.js";
 import { publishStableReviewLink } from "../../review/service/announce.js";
-import { quoteShellArgument } from "../../review/shared/agent-command.js";
+import { quoteShellArgument } from "../../shell-quoting/quote.js";
 import { reviewIdleDurationLabel } from "../../review/shared/review-lifetime.js";
 import { renderDocument } from "../../render/render-document.js";
 

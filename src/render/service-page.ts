@@ -27,6 +27,7 @@ import { COPY_ICON } from "../icons/lucide/copy.js";
 import { LIGHTBULB_ICON } from "../icons/lucide/lightbulb.js";
 import { TRIANGLE_ALERT_ICON } from "../icons/lucide/triangle-alert.js";
 import { renderPage } from "./page.js";
+import { quoteShellArgumentIfNeeded } from "../shell-quoting/quote.js";
 import { lucideIconToHtml } from "./shell/lucide-icon-html.js";
 import { renderShell } from "./shell/shell.js";
 
@@ -168,7 +169,7 @@ const commandBlock = ({ command }: { readonly command: string }): string => {
 
 const restartBlock = ({ planPath }: { readonly planPath: string }): string =>
   `<h2${PROSE}>Start it again</h2>
-${commandBlock({ command: `big-plan review ${planPath}` })}
+${commandBlock({ command: `big-plan review ${quoteShellArgumentIfNeeded(planPath)}` })}
 ${tip({ bodyHtml: '<p data-authored-prose="">Run it in any terminal, then reload this page. The address you are on now is the one it will open.</p>' })}`;
 
 // One screen answers every ending. What changes is the sentence under the
