@@ -384,7 +384,7 @@ Reviewer image references included in a changed candidate are materialized into 
       // Asked here as well as in the recovery prompt, because an agent reaching
       // this output has connected some other way and would otherwise never be
       // told that the reviewer cannot see which model it is.
-      "Export BIG_PLAN_AGENT_MODEL as your API's exact model id (e.g. grok-4.6), plus BIG_PLAN_AGENT_EFFORT, BIG_PLAN_AGENT_CLIENT, and BIG_PLAN_AGENT_SESSION_URL where you know them, so the reviewer sees which agent is connected",
+      "Export BIG_PLAN_AGENT_MODEL as your API's exact model id (e.g. grok-4.6), plus BIG_PLAN_AGENT_EFFORT, BIG_PLAN_AGENT_CLIENT, and BIG_PLAN_AGENT_SESSION_URL - or BIG_PLAN_AGENT_SESSION when your conversation has an id but no link - where you know them, so the reviewer sees which agent is connected",
     ],
   };
 };

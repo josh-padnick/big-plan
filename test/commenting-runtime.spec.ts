@@ -3943,7 +3943,11 @@ test("should restore and submit staged comments through the local review runtime
   expect(restingWidth).toBeGreaterThan(0);
   await copyControl.evaluate((node: HTMLElement) => {
     const label = node.querySelector("span > span:last-child");
-    if (label !== null) label.textContent = "Copy failed";
+    // Throwing rather than skipping: a missing label would otherwise leave the
+    // width unchanged and let the assertion below pass without testing
+    // anything, so the contract would lose its cover silently.
+    if (label === null) throw new Error("copy control has no visible label");
+    label.textContent = "Copy failed";
   });
   expect(await copyWidth()).toBe(restingWidth);
   const connectionLog = agentRail

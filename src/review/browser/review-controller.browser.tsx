@@ -47,6 +47,7 @@ import {
   agentHasEverConnected,
   deriveAgentHealth,
   deriveCurrentAgentActivity,
+  type CurrentAgentActivity,
   heldWorkQuiet,
   projectAgentConnectionState,
   selectClaimedAgentRequest,
@@ -396,6 +397,26 @@ type SidebarView = "feedback" | "agent";
 // ground with a real border at rest, and a pressed ground when their view is
 // open. The pressed look is neutral, not accent - it says "this is the open
 // one", which is not the kind of thing that should shout in colour.
+/*
+Every state's badge is written copy, because the badge is user-facing and a
+state name is not. The record is exhaustive over the union, so a state added
+later has to be given words here rather than leaking its identifier - which is
+how "offline" and "errored" came to sit in lowercase beside "Offline".
+*/
+/** Closing the feedback sidebar has to put focus back here, from wherever it closed. */
+const FEEDBACK_TRIGGER_ID = "review-feedback-trigger";
+
+const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
+  working: "Working",
+  waiting: "Queued",
+  stalled: "Warning",
+  errored: "Error",
+  disconnected: "Offline",
+  offline: "Unreachable",
+  idle: "Connected",
+  "never-connected": "",
+};
+
 const TOOLBAR_CONTROL_CLASS =
   "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border border-edge bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:border-edge-strong hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-edge-strong aria-expanded:bg-raised aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:min-h-8";
 const FEEDBACK_TAB_CLASS =
@@ -4877,9 +4898,20 @@ export const ReviewController = () => {
   // Each control owns its own view. Pressing the one that is already pressed
   // closes the sidebar; it never hands the slot to the other body, which is
   // what made Agent Status look like it was opening Feedback.
+  /*
+  Closing a sidebar hands focus back to the control that opened it. Without
+  that, React unmounts the aside and focus falls to the document body, so a
+  keyboard reader who closes the panel loses their place and tabs from the top
+  of the plan to get back. Both bodies do it, because both are opened the same
+  way and a reader should not have to know which one they were in.
+  */
   const closeAgentSidebar = useCallback(() => {
     setIsOpen(false);
     document.getElementById(AGENT_STATUS_TRIGGER_ID)?.focus();
+  }, []);
+  const closeFeedbackSidebar = useCallback(() => {
+    setIsOpen(false);
+    document.getElementById(FEEDBACK_TRIGGER_ID)?.focus();
   }, []);
   const toggleAgentSidebar = () => {
     if (isOpen && sidebarView === "agent") closeAgentSidebar();
@@ -4893,7 +4925,7 @@ export const ReviewController = () => {
   const toggleFeedbackSidebar = () => {
     if (isOpen && sidebarView === "feedback") {
       feedbackScrollTop.current = feedbackPanel()?.scrollTop ?? 0;
-      setIsOpen(false);
+      closeFeedbackSidebar();
       return;
     }
     setSidebarView("feedback");
@@ -6755,6 +6787,7 @@ export const ReviewController = () => {
               )}
               <button
                 type="button"
+                id={FEEDBACK_TRIGGER_ID}
                 className={`${TOOLBAR_CONTROL_CLASS} [&>svg]:size-4`}
                 aria-expanded={isOpen && sidebarView === "feedback"}
                 aria-controls="big-plan-feedback-sidebar"
@@ -6849,7 +6882,7 @@ export const ReviewController = () => {
               }
               onClick={() => {
                 if (sidebarView === "agent") closeAgentSidebar();
-                else setIsOpen(false);
+                else closeFeedbackSidebar();
               }}
             >
               <Icon icon={X_ICON} />
@@ -7277,11 +7310,7 @@ export const ReviewController = () => {
                         starting condition into something that looks flagged. */}
                     {currentAgentActivity.state === "never-connected" ? null : (
                       <Badge tone="secondary" size="compact">
-                        {currentAgentActivity.state === "disconnected"
-                          ? "Offline"
-                          : currentAgentActivity.state === "stalled"
-                            ? "Warning"
-                            : currentAgentActivity.state}
+                        {AGENT_STATE_BADGE_LABEL[currentAgentActivity.state]}
                       </Badge>
                     )}
                   </div>

@@ -801,6 +801,51 @@ describe("review store agent presence", () => {
     ).toMatchObject({ model: { name: "Grok 4.6" }, state: "ended" });
   });
 
+  it("does not hand one agent's identity to the next", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      model: { name: "grok-4.6", client: "grok-cli 0.2.99" },
+      now: 10_000,
+    });
+    // The same agent renewing its claim says nothing new about itself, so what
+    // it already declared carries forward.
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "working",
+      writerId: "1111111111111111",
+      now: 11_000,
+    });
+    await expect(
+      readAgentPresence({ store, sessionId: "aaaaaaaaaaaaaaaa", now: 11_500 }),
+    ).resolves.toMatchObject({
+      model: { name: "grok-4.6", client: "grok-cli 0.2.99" },
+    });
+    // A different agent that declares nothing has declared nothing. Showing it
+    // under the previous agent's name would name the wrong agent at exactly
+    // the moment the reader most needs to know which one they have.
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "2222222222222222",
+      now: 12_000,
+    });
+    await expect(
+      readAgentPresence({ store, sessionId: "aaaaaaaaaaaaaaaa", now: 12_500 }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      updatedAtMs: 12_000,
+    });
+  });
+
   it("refuses to end a heartbeat another agent now owns", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });

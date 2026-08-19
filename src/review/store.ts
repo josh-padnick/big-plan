@@ -2428,7 +2428,21 @@ export const writeAgentHeartbeat = async ({
     change: async () => {
       const stored = await storedHeartbeatContinuity({ store, sessionId });
       const writer = writerId ?? stored.writerId;
-      const declaredModel = model ?? stored.model;
+      /*
+      Identity carries forward within one agent's session, never across agents.
+
+      A write that names no model is a continuation - `agent note` renewing a
+      claim, say - so it keeps what that agent already declared rather than
+      erasing it. But a DIFFERENT writer arriving with nothing to declare has
+      declared nothing, and inheriting the last agent's identity would show a
+      reader the wrong agent's name at the moment a new one took over, which is
+      the one thing this whole surface exists not to do.
+      */
+      const isSameWriter =
+        writerId === undefined || stored.writerId === undefined
+          ? true
+          : writerId === stored.writerId;
+      const declaredModel = model ?? (isSameWriter ? stored.model : undefined);
       await writeStoreJson({
         path: store.agentHeartbeatPath,
         value: {
