@@ -165,8 +165,8 @@ describe("current agent activity", () => {
   });
 
   // Presence answers "is an agent attached", which the waiting loop proves
-  // twice a second, so it expires on the attachment window rather than on the
-  // much longer window a working agent gets to narrate in.
+  // twice a second. Its silence expires on the shared window; held work may
+  // explain activity during that silence, but never extends presence.
   it("should expire a previously connected agent when its heartbeat is stale", () => {
     expect(
       agentPresenceIsFresh({

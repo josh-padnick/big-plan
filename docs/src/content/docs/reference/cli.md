@@ -227,20 +227,22 @@ If the process dies mid-publish, the next `agent` command and the next `big-plan
 
 Export any of these environment variables before running `agent next` or `agent
 note` to report who is connected. They carry the four facts **Agent Status**
-shows, with a session declared either as a link or as an id:
+shows, with a session declared either as an address or as an id:
 
-| Variable                     | What it declares                                           | Limit       |
-| ---------------------------- | ---------------------------------------------------------- | ----------- |
-| `BIG_PLAN_AGENT_MODEL`       | Your API's own canonical model id, for example `grok-4.6`. | 80 chars    |
-| `BIG_PLAN_AGENT_EFFORT`      | How hard the model was told to think, for example `high`.  | 24 chars    |
-| `BIG_PLAN_AGENT_CLIENT`      | Which tool is connected, for example `grok-cli 0.2.99`.    | 80 chars    |
-| `BIG_PLAN_AGENT_SESSION_URL` | An `http` or `https` link to the agent's own conversation. | 2,048 chars |
-| `BIG_PLAN_AGENT_SESSION`     | That conversation's id, when it has no link.               | 120 chars   |
+| Variable                     | What it declares                                                         | Limit       |
+| ---------------------------- | ------------------------------------------------------------------------ | ----------- |
+| `BIG_PLAN_AGENT_MODEL`       | Your API's own canonical model id, for example `grok-4.6`.               | 80 chars    |
+| `BIG_PLAN_AGENT_EFFORT`      | How hard the model was told to think, for example `high`.                | 24 chars    |
+| `BIG_PLAN_AGENT_CLIENT`      | Which tool is connected, for example `grok-cli 0.2.99`.                  | 80 chars    |
+| `BIG_PLAN_AGENT_SESSION_URL` | The agent's own conversation address; Big Plan decides whether it links. | 2,048 chars |
+| `BIG_PLAN_AGENT_SESSION`     | That conversation's opaque id, when it has no address.                   | 120 chars   |
 
 All are optional and independent: declare only the ones you can answer, and the
 reviewer is shown exactly those.
-None is guessed on the connector's behalf, and none is rewritten - an id Big
-Plan does not recognize is shown exactly as declared rather than re-cased.
+Terminal escape and control sequences are removed before the values are shown,
+because they are terminal formatting rather than part of the declaration.
+Beyond that cleanup, Big Plan does not guess missing facts or re-case an
+unrecognized id: its declared text is shown unchanged.
 Where nothing is declared the reviewer is shown no identity at all rather than a
 note about its absence.
 A value that exceeds its limit, is empty, or fails its own check is dropped on

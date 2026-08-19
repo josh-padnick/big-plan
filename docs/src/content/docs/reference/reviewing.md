@@ -262,8 +262,9 @@ that table rather than a change to what a connector may declare.
 
 Model ids are looked up, never rewritten. A known id prints the name its vendor
 writes - `grok-4.6` shows as `Grok 4.6` - and uses that vendor's own logo. An id
-Big Plan does not hold prints exactly as declared, and shows a logo only where
-Big Plan holds a mark faithful to the vendor's published one, so a different
+Big Plan does not hold prints exactly as declared after the [CLI
+reference's](/reference/cli/) documented input cleanup, and shows a logo only
+where Big Plan holds a mark faithful to the vendor's published one, so a different
 GPT-named model such as EleutherAI's GPT-J neither borrows the OpenAI logo nor
 stands behind a generic one.
 A client is read the same way, except that a recognized one drops the version it
@@ -273,7 +274,7 @@ is a fact about the agent's machine rather than about your review.
 Identity belongs to the session's agent rather than to its heartbeat. Once
 declared it stays on the card through working turns, quiet periods, stalls, and
 disconnection - a disconnected card still names the agent that left - and it
-changes only when another agent connects.
+changes only when another agent declares something else.
 
 The reconnect prompt the review hands the reviewer asks the agent to export
 these itself before connecting, because the agent is the only party that knows
