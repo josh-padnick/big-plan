@@ -70,6 +70,27 @@ export type ServiceRuntime = {
   readonly close: () => Promise<void>;
 };
 
+// The session runtime sends these on every response it makes, and so does
+// this one: a rule that holds for the HTML routes and not for the JSON or
+// plain-text ones is an approximation of that runtime, not a copy of it.
+//
+// The pages are self-contained: every byte they need is inline or a data:
+// URI, so nothing here may reach the network. data: is allowed for images and
+// fonts because the shared shell embeds the Big Plan logo, the favicons, and
+// the typeface that way; without it the product's own chrome is blocked on its
+// own page. form-action is named explicitly because it does not fall back to
+// default-src, and the stop flow is a form: this is what stops a page from
+// being tricked into posting it somewhere else. frame-ancestors is what stops
+// a page on another origin from framing the stop confirmation and harvesting a
+// click against a nonce this process itself issued, which every same-origin
+// check here would then accept.
+const SECURITY_HEADERS = {
+  "content-security-policy":
+    "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+} as const;
+
 const sendHtml = ({
   response,
   status,
@@ -82,20 +103,7 @@ const sendHtml = ({
   response.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
-    // The pages are self-contained: every byte they need is inline or a data:
-    // URI, so nothing here may reach the network. data: is allowed for images
-    // and fonts because the shared shell embeds the Big Plan logo, the
-    // favicons, and the typeface that way; without it the product's own chrome
-    // is blocked on its own page. form-action is named explicitly because it
-    // does not fall back to default-src, and the stop flow is a form: this is
-    // what stops a page from being tricked into posting it somewhere else.
-    // frame-ancestors is what stops a page on another origin from framing the
-    // stop confirmation and harvesting a click against a nonce this process
-    // itself issued, which every same-origin check here would then accept.
-    "content-security-policy":
-      "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-    "referrer-policy": "no-referrer",
-    "x-content-type-options": "nosniff",
+    ...SECURITY_HEADERS,
   });
   response.end(html);
 };
@@ -112,8 +120,26 @@ const sendJson = ({
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
+    ...SECURITY_HEADERS,
   });
   response.end(`${JSON.stringify(value)}\n`);
+};
+
+const sendRedirect = ({
+  response,
+  status,
+  location,
+}: {
+  readonly response: ServerResponse;
+  readonly status: number;
+  readonly location: string;
+}): void => {
+  response.writeHead(status, {
+    location,
+    "cache-control": "no-store",
+    ...SECURITY_HEADERS,
+  });
+  response.end();
 };
 
 const refuse = ({
@@ -125,7 +151,10 @@ const refuse = ({
   readonly status: number;
   readonly reason: string;
 }): void => {
-  response.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+  response.writeHead(status, {
+    "content-type": "text/plain; charset=utf-8",
+    ...SECURITY_HEADERS,
+  });
   response.end(`${reason}\n`);
 };
 
@@ -149,11 +178,21 @@ export const startService = async ({
   version,
   port = servicePort(),
   now = Date.now(),
+  onClosed,
 }: {
   readonly readToken: () => Promise<string | undefined>;
   readonly version: string;
   readonly port?: number;
   readonly now?: number;
+  /**
+   * Runs once after the listener closes, however the stop arrived.
+   *
+   * Every way this process ends passes through the same `close`, so anything
+   * the process leaves behind on disk is cleaned up here rather than at each
+   * call site, where the HTTP stop - the path people actually use - would be
+   * the easiest one to forget.
+   */
+  readonly onClosed?: () => Promise<void>;
 }): Promise<ServiceRuntime> => {
   const startedAtMs = now;
   const pageNonce = randomBytes(32).toString("base64url");
@@ -225,11 +264,7 @@ export const startService = async ({
         : ({ kind: "unknown" } as const);
       switch (answer.kind) {
         case "live":
-          response.writeHead(302, {
-            location: answer.url,
-            "cache-control": "no-store",
-          });
-          response.end();
+          sendRedirect({ response, status: 302, location: answer.url });
           return;
         case "ended":
           sendHtml({
@@ -352,11 +387,7 @@ export const startService = async ({
         // rather than on a form post it would re-submit. The process stays up
         // for exactly that one GET.
         stopArmed = true;
-        response.writeHead(303, {
-          location: "/stopped",
-          "cache-control": "no-store",
-        });
-        response.end();
+        sendRedirect({ response, status: 303, location: "/stopped" });
         // A browser that never follows the redirect must not leave the service
         // running after someone asked it to stop.
         const abandoned = setTimeout(() => {
@@ -408,6 +439,12 @@ export const startService = async ({
       server.close(() => settle());
       server.closeIdleConnections();
     });
+    try {
+      await onClosed?.();
+    } catch {
+      // Whatever it was tidying is advisory: `/healthz` is what liveness is
+      // read from, and a listener that is already closed stays closed.
+    }
   };
   const address = server.address();
   const boundPort =

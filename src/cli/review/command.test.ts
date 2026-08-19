@@ -26,29 +26,33 @@ Today's reality is that a second review command takes the review away.
 `;
 
 let tempDirectory = "";
-let servicePort: Server | undefined;
+let stub: Server | undefined;
+let stubPort = 0;
+let stubIdentity: string | undefined;
+let previousPort: string | undefined;
+let previousStateDirectory: string | undefined;
 
-// Stands in for the link service on the port the CLI will look at, answering
-// the one record the lifecycle adopts. Nothing is spawned, and no real fixed
-// port is touched.
-const listenAsService = async ({
-  version,
-}: {
-  readonly version: string;
-}): Promise<number> => {
+// Every test runs against this listener, on a port the OS handed out, because
+// a link-printing path that fell through to the real fixed port would probe a
+// machine-wide address and spawn a detached process. Unidentified it reads as
+// a stranger holding the port, which is the outcome that needs no spawn;
+// `identifyAsService` turns it into a service the lifecycle will adopt.
+const startStubOccupier = async (): Promise<void> => {
   const created = createServer((request, response) => {
-    const address = created.address();
-    const port =
-      typeof address === "object" && address !== null ? address.port : 0;
+    if (stubIdentity === undefined) {
+      response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      response.end("not big plan");
+      return;
+    }
     response.writeHead(request.url === "/healthz" ? 200 : 404, {
       "content-type": "application/json; charset=utf-8",
     });
     response.end(
       JSON.stringify({
         product: "big-plan-service",
-        version,
+        version: stubIdentity,
         pid: process.pid,
-        port,
+        port: stubPort,
         startedAt: "2026-08-17T12:00:00.000Z",
       }),
     );
@@ -56,28 +60,39 @@ const listenAsService = async ({
   await new Promise<void>((settle) => {
     created.listen({ host: "127.0.0.1", port: 0 }, () => settle());
   });
-  servicePort = created;
+  stub = created;
   const address = created.address();
-  const port =
-    typeof address === "object" && address !== null ? address.port : 0;
-  process.env["BIG_PLAN_PORT"] = String(port);
-  return port;
+  stubPort = typeof address === "object" && address !== null ? address.port : 0;
+  process.env["BIG_PLAN_PORT"] = String(stubPort);
+};
+
+const identifyAsService = (version: string): void => {
+  stubIdentity = version;
 };
 
 beforeEach(async () => {
   tempDirectory = await mkdtemp(join(tmpdir(), "big-plan-review-command-"));
+  previousStateDirectory = process.env["BIG_PLAN_STATE_DIR"];
+  previousPort = process.env["BIG_PLAN_PORT"];
   process.env["BIG_PLAN_STATE_DIR"] = join(tempDirectory, "state");
+  stubIdentity = undefined;
+  await startStubOccupier();
   await recordGuidanceAcknowledgment();
 });
 
 afterEach(async () => {
-  if (servicePort !== undefined) {
-    servicePort.closeAllConnections();
-    await new Promise<void>((settle) => servicePort?.close(() => settle()));
-    servicePort = undefined;
+  if (stub !== undefined) {
+    stub.closeAllConnections();
+    await new Promise<void>((settle) => stub?.close(() => settle()));
+    stub = undefined;
   }
-  delete process.env["BIG_PLAN_PORT"];
-  delete process.env["BIG_PLAN_STATE_DIR"];
+  for (const [name, value] of [
+    ["BIG_PLAN_STATE_DIR", previousStateDirectory],
+    ["BIG_PLAN_PORT", previousPort],
+  ] as const) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
   await rm(tempDirectory, { recursive: true, force: true });
 });
 
@@ -149,14 +164,14 @@ describe("reviewCommand", () => {
   it("should hand over the durable address for a plan another session holds", async () => {
     // This branch prints an address belonging to a session the reader does not
     // control, so it is the one that most needs the link that outlives it.
-    const port = await listenAsService({ version: await serviceVersion() });
+    identifyAsService(await serviceVersion());
     const planPath = join(tempDirectory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const live = await startReviewRuntime({ planPath });
     try {
       const result = await reviewCommand([planPath]);
 
-      const stable = `http://127.0.0.1:${port}/plan/${live.planId}`;
+      const stable = `http://127.0.0.1:${stubPort}/plan/${live.planId}`;
       expect(result).toMatchObject({ custody: "held", link: stable });
       expect(result["help"]).toEqual(
         expect.arrayContaining([expect.stringContaining(stable)]),
@@ -169,7 +184,7 @@ describe("reviewCommand", () => {
   it("should still report held custody when no durable address can be published", async () => {
     // A stranger on the port is the case the service refuses to work around,
     // so the command degrades to today's behaviour and says why.
-    await listenAsService({ version: "not-this-build" });
+    identifyAsService("not-this-build");
     const planPath = join(tempDirectory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const live = await startReviewRuntime({ planPath });

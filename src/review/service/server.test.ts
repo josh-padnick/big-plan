@@ -9,7 +9,7 @@ import { request as httpRequest } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   prepareStore,
   reviewStoreFor,
@@ -17,6 +17,11 @@ import {
   writeSessionHeartbeatValue,
 } from "../store.js";
 import type { ReviewStore } from "../store.js";
+import {
+  clearServiceRuntimeRecord,
+  readServiceRuntimeRecord,
+  writeServiceRuntimeRecord,
+} from "./lifecycle.js";
 import { rememberPlan } from "./registry.js";
 import { startService } from "./server.js";
 import type { ServiceRuntime } from "./server.js";
@@ -55,6 +60,40 @@ const rawStatus = ({
       (response) => {
         response.resume();
         settle(response.statusCode ?? 0);
+      },
+    );
+    request.on("error", fail);
+    request.end();
+  });
+
+// The same, but keeping the response so its headers can be read; `fetch`
+// reserves the Host header for itself.
+const rawResponse = ({
+  path,
+  host,
+}: {
+  readonly path: string;
+  readonly host: string;
+}): Promise<Response> =>
+  new Promise((settle, fail) => {
+    const request = httpRequest(
+      {
+        host: "127.0.0.1",
+        port: runtime.port,
+        path,
+        method: "GET",
+        headers: { host },
+      },
+      (response) => {
+        response.resume();
+        settle(
+          new Response(null, {
+            status: response.statusCode ?? 0,
+            headers: Object.entries(response.headers).flatMap(([key, value]) =>
+              typeof value === "string" ? [[key, value] as const] : [],
+            ),
+          }),
+        );
       },
     );
     request.on("error", fail);
@@ -355,6 +394,22 @@ describe("the service listener", () => {
     expect(policy).not.toContain("http");
   });
 
+  it("should defend every response it makes, not only the pages", async () => {
+    // A cross-origin page can navigate a window straight at any of these, so
+    // the rules the HTML routes carry are the rules all of them carry.
+    for (const response of [
+      await get("/healthz"),
+      await get("/stopped"),
+      await rawResponse({ path: "/healthz", host: "plan-review.evil.test" }),
+    ]) {
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(response.headers.get("content-security-policy")).toContain(
+        "frame-ancestors 'none'",
+      );
+    }
+  });
+
   it("should refuse a stop that carries no credential", async () => {
     const response = await get("/stop", { method: "POST" });
     expect(response.status).toBe(401);
@@ -409,5 +464,66 @@ describe("the service listener", () => {
     expect(
       (await get("/plan/1111111111111111", { method: "DELETE" })).status,
     ).toBe(404);
+  });
+
+  it("should leave no record behind when an HTTP stop ends it", async () => {
+    // The advisory record names a pid and a port. The HTTP stop is the path
+    // both the CLI and the browser use, so a record that outlived it would
+    // describe a process that no longer exists.
+    const stopping = await startService({
+      readToken: async () => token,
+      version: "9.9.9-test",
+      port: 0,
+      onClosed: clearServiceRuntimeRecord,
+    });
+    await writeServiceRuntimeRecord({
+      pid: process.pid,
+      port: stopping.port,
+      startedAt: new Date().toISOString(),
+      managedBy: "on-demand",
+    });
+    expect(await readServiceRuntimeRecord()).not.toBe(undefined);
+
+    const stopped = await fetch(`${stopping.origin}/stop`, {
+      method: "POST",
+      headers: { "x-big-plan-service-token": token },
+    });
+    expect(stopped.status).toBe(200);
+
+    await vi.waitFor(async () => {
+      expect(await readServiceRuntimeRecord()).toBe(undefined);
+    });
+  });
+
+  it("should leave no record behind when a browser stops it", async () => {
+    const stopping = await startService({
+      readToken: async () => token,
+      version: "9.9.9-test",
+      port: 0,
+      onClosed: clearServiceRuntimeRecord,
+    });
+    await writeServiceRuntimeRecord({
+      pid: process.pid,
+      port: stopping.port,
+      startedAt: new Date().toISOString(),
+      managedBy: "on-demand",
+    });
+    const nonce = /name="nonce" type="hidden" value="([^"]+)"/u.exec(
+      await (await fetch(`${stopping.origin}/stop`)).text(),
+    )?.[1];
+    await fetch(`${stopping.origin}/stop`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "sec-fetch-site": "same-origin",
+      },
+      body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
+    });
+    expect((await fetch(`${stopping.origin}/stopped`)).status).toBe(200);
+
+    await vi.waitFor(async () => {
+      expect(await readServiceRuntimeRecord()).toBe(undefined);
+    });
   });
 });

@@ -40,6 +40,9 @@ export const runService = async (): Promise<void> => {
     readToken: readServiceToken,
     version: await serviceVersion(),
     port,
+    // The record describes a process that is about to stop existing, and the
+    // stop that ends it is usually an HTTP one rather than a signal.
+    onClosed: clearServiceRuntimeRecord,
   });
 
   await writeServiceRuntimeRecord({
@@ -62,10 +65,7 @@ export const runService = async (): Promise<void> => {
   await pruneMissingPlans({ exists: planFileExists });
 
   const stop = (): void => {
-    void runtime
-      .close()
-      .then(clearServiceRuntimeRecord)
-      .finally(() => process.exit(0));
+    void runtime.close().finally(() => process.exit(0));
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
