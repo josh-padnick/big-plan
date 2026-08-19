@@ -817,7 +817,7 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
 
 - **Timeline:** stacked `Message` blocks (customer / agent / internal), body under sender+time.
 - **Composer:** Reply | Internal note segment; **Send reply** / sticky above safe area; attachment affordance; internal mode stays tinted.
-- **Chrome:** `‹ Inbox` back, overflow for resolve/status; **Inbox tab stays active** (came from inbox).
+- **Chrome:** a back control to `Inbox`, overflow for resolve/status; **Inbox tab stays active** (came from inbox).
 - **No permanent** undo/draft process copy - snackbar only after send (not drawn as standing helper text).
 
 ### Inbox / New / Settings
@@ -839,8 +839,8 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
   >
     <Stack gap="sm">
       <TopBar title="#4821">
-        <Button label="‹ Inbox" emphasis="tertiary" navigateTo="m-inbox" />
-        <Button label="•••" emphasis="tertiary" />
+        <Button label="Inbox" icon="back" emphasis="tertiary" navigateTo="m-inbox" />
+        <Button label="More actions" icon="more" iconOnly emphasis="tertiary" />
       </TopBar>
       <Heading text="Cannot complete checkout" level="2" />
       <Text text="Northwind · Priority · Open" role="helper" />
@@ -879,9 +879,9 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         <Button label="Send reply" emphasis="primary" />
       </Row>
       <BottomBar>
-        <Button label="▤ Inbox" emphasis="primary" navigateTo="m-inbox" />
-        <Button label="＋ New" navigateTo="m-compose" />
-        <Button label="⚙ Settings" navigateTo="m-settings" />
+        <Button label="Inbox" icon="table" emphasis="primary" navigateTo="m-inbox" />
+        <Button label="New" icon="add" navigateTo="m-compose" />
+        <Button label="Settings" icon="settings" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -962,9 +962,9 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         />
       </List>
       <BottomBar>
-        <Button label="▤ Inbox" emphasis="primary" />
-        <Button label="＋ New" navigateTo="m-compose" />
-        <Button label="⚙ Settings" navigateTo="m-settings" />
+        <Button label="Inbox" icon="table" emphasis="primary" />
+        <Button label="New" icon="add" navigateTo="m-compose" />
+        <Button label="Settings" icon="settings" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -1026,9 +1026,9 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         navigateTo="m-ticket"
       />
       <BottomBar>
-        <Button label="▤ Inbox" navigateTo="m-inbox" />
-        <Button label="＋ New · draft" emphasis="primary" />
-        <Button label="⚙ Settings" navigateTo="m-settings" />
+        <Button label="Inbox" icon="table" navigateTo="m-inbox" />
+        <Button label="New · draft" icon="add" emphasis="primary" />
+        <Button label="Settings" icon="settings" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -1066,7 +1066,7 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         />
       </Stack>
       <List>
-        <ListItem label="Quiet hours" meta="Off" value="›" />
+        <ListItem label="Quiet hours" meta="Off" />
       </List>
       <Text text="Personalization" role="section" />
       <List>
@@ -1092,9 +1092,9 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         />
       </Stack>
       <BottomBar>
-        <Button label="▤ Inbox" navigateTo="m-inbox" />
-        <Button label="＋ New" navigateTo="m-compose" />
-        <Button label="⚙ Settings" emphasis="primary" />
+        <Button label="Inbox" icon="table" navigateTo="m-inbox" />
+        <Button label="New" icon="add" navigateTo="m-compose" />
+        <Button label="Settings" icon="settings" emphasis="primary" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -1108,7 +1108,8 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
     <Stack gap="md">
       <TopBar title="Notifications">
         <Button
-          label="‹ Settings"
+          label="Settings"
+          icon="back"
           emphasis="tertiary"
           navigateTo="m-settings"
         />
@@ -1130,14 +1131,15 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
       <Stack gap="xs">
         <Text text="Schedule" role="section" />
         <List>
-          <ListItem label="Quiet hours" meta="Off" value="›" />
+          <ListItem label="Quiet hours" meta="Off" />
         </List>
       </Stack>
       <BottomBar>
-        <Button label="▤ Inbox" navigateTo="m-inbox" />
-        <Button label="＋ New" navigateTo="m-compose" />
+        <Button label="Inbox" icon="table" navigateTo="m-inbox" />
+        <Button label="New" icon="add" navigateTo="m-compose" />
         <Button
-          label="⚙ Settings"
+          label="Settings"
+          icon="settings"
           emphasis="primary"
           navigateTo="m-settings"
         />

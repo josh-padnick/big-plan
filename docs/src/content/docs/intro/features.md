@@ -67,7 +67,7 @@ See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence mode
 - `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types, one-level input and payload fields, and grouped executable examples with repeatable labeled responses.
 - `GrpcMethod` components for streaming-aware proto signatures, message-typed request and response fields, gRPC status codes, grouped examples, and proto source.
 - `QuickDecision` components for standalone brief questions with recommendations and an answer flow, without a comparison expander.
-- `Wireframe` components for true-width product screens with device-honest fixed or growing frames, walkable prototypes, opt-in common layout patterns, and an open vocabulary for custom layouts.
+- `Wireframe` components for true-width product screens with device-honest fixed or growing frames, walkable prototypes, opt-in common layout patterns, and an open vocabulary for custom layouts, including named glyphs as standalone marks or inside controls, surfaces layered over the page with a dimmed or clear backdrop, and toolbars anchored at both ends.
 
 ## Output
 

@@ -712,3 +712,79 @@ test("should keep short page-header actions at the trailing edge", async ({
   expect(geometry.actionsLeft).toBeGreaterThan(geometry.textRight);
   expect(geometry.actionsRight).toBeCloseTo(geometry.headerRight, 1);
 });
+
+// The icon, overlay, and grouping vocabulary is proven in the component slice;
+// what only a browser can answer is whether the CSS behind it still holds.
+// Each assertion below fences a failure that is silent in the source: a mark
+// that keeps its size when the artboard scales, a bar whose two ends stop being
+// two ends, a surface that stops covering the page it says is unavailable, and
+// an icon-only control that shrinks below the target a finger can hit.
+test("should draw marks, a two-ended toolbar, and a surface that covers the page", async ({
+  page,
+  wireframeChromeViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(wireframeChromeViewerUrl);
+
+  const review = page.locator('[data-wireframe-screen="review"]');
+
+  await test.step("a named mark draws its glyph and a missing one would say so", async () => {
+    await expect(
+      review.locator('[data-wireframe-icon="terminal"] svg'),
+    ).toBeVisible();
+    await expect(review.locator("[data-wireframe-icon-unnamed]")).toHaveCount(
+      0,
+    );
+  });
+
+  await test.step("an icon-only control keeps its words for a screen reader", async () => {
+    const copy = review.getByRole("button", { name: "Copy command" });
+    await expect(copy).toBeVisible();
+    await expect(copy).toHaveText("");
+  });
+
+  await test.step("a top bar puts its title at one end and its controls at the other", async () => {
+    const bar = review.locator(".wireframe-top-bar");
+    const title = boxOf(bar.locator(".wireframe-brand"));
+    const actions = boxOf(bar.locator(".wireframe-top-bar-actions"));
+    const [titleBox, actionsBox, barBox] = await Promise.all([
+      title,
+      actions,
+      boxOf(bar),
+    ]);
+    expect(titleBox.x - barBox.x).toBeLessThan(barBox.width / 4);
+    expect(actionsBox.x + actionsBox.width).toBeGreaterThan(
+      barBox.x + barBox.width * 0.75,
+    );
+  });
+
+  await test.step("two groups in one row settle at the row's two ends", async () => {
+    const row = review.locator(".wireframe-row.justify-between").first();
+    const groups = row.locator("> .wireframe-group");
+    const [rowBox, first, second] = await Promise.all([
+      boxOf(row),
+      boxOf(groups.nth(0)),
+      boxOf(groups.nth(1)),
+    ]);
+    expect(first.x - rowBox.x).toBeLessThan(4);
+    expect(rowBox.x + rowBox.width - (second.x + second.width)).toBeLessThan(4);
+  });
+
+  await test.step("a dimmed overlay covers the page it makes unavailable", async () => {
+    await page
+      .locator("[data-wireframe-switch]", { hasText: "Delete confirmation" })
+      .click();
+    const screen = page.locator('[data-wireframe-screen="confirm-delete"]');
+    const overlay = screen.locator(".wireframe-overlay");
+    await expect(overlay).toHaveAttribute("data-wireframe-backdrop", "dim");
+    const [overlayBox, artboardBox] = await Promise.all([
+      boxOf(overlay),
+      boxOf(screen.locator(".wireframe-artboard")),
+    ]);
+    expect(overlayBox.width).toBeGreaterThanOrEqual(artboardBox.width - 2);
+    expect(overlayBox.height).toBeGreaterThanOrEqual(artboardBox.height - 2);
+    await expect(
+      screen.getByRole("alertdialog", { name: "Delete Checkout rewrite?" }),
+    ).toBeVisible();
+  });
+});

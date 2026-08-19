@@ -72,6 +72,7 @@ type WorkerFixtures = {
   readonly longNavigationViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
   readonly weightedAuditDecisionAnalysisViewerUrl: string;
+  readonly wireframeChromeViewerUrl: string;
   readonly wireframeFormFactorsViewerUrl: string;
   readonly wireframeLongCaptionDesktopViewerUrl: string;
   readonly wireframeQualityViewerUrl: string;
@@ -884,6 +885,22 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       const outputPath = join(outputDir, "wireframe.html");
       await renderThroughCli({
         inputPath: join(repoRoot, "examples", "wireframe.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeChromeViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-chrome-"),
+      );
+      const outputPath = join(outputDir, "wireframe-chrome.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "wireframe-chrome.mdx"),
         outputPath,
         outputDir,
       });

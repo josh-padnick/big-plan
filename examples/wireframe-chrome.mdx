@@ -1,0 +1,194 @@
+# Review chrome: marks, controls, and layered surfaces
+
+Big Plan's own review surface is full of chrome a wireframe used to have to fake, and this document draws all of it with the vocabulary that exists for it.
+
+Copy marks on a snippet, a settings gear in the toolbar, a launcher that opens a menu, and a confirmation that covers the page it is about to change: each one is authored rather than approximated, so a reviewer argues about the product instead of about the drawing.
+
+## The reviewer's toolbar
+
+The toolbar carries the plan's identity on the left and the controls on the right, which is the split every real application uses and the one a row of loose children cannot produce on its own.
+
+A `Row` distributes space between its children, so a title and three buttons each take a quarter of the bar.
+Wrapping each side in a `Group` makes the row two items, and `justify="between"` sends them to the two ends.
+
+The marks are named rather than typed.
+A gear is `icon="settings"`, and `iconOnly` keeps the words as the control's accessible name and tooltip instead of drawing them.
+
+<Wireframe
+  id="review-chrome"
+  title="Review chrome, four screens"
+  initialScreen="review"
+>
+  <Screen id="review" name="Reviewing a plan" device="desktop" url="big-plan.local/review/checkout-rewrite">
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Review">
+        <Nav label="Plans">
+          <NavItem label="Checkout rewrite" active />
+          <NavItem label="Billing migration" />
+          <NavItem label="Search plans" navigateTo="menu" />
+        </Nav>
+      </Sidebar>
+      <TopBar title="Checkout rewrite">
+        <Button label="Search this plan" icon="search" iconOnly />
+        <Button label="Plan actions" icon="more" iconOnly navigateTo="menu" />
+        <Button label="Review settings" icon="settings" iconOnly navigateTo="menu" />
+        <Button label="Accept plan" icon="done" emphasis="primary" />
+      </TopBar>
+      <AppContent>
+        <Row gap="md">
+          <Panel title="Sections">
+            <List>
+              <ListItem label="Why this change" meta="Read" status="done" />
+              <ListItem label="What changes" meta="2 comments" status="attention" selected />
+              <ListItem label="How we verify" meta="Unread" status="waiting" />
+            </List>
+          </Panel>
+          <Panel title="What changes">
+            <Row justify="between">
+              <Group>
+                <Icon name="terminal" label="Command" size="sm" />
+                <Text text="big-plan render plan.mdx review.html" role="helper" />
+              </Group>
+              <Group>
+                <Button label="Copy command" icon="copy" iconOnly />
+              </Group>
+            </Row>
+            <Row gap="sm" align="center">
+              <Icon name="tip" label="Tip" size="sm" labelled />
+              <Text text="The rendered file carries the whole review with it." role="helper" />
+            </Row>
+            <Divider />
+            <Row justify="between">
+              <Group>
+                <Icon name="lock" label="Locked" size="sm" />
+                <Text text="Locked while the agent holds the claim" role="muted" />
+              </Group>
+              <Group>
+                <Button label="Comment on this section" icon="comment" />
+              </Group>
+            </Row>
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="menu" name="Plan actions menu" device="desktop" url="big-plan.local/review/checkout-rewrite">
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Review">
+        <Nav label="Plans">
+          <NavItem label="Checkout rewrite" active />
+          <NavItem label="Billing migration" />
+          <NavItem label="Search plans" />
+        </Nav>
+      </Sidebar>
+      <TopBar title="Checkout rewrite">
+        <Button label="Search this plan" icon="search" iconOnly />
+        <Button label="Plan actions" icon="more" iconOnly />
+      </TopBar>
+      <AppContent>
+        <Row gap="md">
+          <Panel title="Sections">
+            <List>
+              <ListItem label="Why this change" meta="Read" status="done" />
+              <ListItem label="What changes" meta="2 comments" status="attention" selected />
+              <ListItem label="How we verify" meta="Unread" status="waiting" />
+            </List>
+          </Panel>
+          <Panel title="What changes">
+            <Text text="The launcher opened a menu, and the page behind it is still readable because nothing about it became unavailable." />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+    <Overlay backdrop="clear" title="Plan actions">
+      <Button label="Duplicate this plan" icon="copy" />
+      <Button label="Rename this plan" icon="edit" />
+      <Button label="Re-render the document" icon="refresh" />
+      <Button label="Delete this plan" icon="delete" emphasis="destructive" navigateTo="confirm-delete" />
+      <Button label="Back to the plan" icon="back" emphasis="tertiary" navigateTo="review" />
+    </Overlay>
+  </Screen>
+
+  <Screen id="confirm-delete" name="Delete confirmation" device="desktop" url="big-plan.local/review/checkout-rewrite">
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Review">
+        <Nav label="Plans">
+          <NavItem label="Checkout rewrite" active />
+          <NavItem label="Billing migration" />
+          <NavItem label="Search plans" />
+        </Nav>
+      </Sidebar>
+      <TopBar title="Checkout rewrite">
+        <Button label="Search this plan" icon="search" iconOnly />
+        <Button label="Plan actions" icon="more" iconOnly />
+      </TopBar>
+      <AppContent>
+        <Row gap="md">
+          <Panel title="Sections">
+            <List>
+              <ListItem label="Why this change" meta="Read" status="done" />
+              <ListItem label="What changes" meta="2 comments" status="attention" selected />
+              <ListItem label="How we verify" meta="Unread" status="waiting" />
+            </List>
+          </Panel>
+          <Panel title="What changes">
+            <Text text="The page is dimmed because it is genuinely unavailable until the question above it is answered." />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+    <Overlay kind="alert" title="Delete Checkout rewrite?">
+      <Text text="The plan and its two open comments go with it." />
+      <Text text="Nothing restores them afterwards." role="helper" />
+      <Row justify="end">
+        <Group>
+          <Button label="Keep the plan" emphasis="tertiary" navigateTo="review" />
+          <Button label="Delete plan" icon="delete" emphasis="destructive" navigateTo="deleted" />
+        </Group>
+      </Row>
+    </Overlay>
+  </Screen>
+
+  <Screen id="deleted" name="After deleting" device="desktop" url="big-plan.local/review">
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Review">
+        <Nav label="Plans">
+          <NavItem label="Billing migration" />
+          <NavItem label="Search plans" />
+        </Nav>
+      </Sidebar>
+      <TopBar title="Plans">
+        <Button label="Search plans" icon="search" iconOnly />
+        <Button label="New plan" icon="add" emphasis="primary" />
+      </TopBar>
+      <AppContent>
+        <Panel title="Plans">
+          <List>
+            <ListItem label="Billing migration" meta="In review · 3 comments" status="attention" />
+            <ListItem label="Search relevance" meta="Accepted Tuesday" status="done" />
+          </List>
+        </Panel>
+        <Panel title="Recently deleted" surface="outlined">
+          <Row justify="between">
+            <Group>
+              <Icon name="delete" label="Deleted" size="sm" />
+              <Text text="Checkout rewrite" />
+            </Group>
+            <Group>
+              <Text text="Just now" role="muted" />
+            </Group>
+          </Row>
+          <Text text="Deleted plans stay here for thirty days." role="helper" />
+          <Button label="Restore Checkout rewrite" icon="undo" navigateTo="review" />
+        </Panel>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+## What each screen settles
+
+The launcher screen and the confirmation screen differ in exactly one authored attribute, and that attribute is the whole argument: a menu leaves the page available, and a destructive confirmation does not.
+
+Drawing both as ordinary panels in the column would have hidden that difference behind an arrangement neither surface actually has.
