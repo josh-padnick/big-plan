@@ -122,3 +122,72 @@ test("should discard an image insertion after the composer is sent", async ({
   await expect(rail.getByText("Uploading…", { exact: true })).toHaveCount(0);
   await expect(composer).toHaveValue("");
 });
+
+test.describe("image upload failures", () => {
+  test.use({ allowedConsoleErrors: [/Failed to load resource:.*503/u] });
+
+  test("should report an image upload failure for the current composer", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.route("**/api/review-images", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Image storage is unavailable." }),
+      });
+    });
+    const { composer, rail } = await openChatComposer({
+      page,
+      reviewRuntimeUrl,
+    });
+    const question = "Keep this question after the failed upload.";
+    await composer.fill(question);
+
+    await pastePng(composer, "failed.png");
+
+    await expect(
+      rail.getByText("Image storage is unavailable.", { exact: true }),
+    ).toBeVisible();
+    await expect(rail.getByText("Uploading…", { exact: true })).toHaveCount(0);
+    await expect(composer).toHaveValue(question);
+  });
+
+  test("should suppress an upload failure after the composer is sent", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    const uploadStarted = deferred();
+    const uploadReleased = deferred();
+    await page.route("**/api/review-images", async (route) => {
+      uploadStarted.resolve();
+      await uploadReleased.promise;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Image storage is unavailable." }),
+      });
+    });
+    const { composer, rail } = await openChatComposer({
+      page,
+      reviewRuntimeUrl,
+    });
+    const question = "Send this before the failed upload returns.";
+    await composer.fill(question);
+    await pastePng(composer, "stale-failure.png");
+    await uploadStarted.promise;
+
+    await rail.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(
+      rail.locator("li").filter({ hasText: question }),
+    ).toBeVisible();
+    await expect(composer).toHaveValue("");
+
+    uploadReleased.resolve();
+    await expect(rail.getByText("Uploading…", { exact: true })).toHaveCount(0);
+    await expect(
+      rail.getByText("Image storage is unavailable.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(composer).toHaveValue("");
+  });
+});

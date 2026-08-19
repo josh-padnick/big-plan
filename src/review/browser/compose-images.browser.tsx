@@ -91,7 +91,8 @@ export const ComposeImages = ({
     captureGeneration: number,
     altOverride?: string,
   ): Promise<void> => {
-    if (captureGeneration !== bodyGeneration.current) return;
+    const isCurrentCapture = () => captureGeneration === bodyGeneration.current;
+    if (!isCurrentCapture()) return;
     // Nothing typed is touched: only the digest reference this would have
     // inserted is withheld, so the composer keeps exactly what it had.
     const refusal = reviewWriteRefusal({
@@ -128,7 +129,7 @@ export const ComposeImages = ({
           "error" in value && value.error ? value.error : "Image upload failed",
         );
       }
-      if (captureGeneration !== bodyGeneration.current) return;
+      if (!isCurrentCapture()) return;
       const reference = buildReviewImageReference({
         alt: value.alt,
         id: value.id,
@@ -140,6 +141,7 @@ export const ComposeImages = ({
       onBodyChange(insertionAnchor.current.body);
       setError("");
     } catch (uploadError: unknown) {
+      if (!isCurrentCapture()) return;
       setError(
         uploadError instanceof Error
           ? uploadError.message
