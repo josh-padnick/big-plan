@@ -80,11 +80,18 @@ export const ComposeImages = ({
   useEffect(() => {
     if (autoFocus) textarea.current?.focus();
   }, [autoFocus]);
+  // External body replacement and unmount invalidate pending captures.
   useLayoutEffect(() => {
     if (body === insertionAnchor.current.body) return;
     bodyGeneration.current += 1;
     insertionAnchor.current = { body, offset: body.length };
   }, [body]);
+  useLayoutEffect(
+    () => () => {
+      bodyGeneration.current += 1;
+    },
+    [],
+  );
   const references = extractReviewImageReferences(body);
   const upload = async (
     file: File,

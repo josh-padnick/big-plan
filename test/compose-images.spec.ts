@@ -43,6 +43,23 @@ const openChatComposer = async ({
   };
 };
 
+const openSlideCommentComposer = async (page: Page) => {
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const dialog = page.getByRole("dialog", { name: /Comment on/u });
+  const submitRightAway = dialog.getByRole("switch", {
+    name: "Submit right away",
+  });
+  if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+    await submitRightAway.click();
+  }
+  return {
+    composer: dialog.getByLabel("Add a comment"),
+    dialog,
+  };
+};
+
 const deferred = () => {
   let resolve!: () => void;
   const promise = new Promise<void>((settle) => {
@@ -123,6 +140,71 @@ test("should discard an image insertion after the composer is sent", async ({
   await expect(composer).toHaveValue("");
 });
 
+test("should discard an image insertion after a comment composer unmounts", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const uploadStarted = deferred();
+  const uploadReleased = deferred();
+  await page.route("**/api/review-images", async (route) => {
+    uploadStarted.resolve();
+    await uploadReleased.promise;
+    await route.continue();
+  });
+  await page.goto(reviewRuntimeUrl);
+  const { composer, dialog } = await openSlideCommentComposer(page);
+  const comment = "Save this before the image upload finishes.";
+  await composer.fill(comment);
+  await pastePng(composer, "pending-comment.png");
+  await uploadStarted.promise;
+  await expect(dialog.getByText("Uploading…", { exact: true })).toBeVisible();
+
+  const draftPersisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await dialog.getByRole("button", { name: "Add Comment" }).click();
+  expect((await draftPersisted).ok()).toBe(true);
+  await expect(dialog).toHaveCount(0);
+
+  const uploadFinished = page.waitForResponse((response) =>
+    response.url().endsWith("/api/review-images"),
+  );
+  uploadReleased.resolve();
+  const uploadResponse = await uploadFinished;
+  expect(uploadResponse.ok()).toBe(true);
+  await uploadResponse.finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      }),
+  );
+
+  await page.evaluate(() => {
+    const fetchFromRuntime = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(
+        input instanceof Request ? input.url : input,
+        window.location.href,
+      );
+      return ["/api/agent", "/api/progress", "/api/session"].includes(
+        url.pathname,
+      )
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : fetchFromRuntime(input, init);
+    };
+  });
+  const banner = page.getByRole("alert").filter({
+    hasText: "This tab lost contact with this review session",
+  });
+  await expect(banner).toBeVisible({ timeout: 6_000 });
+  await expect(
+    banner.getByRole("button", { name: "Refresh" }),
+  ).toBeEnabled();
+});
+
 test.describe("image upload failures", () => {
   test.use({ allowedConsoleErrors: [/Failed to load resource:.*503/u] });
 
@@ -189,5 +271,50 @@ test.describe("image upload failures", () => {
       rail.getByText("Image storage is unavailable.", { exact: true }),
     ).toHaveCount(0);
     await expect(composer).toHaveValue("");
+  });
+
+  test("should suppress an upload failure after a comment composer unmounts", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    const uploadStarted = deferred();
+    const uploadReleased = deferred();
+    await page.route("**/api/review-images", async (route) => {
+      uploadStarted.resolve();
+      await uploadReleased.promise;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Image storage is unavailable." }),
+      });
+    });
+    await page.goto(reviewRuntimeUrl);
+    const { composer, dialog } = await openSlideCommentComposer(page);
+    await composer.fill("Save this before the failed upload returns.");
+    await pastePng(composer, "failed-comment.png");
+    await uploadStarted.promise;
+
+    await dialog.getByRole("button", { name: "Add Comment" }).click();
+    await expect(dialog).toHaveCount(0);
+    const uploadFinished = page.waitForResponse((response) =>
+      response.url().endsWith("/api/review-images"),
+    );
+    uploadReleased.resolve();
+    const uploadResponse = await uploadFinished;
+    await uploadResponse.finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        }),
+    );
+
+    await expect(
+      page.getByText("Image storage is unavailable.", { exact: true }),
+    ).toHaveCount(0);
+    const next = await openSlideCommentComposer(page);
+    await expect(
+      next.dialog.getByText("Image storage is unavailable.", { exact: true }),
+    ).toHaveCount(0);
   });
 });
