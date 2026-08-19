@@ -1165,10 +1165,8 @@ export const writeAgentRequest = async ({
 };
 
 /**
- * A plan-wide pickup block releases only when its writer is provably gone.
- * An answer proves the agent finished, but cancellation is a reviewer action
- * the agent may not see until its next note or response, so a canceled live
- * claim keeps blocking new work until its lease lapses.
+ * Applies ADR 0002's pickup release rule: a terminal request cannot block the
+ * plan, while an unterminated request blocks only for its live claim.
  */
 export const requestBlocksPlanPickup = ({
   request,
@@ -1176,8 +1174,7 @@ export const requestBlocksPlanPickup = ({
 }: {
   readonly request: AgentRequest;
   readonly nowMs: number;
-}): boolean =>
-  request.answeredAt === undefined && claimIsLive({ request, nowMs });
+}): boolean => !requestIsTerminal(request) && claimIsLive({ request, nowMs });
 
 /**
  * Reads the whole plan exchange through the contract. A review-server restart

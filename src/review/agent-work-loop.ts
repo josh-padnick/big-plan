@@ -341,7 +341,7 @@ Work in the plan's repository. You never edit that plan file: each work item han
 Run this command to receive the next real review request:
 ${nextCommand}
 
-Big Plan permits one live request claim for this plan at a time. If another agent is working, this command waits until that agent answers or its lease lapses instead of starting parallel plan edits.
+Big Plan permits one live request claim for this plan at a time. If another agent is working, this command waits until that request is answered or canceled, or its lease lapses, instead of starting parallel plan edits.
 
 For each returned work item:
 1. Read the returned candidate_plan and the request plus its conversation history.

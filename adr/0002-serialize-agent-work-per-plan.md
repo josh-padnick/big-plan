@@ -8,6 +8,7 @@ concurrent plan editing.
 - Status: Accepted
 - Date: 2026-08-15
 - Amended: 2026-08-17, when BIG-122 delivered the staged-write boundary
+- Amended: 2026-08-18, when BIG-159 made cancellation release the plan
 
 ## Context
 
@@ -25,7 +26,7 @@ The check can narrow the window but cannot guarantee that a successful answer pr
 Big Plan permits one live request claim per plan, so pickup is serialized across that plan.
 A per-pickup agent token is the claim identity.
 The token holder may resume its request, renew the lease through progress notes, and commit the response.
-A second agent waits until the holder answers or the lease lapses instead of editing the plan in parallel.
+A second agent waits until the holder's request is answered or canceled, or the lease lapses, instead of editing the plan in parallel.
 A lapsed claim may be taken over, and the takeover is disclosed through the progress channel.
 
 The request file is the single terminal commit point.
@@ -39,10 +40,13 @@ Until source writes have a sound shared boundary, serialization is the only boun
 
 ## Pickup release rule
 
-The plan-wide pickup block releases when the writer is provably gone, not merely when the request is terminal.
+The plan-wide pickup block releases when the writer can no longer reach the plan source, not merely when the request is terminal.
+Both terminal outcomes prove that, for different reasons.
 An answered request releases immediately because the agent finished editing and said so.
-A canceled request with a live lease keeps blocking until the lease expires because cancellation is a reviewer action that the editing agent may not learn about until its next note or response.
-Treating cancellation as an immediate release would allow a new agent to edit while the canceled agent may still be writing.
+A canceled request releases immediately because the terminal commit refuses a canceled request outright and cancellation drops the claim stages that request opened, so its holder is fenced out of the plan whether or not it has noticed the cancellation yet.
+
+This rule originally kept a canceled request blocking until its lease lapsed, on the reasoning that the editing agent may not learn about the cancellation until its next note or response.
+The staged-write invariant below replaced that reasoning: a canceled holder is fenced out more completely than a displaced one, so the block bought no safety and cost the reviewer a stalled queue, with the next message sitting queued for the rest of the lease (BIG-159).
 
 ## Staged-write invariant
 
@@ -84,7 +88,7 @@ It is recorded above as the staged-write invariant.
 
 - Only one agent works on a plan at a time, although other agents may wait for queued work.
 - Per-pickup tokens, lease renewal, resumption, terminal ownership checks, and lapsed-claim takeover remain necessary within the serialized design.
-- Answered requests release the plan immediately, while canceled requests with live leases continue to block pickup until expiry.
+- Either terminal outcome releases the plan immediately, so the queue advances when a request is answered or canceled rather than when a lease expires.
 - The shared source-mutation boundary BIG-122 was required to provide now exists, so the precondition for restoring concurrent plan editing is met.
 - Serialization itself is not lifted here. Concurrent claims need their own decision about merge policy, conflict presentation, and reviewer experience; the write boundary makes that decision possible, not automatic.
 - The lapsed-lease takeover interleave is closed rather than accepted.

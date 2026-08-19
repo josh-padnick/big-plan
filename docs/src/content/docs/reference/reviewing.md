@@ -190,8 +190,9 @@ valid answer publishes, so an agent that stalls, is taken over, or dies
 mid-edit leaves your plan exactly as it was.
 
 Messages sent while the agent is handling another request are received immediately and wait in delivery order.
-A sent thread reports that wait in two places until an agent picks its request up: the comment rail groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
-That in-thread block adds the line **Queued, _N_ ahead** above the headline when earlier unanswered work exists, then reaches the agent when that earlier work finishes.
+A sent thread reports that wait in two places until an agent picks its request up: the comment sidebar groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
+That in-thread block adds the line **Queued, _N_ ahead** above the headline when earlier unanswered work exists, then reaches the agent when every earlier request is answered or canceled.
+Canceling the active request releases the plan immediately, so the next queued request advances without waiting for the canceled claim's lease to lapse.
 Once an agent picks the request up the thread says **Working**, and it stays picked up from then on.
 A turn can run longer than the agent reports progress for, because `big-plan agent next` hands the work over and its own process exits, so nothing is running on that agent's behalf between two progress notes.
 After 75 seconds of that quiet the thread reads **No progress for *N*m** and the **Agent** tab reads **Agent may be stalled**, naming how long the agent has been silent and suggesting you check its terminal.

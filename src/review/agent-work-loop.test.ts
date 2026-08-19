@@ -1131,6 +1131,146 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should hand a waiting agent the queued request as the active one is canceled", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-advance-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\n## Approach\n\nKeep the first version.\n";
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const feedbackFor = ({
+      packageId,
+      commentId,
+      body,
+      createdAt,
+    }: {
+      readonly packageId: string;
+      readonly commentId: string;
+      readonly body: string;
+      readonly createdAt: string;
+    }): ReturnType<typeof feedbackAgentRequest> =>
+      feedbackAgentRequest({
+        feedback: buildFeedbackPackage({
+          sessionId: review.sessionId,
+          packageId,
+          planId: review.planId,
+          planPath,
+          createdAt,
+          comments: [
+            {
+              id: commentId,
+              body,
+              createdAt,
+              premiseSnapshot,
+              target: {
+                type: "block",
+                blockId: "section/approach/paragraph-1",
+                kind: "paragraph",
+                label: "Keep the first version.",
+                section: "Approach",
+              },
+            },
+          ],
+        }),
+        premiseSnapshot,
+      });
+    const active = feedbackFor({
+      packageId: "cccccccccccccccc",
+      commentId: "aaaaaaaaaaaaaaaa",
+      body: "Expand the approach section.",
+      createdAt: "2026-08-12T12:00:00.000Z",
+    });
+    const queued = feedbackFor({
+      packageId: "dddddddddddddddd",
+      commentId: "bbbbbbbbbbbbbbbb",
+      body: "Tighten the verification wording.",
+      createdAt: "2026-08-12T12:00:01.000Z",
+    });
+    await writeAgentRequest({ store: review.store, request: active });
+    await writeAgentRequest({ store: review.store, request: queued });
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: active.requestId,
+      claimedBy: "eeeeeeeeeeeeeeee",
+      baselineSnapshot: premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+
+    let waitingPickup: Promise<Record<string, unknown>> | undefined;
+    try {
+      waitingPickup = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        executablePath,
+        shouldWait: true,
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({ state: "waiting" });
+        },
+        { timeout: 5_000 },
+      );
+      const beforeCancel = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(beforeCancel.requests).toEqual([
+        expect.objectContaining({
+          requestId: active.requestId,
+          claimedBy: "eeeeeeeeeeeeeeee",
+        }),
+        expect.objectContaining({ requestId: queued.requestId }),
+      ]);
+      expect(beforeCancel.requests[0]?.canceledAt).toBeUndefined();
+      expect(beforeCancel.requests[1]?.claimedBy).toBeUndefined();
+
+      // The reviewer's cancel is the only thing that changes after the second
+      // agent is waiting, and the active claim's lease still has the whole
+      // window left to run. Without cancellation releasing the plan, this
+      // waits out that lease and the reviewer watches a queued message that
+      // never starts (BIG-159). That counterfactual was verified before this
+      // test passed.
+      await cancelAgentRequest({
+        store: review.store,
+        requestId: active.requestId,
+        now: new Date().toISOString(),
+      });
+
+      await expect(waitingPickup).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: queued.requestId },
+      });
+      const promoted = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(promoted.requests).toEqual([
+        expect.objectContaining({
+          requestId: active.requestId,
+          canceledAt: expect.any(String),
+        }),
+        expect.objectContaining({
+          requestId: queued.requestId,
+          claimedBy: expect.any(String),
+        }),
+      ]);
+      expect(promoted.requests[1]?.canceledAt).toBeUndefined();
+      expect(promoted.requests[1]?.answeredAt).toBeUndefined();
+    } finally {
+      await review.close();
+      await waitingPickup;
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should select the next request when an answer wins before claim", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-answer-"));
     const planPath = join(directory, "plan.mdx");
@@ -2504,7 +2644,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should let a waiting agent outlive a canceled writer's lease", async () => {
+  it("should let a waiting agent outlive a quiet writer's lease", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nWait for the previous writer to leave.\n";
@@ -2514,23 +2654,23 @@ describe("agent work loop lifecycle", () => {
       idleTimeoutMs: 100,
     });
     const premiseSnapshot = deriveSnapshotDigest(source);
-    const blocker = messageAgentRequest({
-      kind: "chat",
-      requestId: "abababababababab",
-      sessionId: review.sessionId,
-      planId: review.planId,
-      premiseSnapshot,
-      createdAt: new Date().toISOString(),
-      body: "Cancel this while its writer may still be editing.",
-    });
     const queued = messageAgentRequest({
       kind: "chat",
       requestId: "cdcdcdcdcdcdcdcd",
       sessionId: review.sessionId,
       planId: review.planId,
       premiseSnapshot,
+      createdAt: new Date().toISOString(),
+      body: "Pick this up after the quiet writer's lease lapses.",
+    });
+    const blocker = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
       createdAt: new Date(Date.now() + 1).toISOString(),
-      body: "Pick this up after the canceled writer's lease lapses.",
+      body: "Hold the plan's one live claim while its writer stays quiet.",
     });
     await writeAgentRequest({ store: review.store, request: blocker });
     await writeAgentRequest({ store: review.store, request: queued });
@@ -2543,11 +2683,6 @@ describe("agent work loop lifecycle", () => {
       baselineSnapshot: premiseSnapshot,
       now: new Date(leaseClock).toISOString(),
       clock: () => leaseClock,
-    });
-    await cancelAgentRequest({
-      store: review.store,
-      requestId: blocker.requestId,
-      now: new Date().toISOString(),
     });
 
     try {
