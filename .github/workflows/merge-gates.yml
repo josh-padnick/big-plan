@@ -82,13 +82,14 @@ on:
         description: Pull request number to judge
         required: true
 
-# One judgment per pull request at a time. Keep the active judgment running so
-# an issue-comment event cannot leave the pull request's head with a canceled
-# judge check. GitHub retains only the newest pending run, so a burst still
-# settles on the newest state after the active judgment finishes.
+# One judgment per pull request and workflow ref at a time. Pull request events
+# run the workflow from the pull request ref, while issue comments run it from
+# the default branch. Separate lanes keep a default-branch comment run from
+# canceling the pull request's judge check. Within either lane, a burst settles
+# on the newest event.
 concurrency:
-  group: merge-gates-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull-request }}
-  cancel-in-progress: false
+  group: merge-gates-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull-request }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   judge:
