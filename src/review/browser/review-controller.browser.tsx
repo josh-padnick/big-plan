@@ -393,19 +393,15 @@ const STATIC_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = ["comments", "chat"];
  */
 type SidebarView = "feedback" | "agent";
 
-// Both toolbar controls read as buttons rather than links: a transparent
-// ground with a real border at rest, and a pressed ground when their view is
-// open. The pressed look is neutral, not accent - it says "this is the open
-// one", which is not the kind of thing that should shout in colour.
+/** Closing the feedback sidebar has to put focus back here, from wherever it closed. */
+const FEEDBACK_TRIGGER_ID = "review-feedback-trigger";
+
 /*
 Every state's badge is written copy, because the badge is user-facing and a
 state name is not. The record is exhaustive over the union, so a state added
 later has to be given words here rather than leaking its identifier - which is
 how "offline" and "errored" came to sit in lowercase beside "Offline".
 */
-/** Closing the feedback sidebar has to put focus back here, from wherever it closed. */
-const FEEDBACK_TRIGGER_ID = "review-feedback-trigger";
-
 const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
   working: "Working",
   waiting: "Queued",
@@ -417,6 +413,10 @@ const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
   "never-connected": "",
 };
 
+// Both toolbar controls read as buttons rather than links: a transparent
+// ground with a real border at rest, and a pressed ground when their view is
+// open. The pressed look is neutral, not accent - it says "this is the open
+// one", which is not the kind of thing that should shout in colour.
 const TOOLBAR_CONTROL_CLASS =
   "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border border-edge bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:border-edge-strong hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-edge-strong aria-expanded:bg-raised aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:min-h-8";
 const FEEDBACK_TAB_CLASS =
@@ -6298,9 +6298,15 @@ export const ReviewController = () => {
     ...(claimedRequest?.claimedModel === undefined
       ? {}
       : { claimed: claimedRequest.claimedModel }),
+    ...(claimedRequest === undefined
+      ? {}
+      : { claimedRequestId: claimedRequest.requestId }),
     ...(agent.presence.model === undefined
       ? {}
       : { presence: agent.presence.model }),
+    ...(agent.presence.requestId === undefined
+      ? {}
+      : { presenceRequestId: agent.presence.requestId }),
   });
   const threadProjections = projectCommentThreads({
     comments: sent,

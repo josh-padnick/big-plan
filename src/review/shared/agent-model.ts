@@ -144,11 +144,34 @@ export const decodeAgentModelIdentity = (
   return Object.keys(identity).length === 0 ? undefined : identity;
 };
 
-/** Selects one connector declaration without composing fields across agents. */
+/**
+ * Selects one connector declaration without composing fields across agents.
+ *
+ * A pickup's own declaration always speaks for it. When the pickup declared
+ * nothing, the plan-wide liveness signal may only speak for it when that
+ * signal names the same request: one signal serves every agent process
+ * attached to a review, so a second agent merely waiting for work overwrites
+ * it every half second, and borrowing that would label one agent's in-flight
+ * work with another agent's name, client, and conversation. With no pickup to
+ * describe, the signal is describing whoever is attached and stands alone.
+ */
 export const selectAgentModelIdentity = ({
   claimed,
   presence,
+  claimedRequestId,
+  presenceRequestId,
 }: {
   readonly claimed?: AgentModelIdentity;
   readonly presence?: AgentModelIdentity;
-}): AgentModelIdentity | undefined => claimed ?? presence;
+  readonly claimedRequestId?: string;
+  readonly presenceRequestId?: string;
+}): AgentModelIdentity | undefined => {
+  if (claimed !== undefined) return claimed;
+  if (
+    claimedRequestId !== undefined &&
+    presenceRequestId !== claimedRequestId
+  ) {
+    return undefined;
+  }
+  return presence;
+};

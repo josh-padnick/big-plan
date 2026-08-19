@@ -4308,11 +4308,25 @@ test("should restore and submit staged comments through the local review runtime
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary")
     .click();
-  await agentStatusTrigger(page).click();
-  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  // Closing a sidebar from its own control hands focus back to the toolbar
+  // control that opened it. Without that the aside unmounts and focus falls to
+  // the document body, so a keyboard reader tabs from the top of the plan to
+  // get back. Both bodies owe the reader the same thing.
+  await agentSidebar(page)
+    .getByRole("button", { name: "Close Agent Status" })
+    .click();
+  await expect(agentSidebar(page)).toHaveCount(0);
+  await expect(agentStatusTrigger(page)).toBeFocused();
+  const feedbackTrigger = page.getByRole("button", {
+    name: "Feedback",
+    exact: true,
+  });
+  await feedbackTrigger.click();
   await rail.getByRole("tab", { name: "Comments" }).click();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
+  await expect(rail).toHaveCount(0);
+  await expect(feedbackTrigger).toBeFocused();
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,

@@ -118,4 +118,30 @@ describe("selectAgentModelIdentity", () => {
       }),
     ).toEqual({ name: "claude-fable-5" });
   });
+
+  it("should refuse a presence declaration made about other work", () => {
+    expect(
+      selectAgentModelIdentity({
+        claimedRequestId: "1111111111111111",
+        presence: { name: "claude-fable-5", client: "claude-code 2.1.217" },
+      }),
+    ).toBeUndefined();
+    expect(
+      selectAgentModelIdentity({
+        claimedRequestId: "1111111111111111",
+        presence: { name: "claude-fable-5" },
+        presenceRequestId: "2222222222222222",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should keep presence naming the pickup it is working on", () => {
+    expect(
+      selectAgentModelIdentity({
+        claimedRequestId: "1111111111111111",
+        presence: { name: "claude-fable-5" },
+        presenceRequestId: "1111111111111111",
+      }),
+    ).toEqual({ name: "claude-fable-5" });
+  });
 });
