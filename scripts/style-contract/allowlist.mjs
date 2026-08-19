@@ -74,7 +74,9 @@ export const STYLESHEET_BUDGETS = {
     // for a bar that carries nothing trailing - so a back control leads while
     // the title stays centred in the bar rather than in what the controls left
     // over, and to keep the quiet link stroke off a control drawn as one mark.
-    declarations: 1077,
+    // Paid back down by dropping the bar's own trailing-edge margins, which
+    // the trailing slot's utility already carries from a later layer.
+    declarations: 1075,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,
