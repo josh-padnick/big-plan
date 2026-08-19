@@ -799,6 +799,23 @@ test("should draw marks, a two-ended toolbar, and a surface that covers the page
   });
 });
 
+// A push header centres its title in the bar, not in whatever the controls
+// left over. Measuring the painted text rather than the box around it is what
+// makes this fail when the slot sizing or the alignment goes, which is how the
+// pattern was lost silently once already.
+const expectCentredTitle = async (bar: TestLocator): Promise<void> => {
+  const barBox = await boxOf(bar);
+  const titleCentre = await bar.locator(".wireframe-brand").evaluate((node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const painted = range.getBoundingClientRect();
+    return painted.left + painted.width / 2;
+  });
+  expect(
+    Math.abs(titleCentre - (barBox.x + barBox.width / 2)),
+  ).toBeLessThanOrEqual(barBox.width * 0.02);
+};
+
 // A control drawn as one mark has no words to give it size, so its target is
 // whatever the stylesheet last said - and a padding change that shrinks it
 // below what a finger can hit looks identical in the source and nearly
@@ -837,23 +854,22 @@ test("should hold the touch floor and the leading control on a phone bar", async
     expect(title.x + title.width).toBeLessThanOrEqual(actions.x);
   });
 
-  // A push header centres its title in the bar, not in whatever the controls
-  // left over. Measuring the painted text rather than its box is what makes
-  // this fail when the slot sizing or the alignment goes, which is how this
-  // pattern was lost silently once already.
   await test.step("the title is centred in the bar the reader sees", async () => {
-    const bar = screen.locator(".wireframe-top-bar");
-    const barBox = await boxOf(bar);
-    const titleCentre = await bar
-      .locator(".wireframe-brand")
-      .evaluate((node) => {
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        const painted = range.getBoundingClientRect();
-        return painted.left + painted.width / 2;
-      });
-    expect(
-      Math.abs(titleCentre - (barBox.x + barBox.width / 2)),
-    ).toBeLessThanOrEqual(barBox.width * 0.02);
+    await expectCentredTitle(screen.locator(".wireframe-top-bar"));
+  });
+
+  // The trailing slot is drawn only when the author wrote loose controls, so
+  // a bar that carries none is laid out from two slots rather than three. A
+  // title centred against its siblings instead of against the bar lands at
+  // three quarters of it, and this is the shape that catches that.
+  await test.step("a bar carrying nothing trailing centres its title too", async () => {
+    await page
+      .locator("[data-wireframe-switch]", { hasText: "Phone · Notifications" })
+      .click();
+    await expectCentredTitle(
+      page.locator(
+        '[data-wireframe-screen="m-notifications"] .wireframe-top-bar',
+      ),
+    );
   });
 });

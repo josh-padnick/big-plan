@@ -70,11 +70,11 @@ export const STYLESHEET_BUDGETS = {
     // controls with their touch floor, a surface drawn over the page with its
     // dim or clear backdrop and its alert variant, and the run of elements
     // that hugs its contents so a toolbar can anchor two ends. Raised again
-    // to give a phone's push header its three equal slots, so a back control
-    // leads while the title stays centred in the bar rather than in what the
-    // controls left over, and to keep the quiet link stroke off a control
-    // drawn as one mark.
-    declarations: 1075,
+    // to give a phone's push header its three equal slots - one of them drawn
+    // for a bar that carries nothing trailing - so a back control leads while
+    // the title stays centred in the bar rather than in what the controls left
+    // over, and to keep the quiet link stroke off a control drawn as one mark.
+    declarations: 1077,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,

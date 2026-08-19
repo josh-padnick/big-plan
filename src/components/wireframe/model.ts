@@ -394,9 +394,9 @@ export type WireframeNode =
     }
   | {
       // A run of elements that travel together as one item of a Row. Without
-      // it a Row distributes space between every child equally, so a title and
-      // its actions each take half the bar instead of settling at the two
-      // ends the product puts them at.
+      // it a Row clusters its loose children at the start, and justify
+      // "between" spreads every one of them evenly, so a title and its
+      // actions never settle at the two ends the product puts them at.
       readonly element: "Group";
       readonly gap: WireframeSpace;
       readonly align: WireframeAlign;

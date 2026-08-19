@@ -12,8 +12,8 @@ A `TopBar` reads that way on its own: the title leads, and every loose control t
 Nothing in this bar is grouped, because a `Group` inside a `TopBar` means something else - it draws ahead of the title, which is where a phone puts its back control and where a desktop bar wants nothing.
 
 The panel rows further down need that split spelled out.
-A `Row` distributes space between its children, so a mark, a line of copy, and a button each take a third of it.
-Wrapping each side in a `Group` makes the row two items, and `justify="between"` sends them to the two ends: the command and its copy control, then the lock and its comment action.
+A `Row` gives a flexible share only to a pane - a `Panel`, `Stack`, `Row`, or `Center` - so a mark, a line of copy, and a button keep their natural width and cluster at the start of it, and `justify="between"` would only spread all three evenly.
+Wrapping each side in a `Group` makes the row exactly two items, and `justify="between"` then sends those two to the two ends: the command and its copy control, then the lock and its comment action.
 
 The marks are named rather than typed.
 A gear is `icon="settings"`, and `iconOnly` keeps the words as the control's accessible name and tooltip instead of drawing them.

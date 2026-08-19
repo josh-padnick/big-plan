@@ -498,10 +498,11 @@ marks and a plan diff never jitters.
   }
 
   /* A run of elements that travels together hugs what it holds, which is the
-     whole point of it: a Row distributes space between its children, so a
-     title and a set of controls each take half the bar unless each side is one
-     item. Two Groups in a Row with justify="between" therefore settle at the
-     two ends the product puts them at, and nothing in between is invented. */
+     whole point of it: a Row keeps loose children at their natural width and
+     clusters them at its start, and justify="between" spreads all of them
+     evenly rather than settling two ends. Wrapping each side in a Group makes
+     the row exactly two items, and those two do settle at the two ends the
+     product puts them at, with nothing in between invented. */
   .wireframe-group {
     flex: 0 0 auto;
   }
@@ -1685,9 +1686,6 @@ marks and a plan diff never jitters.
     min-width: 0;
     text-align: center;
   }
-  /* The trailing slot's automatic left margin is what pushes controls to the
-     right end of an ordinary bar; here the centered title already owns that
-     space, and leaving the margin in would carry the title off centre. */
   .wireframe-artboard[data-wireframe-device="phone"]
     .wireframe-top-bar:has(
       > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
@@ -1697,7 +1695,18 @@ marks and a plan diff never jitters.
     flex: 1 1 0;
     justify-content: flex-end;
     min-width: 0;
-    margin-left: 0;
+  }
+  /* The trailing slot is drawn only when the author wrote loose controls, and
+     a title centred between two slots sits at three quarters of the bar. This
+     stands in for the slot that is not there, so the title is centred in the
+     bar whether or not the header carries anything trailing. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-top-bar:has(
+      > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
+    ):not(:has(> .wireframe-top-bar-actions))::after {
+    content: "";
+    order: 3;
+    flex: 1 1 0;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-brand {
     font-size: 1.125rem;
