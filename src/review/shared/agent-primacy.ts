@@ -200,10 +200,28 @@ export const agentIsAttached = ({
   agent,
   nowMs,
 }: {
-  readonly agent: Pick<AttachedAgent, "signalAtMs">;
+  readonly agent: Pick<AttachedAgent, "signalAtMs" | "claimToken">;
   readonly nowMs: number;
 }): boolean =>
-  agentIsLive({ agent, nowMs, maximumAgeMs: AGENT_RECOVERY_HORIZON_MS });
+  agentIsLive({
+    agent,
+    nowMs,
+    /*
+    Patience is for agents whose silence might mean "busy", and only an agent
+    that has held work can be busy. One that never claimed anything is either
+    running - in which case it is signalling twice a second and this window is
+    irrelevant - or gone, and dropping it costs nothing because it re-attaches
+    on its next command.
+
+    The distinction also bounds a real pile-up: every `agent next` invocation
+    mints its own writer id, so a harness that polls without --wait would
+    otherwise accumulate one dead observer per poll for the whole horizon.
+    */
+    maximumAgeMs:
+      agent.claimToken === undefined
+        ? AGENT_STALL_MS
+        : AGENT_RECOVERY_HORIZON_MS,
+  });
 
 /**
  * The agents a reviewer should be shown, oldest attachment first.

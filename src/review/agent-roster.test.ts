@@ -29,6 +29,7 @@ import {
   grantAgentPrimacy,
   prepareStore,
   readAgentRoster,
+  recordAgentClaimToken,
   requestAgentPrimacy,
   reviewStoreFor,
   writeAgentHeartbeat,
@@ -122,6 +123,13 @@ describe("attachAgentToRoster", () => {
       writerId: "working",
       now: 1_000,
     });
+    // Holding work is what makes silence mean "busy" rather than "gone".
+    await recordAgentClaimToken({
+      store,
+      sessionId: SESSION,
+      writerId: "working",
+      claimToken: "held",
+    });
     const agents = await attachAgentToRoster({
       store,
       sessionId: SESSION,
@@ -145,6 +153,12 @@ describe("attachAgentToRoster", () => {
       sessionId: SESSION,
       writerId: "gone",
       now: 1_000,
+    });
+    await recordAgentClaimToken({
+      store,
+      sessionId: SESSION,
+      writerId: "gone",
+      claimToken: "held",
     });
     const agents = await attachAgentToRoster({
       store,
@@ -470,6 +484,12 @@ describe("roster liveness", () => {
       sessionId: SESSION,
       writerId: "first",
       now: 1_000,
+    });
+    await recordAgentClaimToken({
+      store,
+      sessionId: SESSION,
+      writerId: "first",
+      claimToken: "held",
     });
     const agents = await readAgentRoster({ store, sessionId: SESSION });
     const stalled = { nowMs: 1_000 + AGENT_STALL_MS + 1 };

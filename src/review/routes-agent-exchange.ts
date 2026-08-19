@@ -21,6 +21,7 @@ import {
   deleteQueuedRequest,
   ensureAgentRequest,
   recordAgentConnectionState,
+  releaseClaimsForPrimacyHandoff,
   releaseClaimsHeldBy,
   reviseQueuedRequest,
   withPlanClaimLock,
@@ -673,7 +674,7 @@ export const answerAgentPrimacy = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, sessionId } = context;
+  const { store, sessionId, planId } = context;
   const payload = payloadOf(body);
   const writerId = payload.writerId;
   const answer = payload.answer;
@@ -693,6 +694,15 @@ export const answerAgentPrimacy = async (
   const attached = await readAgentRoster({ store, sessionId });
   if (!attached.some((agent) => agent.writerId === writerId)) {
     return refusal({ status: 404, reason: "That agent is not attached" });
+  }
+  /*
+  Moving primacy frees the open claim in the same breath, which is the answer
+  the reviewer already gave: a hand-off fences the incumbent at once rather
+  than letting it finish. Released first, so that by the time the roster names
+  a new primary there is no lease left for it to wait behind.
+  */
+  if (answer === "primary") {
+    await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
   }
   const agents =
     answer === "primary"

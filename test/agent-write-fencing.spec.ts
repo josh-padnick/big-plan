@@ -10,10 +10,11 @@ import {
   deriveSnapshotDigest,
   readAgentExchange,
 } from "../src/review/agent-exchange.js";
+import { releaseClaimsForPrimacyHandoff } from "../src/review/request-mailbox.js";
 import { startReviewRuntime } from "../src/review/server.js";
 import {
+  grantAgentPrimacy,
   readSnapshot,
-  writeAgentRequestValue,
   writeStoreJson,
 } from "../src/review/store.js";
 import type { ReviewStore } from "../src/review/store.js";
@@ -25,6 +26,7 @@ import {
   stageComment,
   test,
   closeReviewRuntime,
+  untilObserverAttaches,
 } from "./fixtures";
 
 const PLAN = `# Lapsed lease
@@ -54,6 +56,8 @@ const responseDraftOf = (stdout: string): string => {
   }
   return draft;
 };
+
+test.setTimeout(90_000);
 
 test("should keep a lapsed agent's edits out of the plan and its Was/Now", async ({
   page,
@@ -94,7 +98,6 @@ test("should keep a lapsed agent's edits out of the plan and its Was/Now", async
     );
     await expect(readFile(planPath, "utf8")).resolves.toBe(committedSource);
 
-    // The lease lapses while agent A is still mid-edit.
     const exchange = await readAgentExchange({
       store: runtime.store,
       sessionId: runtime.sessionId,
@@ -106,14 +109,32 @@ test("should keep a lapsed agent's edits out of the plan and its Was/Now", async
     if (request === undefined) {
       throw new Error("The browser never queued the feedback request");
     }
-    await writeAgentRequestValue({
+
+    /*
+    Agent B arrives while A is still mid-edit. A lapsed lease no longer hands
+    the plan over on its own (BIG-171), so B attaches as an observer and waits;
+    the reviewer is the one who moves primacy, and B's own loop picks up as soon
+    as they do. What this test proves is unchanged: once displaced, A's edits
+    cannot reach the plan and its answer is refused.
+    */
+    const secondPickup = runAgentCli(["next", planPath, "--wait"]);
+    const waitingObserver = await untilObserverAttaches(runtime);
+    // The reviewer's answer frees the incumbent's claim in the same breath, so
+    // the new primary is not left waiting behind a lease its holder can no
+    // longer publish against.
+    await releaseClaimsForPrimacyHandoff({
       store: runtime.store,
-      requestId: request.requestId,
-      value: { ...request, claimExpiresAtMs: Date.now() - 1_000 },
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    await grantAgentPrimacy({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: waitingObserver.writerId,
     });
 
     // Agent B takes over and starts from the last committed revision.
-    const secondClaim = await runAgentCli(["next", planPath, "--wait"]);
+    const secondClaim = await secondPickup;
     const secondToken = agentIdOf(secondClaim.stdout, "agent_token");
     const secondCandidate = candidateOf(secondClaim.stdout);
     expect(secondToken).not.toBe(firstToken);
@@ -152,9 +173,17 @@ test("should keep a lapsed agent's edits out of the plan and its Was/Now", async
       "--agent",
       firstToken,
     ]);
-    expect(`${refused.stdout}${refused.stderr}`).toContain(
-      "this claim generation can no longer publish",
-    );
+    /*
+    The refusal moved earlier and got more useful. A displaced agent used to
+    discover its loss only when the commit checked the generation it drafted
+    for; now the primacy check refuses it first, names who holds the plan, and
+    reports a code its harness can branch on (BIG-171). The guarantee under the
+    message is unchanged and still asserted below: nothing it wrote reaches the
+    plan, and no response is stored.
+    */
+    const refusalText = `${refused.stdout}${refused.stderr}`;
+    expect(refusalText).toContain("PRIMACY_LOST");
+    expect(refusalText).toContain("no longer the primary");
     await expect(
       readAgentExchange({
         store: runtime.store,

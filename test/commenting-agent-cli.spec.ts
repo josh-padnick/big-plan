@@ -12,7 +12,12 @@ import {
   AGENT_STALL_MS,
 } from "../src/review/shared/agent-timing.js";
 import { startReviewRuntime } from "../src/review/server.js";
-import { readProgress, writeAgentRequestValue } from "../src/review/store.js";
+import {
+  grantAgentPrimacy,
+  readProgress,
+  writeAgentRequestValue,
+} from "../src/review/store.js";
+import { releaseClaimsForPrimacyHandoff } from "../src/review/request-mailbox.js";
 import {
   agentIdOf,
   agentSidebar,
@@ -21,6 +26,7 @@ import {
   expect,
   runAgentCli,
   test,
+  untilObserverAttaches,
 } from "./fixtures";
 
 /** The claim's own response draft path, as pickup hands it to the agent. */
@@ -499,10 +505,27 @@ test("should warn about a takeover before inviting one while work is held", asyn
     await expect(takeoverRecovery).toBeVisible();
     await expect(plainRecovery).toHaveCount(0);
 
-    // What following that prompt does. A second agent takes the lapsed claim,
-    // and the first agent's finished answer is refused - the reviewer's message
-    // is the thing that would be lost.
-    const takeover = await runAgentCli(["next", planPath, "--wait"]);
+    /*
+    What following that prompt does. A second connector no longer takes a lapsed
+    claim by arriving (BIG-171): it attaches as an observer and waits for the
+    reviewer to move primacy, which frees the incumbent's claim in the same
+    breath. The consequence the copy above warns about is unchanged, and it is
+    what the rest of this block proves - the first agent's finished answer is
+    refused, and the reviewer's message is the thing that would be lost.
+    */
+    const takeoverPickup = runAgentCli(["next", planPath, "--wait"]);
+    const observer = await untilObserverAttaches(runtime);
+    await releaseClaimsForPrimacyHandoff({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    await grantAgentPrimacy({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: observer.writerId,
+    });
+    const takeover = await takeoverPickup;
     expect(agentIdOf(takeover.stdout, "agent_token")).not.toBe(workingAgent);
     // Each claim drafts into its own stage, so the displaced agent's answer
     // cannot even overwrite the file the takeover will answer from.
@@ -517,6 +540,9 @@ test("should warn about a takeover before inviting one while work is held", asyn
       }),
       "utf8",
     );
+    // Refused earlier and more usefully than before: the primacy check names
+    // who holds the plan and reports a branchable code, where the commit's
+    // generation check used to be the first thing to notice.
     await expect(
       runAgentCli([
         "respond",
@@ -525,7 +551,7 @@ test("should warn about a takeover before inviting one while work is held", asyn
         "--agent",
         workingAgent,
       ]),
-    ).rejects.toThrow(/this claim generation can no longer publish/u);
+    ).rejects.toThrow(/no longer the primary/u);
     await expect(
       readAgentExchange({
         store: runtime.store,

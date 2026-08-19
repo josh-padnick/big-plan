@@ -146,18 +146,33 @@ describe("writersAreContending", () => {
 });
 
 describe("agentIsAttached", () => {
-  it("should keep counting an agent through a long working turn", () => {
+  it("should keep counting an agent that holds work through a long turn", () => {
     expect(
-      agentIsAttached({ agent: { signalAtMs: NOW - 90_000 }, nowMs: NOW }),
+      agentIsAttached({
+        agent: { signalAtMs: NOW - 90_000, claimToken: "held" },
+        nowMs: NOW,
+      }),
     ).toBe(true);
   });
 
-  it("should stop counting one past the recovery horizon", () => {
+  it("should stop counting a holder past the recovery horizon", () => {
     expect(
       agentIsAttached({
-        agent: { signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1 },
+        agent: {
+          signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1,
+          claimToken: "held",
+        },
         nowMs: NOW,
       }),
+    ).toBe(false);
+  });
+
+  it("should drop a quiet agent that never held work", () => {
+    // It is either running and signalling twice a second, or gone. Nothing is
+    // lost by dropping it, and keeping it would let a polling harness pile up
+    // one dead record per poll.
+    expect(
+      agentIsAttached({ agent: { signalAtMs: NOW - 90_000 }, nowMs: NOW }),
     ).toBe(false);
   });
 });
@@ -189,13 +204,19 @@ describe("selectPrimaryAgent", () => {
     // `agent next` hands its work item over and the process exits, so every
     // working agent looks quiet. Dropping it here would hand the plan to a
     // newcomer exactly while the primary was answering (BIG-147).
-    const agents = [agent({ writerId: "b", signalAtMs: NOW - 90_000 })];
+    const agents = [
+      agent({ writerId: "b", signalAtMs: NOW - 90_000, claimToken: "held" }),
+    ];
     expect(selectPrimaryAgent({ agents, nowMs: NOW })?.writerId).toBe("b");
   });
 
   it("should ignore a primary that has been silent past the recovery horizon", () => {
     const agents = [
-      agent({ writerId: "b", signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1 }),
+      agent({
+        writerId: "b",
+        signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1,
+        claimToken: "held",
+      }),
     ];
     expect(selectPrimaryAgent({ agents, nowMs: NOW })).toBeUndefined();
   });
@@ -228,7 +249,13 @@ describe("roleForArrivingAgent", () => {
   it("should not promote an arrival past a primary that is merely mid turn", () => {
     expect(
       roleForArrivingAgent({
-        agents: [agent({ writerId: "a", signalAtMs: NOW - 90_000 })],
+        agents: [
+          agent({
+            writerId: "a",
+            signalAtMs: NOW - 90_000,
+            claimToken: "held",
+          }),
+        ],
         nowMs: NOW,
       }),
     ).toBe("observer");
@@ -241,6 +268,7 @@ describe("roleForArrivingAgent", () => {
           agent({
             writerId: "a",
             signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1,
+            claimToken: "held",
           }),
         ],
         nowMs: NOW,

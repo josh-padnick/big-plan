@@ -13,6 +13,7 @@ import {
   readValidatedAgentRequests,
   requestBaselineSnapshot,
   requestBlocksPlanPickup,
+  requestIsTerminal,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
@@ -1511,6 +1512,96 @@ export const reviseQueuedRequest = async ({
     });
   }
   return revised;
+};
+
+/**
+ * Frees every open claim on a plan when the reviewer moves primacy.
+ *
+ * The reviewer answered this question in the plan: a hand-off fences the
+ * incumbent at once rather than letting it finish. Without this, primacy would
+ * move while the open request stayed claimed, and the new primary would sit
+ * waiting behind a lease belonging to an agent that can no longer publish -
+ * which is the stalled queue the whole change exists to remove.
+ *
+ * The displaced agent is fenced exactly as a takeover fences it: its stage is
+ * dropped, so the generation it drafted for can never publish, and its next
+ * command answers PRIMACY_LOST rather than silence.
+ */
+export const releaseClaimsForPrimacyHandoff = async ({
+  store,
+  sessionId,
+  planId,
+  clock = Date.now,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly clock?: Clock;
+}): Promise<ReadonlyArray<AgentRequest>> => {
+  const nowMs = readClock(clock);
+  const open = (
+    await readValidatedAgentRequests({ store, sessionId, planId })
+  ).filter(
+    (request) => !requestIsTerminal(request) && request.claimedAt !== undefined,
+  );
+  const released: Array<AgentRequest> = [];
+  for (const candidate of open) {
+    const next = await withRequestLock({
+      store,
+      requestId: candidate.requestId,
+      change: async (lockedStore) => {
+        const current = await readCurrentRequest({
+          store: lockedStore,
+          requestId: candidate.requestId,
+        });
+        // Re-read under the lock: the holder may have answered in between, and
+        // releasing a terminal request would rewrite settled history.
+        if (requestIsTerminal(current) || current.claimedAt === undefined) {
+          return undefined;
+        }
+        const freed = validateAgentRequest(withoutClaim(current));
+        await writeAgentRequestValue({
+          store: lockedStore,
+          requestId: candidate.requestId,
+          value: freed,
+        });
+        /*
+        The displaced agent's stage is deliberately left on disk.
+
+        Releasing a claim drops its generation with the rest of it, so the next
+        claim recomputes that number from the highest stage still present. Drop
+        the stage here and the new primary would be handed generation 1 - the
+        same number, and so the same candidate file, the displaced agent is
+        still writing to. Two agents sharing one candidate is the lost update
+        this whole boundary exists to exclude.
+
+        Left in place, the stage makes the generation climb, the new primary
+        gets its own copy of the last published revision, and the old stage is
+        refused at the one commit that reaches the plan. It is also the draft
+        the reviewer may choose to hand forward, so destroying it here would
+        discard work they were offered a say over.
+        */
+        return freed;
+      },
+    });
+    if (next !== undefined) released.push(next);
+  }
+  for (const request of released) {
+    await appendProgressEvent({
+      store,
+      event: {
+        sessionId: request.sessionId,
+        requestId: request.requestId,
+        atMs: nowMs,
+        stepCode: "claim-released",
+        step: "Claim released when you changed the primary agent",
+        state: "done",
+        detail:
+          "The new primary answers this message; the previous agent keeps its draft and can no longer publish it",
+      },
+    }).catch(() => undefined);
+  }
+  return released;
 };
 
 /**

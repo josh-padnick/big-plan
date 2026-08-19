@@ -12,6 +12,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
+import type { AttachedAgent } from "../src/review/shared/agent-primacy.js";
+import { readAgentRoster } from "../src/review/store.js";
+import type { ReviewStore } from "../src/review/store.js";
 import { startReviewRuntime } from "../src/review/server.js";
 
 const execFileAsync = promisify(execFile);
@@ -1168,3 +1171,32 @@ export const agentStatusIndicator = (page: Page): Locator =>
 /** The sidebar while it is showing the agent, not the feedback it replaced. */
 export const agentSidebar = (page: Page): Locator =>
   page.getByRole("complementary", { name: "Agent Status" });
+
+/**
+ * Waits for a connector's own loop to register as an observer.
+ *
+ * Polled rather than awaited on the process, because the loop stays alive by
+ * design: it attaches, asks to be the primary, and waits to be told what it is
+ * (BIG-171). A spec that awaited the command would wait for the answer it has
+ * not given yet.
+ */
+export const untilObserverAttaches = async (
+  runtime: {
+    readonly store: ReviewStore;
+    readonly sessionId: string;
+  },
+  timeoutMs = 15_000,
+): Promise<AttachedAgent> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const observer = (
+      await readAgentRoster({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+      })
+    ).find((agent) => agent.role === "observer");
+    if (observer !== undefined) return observer;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error("The connector never attached as an observer");
+};
