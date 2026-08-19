@@ -55,36 +55,48 @@ const absoluteTime = (at: number): string =>
     minute: "2-digit",
   }).format(new Date(at));
 
+/**
+ * Code in a message, however that message was authored.
+ *
+ * Both renderers below speak the same Markdown vocabulary, so code has one
+ * presentation and one containment rule rather than a copy per renderer. The
+ * containment is what keeps the rule honest: a `pre` left to the user agent
+ * keeps `white-space: pre`, so one long line gives the message an unbounded
+ * min-content width and pushes the card holding it past its surface, where a
+ * scrolling panel hides the overflow instead of reporting it (BIG-185).
+ */
+const InlineCode = ({ value }: { readonly value: string }) => (
+  <code className="max-w-full rounded-sm border border-edge bg-surface px-1 font-mono text-[0.9em] [overflow-wrap:anywhere]">
+    {value}
+  </code>
+);
+
+const CodeBlock = ({
+  value,
+  language,
+}: {
+  readonly value: string;
+  readonly language?: string;
+}) => (
+  <pre className="relative mt-1 min-w-0 max-w-full overflow-x-auto rounded-md border border-edge bg-surface p-2 whitespace-pre-wrap [overflow-wrap:anywhere]">
+    {language === undefined ? null : (
+      <span className="mb-1 block text-2xs text-muted uppercase tracking-caps">
+        {language}
+      </span>
+    )}
+    <code className="min-w-0 max-w-full font-mono text-2xs whitespace-pre-wrap [overflow-wrap:anywhere]">
+      {value}
+    </code>
+  </pre>
+);
+
 /** Renders only the bounded Markdown node vocabulary owned by the parser. */
 const renderMessageNode = (node: MessageNode, key: string): ReactNode => {
   if (node.type === "text") return node.value;
-  if (node.type === "inlineCode") {
-    return (
-      <code
-        key={key}
-        className="max-w-full rounded-sm border border-edge bg-surface px-1 font-mono text-[0.9em] [overflow-wrap:anywhere]"
-      >
-        {node.value}
-      </code>
-    );
-  }
-  if (node.type === "code") {
-    return (
-      <pre
-        key={key}
-        className="relative mt-1 min-w-0 max-w-full overflow-x-auto rounded-md border border-edge bg-surface p-2 whitespace-pre-wrap [overflow-wrap:anywhere]"
-      >
-        {node.language === undefined ? null : (
-          <span className="mb-1 block text-2xs text-muted uppercase tracking-caps">
-            {node.language}
-          </span>
-        )}
-        <code className="min-w-0 max-w-full font-mono text-2xs whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {node.value}
-        </code>
-      </pre>
-    );
-  }
+  if (node.type === "inlineCode")
+    return <InlineCode key={key} value={node.value} />;
+  if (node.type === "code")
+    return <CodeBlock key={key} value={node.value} language={node.language} />;
   const children = node.children.map((child, index) =>
     renderMessageNode(child, `${key}-${index}`),
   );
@@ -141,13 +153,10 @@ const renderReviewerNode = (
   key: string,
 ): ReactNode => {
   if (node.type === "text") return node.value;
-  if (node.type === "inlineCode") return <code key={key}>{node.value}</code>;
+  if (node.type === "inlineCode")
+    return <InlineCode key={key} value={node.value} />;
   if (node.type === "code")
-    return (
-      <pre key={key}>
-        <code>{node.value}</code>
-      </pre>
-    );
+    return <CodeBlock key={key} value={node.value} language={node.language} />;
   if (node.type === "image") {
     return <ReviewImage key={key} id={node.id} alt={node.alt} />;
   }
