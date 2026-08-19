@@ -208,7 +208,9 @@ a model provider itself. The launched coding-agent session uses:
 it as `agent_token` together with ready-to-run `note_command` and
 `respond_command` strings.
 It also returns `candidate_plan`: this claim's own copy of the plan, and the
-only file the agent edits.
+only repository file the agent edits.
+The agent writes its response JSON to the returned `response_file`, then runs
+the returned `respond_command` to validate and publish both files.
 The plan path itself stays read-only identity, so relative asset paths and
 repository context still resolve against it, and Big Plan writes it only when a
 response publishes.

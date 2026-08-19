@@ -39,7 +39,7 @@ import {
 } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { reviewImageId } from "./shared/review-image.js";
+import { MAX_IMAGE_BYTES, reviewImageId } from "./shared/review-image.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
 import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";

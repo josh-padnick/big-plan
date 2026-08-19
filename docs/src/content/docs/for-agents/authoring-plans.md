@@ -41,7 +41,8 @@ Standard Markdown plus GFM tables, task lists, footnotes, and literal autolinks 
 Fenced code blocks with a supported declared language receive syntax highlighting; unknown and undeclared languages stay plain.
 Components are flow-level JSX elements from the built-in [component registry](/components/), plus scoped child components such as `Annotation`, `Column`, `Entry`, `Option`, and `Score` that are valid only in the hierarchy declared by their parent.
 Component attributes are strings (`title="Rollout"`) or bare shorthand booleans (`showLineNumbers`) where a component's schema allows them.
-A self-closing [`Slide`](/components/slide/) marker may appear directly above a top-level h2 to apply one registered slide type; an untyped h2 remains valid.
+A self-closing [`Slide`](/components/slide/) marker may appear directly above a top-level h2 to apply one registered slide type.
+A `user-journey` marker may instead type an h3 sub-slide inside an h2 group; an untyped heading remains valid.
 
 ## What a plan may not contain
 

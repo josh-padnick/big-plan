@@ -204,9 +204,9 @@ type AssignedSlideType = {
 };
 
 // Consumes every typed Slide placeholder before framing. A valid marker is a
-// top-level sibling immediately before its h2 (blank text is ignorable); a
-// top-level marker in any other position receives a positional structural
-// diagnostic, and no marker ever emits HTML.
+// top-level sibling immediately before its h2, or before an h3 inside an open
+// h2 group (blank text is ignorable). A top-level marker in any other position
+// receives a positional structural diagnostic, and no marker ever emits HTML.
 const collectSlideTypes = ({
   tree,
   diagnostics,

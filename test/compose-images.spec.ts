@@ -200,9 +200,7 @@ test("should discard an image insertion after a comment composer unmounts", asyn
     hasText: "This tab lost contact with this review session",
   });
   await expect(banner).toBeVisible({ timeout: 6_000 });
-  await expect(
-    banner.getByRole("button", { name: "Refresh" }),
-  ).toBeEnabled();
+  await expect(banner.getByRole("button", { name: "Refresh" })).toBeEnabled();
 });
 
 test.describe("image upload failures", () => {

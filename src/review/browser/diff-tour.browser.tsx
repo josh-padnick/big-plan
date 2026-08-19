@@ -59,7 +59,7 @@ type DiffTourValue = {
     placeIds: ReadonlyArray<string>,
     accepted: boolean,
   ) => void;
-  /** False while this session may not record anything, so no control offers to. */
+  /** False while this page may not record anything, so no control offers to. */
   readonly canRecordAcceptance: boolean;
   readonly openTour: (tour: OpenTour) => void;
   readonly closeTour: () => void;

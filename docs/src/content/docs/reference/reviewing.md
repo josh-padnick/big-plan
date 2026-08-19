@@ -334,7 +334,8 @@ Choose **Accept change** to mark the current place accepted and advance to the n
 Acceptance is a review checklist rather than an edit: it does not change the plan or resolve the comment thread.
 It is recorded with the review, so it survives a reload and a runtime restart, and every place it is counted - the change digest on the agent's message and the navigator touring that same set - reports the same number.
 Acceptance is recorded against the two snapshots the change set compares, so a later revision arrives as its own set to review rather than inheriting what you already accepted.
-A read-only review session records nothing, so its accept controls say why instead of offering a checklist nothing reads back.
+A page that cannot record review state, such as a read-only review session or a standalone rendered document, disables its accept controls and says why.
+If Big Plan cannot reach the runtime while reading recorded acceptances, it warns that the page may show an incomplete count and keeps retrying.
 If recording an acceptance fails, Big Plan says it is not saved yet and keeps retrying; keep the review open until the change set reports itself accepted.
 If the runtime refuses the acceptance outright, the mark comes back off and the review says so, so the page never claims work that nothing recorded.
 After accepting the set, choose **Keep chatting**; a comment thread also offers **Resolve thread**.

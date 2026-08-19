@@ -8,8 +8,7 @@ describe("createRevisionedRecord", () => {
   it("should return the committed body when every bounded read is overtaken", async () => {
     type Record = { readonly revision: number; readonly value: string };
     let readNumber = 0;
-    let record: ReturnType<typeof createRevisionedRecord<Record>>;
-    record = createRevisionedRecord<Record>({
+    const record = createRevisionedRecord<Record>({
       initial: { revision: 0, value: "initial" },
       readStored: async () => {
         const stale = { revision: readNumber, value: `stale-${readNumber}` };
