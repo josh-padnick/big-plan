@@ -243,15 +243,15 @@ is genuinely in flight.
 */
 export const WorkingMark = ({
   className = "size-3",
-}: {
-  readonly className?: string;
-}) => (
+  ...props
+}: HTMLAttributes<HTMLSpanElement>) => (
   <span
     /* box-border so the ring's own stroke sits inside the size it is given:
        a mark asked for eight pixels has to occupy eight, or it shifts the
        toolbar it replaces a dot in. */
     className={`box-border inline-block shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent motion-reduce:[animation-duration:2.4s] ${className}`}
     aria-hidden="true"
+    {...props}
   />
 );
 

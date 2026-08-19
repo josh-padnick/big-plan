@@ -1,6 +1,7 @@
 // Owns Comments-tab lifecycle order, density, empty states, and bulk actions.
-// Individual thread cards remain reusable across the rail and inline document
-// surfaces; this module decides how much attention each lifecycle needs.
+// Individual thread cards remain reusable across the sidebar and inline
+// document surfaces; this module decides how much attention each lifecycle
+// needs.
 
 import type { ReactNode } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
@@ -20,10 +21,10 @@ const PICKED_UP_STAGES: ReadonlySet<AgentStatusStage> = new Set([
 ]);
 
 /**
- * The treatment the active feedback batch's header wears.
+ * The treatment a feedback batch's header wears.
  *
  * Only the batch's own status decides, because the header speaks for that batch
- * alone. The rail's working group answers a different question - whether
+ * alone. The sidebar's working group answers a different question - whether
  * anything on this plan is being worked - so consulting it dressed a batch
  * nobody had picked up in the spinner whenever an earlier batch was running,
  * putting the working treatment beside the batch's own queued label (BIG-158).
@@ -50,6 +51,16 @@ type LifecycleSectionProps = {
   readonly first: boolean;
   readonly children: ReactNode;
   readonly action?: ReactNode;
+  /** The batch this section speaks for, when it heads one. */
+  readonly batchId?: string;
+  /**
+   * Whether the section holds its threads on its own ground. Batch groups stack
+   * directly on one another, so a rule between them would leave every header
+   * looking equally close to the threads above and below it; a filled, inset
+   * panel says which threads a header owns. A lone section keeps the quieter
+   * rule, which is the sidebar's resting look.
+   */
+  readonly contained?: boolean;
 };
 
 const LifecycleSection = ({
@@ -59,14 +70,22 @@ const LifecycleSection = ({
   first,
   children,
   action,
+  batchId,
+  contained = false,
 }: LifecycleSectionProps) => (
   <section
-    className={`min-w-0 ${first ? "" : "border-t border-edge pt-4"} ${tone === "working" ? "text-[var(--callout-note-c)]" : tone === "ready" ? "text-accent" : "text-muted"}`}
+    className={`min-w-0 ${contained ? "rounded-lg bg-surface p-3" : first ? "" : "border-t border-edge pt-4"} ${tone === "working" ? "text-[var(--callout-note-c)]" : tone === "ready" ? "text-accent" : "text-muted"}`}
     data-review-thread-group={tone}
+    {...(batchId === undefined ? {} : { "data-review-batch": batchId })}
   >
     <h3 className="m-0 mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-caps">
       {tone === "working" ? (
-        <WorkingMark />
+        <WorkingMark
+          // The heading's working treatment, addressable without naming a
+          // presentation class. It is decoration to a reader, so it carries no
+          // role or name a journey could assert instead.
+          data-review-working-indicator=""
+        />
       ) : tone === "ready" ? (
         <Icon icon={CHECK_ICON} />
       ) : tone === "queued" ? (
@@ -82,6 +101,29 @@ const LifecycleSection = ({
   </section>
 );
 
+/** One feedback batch, headed by what that batch alone is doing. */
+export type CommentsSurfaceBatch = {
+  /** Gives one batch's group a stable address for scoping and testing. */
+  readonly requestId: string;
+  /**
+   * How many of this batch's comments the sidebar is showing, which is not
+   * always the length of the list below. A header heads only the threads still
+   * waiting on its batch, so one whose latest exchange has settled is still
+   * counted here and renders in the lifecycle section for its own state. A
+   * lone batch narrows further to the sidebar's working group, which holds its
+   * threads once an agent picks the batch up and nothing while the batch is
+   * still waiting in the queued group.
+   */
+  readonly count: number;
+  readonly content: ReactNode;
+  // A batch the agent has not picked up yet is still waiting, so the section
+  // it heads says so rather than claiming work is underway.
+  readonly label: string;
+  readonly tone: "working" | "queued";
+  /** The threads this batch's header owns. */
+  readonly comments: ReadonlyArray<ReviewComment>;
+};
+
 export type CommentsSurfaceModel = {
   readonly query: string;
   readonly onQueryChange: (query: string) => void;
@@ -92,19 +134,17 @@ export type CommentsSurfaceModel = {
   // example) that the reviewer must hand to this review from the component.
   readonly hasComponentBatchNotes: boolean;
   readonly groups: ReadonlyMap<ThreadGroup, ReadonlyArray<ReviewComment>>;
-  readonly workingBatch?: {
-    readonly count: number;
-    readonly content: ReactNode;
-    // A batch the agent has not picked up yet is still waiting, so the section
-    // it heads says so rather than claiming work is underway.
-    readonly label: string;
-    readonly tone: "working" | "queued";
-  };
+  readonly batches: ReadonlyArray<CommentsSurfaceBatch>;
   readonly resolved: ReadonlyArray<ReviewComment>;
   readonly resolvedDrafts: ReadonlyArray<ReviewComment>;
   readonly canResolveAll: boolean;
   readonly renderDraft: (comment: ReviewComment, compact: boolean) => ReactNode;
   readonly renderResolvedDraft: (comment: ReviewComment) => ReactNode;
+  /**
+   * Renders one sent thread. queuePosition is that thread's position among the
+   * queued threads the sidebar is showing, counting the ones a batch header
+   * owns, so it is not the card's index in the list it renders into.
+   */
   readonly renderSent: (
     comment: ReviewComment,
     resolved: boolean,
@@ -120,15 +160,34 @@ export const CommentsSurface = ({
 }: {
   readonly model: CommentsSurfaceModel;
 }) => {
-  const ready = [
-    ...(model.groups.get("needs-input") ?? []),
-    ...(model.groups.get("ready") ?? []),
-  ];
-  const working = model.groups.get("working") ?? [];
-  const queued = model.groups.get("queued") ?? [];
+  // A thread a batch header owns is shown there and nowhere else, so no
+  // lifecycle section repeats it under a header that speaks for other work.
+  const headed = new Set(
+    model.batches.flatMap((batch) =>
+      batch.comments.map((comment) => comment.id),
+    ),
+  );
+  const unheaded = (group: ThreadGroup): ReadonlyArray<ReviewComment> =>
+    (model.groups.get(group) ?? []).filter(
+      (comment) => !headed.has(comment.id),
+    );
+  const ready = [...unheaded("needs-input"), ...unheaded("ready")];
+  const working = unheaded("working");
+  const queuedGroup = model.groups.get("queued") ?? [];
+  const queued = unheaded("queued");
+  // A thread keeps its place among the queued threads on show, whether or not a
+  // batch header speaks for the ones around it. Counting the whole queued group
+  // rather than the leftovers is what keeps the number a position in that group
+  // instead of an index into whatever this section happens to hold.
+  const queuePosition = (comment: ReviewComment): number =>
+    queuedGroup.indexOf(comment) + 1;
+  // Only stacked batches need containment; one batch has nothing to be told
+  // apart from, so the sidebar keeps the layout it has always had.
+  const grouped = model.batches.length > 1;
   const sectionCount = [
     ready.length,
-    model.workingBatch?.count ?? working.length,
+    ...model.batches.map((batch) => batch.count),
+    working.length,
     queued.length,
     model.drafts.length,
     model.resolved.length + model.resolvedDrafts.length,
@@ -192,26 +251,36 @@ export const CommentsSurface = ({
             </LifecycleSection>
           )}
 
-          {(model.workingBatch?.count ?? working.length) === 0 ? null : (
+          {model.batches.map((batch) => (
             <LifecycleSection
-              label={model.workingBatch?.label ?? "Working"}
-              count={model.workingBatch?.count ?? working.length}
-              tone={model.workingBatch?.tone ?? "working"}
+              key={batch.requestId}
+              label={batch.label}
+              count={batch.count}
+              tone={batch.tone}
+              first={first()}
+              batchId={batch.requestId}
+              contained={grouped}
+            >
+              {batch.content}
+              <ol className="mt-2 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
+                {batch.comments.map((comment) => (
+                  <li key={comment.id}>
+                    {model.renderSent(comment, false, true)}
+                  </li>
+                ))}
+              </ol>
+            </LifecycleSection>
+          ))}
+
+          {working.length === 0 ? null : (
+            <LifecycleSection
+              label="Working"
+              count={working.length}
+              tone="working"
               first={first()}
             >
-              {model.workingBatch?.content}
-              {model.workingBatch === undefined ? (
-                working.map((comment) =>
-                  model.renderSent(comment, false, false),
-                )
-              ) : (
-                <ol className="mt-2 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
-                  {working.map((comment) => (
-                    <li key={comment.id}>
-                      {model.renderSent(comment, false, true)}
-                    </li>
-                  ))}
-                </ol>
+              {working.map((comment) =>
+                model.renderSent(comment, false, false),
               )}
             </LifecycleSection>
           )}
@@ -224,9 +293,14 @@ export const CommentsSurface = ({
               first={first()}
             >
               <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
-                {queued.map((comment, index) => (
+                {queued.map((comment) => (
                   <li key={comment.id}>
-                    {model.renderSent(comment, false, true, index + 1)}
+                    {model.renderSent(
+                      comment,
+                      false,
+                      true,
+                      queuePosition(comment),
+                    )}
                   </li>
                 ))}
               </ol>

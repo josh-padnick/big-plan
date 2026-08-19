@@ -980,20 +980,31 @@ test("should preserve a text selection while its compact composer is open", asyn
     )
     .toBe(true);
   await page.getByRole("button", { name: /Feedback/ }).click();
-  const selectedPoint = await block.evaluate((element) => {
-    const text = document
-      .createTreeWalker(element, NodeFilter.SHOW_TEXT)
-      .nextNode();
-    if (!(text instanceof Text)) return null;
-    const range = document.createRange();
-    range.setStart(text, 0);
-    range.setEnd(text, Math.min(18, text.length));
-    const rect = range.getBoundingClientRect();
-    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-  });
-  if (selectedPoint === null) throw new Error("Expected selected text bounds");
-  await page.mouse.move(selectedPoint.x, selectedPoint.y);
-  await expect(railCard).toHaveAttribute("data-review-associated", "true");
+  // Reopening the sidebar leaves the page settling under the pointer, so one
+  // reading of where the quote sits can already be wrong by the time the
+  // pointer arrives. Hover the quote where it currently sits, the way a reader
+  // moving a mouse over it does, until its sidebar card reports the
+  // association.
+  const quotedTextPoint = async () =>
+    block.evaluate((element) => {
+      const text = document
+        .createTreeWalker(element, NodeFilter.SHOW_TEXT)
+        .nextNode();
+      if (!(text instanceof Text)) return null;
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, Math.min(18, text.length));
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+  await expect
+    .poll(async () => {
+      const point = await quotedTextPoint();
+      if (point === null) throw new Error("Expected selected text bounds");
+      await page.mouse.move(point.x, point.y);
+      return railCard.getAttribute("data-review-associated");
+    })
+    .toBe("true");
   const stored = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((candidate) =>
       candidate.startsWith("big-plan:review:drafts:"),

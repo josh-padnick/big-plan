@@ -171,6 +171,21 @@ GH_TOKEN=$(gh auth token) bun run check:merge-gates <pr-number> --repo=josh-padn
 
 `--dry-run` prints the verdicts without publishing the check runs.
 
+### A cancelled `judge` run is not a verdict
+
+`judge` is the Merge gates job's own name, and it is not one of the two required checks.
+Branch protection requires `review-triage` and `validation-attestation`, which the job publishes through the Checks API; the job's own conclusion gates nothing.
+
+The gate settles a burst of events on the newest run in its lane, so every run the burst superseded ends `cancelled`.
+GitHub then lists each of those on the pull request as a red `judge` entry beside the successful one, which reads like several failures and is not.
+A cancelled run ran no step, so it judged nothing: its job records zero steps, and it never reached `scripts/merge-gates/check.mjs`.
+
+Read the newest `judge` run on the current head, or re-run the gate for a fresh verdict.
+Never change the workflow, the packaging, the lint script, or the linter configuration in response to a cancellation, because none of them caused it and none of them can fix it.
+Cross-lane runner contention was the cause the last time this was diagnosed, and the lane that owns the gate workflow fixed it on `main` in 93f5c1b7 (#173) by separating the concurrency lane per `github.ref`.
+
+Measured on 2026-08-19 on PR #166: four `judge` runs on one head were cancelled within seconds of each other by a burst of review-comment events, each recording zero steps, and a fifth run on that same head succeeded a minute later.
+
 ## Styling changes
 
 There is no pixel-history CI gate and no visual contract in commit subjects.

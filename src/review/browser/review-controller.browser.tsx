@@ -80,7 +80,8 @@ import {
   projectRequestStatus,
   queuedRequestsAhead,
   requestCommentIds,
-  selectActiveFeedbackBatch,
+  selectOpenFeedbackBatches,
+  selectThreadsAwaitingAgent,
   type CommentThreadProjection,
   type RequestDelivery,
   type ThreadGroup,
@@ -116,6 +117,7 @@ import { InputsSurface } from "./inputs-surface.browser.js";
 import {
   batchSectionTone,
   CommentsSurface,
+  type CommentsSurfaceBatch,
 } from "./comments-surface.browser.js";
 import {
   AgentChangeDigest,
@@ -5066,7 +5068,11 @@ export const ReviewController = () => {
         },
       ];
     });
-    const refreshGeometry = () => {
+    // Measured while inspecting a pointer position rather than cached across
+    // them: the page also reflows without scrolling or resizing - reopening the
+    // feedback sidebar reflows it - and geometry held from before such a reflow
+    // silently stops matching the text the pointer is over.
+    const measureGeometry = () => {
       for (const entry of entries) {
         if (entry.target.type === "selection") {
           const range = selectionRange(entry.target);
@@ -5078,7 +5084,6 @@ export const ReviewController = () => {
         }
       }
     };
-    refreshGeometry();
     let frame = 0;
     let pending:
       | {
@@ -5115,6 +5120,7 @@ export const ReviewController = () => {
       ) {
         return;
       }
+      measureGeometry();
       const selected = entries.find(({ target, selectionRects }) => {
         if (target.type !== "selection") return false;
         return selectionRects.some(
@@ -5143,15 +5149,10 @@ export const ReviewController = () => {
       pending = { x: event.clientX, y: event.clientY, target: event.target };
       if (frame === 0) frame = requestAnimationFrame(inspect);
     };
-    const refresh = () => refreshGeometry();
     document.addEventListener("pointermove", move, { passive: true });
-    window.addEventListener("scroll", refresh, { passive: true });
-    window.addEventListener("resize", refresh, { passive: true });
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("pointermove", move);
-      window.removeEventListener("scroll", refresh);
-      window.removeEventListener("resize", refresh);
       for (const element of marked) delete element.dataset.reviewHasComment;
     };
   }, [articleVersion, reviewComments]);
@@ -6600,16 +6601,93 @@ export const ReviewController = () => {
       });
     });
   };
-  const activeBatchRequest = selectActiveFeedbackBatch({
+  const openBatches = selectOpenFeedbackBatches({
     requests: agent.requests,
     cancelPendingRequestIds,
   });
-  const activeBatchCommentIds =
-    activeBatchRequest === undefined
-      ? []
-      : requestCommentIds(activeBatchRequest).filter((commentId) =>
-          visibleUnresolvedSent.some((comment) => comment.id === commentId),
-        );
+  const batchCommentIds = (request: AgentRequest): ReadonlyArray<string> =>
+    requestCommentIds(request).filter((commentId) =>
+      visibleUnresolvedSent.some((comment) => comment.id === commentId),
+    );
+  /** Heads one batch with what that batch alone is doing. */
+  const batchSection = ({
+    request,
+    count,
+    comments,
+  }: {
+    readonly request: AgentRequest;
+    readonly count: number;
+    readonly comments: ReadonlyArray<ReviewComment>;
+  }): CommentsSurfaceBatch => {
+    const status = statusForRequest(request, "thread");
+    return {
+      requestId: request.requestId,
+      count,
+      comments,
+      label: status.label,
+      tone: batchSectionTone({ status }),
+      content: (
+        <Card
+          className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"
+          density="dense"
+          elevation="none"
+        >
+          <RequestStatusStrip
+            status={status}
+            activity={activityForRequest(request)}
+            surface="thread"
+            commentCount={count}
+            onShowAgent={openAgentSidebar}
+            onCancelRequest={() => void cancelRequest(request.requestId)}
+          />
+        </Card>
+      ),
+    };
+  };
+  const openBatchThreads = openBatches.flatMap((request) => {
+    const commentIds = batchCommentIds(request);
+    return commentIds.length === 0 ? [] : [{ request, commentIds }];
+  });
+  // More than one open batch is where a single header stops being able to tell
+  // the truth: the threads under it belong to whichever batch is running, not
+  // to the batch the header names, so each batch heads its own threads
+  // (BIG-162). One batch has nothing to be confused with, so it keeps the
+  // sidebar's existing shape - the whole working group beneath the one header.
+  //
+  // How many batches are open is a fact about the plan, so it is read from
+  // openBatches rather than from the sections that survive the search query.
+  // Counting the survivors let a query that hid one batch's comments drop the
+  // sidebar back to the lone-batch path, which hands the batch still on screen
+  // the whole working group - putting another request's working thread under
+  // that batch's header, which is the composition BIG-162 exists to remove.
+  const batchGroups = openBatchThreads.map(({ request, commentIds }) => {
+    const comments = selectThreadsAwaitingAgent({
+      comments:
+        openBatches.length > 1
+          ? visibleUnresolvedSent.filter((comment) =>
+              commentIds.includes(comment.id),
+            )
+          : (sentByGroup.get("working") ?? []),
+      groupOf: (commentId) => threadProjections.get(commentId)?.group,
+    });
+    return {
+      section: batchSection({ request, count: commentIds.length, comments }),
+      // A card whose batch carries a status strip above it does not repeat that
+      // status on the card itself. Only the threads this header both renders
+      // and speaks for qualify: one it has stopped rendering carries its own
+      // status again, and a thread from another request that the lone-batch
+      // path happens to list is not this batch's to speak for.
+      headedCommentIds: comments
+        .filter((comment) => commentIds.includes(comment.id))
+        .map((comment) => comment.id),
+    };
+  });
+  const batchSections: ReadonlyArray<CommentsSurfaceBatch> = batchGroups.map(
+    ({ section }) => section,
+  );
+  const headedBatchCommentIds = new Set(
+    batchGroups.flatMap(({ headedCommentIds }) => headedCommentIds),
+  );
 
   return (
     <>
@@ -6904,42 +6982,7 @@ export const ReviewController = () => {
                 hasRuntime: identity !== null,
                 hasComponentBatchNotes: componentBatchNotes,
                 groups: sentByGroup,
-                workingBatch:
-                  activeBatchRequest === undefined ||
-                  activeBatchCommentIds.length === 0
-                    ? undefined
-                    : {
-                        count: activeBatchCommentIds.length,
-                        label: statusForRequest(activeBatchRequest, "thread")
-                          .label,
-                        tone: batchSectionTone({
-                          status: statusForRequest(
-                            activeBatchRequest,
-                            "thread",
-                          ),
-                        }),
-                        content: (
-                          <Card
-                            className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"
-                            density="dense"
-                            elevation="none"
-                          >
-                            <RequestStatusStrip
-                              status={statusForRequest(
-                                activeBatchRequest,
-                                "thread",
-                              )}
-                              activity={activityForRequest(activeBatchRequest)}
-                              surface="thread"
-                              commentCount={activeBatchCommentIds.length}
-                              onShowAgent={openAgentSidebar}
-                              onCancelRequest={() =>
-                                void cancelRequest(activeBatchRequest.requestId)
-                              }
-                            />
-                          </Card>
-                        ),
-                      },
+                batches: batchSections,
                 resolved: resolvedSent,
                 resolvedDrafts: visibleResolvedDrafts,
                 canResolveAll: visibleUnresolvedSent.some(
@@ -7096,7 +7139,7 @@ export const ReviewController = () => {
                       writeAvailability={writeAvailability}
                       compact={compact}
                       queuePosition={queuePosition}
-                      suppressPendingStatus={activeBatchCommentIds.includes(
+                      suppressPendingStatus={headedBatchCommentIds.has(
                         comment.id,
                       )}
                     />

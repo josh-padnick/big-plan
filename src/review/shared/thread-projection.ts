@@ -148,15 +148,19 @@ export const projectRequestDelivery = ({
 }): RequestDelivery =>
   requestIsTerminal(request) || requestWasClaimed(request) ? "Sent" : "Queued";
 
-/** Selects the newest open multi-comment feedback batch. */
-export const selectActiveFeedbackBatch = <Request extends ThreadRequest>({
+/**
+ * Every open multi-comment feedback batch, in the order the agent will take
+ * them. Requests arrive in delivery order, so the list order is the queue
+ * order, and a surface that heads each batch separately can rely on it.
+ */
+export const selectOpenFeedbackBatches = <Request extends ThreadRequest>({
   requests,
   cancelPendingRequestIds,
 }: {
   readonly requests: ReadonlyArray<Request>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
-}): Request | undefined =>
-  [...requests].reverse().find(
+}): ReadonlyArray<Request> =>
+  requests.filter(
     (request) =>
       request.kind === "feedback" &&
       requestCommentIds(request).length > 1 &&
@@ -166,6 +170,27 @@ export const selectActiveFeedbackBatch = <Request extends ThreadRequest>({
         pendingRequestIds: cancelPendingRequestIds,
       }),
   );
+
+/**
+ * The threads a batch header still speaks for. A header stands for waiting
+ * work, so it speaks only for threads whose own state is still waiting on an
+ * agent; a thread whose latest exchange has settled renders in the lifecycle
+ * section for that state instead, whatever number of batches happen to be
+ * open. Settling that thread is not the batch answering it - a canceled reply
+ * settles the thread while the batch still owes it an outcome, which is why
+ * the batch's own count keeps counting it.
+ */
+export const selectThreadsAwaitingAgent = ({
+  comments,
+  groupOf,
+}: {
+  readonly comments: ReadonlyArray<ReviewComment>;
+  readonly groupOf: (commentId: string) => ThreadGroup | undefined;
+}): ReadonlyArray<ReviewComment> =>
+  comments.filter((comment) => {
+    const group = groupOf(comment.id);
+    return group === "working" || group === "queued";
+  });
 
 export const projectRequestActivity = ({
   request,
