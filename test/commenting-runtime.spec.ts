@@ -6198,17 +6198,52 @@ ${reorderedWorkspace}
     await test.step("shrink the maximized frame by height, not just width", async () => {
       await maximize.click();
       await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
-      await page.setViewportSize({ width: 1855, height: 1200 });
+      // The fit answers a size change from a ResizeObserver, which delivers
+      // after the frame that lays the new size out, while maximizing and
+      // setViewportSize both resolve as soon as the new size is applied. A
+      // zoom sampled straight afterwards is therefore still the answer to
+      // the previous geometry - which is how this comparison once read the
+      // earlier 1600x600 step's zoom as the tall viewport's own and then
+      // asked the short viewport to shrink below it. Reading across two
+      // rendering frames puts the observer's answer in front of the sample.
       const readZoom = () =>
-        highlightedScreen.evaluate((node) => {
+        highlightedScreen.evaluate(async (node) => {
+          const nextFrame = (): Promise<void> =>
+            new Promise((resolve) => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            });
+          await nextFrame();
+          await nextFrame();
           const frame = node.querySelector<HTMLElement>(".wireframe-frame");
           return Number.parseFloat(frame?.style.zoom || "1");
         });
-      await expect.poll(readZoom).toBeGreaterThan(0);
-      const tallZoom = await readZoom();
+      // A sample is taken only once two of those reads agree, the way
+      // test/wireframe.spec.ts settles the non-diff fit: the fit pins the
+      // card to the width the frame paints at, and that write resizes an
+      // observed element in turn, so one delivery can still schedule
+      // another. Like that helper this waits for the value to stop moving
+      // rather than for it to change, so a fit that wrongly answers both
+      // viewports with the same zoom fails the comparison below instead of
+      // timing out here.
+      const readSettledZoom = async (): Promise<number> => {
+        let lastZoom = Number.NaN;
+        await expect
+          .poll(async () => {
+            const zoom = await readZoom();
+            const settled = zoom > 0 && zoom === lastZoom;
+            lastZoom = zoom;
+            return settled;
+          })
+          .toBe(true);
+        return lastZoom;
+      };
+      await page.setViewportSize({ width: 1855, height: 1200 });
+      const tallZoom = await readSettledZoom();
       await page.setViewportSize({ width: 1855, height: 700 });
-      await expect.poll(readZoom).toBeLessThan(tallZoom);
-      const shortZoom = await readZoom();
+      const shortZoom = await readSettledZoom();
+      expect(shortZoom).toBeLessThan(tallZoom);
       await expect
         .poll(() =>
           highlightedScreen.evaluate(
