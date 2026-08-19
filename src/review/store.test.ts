@@ -514,7 +514,7 @@ describe("review store session files", () => {
 describe("review store agent presence", () => {
   // Which agent is attached is a fact about the session, so a reviewer can ask
   // it while no request is being worked on at all.
-  it("reports the attached connector's model with or without a claim", async () => {
+  it("preserves connector identity until another declaration replaces it", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
@@ -544,7 +544,23 @@ describe("review store agent presence", () => {
     ).resolves.toEqual({
       connected: true,
       state: "waiting",
+      model: { name: "Claude Opus 5" },
       updatedAtMs: 10_000,
+    });
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      model: { client: "grok-cli 0.2.99" },
+      now: 11_000,
+    });
+    await expect(
+      readAgentPresence({ store, sessionId: "aaaaaaaaaaaaaaaa", now: 12_000 }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      model: { client: "grok-cli 0.2.99" },
+      updatedAtMs: 11_000,
     });
   });
 
@@ -600,6 +616,32 @@ describe("review store agent presence", () => {
       connected: false,
       state: "waiting",
       updatedAtMs: 10_000,
+    });
+  });
+
+  it("does not carry identity into another review session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      model: { name: "claude-fable-5" },
+      now: 10_000,
+    });
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "bbbbbbbbbbbbbbbb",
+      state: "waiting",
+      now: 11_000,
+    });
+    await expect(
+      readAgentPresence({ store, sessionId: "bbbbbbbbbbbbbbbb", now: 12_000 }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      updatedAtMs: 11_000,
     });
   });
 

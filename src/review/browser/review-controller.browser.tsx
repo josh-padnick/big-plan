@@ -52,6 +52,7 @@ import {
   selectClaimedAgentRequest,
   type AgentStatus,
 } from "../shared/agent-status.js";
+import { selectAgentModelIdentity } from "../shared/agent-model.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
 import {
@@ -6261,6 +6262,14 @@ export const ReviewController = () => {
     cancelPendingRequestIds,
     now: agentProjectionNowMs,
   });
+  const displayedAgentIdentity = selectAgentModelIdentity({
+    ...(claimedRequest?.claimedModel === undefined
+      ? {}
+      : { claimed: claimedRequest.claimedModel }),
+    ...(agent.presence.model === undefined
+      ? {}
+      : { presence: agent.presence.model }),
+  });
   const threadProjections = projectCommentThreads({
     comments: sent,
     requests: agent.requests,
@@ -7122,24 +7131,11 @@ export const ReviewController = () => {
                 ...(agentEndedAtMs === undefined
                   ? {}
                   : { endedAtMs: agentEndedAtMs }),
-                // The claimed request names the model the card is describing;
-                // presence names the one that is merely attached. Falling back
-                // is what keeps the badge on screen while the agent sits idle.
-                modelName:
-                  claimedRequest?.claimedModel?.name ??
-                  agent.presence.model?.name,
-                modelEffort:
-                  claimedRequest?.claimedModel?.effort ??
-                  agent.presence.model?.effort,
-                modelClient:
-                  claimedRequest?.claimedModel?.client ??
-                  agent.presence.model?.client,
-                sessionUrl:
-                  claimedRequest?.claimedModel?.sessionUrl ??
-                  agent.presence.model?.sessionUrl,
-                sessionId:
-                  claimedRequest?.claimedModel?.sessionId ??
-                  agent.presence.model?.sessionId,
+                modelName: displayedAgentIdentity?.name,
+                modelEffort: displayedAgentIdentity?.effort,
+                modelClient: displayedAgentIdentity?.client,
+                sessionUrl: displayedAgentIdentity?.sessionUrl,
+                sessionId: displayedAgentIdentity?.sessionId,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 runtimeSession,

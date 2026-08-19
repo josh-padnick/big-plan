@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { decodeAgentModelIdentity } from "./agent-model.js";
+import {
+  decodeAgentModelIdentity,
+  selectAgentModelIdentity,
+} from "./agent-model.js";
 
 const ESCAPE = "";
 
@@ -32,13 +35,35 @@ describe("decodeAgentModelIdentity", () => {
     ).toEqual({ name: "claude-opus-5", client: "claude-code 2.1.235" });
   });
 
-  it("should drop a session URL the browser must not follow", () => {
+  it("should strip terminal control strings and private CSI sequences", () => {
+    expect(
+      decodeAgentModelIdentity({
+        name: `${ESCAPE}]0;terminal title\u0007claude-opus-5`,
+        client: `${ESCAPE}[?25lclaude-code 2.1.235`,
+        effort: `${ESCAPE}Pignored${ESCAPE}\\high`,
+      }),
+    ).toEqual({
+      name: "claude-opus-5",
+      client: "claude-code 2.1.235",
+      effort: "high",
+    });
+  });
+
+  it("should retain a session declaration for the affordance classifier", () => {
     expect(
       decodeAgentModelIdentity({
         name: "grok-4.6",
         sessionUrl: "javascript:alert(1)",
       }),
-    ).toEqual({ name: "grok-4.6" });
+    ).toEqual({ name: "grok-4.6", sessionUrl: "javascript:alert(1)" });
+    expect(
+      decodeAgentModelIdentity({
+        sessionUrl: "vscode://anthropic.claude/session/abc",
+      }),
+    ).toEqual({ sessionUrl: "vscode://anthropic.claude/session/abc" });
+    expect(decodeAgentModelIdentity({ sessionUrl: "01H9" })).toEqual({
+      sessionUrl: "01H9",
+    });
   });
 
   it("should report a declaration that names only the client", () => {
@@ -69,5 +94,28 @@ describe("decodeAgentModelIdentity", () => {
     expect(decodeAgentModelIdentity({})).toBeUndefined();
     expect(decodeAgentModelIdentity({ name: "   " })).toBeUndefined();
     expect(decodeAgentModelIdentity({ name: "x".repeat(81) })).toBeUndefined();
+  });
+});
+
+describe("selectAgentModelIdentity", () => {
+  it("should select one partial declaration without filling it from presence", () => {
+    expect(
+      selectAgentModelIdentity({
+        claimed: { client: "grok-cli 0.2.99" },
+        presence: {
+          name: "claude-fable-5",
+          effort: "max",
+          sessionId: "01H9",
+        },
+      }),
+    ).toEqual({ client: "grok-cli 0.2.99" });
+  });
+
+  it("should use presence when no request has claimed the work", () => {
+    expect(
+      selectAgentModelIdentity({
+        presence: { name: "claude-fable-5" },
+      }),
+    ).toEqual({ name: "claude-fable-5" });
   });
 });

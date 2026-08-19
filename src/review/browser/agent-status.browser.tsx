@@ -6,6 +6,7 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { CIRCLE_ICON } from "../../icons/lucide/circle.js";
 import { LOCK_ICON } from "../../icons/lucide/lock.js";
+import { OCTAGON_ALERT_ICON } from "../../icons/lucide/octagon-alert.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type {
   AgentHealth,
@@ -22,8 +23,9 @@ export const AGENT_STATUS_TRIGGER_ID = "review-agent-trigger";
 
 // Shape carries the state alongside colour: a filled dot for healthy, the
 // product's rotating working mark for working, a padlock for a session that
-// has gone read-only, the hazard triangle for an agent that is gone, and a
-// question mark for a state the review session cannot observe.
+// has gone read-only, an amber octagon for an agent that stopped responding,
+// the hazard triangle for an agent that is gone, and a question mark for a
+// state the review session cannot observe.
 //
 // A padlock rather than a second triangle for read-only: the hazard mark now
 // belongs to the offline state, and two triangles apart only by colour would
@@ -57,7 +59,14 @@ const INDICATOR_PRESENTATION: Record<
     icon: CIRCLE_ICON,
     className: `text-agent-live ${FILLED_MARK}`,
   },
-  warning: { icon: LOCK_ICON, className: `text-warning ${OUTLINED_MARK}` },
+  "read-only": {
+    icon: LOCK_ICON,
+    className: `text-warning ${OUTLINED_MARK}`,
+  },
+  stalled: {
+    icon: OCTAGON_ALERT_ICON,
+    className: `text-warning ${OUTLINED_MARK}`,
+  },
   error: {
     icon: TRIANGLE_ALERT_ICON,
     className: `text-danger ${OUTLINED_MARK}`,
@@ -77,7 +86,7 @@ const AgentStatusGlyph = ({
   const presentation = INDICATOR_PRESENTATION[indicator];
   return (
     <span
-      className={`inline-flex shrink-0 items-center ${presentation.className}`}
+      className={`inline-flex size-3.5 shrink-0 items-center justify-center ${presentation.className}`}
       data-review-agent-status={indicator}
       aria-hidden="true"
     >

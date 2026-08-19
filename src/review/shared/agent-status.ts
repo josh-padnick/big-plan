@@ -125,7 +125,7 @@ export type CurrentAgentActivity =
  * fills a disc.
  */
 export type AgentHealthIndicator =
-  "healthy" | "working" | "warning" | "error" | "unavailable";
+  "healthy" | "working" | "read-only" | "stalled" | "error" | "unavailable";
 
 export type AgentHealth = {
   readonly indicator: AgentHealthIndicator;
@@ -159,7 +159,7 @@ export const deriveAgentHealth = ({
     return { indicator: "unavailable", label: "No agent session" };
   }
   if (isReadOnly) {
-    return { indicator: "warning", label: "Using read-only session" };
+    return { indicator: "read-only", label: "Using read-only session" };
   }
   if (!isObservable) {
     return { indicator: "unavailable", label: "Agent status unavailable" };
@@ -174,7 +174,7 @@ export const deriveAgentHealth = ({
     return { indicator: "error", label: "Agent error" };
   }
   if (activity.state === "stalled") {
-    return { indicator: "warning", label: "Agent not responding" };
+    return { indicator: "stalled", label: "Agent not responding" };
   }
   if (activity.state === "working") {
     return { indicator: "working", label: "Agent working" };

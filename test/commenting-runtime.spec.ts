@@ -2702,7 +2702,6 @@ test("should show the active claim's model despite a competing heartbeat", async
     claimedBy: "abababababababab",
     model: {
       name: "grok-4.6",
-      effort: "high",
       client: "grok-cli 0.2.99",
       sessionUrl: "https://grok.com/chat/42",
     },
@@ -2714,7 +2713,11 @@ test("should show the active claim's model despite a competing heartbeat", async
     JSON.stringify({
       sessionId: session.sessionId,
       state: "waiting",
-      model: { name: "Wrong waiting agent" },
+      model: {
+        name: "Wrong waiting agent",
+        effort: "max",
+        client: "wrong-cli 1.0",
+      },
       updatedAtMs: Date.now(),
     }),
   );
@@ -2743,10 +2746,10 @@ test("should show the active claim's model despite a competing heartbeat", async
     "viewBox",
     "0 0 34 33",
   );
-  // Effort is shown only because the connector reported it, and it travels with
-  // the name rather than standing beside it as a second fact.
-  await expect(modelBadge).toContainText("high");
-  await expect(modelBadge).toHaveAttribute("data-review-agent-effort", "high");
+  // A claim is one declaration. Its missing effort is not filled from the
+  // competing heartbeat, because that would compose an agent nobody declared.
+  await expect(modelBadge).not.toContainText("max");
+  await expect(modelBadge).not.toHaveAttribute("data-review-agent-effort");
   // A declared URL is the one segment that becomes an affordance.
   const chatLink = rail.getByRole("link", { name: "Open the agent's chat" });
   await expect(chatLink).toHaveAttribute("href", "https://grok.com/chat/42");
@@ -3521,6 +3524,102 @@ test.describe("a resolve the runtime refuses", () => {
   });
 });
 
+test("should align an agent request target at the top of the reading column", async ({
+  page,
+  reviewRuntimeScrollUrl,
+}) => {
+  await page.goto(reviewRuntimeScrollUrl);
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const targetHeading = page.getByRole("heading", {
+    name: "Scroll regression target",
+  });
+  const target = page.locator("[data-slide]").filter({ has: targetHeading });
+  await target.hover();
+  await target.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/ });
+  const submitRightAway = composer.getByRole("switch", {
+    name: "Submit right away",
+  });
+  if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+    await submitRightAway.click();
+  }
+  await composer
+    .getByLabel("Add a comment")
+    .fill("Show this below-fold target.");
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const feedback = page.getByRole("complementary", { name: "Feedback" });
+  const sent = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await feedback
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await sent).ok()).toBe(true);
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = nextPendingAgentRequest(exchange, agentViewer());
+  if (request === undefined || request.kind !== "feedback") {
+    throw new Error("The scroll journey did not create a feedback request");
+  }
+  await claimAgentRequest({
+    store,
+    activeSessionId: session.sessionId,
+    requestId: request.requestId,
+    claimedBy: agentSessionId,
+    baselineSnapshot: request.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
+
+  const statusTrigger = agentStatusTrigger(page);
+  await expect(statusTrigger).toHaveAccessibleName(
+    "Agent Status: Agent working",
+  );
+  await statusTrigger.click();
+  const activeWork = agentSidebar(page).locator(
+    "[data-review-current-activity='working']",
+  );
+  await expect(activeWork).toBeVisible();
+  await page.evaluate(() => window.scrollTo({ top: 0 }));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  const viewportHeight = page.viewportSize()?.height ?? 0;
+  expect(
+    await target.evaluate((element) => element.getBoundingClientRect().top),
+  ).toBeGreaterThan(viewportHeight);
+
+  await activeWork.getByRole("button").first().click();
+  await expect
+    .poll(async () => {
+      const top = await target.evaluate(
+        (element) => element.getBoundingClientRect().top,
+      );
+      return top < 0
+        ? `above:${Math.round(top)}`
+        : top >= viewportHeight / 2
+          ? `below:${Math.round(top)}`
+          : "positioned";
+    })
+    .toBe("positioned");
+  await expect(agentSidebar(page)).toHaveCount(0);
+  await expect(feedback).toBeVisible();
+});
+
 test("should restore and submit staged comments through the local review runtime", async ({
   page,
   reviewRuntimeUrl,
@@ -3569,6 +3668,10 @@ test("should restore and submit staged comments through the local review runtime
     ];
   });
   expect(toolbarGaps).toEqual([4, 4]);
+  const agentStatusWidth = Math.round(
+    (await agentStatus.boundingBox())?.width ?? 0,
+  );
+  expect(agentStatusWidth).toBeGreaterThan(0);
 
   await stageComment(page, "Clarify the failure boundary.");
   await stageComment(page, "Name the operator recovery path.");
@@ -4034,6 +4137,9 @@ test("should restore and submit staged comments through the local review runtime
   await expect(workingAgent).toHaveAccessibleName(
     "Agent Status: Agent working",
   );
+  expect(Math.round((await workingAgent.boundingBox())?.width ?? 0)).toBe(
+    agentStatusWidth,
+  );
   const workingMark = agentStatusIndicator(page);
   await expect(workingMark).toHaveAttribute(
     "data-review-agent-status",
@@ -4121,32 +4227,10 @@ test("should restore and submit staged comments through the local review runtime
     activeWork.getByRole("button", { name: /^Copy agent session identifier/u }),
   ).toBeVisible();
 
-  // Clicking the request brings its block to the top of the reading column.
-  // "Nearest" used to park a block below the fold at the very bottom edge,
-  // which reads as the page having scrolled past the thing that was asked for.
-  // This fixture's plan is shorter than the viewport, so this holds the
-  // behaviour rather than reproducing the geometry that exposed it; the
-  // measurement against a full-length plan is in the live preview.
-  await page.evaluate(() => window.scrollTo({ top: 0 }));
-  const subject = activeWork.getByRole("button").first();
-  const commentedBlockId = await subject.click().then(async () => {
-    await page.waitForTimeout(700);
-    return page.evaluate(() => {
-      const highlighted = document.querySelector<HTMLElement>(
-        "[data-review-associated]",
-      );
-      return highlighted?.getBoundingClientRect().top ?? null;
-    });
-  });
-  expect(commentedBlockId).not.toBeNull();
-  // Below the branding bar, and nowhere near the bottom of the viewport.
-  const viewportHeight = page.viewportSize()?.height ?? 0;
-  expect(commentedBlockId ?? 0).toBeGreaterThanOrEqual(0);
-  expect(commentedBlockId ?? 0).toBeLessThan(viewportHeight / 2);
-
   // Opening the request is a request to see the reviewer's own feedback, so the
   // sidebar claims its slot for the feedback body. Setting the tab alone left
   // agent diagnosis on screen and the thread the reader asked for invisible.
+  await activeWork.getByRole("button").first().click();
   await expect(agentSidebar(page)).toHaveCount(0);
   await expect(rail).toBeVisible();
   await expect(rail.getByRole("tab", { name: "Comments" })).toHaveAttribute(

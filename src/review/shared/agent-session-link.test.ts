@@ -29,6 +29,8 @@ describe("agentSessionAffordance", () => {
     // the application a custom scheme would reach.
     "vscode://anthropic.claude/session/abc",
     "http://claude.ai/code/abc123",
+    "javascript:alert(1)",
+    "data:text/html,not-a-chat",
     // Not a URL.
     "8ad2b97a-fb30-41bb-bd12",
   ])("should offer %j as an identifier instead of a link", (sessionUrl) => {

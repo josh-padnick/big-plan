@@ -77,6 +77,7 @@ type WorkerFixtures = {
 
 type TestFixtures = {
   readonly reviewRuntimeUrl: string;
+  readonly reviewRuntimeScrollUrl: string;
   // Browser-level messages a journey deliberately provokes, such as the 404 a
   // missing picture logs while the document proves it says so. Every other
   // console error still fails the test, so an allowance names one expected
@@ -340,6 +341,18 @@ const WIREFRAME_SPARSE_APP_SHELL_MDX = `# Sparse application shells
 </Wireframe>
 `;
 
+const REVIEW_RUNTIME_SCROLL_CONTEXT = Array.from(
+  { length: 32 },
+  (_, index) =>
+    `Review context ${index + 1} keeps a later target below the fold before the reviewer asks to see it.`,
+).join("\n\n");
+
+const REVIEW_RUNTIME_SCROLL_TAIL = Array.from(
+  { length: 24 },
+  (_, index) =>
+    `Following context ${index + 1} leaves enough document below the target to align it at the top.`,
+).join("\n\n");
+
 const REVIEW_RUNTIME_MDX = `# Review persistence
 
 Keep every reviewer note safe while the plan is discussed.
@@ -358,6 +371,21 @@ The table has adjacent targets that must remain distinguishable.
 Sending writes one real feedback package beside this plan.
 `;
 
+const REVIEW_RUNTIME_SCROLL_MDX = `${REVIEW_RUNTIME_MDX}
+
+## Scroll regression context
+
+${REVIEW_RUNTIME_SCROLL_CONTEXT}
+
+## Scroll regression target
+
+This block is intentionally below the initial viewport.
+
+## Scroll regression tail
+
+${REVIEW_RUNTIME_SCROLL_TAIL}
+`;
+
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   reviewRuntimeUrl: [
     async ({ page }, use) => {
@@ -371,6 +399,24 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         await use(runtime.url);
       } finally {
         // Unmount the polling review island before its runtime disappears.
+        if (!page.isClosed()) await page.goto("about:blank");
+        await runtime.close();
+        await rm(outputDir, { recursive: true, force: true });
+      }
+    },
+    { scope: "test" },
+  ],
+  reviewRuntimeScrollUrl: [
+    async ({ page }, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-review-runtime-scroll-"),
+      );
+      const inputPath = join(outputDir, "plan.mdx");
+      await writeFile(inputPath, REVIEW_RUNTIME_SCROLL_MDX, "utf8");
+      const runtime = await startReviewRuntime({ planPath: inputPath });
+      try {
+        await use(runtime.url);
+      } finally {
         if (!page.isClosed()) await page.goto("about:blank");
         await runtime.close();
         await rm(outputDir, { recursive: true, force: true });

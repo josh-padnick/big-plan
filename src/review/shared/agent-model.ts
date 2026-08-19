@@ -27,7 +27,7 @@ export type AgentModelIdentity = {
   readonly effort?: string;
   /** Which tool is connected, for example `claude-code 2.1.217`. */
   readonly client?: string;
-  /** Where the agent's own conversation can be opened, when it has a URL. */
+  /** The connector's URL-shaped or opaque address for its conversation. */
   readonly sessionUrl?: string;
   /** An opaque handle for that conversation, when there is no URL for it. */
   readonly sessionId?: string;
@@ -42,9 +42,65 @@ writes colour: `claude-opus-5\u001b[1m` arrives as a model name and renders as
 sequences is not the same as rewriting what was declared - the card still never
 re-cases or expands an id - it is refusing bytes that were never text.
 */
-const withoutTerminalFormatting = (value: string): string =>
-  // eslint-disable-next-line no-control-regex -- the point is the control bytes
-  value.replace(/\u001b\[[0-9;]*[a-zA-Z]|[\u0000-\u001f\u007f]/gu, "");
+const CONTROL_STRING_STARTS = new Set([0x50, 0x58, 0x5d, 0x5e, 0x5f]);
+const C1_CONTROL_STRING_STARTS = new Set([0x90, 0x98, 0x9d, 0x9e, 0x9f]);
+
+/** Consumes a CSI sequence, including private parameters, through its final byte. */
+const afterCsi = (value: string, start: number): number => {
+  for (let index = start; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0x40 && code <= 0x7e) return index + 1;
+  }
+  return value.length;
+};
+
+/** Consumes an OSC, DCS, SOS, PM, or APC string through BEL or ST. */
+const afterControlString = (value: string, start: number): number => {
+  for (let index = start; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0x07 || code === 0x9c) return index + 1;
+    if (code === 0x1b && value.charCodeAt(index + 1) === 0x5c) {
+      return index + 2;
+    }
+  }
+  return value.length;
+};
+
+/** Consumes one seven-bit escape sequence from its ESC byte. */
+const afterEscapeSequence = (value: string, start: number): number => {
+  const kind = value.charCodeAt(start + 1);
+  if (kind === 0x5b) return afterCsi(value, start + 2);
+  if (CONTROL_STRING_STARTS.has(kind)) {
+    return afterControlString(value, start + 2);
+  }
+  let index = start + 1;
+  while (index < value.length) {
+    const code = value.charCodeAt(index);
+    if (code < 0x20 || code > 0x2f) break;
+    index += 1;
+  }
+  return Math.min(index + 1, value.length);
+};
+
+const withoutTerminalFormatting = (value: string): string => {
+  let text = "";
+  for (let index = 0; index < value.length;) {
+    const code = value.charCodeAt(index);
+    if (code === 0x1b) {
+      index = afterEscapeSequence(value, index);
+    } else if (code === 0x9b) {
+      index = afterCsi(value, index + 1);
+    } else if (C1_CONTROL_STRING_STARTS.has(code)) {
+      index = afterControlString(value, index + 1);
+    } else if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+      index += 1;
+    } else {
+      text += value[index];
+      index += 1;
+    }
+  }
+  return text;
+};
 
 const readText = (
   value: object,
@@ -56,28 +112,6 @@ const readText = (
   if (typeof raw !== "string") return undefined;
   const trimmed = withoutTerminalFormatting(raw).trim();
   return trimmed === "" || trimmed.length > limit ? undefined : trimmed;
-};
-
-/**
- * Accepts only a session URL the browser can safely open.
- *
- * A declared URL becomes a link the reviewer clicks, so the scheme is checked
- * rather than trusted: `javascript:` and `data:` are the reason this exists,
- * and a URL that fails the check is dropped rather than rendered inert, since a
- * link that cannot be followed is worse than no link at all.
- */
-const readSessionUrl = (value: object): string | undefined => {
-  const declared = readText(value, "sessionUrl", 2_048);
-  if (declared === undefined) return undefined;
-  let parsed: URL;
-  try {
-    parsed = new URL(declared);
-  } catch {
-    return undefined;
-  }
-  return parsed.protocol === "https:" || parsed.protocol === "http:"
-    ? declared
-    : undefined;
 };
 
 /**
@@ -98,7 +132,7 @@ export const decodeAgentModelIdentity = (
   const name = readText(value, "name", 80);
   const effort = readText(value, "effort", 24);
   const client = readText(value, "client", 80);
-  const sessionUrl = readSessionUrl(value);
+  const sessionUrl = readText(value, "sessionUrl", 2_048);
   const sessionId = readText(value, "sessionId", 120);
   const identity = {
     ...(name === undefined ? {} : { name }),
@@ -109,3 +143,12 @@ export const decodeAgentModelIdentity = (
   };
   return Object.keys(identity).length === 0 ? undefined : identity;
 };
+
+/** Selects one connector declaration without composing fields across agents. */
+export const selectAgentModelIdentity = ({
+  claimed,
+  presence,
+}: {
+  readonly claimed?: AgentModelIdentity;
+  readonly presence?: AgentModelIdentity;
+}): AgentModelIdentity | undefined => claimed ?? presence;

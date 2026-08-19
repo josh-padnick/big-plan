@@ -2347,21 +2347,39 @@ const withAgentHeartbeatLock = async ({
   }
 };
 
-/** The writer the stored heartbeat currently names, if it names one. */
-const storedHeartbeatWriterId = async (
-  store: ReviewStore,
-): Promise<string | undefined> => {
+type StoredHeartbeatContinuity = {
+  readonly writerId?: string;
+  readonly model?: AgentModelIdentity;
+};
+
+/** Reads facts an omitted heartbeat field must carry forward in one session. */
+const storedHeartbeatContinuity = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<StoredHeartbeatContinuity> => {
   const value = await readStoreJson(store.agentHeartbeatPath);
   if (
     typeof value !== "object" ||
     value === null ||
     Array.isArray(value) ||
-    !("writerId" in value) ||
-    typeof value.writerId !== "string"
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId
   ) {
-    return undefined;
+    return {};
   }
-  return value.writerId;
+  const writerId =
+    "writerId" in value && typeof value.writerId === "string"
+      ? value.writerId
+      : undefined;
+  const model =
+    "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
+  return {
+    ...(writerId === undefined ? {} : { writerId }),
+    ...(model === undefined ? {} : { model }),
+  };
 };
 
 /**
@@ -2408,7 +2426,9 @@ export const writeAgentHeartbeat = async ({
     store,
     lockAttempts,
     change: async () => {
-      const writer = writerId ?? (await storedHeartbeatWriterId(store));
+      const stored = await storedHeartbeatContinuity({ store, sessionId });
+      const writer = writerId ?? stored.writerId;
+      const declaredModel = model ?? stored.model;
       await writeStoreJson({
         path: store.agentHeartbeatPath,
         value: {
@@ -2416,7 +2436,7 @@ export const writeAgentHeartbeat = async ({
           state,
           ...(requestId === undefined ? {} : { requestId }),
           ...(writer === undefined ? {} : { writerId: writer }),
-          ...(model === undefined ? {} : { model }),
+          ...(declaredModel === undefined ? {} : { model: declaredModel }),
           updatedAtMs: now,
         },
       });

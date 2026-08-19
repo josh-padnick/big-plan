@@ -101,7 +101,7 @@ describe("agent health", () => {
         isReadOnly: true,
         isObservable: true,
       }),
-    ).toEqual({ indicator: "warning", label: "Using read-only session" });
+    ).toEqual({ indicator: "read-only", label: "Using read-only session" });
   });
 
   it("should report an unobservable review session as unknown, never as bad", () => {
@@ -141,7 +141,7 @@ describe("current agent activity", () => {
       state: "disconnected",
       headline: "The agent has disconnected.",
       supporting:
-        "The session has ended or the agent stopped. Reconnect to continue. All comments are safe.",
+        "Reconnect the coding agent to continue. All comments are safe.",
     });
   });
 
@@ -197,7 +197,7 @@ describe("current agent activity", () => {
       state: "disconnected",
       headline: "The agent has disconnected.",
       supporting:
-        "The session has ended or the agent stopped. Reconnect to continue. All comments are safe.",
+        "No agent signal for 1m 15s (disconnect threshold: 75 seconds); the session may have ended or gone idle. Reconnect to continue. All comments are safe.",
     });
   });
 
@@ -217,7 +217,7 @@ describe("current agent activity", () => {
       tone: "danger",
       headline: "The agent has disconnected.",
       supporting:
-        "The session has ended or the agent stopped. Reconnect to continue. All comments are safe.",
+        "Reconnect the coding agent to continue. All comments are safe.",
     });
     expect(activity).not.toHaveProperty("requestId");
   });
@@ -492,7 +492,7 @@ describe("current agent activity", () => {
         isReadOnly: false,
         isObservable: true,
       }),
-    ).toEqual({ indicator: "warning", label: "Agent not responding" });
+    ).toEqual({ indicator: "stalled", label: "Agent not responding" });
   });
 
   it("should still report disconnection once no agent holds any work", () => {
@@ -1108,9 +1108,10 @@ describe("observed session end", () => {
       now: NOW,
       heartbeatAt: NOW - 4_000,
       endedAtMs: NOW - 4_000,
+      everConnected: true,
     });
     expect(activity.state).toBe("disconnected");
-    expect(activity.headline).toBe("The agent is disconnected");
+    expect(activity.headline).toBe("The agent has disconnected.");
     expect(activity.supporting).toBe(
       "The agent session ended 4s ago. Reconnect the coding agent to continue. All comments are safe.",
     );
@@ -1127,6 +1128,7 @@ describe("observed session end", () => {
       runtimeOffline: false,
       now: NOW,
       heartbeatAt: NOW - AGENT_STALL_MS - 1_000,
+      everConnected: true,
     });
     expect(activity.supporting).toContain("disconnect threshold");
     expect(activity.supporting).not.toContain("session ended");
