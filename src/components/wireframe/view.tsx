@@ -435,11 +435,17 @@ const WireframeElement = ({
           data-wireframe-overlay={node.kind}
           data-wireframe-backdrop={node.backdrop}
         >
+          {/* The role says what is drawn, the way every other primitive here
+              names the control it depicts. aria-modal deliberately is not set:
+              it is not a description but an instruction to hide the rest of
+              the document, and a drawing of a modal must not take the plan
+              around it away from a reader using assistive technology. */}
           <div
             className="wireframe-overlay-surface flex flex-col gap-3"
             role={node.kind === "alert" ? "alertdialog" : "dialog"}
-            aria-modal="true"
-            {...(node.title === undefined ? {} : { "aria-label": node.title })}
+            aria-label={
+              node.title ?? (node.kind === "alert" ? "Alert dialog" : "Dialog")
+            }
           >
             {node.title === undefined ? null : (
               <h4 className="wireframe-overlay-title flex min-w-0 items-center gap-2">

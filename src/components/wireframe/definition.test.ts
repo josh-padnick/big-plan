@@ -2443,7 +2443,10 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-overlay":"alert"');
     expect(rendered).toContain('"data-wireframe-backdrop":"dim"');
     expect(rendered).toContain('"role":"alertdialog"');
-    expect(rendered).toContain('"ariaModal":"true"');
+    expect(rendered).toContain('"ariaLabel":"Delete this plan?"');
+    // A drawing of a modal must not hide the plan around it from a reader
+    // using assistive technology, so the instruction to do that is never set.
+    expect(rendered).not.toContain("ariaModal");
   });
 
   it("should report an overlay with no page under it and no way out", () => {
