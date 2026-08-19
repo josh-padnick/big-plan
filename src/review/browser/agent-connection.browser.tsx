@@ -682,82 +682,49 @@ export const connectionLogRowReading = ({
     : { label, prefix: "Quiet for ", suffix: "", showReason };
 };
 
-export type ConnectionLogTally = {
-  readonly quietPeriods: number;
-  readonly sessionsEnded: number;
-  readonly resumed: number;
-};
-
 /**
- * Names the state the log's summary reports.
+ * Paints one timeline marker: a dot, filled by what the entry is.
  *
- * It has to answer with the same word as the health card above it: a summary
- * reading "NO SIGNAL" under a card reading "Agent session ended" tells the
- * reviewer the two disagree about what happened.
+ * The paint lives here rather than inline so it has one owner and one test.
+ * Its rule is that a marker names exactly one background utility. Two of them
+ * in one class list are not resolved by the order they are written, because
+ * they carry equal specificity and the generated stylesheet decides which
+ * comes last - and it emits a named utility after an arbitrary-value one. A
+ * `bg-paper` ground carried in the base therefore outranked the connected
+ * entry's own fill no matter where it was written, and the marker rendered
+ * hollow (BIG-176). Each state names its ground or its fill, never both.
  */
-export const connectionLogState = ({
+export const connectionMarkerClassName = ({
   connected,
-  ended,
+  isLatest,
 }: {
   readonly connected: boolean;
-  readonly ended: boolean;
-}): string => (connected ? "CONNECTED" : ended ? "SESSION ENDED" : "NO SIGNAL");
-
-/**
- * Counts what the log's edges say, keeping reported ends out of the count of
- * gaps Big Plan inferred. Those are different events, and a summary that
- * merges them re-imports the guess the row above it just stopped making.
- */
-export const connectionLogTally = (
-  events: ReadonlyArray<Pick<BrowserConnectionEvent, "connected" | "reason">>,
-): ConnectionLogTally => {
-  let quietPeriods = 0;
-  let sessionsEnded = 0;
-  let resumed = 0;
-  let hasConnected = false;
-  events.forEach((event, index) => {
-    const previous = events[index - 1];
-    if (!event.connected && previous?.connected) {
-      if (connectionEventEnded(event)) sessionsEnded += 1;
-      else quietPeriods += 1;
-    }
-    if (event.connected && hasConnected && previous?.connected === false) {
-      resumed += 1;
-    }
-    if (event.connected) hasConnected = true;
-  });
-  return { quietPeriods, sessionsEnded, resumed };
-};
-
-/** Renders the tally, naming reported ends only once there are some. */
-export const connectionLogTallyLabel = ({
-  quietPeriods,
-  sessionsEnded,
-  resumed,
-}: ConnectionLogTally): string =>
-  [
-    `${quietPeriods} quiet ${quietPeriods === 1 ? "period" : "periods"}`,
-    ...(sessionsEnded === 0
-      ? []
-      : [
-          `${sessionsEnded} ended ${sessionsEnded === 1 ? "session" : "sessions"}`,
-        ]),
-    `${resumed} resumed`,
-  ].join(" · ");
+  readonly isLatest: boolean;
+}): string =>
+  `relative size-[6px] shrink-0 self-center rounded-full border ${
+    connected
+      ? "border-[var(--diff-add-c)] bg-[var(--diff-add-c)]"
+      : isLatest
+        ? "border-warning bg-warning"
+        : "border-muted bg-paper"
+  }`;
 
 /** True when this edge carries the loop's own report that its session ended. */
 export const connectionEventEnded = (
   event: Pick<BrowserConnectionEvent, "connected" | "reason">,
 ): boolean => !event.connected && event.reason === AGENT_SESSION_ENDED_REASON;
 
+/*
+The log is the history and nothing else. State, since, last signal, and the
+event tally are the status card's answers, and the card is on screen directly
+above this section: repeating them here made the reader check two renderings of
+one fact for agreement, and gave the same answer a second voice that could drift
+from the first (BIG-176).
+*/
 const ConnectionLog = ({
-  connected,
-  heartbeatAt,
   events,
   nowMs,
 }: {
-  readonly connected: boolean;
-  readonly heartbeatAt: number;
   readonly events: ReadonlyArray<BrowserConnectionEvent>;
   readonly nowMs: number;
 }) => {
@@ -766,14 +733,6 @@ const ConnectionLog = ({
     .filter((event) => Number.isFinite(event.atMs))
     .sort((left, right) => left.atMs - right.atMs);
   const latest = ordered.at(-1);
-  // A gap in the signal is a quiet period, not an observed disconnection. The
-  // runtime records an edge whenever the heartbeat ages out, and nothing renews
-  // it while a turn runs, so counting these as disconnects and reconnects put
-  // events in the reviewer's log that never happened (BIG-147). An end the
-  // agent's loop reported is the one edge that is not a guess, and it is
-  // counted apart from them (BIG-156).
-  const tally = connectionLogTally(ordered);
-  const latestEnded = latest !== undefined && connectionEventEnded(latest);
   const groups = new Map<string, Array<(typeof ordered)[number]>>();
   for (const event of [...ordered].reverse()) {
     const date = new Intl.DateTimeFormat(undefined, {
@@ -812,46 +771,6 @@ const ConnectionLog = ({
         <p className="mb-0">No connection events recorded yet.</p>
       ) : (
         <>
-          <dl className="mt-3 mb-3 grid grid-cols-2 gap-x-3 gap-y-2 border-y border-edge py-3">
-            <div className="min-w-0">
-              <dt className="mb-0.5 text-2xs font-bold uppercase tracking-caps text-muted">
-                State
-              </dt>
-              <dd
-                className={
-                  connected
-                    ? "m-0 text-xs font-[750] text-[var(--diff-add-c)] [overflow-wrap:anywhere]"
-                    : "m-0 text-xs font-[750] text-warning [overflow-wrap:anywhere]"
-                }
-              >
-                {connectionLogState({ connected, ended: latestEnded })}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="mb-0.5 text-2xs font-bold uppercase tracking-caps text-muted">
-                Since
-              </dt>
-              <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
-                {latest === undefined ? "Unavailable" : formatTime(latest.atMs)}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="mb-0.5 text-2xs font-bold uppercase tracking-caps text-muted">
-                Last signal
-              </dt>
-              <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
-                {relativeSignalLabel({ now: nowMs, at: heartbeatAt })}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="mb-0.5 text-2xs font-bold uppercase tracking-caps text-muted">
-                Events
-              </dt>
-              <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
-                {connectionLogTallyLabel(tally)}
-              </dd>
-            </div>
-          </dl>
           {Array.from(groups).map(([date, rows]) => (
             <section key={date} className="mt-2 [&+section]:mt-3">
               <h3 className="mt-0 mb-1 border-b border-edge pb-1 text-2xs font-semibold text-muted">
@@ -878,7 +797,12 @@ const ConnectionLog = ({
                   return (
                     <li
                       key={event.eventId ?? event.at}
-                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-0.5 py-1 leading-none first:pt-0.5 last:pb-0 [&>*]:min-h-4 [&_*]:leading-[1.2]"
+                      /* The minimum line box belongs to the row's text, which
+                         is what has to keep a common baseline rhythm. The
+                         marker is a drawn dot with its own geometry, and a
+                         floor applied to it stretches the circle into a pill
+                         instead of aligning anything (BIG-176). */
+                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-0.5 py-1 leading-none first:pt-0.5 last:pb-0 [&>*:not([data-review-connection-marker])]:min-h-4 [&_*]:leading-[1.2]"
                       data-review-connection-event={
                         event.connected
                           ? "connected"
@@ -891,7 +815,10 @@ const ConnectionLog = ({
                       }
                     >
                       <span
-                        className={`relative size-[6px] self-center rounded-full border bg-paper ${event.connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-c)]" : event === latest ? "border-warning bg-warning" : "border-muted"}`}
+                        className={connectionMarkerClassName({
+                          connected: event.connected,
+                          isLatest: event === latest,
+                        })}
                         data-review-connection-marker=""
                         aria-hidden="true"
                       />
@@ -942,10 +869,7 @@ export const AgentConnectionPanel = ({
   activity,
   status,
   presenceState,
-  connected,
   heldWork,
-  heartbeatAt,
-  endedAtMs,
   modelName,
   modelEffort,
   modelClient,
@@ -960,7 +884,6 @@ export const AgentConnectionPanel = ({
   readonly activity: CurrentAgentActivity;
   readonly status: AgentHealth;
   readonly presenceState: ReviewAgentProjection["state"];
-  readonly connected: boolean;
   readonly modelName?: string;
   readonly modelEffort?: string;
   readonly modelClient?: string;
@@ -976,9 +899,6 @@ export const AgentConnectionPanel = ({
    * presence alone (BIG-147).
    */
   readonly heldWork: HeldWorkQuiet;
-  readonly heartbeatAt: number;
-  /** When the agent's own loop reported the session ending, if it did. */
-  readonly endedAtMs?: number;
   readonly recoveryPrompt: string;
   readonly isReadOnly: boolean;
   readonly replacementUrl: string | null;
@@ -1012,11 +932,6 @@ export const AgentConnectionPanel = ({
   const presenceIsObservable = presenceState === "observable";
   const agentStatusIsAvailable =
     presenceIsObservable || presenceState === "agent-unavailable";
-  const isConnected =
-    presenceIsObservable &&
-    connected &&
-    activity.state !== "offline" &&
-    activity.state !== "disconnected";
   return (
     <section className="min-w-0">
       {agentStatusIsAvailable ? (
@@ -1107,12 +1022,7 @@ export const AgentConnectionPanel = ({
       {isReadOnly || !agentStatusIsAvailable ? null : (
         <>
           <hr className="mt-3 border-0 border-t border-edge" />
-          <ConnectionLog
-            connected={isConnected}
-            heartbeatAt={endedAtMs ?? heartbeatAt}
-            events={connectionLog}
-            nowMs={currentNowMs}
-          />
+          <ConnectionLog events={connectionLog} nowMs={currentNowMs} />
         </>
       )}
     </section>

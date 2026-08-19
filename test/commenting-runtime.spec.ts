@@ -4029,6 +4029,56 @@ test("should restore and submit staged comments through the local review runtime
     .locator("xpath=ancestor::summary");
   await expect(connectionLog.locator("svg")).toHaveCount(1);
   await connectionLog.click();
+  // The log is the history alone. State, since, last signal, and the event
+  // tally are the status card's answers, and repeating them under this heading
+  // asked the reader to reconcile two renderings of one fact (BIG-176).
+  const connectionLogBody = agentRail.locator(
+    "[data-review-connection-history]",
+  );
+  await expect(connectionLogBody.locator("dl")).toHaveCount(0);
+  for (const duplicated of ["Last signal", "State", "Since", "Events"]) {
+    await expect(
+      connectionLogBody.getByText(duplicated, { exact: true }),
+    ).toHaveCount(0);
+  }
+  /*
+  Every entry's marker is a dot: as wide as it is tall, and painted the way its
+  own state names. Both halves have failed silently here - a minimum line box
+  meant for the row's text stretched the circle into a pill, and a `bg-paper`
+  ground carried in the base class list outranked each state's fill, so the
+  markers rendered as empty vertical ovals (BIG-176). Geometry and paint are
+  pinned together because either alone still reads as a defect.
+  */
+  const markers = await agentRail
+    .locator("[data-review-connection-marker]")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const box = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        const row = node.parentElement;
+        return {
+          width: Math.round(box.width),
+          height: Math.round(box.height),
+          background: style.backgroundColor,
+          borderColor: style.borderColor,
+          // A live entry - connected, or the latest one whatever it says -
+          // is the filled kind; a settled quiet entry is the hollow kind.
+          live:
+            row?.getAttribute("data-review-connection-event") === "connected" ||
+            row?.hasAttribute("data-review-connection-current") === true,
+        };
+      }),
+    );
+  expect(markers.length).toBeGreaterThan(0);
+  for (const marker of markers) {
+    expect(marker.width).toBe(6);
+    expect(marker.height).toBe(marker.width);
+    // Filled means painted its own colour edge to edge. The regression showed
+    // the page ground through every marker instead, which is what made them
+    // read as empty.
+    if (marker.live) expect(marker.background).toBe(marker.borderColor);
+    else expect(marker.background).not.toBe(marker.borderColor);
+  }
   const currentConnectionEvent = agentRail.locator(
     "[data-review-connection-current]",
   );
