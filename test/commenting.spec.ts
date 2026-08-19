@@ -905,13 +905,16 @@ test("should keep a comment thread level with a card it collapsed after the comm
         best = { blockId, collapseId, offset };
       }
     }
+    if (best === null) {
+      throw new Error("A card must hold an identified block to comment on");
+    }
     return best;
   });
-  const remembered = deepest?.offset ?? 0;
+  const remembered = deepest.offset;
 
-  const block = page.locator(`[data-block-id="${deepest?.blockId ?? ""}"]`);
+  const block = page.locator(`[data-block-id="${deepest.blockId}"]`);
   const card = page.locator(
-    `[data-slide][data-collapse-id="${deepest?.collapseId ?? ""}"]`,
+    `[data-slide][data-collapse-id="${deepest.collapseId}"]`,
   );
   await block.scrollIntoViewIfNeeded();
   const quoted = await block.evaluate((element) => {
@@ -983,6 +986,37 @@ test("should keep a comment thread level with a card it collapsed after the comm
       return "level with the card";
     })
     .toBe("level with the card");
+
+  /*
+  Holding the distance while the card is collapsed is half the promise; giving
+  it back is the other half. Toggling the sidebar re-runs the positioning
+  effect, which is the same re-run an agent reply or a snapshot reconcile
+  causes, and the distance cannot be measured again while the target is hidden.
+  If the re-run discards it, expanding the card returns the thread to the card's
+  top instead of to the words it points at.
+  */
+  const feedbackControl = page.getByRole("button", { name: /Feedback/u });
+  const sidebar = page.getByRole("complementary", { name: "Feedback" });
+  await feedbackControl.click();
+  await expect(sidebar).toBeVisible();
+  await feedbackControl.click();
+  await expect(sidebar).not.toBeVisible();
+
+  await card
+    .locator(":scope > [data-collapse-header] button[data-collapse-toggle]")
+    .click();
+  await expect(card).not.toHaveAttribute("data-collapsed", "");
+  await expect(block).toBeVisible();
+
+  await expect
+    .poll(async () => {
+      const restored = await drop();
+      if (Math.abs(restored - droppedWhileOpen) <= 1) {
+        return "back beside its block";
+      }
+      return `${Math.round(droppedWhileOpen - restored)} above its block`;
+    })
+    .toBe("back beside its block");
 });
 
 test("should minimize an expanded long comment from the feedback toolbar", async ({

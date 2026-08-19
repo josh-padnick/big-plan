@@ -1940,7 +1940,7 @@ const threadAnchorElement = (comment: ReviewComment): HTMLElement | null => {
   const nominated = document.querySelector<HTMLElement>(
     `[data-review-thread-anchor="${CSS.escape(comment.id)}"]`,
   );
-  if (nominated !== null && nominated.getClientRects().length > 0) {
+  if (nominated !== null && isRendered(nominated)) {
     return nominated;
   }
   return targetElement(comment.target);
@@ -1970,6 +1970,11 @@ const useThreadHosts = (
     new Map(),
   );
   const isWide = useWide();
+  // Outlives the effect on purpose. The effect re-runs whenever the comment
+  // list gets a fresh identity, which routine agent polling causes, and a
+  // distance measured before a collapse must not be thrown away by a re-run
+  // that happens while the target is hidden and cannot be measured again.
+  const targetOffsetsRef = useRef(new Map<string, number>());
 
   useEffect(() => {
     if (!isWide) {
@@ -1977,7 +1982,11 @@ const useThreadHosts = (
       return;
     }
     const mounted = new Map<string, HTMLDivElement>();
-    const targetOffsets = new Map<string, number>();
+    const targetOffsets = targetOffsetsRef.current;
+    const live = new Set(comments.map((comment) => comment.id));
+    for (const id of targetOffsets.keys()) {
+      if (!live.has(id)) targetOffsets.delete(id);
+    }
     for (const comment of comments) {
       const anchor = threadAnchorElement(comment);
       if (anchor === null) continue;
@@ -1994,13 +2003,15 @@ const useThreadHosts = (
       The distance only exists when both boxes were laid out. Recording it from
       an anchor that is not on screen - one inside a collapsed slide, say -
       stores the difference between two all-zero rects, which reads back as a
-      real measurement of zero.
+      real measurement of zero, so a hidden target leaves the last real
+      measurement standing rather than replacing it.
 
       For the same reason it is not applied once nothing occupies the place it
       measures. A collapse hides the body but keeps the card, so the card still
       measures while the distance inside it names a gap that has closed, and
       adding it would draw the thread below the collapsed card beside unrelated
-      content. Level with the card is the whole answer until the target is back.
+      content. Level with the card is the whole answer until the target is back,
+      and the distance is still here to put the thread beside it again.
       */
       if (isRendered(anchor) && isRendered(container)) {
         targetOffsets.set(
