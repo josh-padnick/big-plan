@@ -40,6 +40,7 @@ import {
   commitRequestTerminal,
   ensureAgentRequest,
   recordAgentConnectionState,
+  releaseClaimsHeldBy,
   removeCommentFromQueuedFeedbackRequest,
   ResolvedThreadWorkRejected,
   reviseQueuedRequest,
@@ -2231,5 +2232,96 @@ describe("request mailbox", () => {
         request: chatRequest("What is the retry boundary?"),
       }),
     ).resolves.toMatchObject({ kind: "chat" });
+  });
+});
+
+// BIG-190: disconnecting an agent drops the answer it was drafting and keeps the
+// reviewer's message, so the release has to be exactly that and nothing more.
+describe("releasing the claims a disconnected agent held", () => {
+  const claimed = async () => {
+    const { planPath, store } = await preparedReview();
+    const request = chatRequest("Why is this ordering right?");
+    await writeAgentRequest({ store, request });
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:01:00.000Z",
+    });
+    return { planPath, store, request };
+  };
+
+  it("should return the claimed request to the queue without ending it", async () => {
+    const { store, request } = await claimed();
+    await expect(
+      releaseClaimsHeldBy({
+        store,
+        sessionId,
+        planId,
+        claimedBy: agentA,
+        step: "Claim released when the reviewer disconnected the agent",
+        detail: "The answer in flight was dropped",
+      }),
+    ).resolves.toEqual([request.requestId]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    const released = exchange.requests.find(
+      (candidate) => candidate.requestId === request.requestId,
+    );
+    // The message survives; only the claim on it goes.
+    expect(released).toMatchObject({ body: request.body });
+    expect(released?.claimedBy).toBeUndefined();
+    expect(released?.canceledAt).toBeUndefined();
+    expect(released?.answeredAt).toBeUndefined();
+    // And it is immediately available, rather than after the lease it would
+    // otherwise have to outlive.
+    expect(
+      nextPendingAgentRequest(exchange, {
+        claimedBy: agentB,
+        nowMs: Date.parse("2026-08-10T12:01:05.000Z"),
+      }),
+    ).toMatchObject({ requestId: request.requestId });
+  });
+
+  it("should narrate the release in the reviewer's own terms", async () => {
+    const { store, request } = await claimed();
+    await releaseClaimsHeldBy({
+      store,
+      sessionId,
+      planId,
+      claimedBy: agentA,
+      step: "Claim released when the reviewer disconnected the agent",
+      detail: "The answer in flight was dropped",
+    });
+    await expect(readProgress({ store, sessionId })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: request.requestId,
+          stepCode: "claim-released",
+          step: "Claim released when the reviewer disconnected the agent",
+        }),
+      ]),
+    );
+  });
+
+  it("should leave another agent's claim alone", async () => {
+    const { store, request } = await claimed();
+    await expect(
+      releaseClaimsHeldBy({
+        store,
+        sessionId,
+        planId,
+        claimedBy: agentB,
+        step: "Claim released when the reviewer disconnected the agent",
+        detail: "The answer in flight was dropped",
+      }),
+    ).resolves.toEqual([]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(
+      exchange.requests.find(
+        (candidate) => candidate.requestId === request.requestId,
+      ),
+    ).toMatchObject({ claimedBy: agentA });
   });
 });

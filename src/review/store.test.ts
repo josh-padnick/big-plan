@@ -799,6 +799,7 @@ describe("review store agent presence", () => {
       state: "waiting",
       updatedAtMs: 10_500,
       endedAtMs: 10_500,
+      writerId: "1111111111111111",
     });
   });
 
@@ -870,6 +871,7 @@ describe("review store agent presence", () => {
       connected: true,
       state: "waiting",
       updatedAtMs: 12_000,
+      writerId: "2222222222222222",
     });
   });
 
@@ -902,6 +904,7 @@ describe("review store agent presence", () => {
       connected: true,
       state: "waiting",
       updatedAtMs: 20_000,
+      writerId: "2222222222222222",
     });
   });
 
@@ -956,6 +959,7 @@ describe("review store agent presence", () => {
       connected: true,
       state: "waiting",
       updatedAtMs: 20_300,
+      writerId: "2222222222222222",
     });
   });
 
@@ -1078,6 +1082,7 @@ describe("review store agent presence", () => {
       state: "waiting",
       updatedAtMs: 40_200,
       endedAtMs: 40_200,
+      writerId: "1111111111111111",
     });
   });
 

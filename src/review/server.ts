@@ -71,6 +71,7 @@ import {
   deriveReviewPlanId,
   prepareStore,
   randomId,
+  readAgentDisconnectRequestFor,
   readAgentPresence,
   readComments,
   readResolvedCommentIds,
@@ -135,6 +136,7 @@ import {
 } from "./routes-assets.js";
 import {
   cancelPendingAgentRequest,
+  disconnectAgent,
   deleteQueuedAgentRequest,
   readAgentSnapshot,
   readProgressEvents,
@@ -244,6 +246,11 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
     method: "POST",
     path: "/api/agent-cancel",
     handler: cancelPendingAgentRequest,
+  },
+  {
+    method: "POST",
+    path: "/api/agent-disconnect",
+    handler: disconnectAgent,
   },
   { method: "GET", path: "/api/progress", handler: readProgressEvents },
   { method: "GET", path: "/api/snapshot-diff", handler: readSnapshotDiff },
@@ -1162,6 +1169,14 @@ export const startReviewRuntime = async ({
         // loop reported its own end, which is the one case where the store
         // holds a fact rather than an inference.
         const presence = await readAgentPresence({ store, sessionId });
+        // A disconnect the reviewer asked for explains this edge better than
+        // either default, and it explains it whether or not the agent lived long
+        // enough to acknowledge. It is read against this presence record, so it
+        // can never explain the departure of an agent it was not about.
+        const disconnect = await readAgentDisconnectRequestFor({
+          store,
+          presence,
+        });
         await recordAgentConnectionState({
           store,
           sessionId,
@@ -1169,7 +1184,12 @@ export const startReviewRuntime = async ({
           at: new Date(
             agentConnectionEdgeAtMs({ ...presence, nowMs: Date.now() }),
           ).toISOString(),
-          disconnectReason: agentDisconnectReason(presence),
+          disconnectReason: agentDisconnectReason({
+            ...presence,
+            ...(disconnect === undefined
+              ? {}
+              : { disconnectRequestedAtMs: disconnect.requestedAtMs }),
+          }),
         });
       })
       .catch((error: unknown) => {

@@ -10,10 +10,12 @@ export const PROGRESS_STEP_CODES = [
   "queued-message-deleted",
   "request-canceled",
   "claim-released",
+  "agent-disconnect-requested",
   "request-picked-up",
   "request-reclaimed",
   "response-ready",
   "agent-note",
+  "agent-disconnected",
 ] as const;
 
 export type ProgressStepCode = (typeof PROGRESS_STEP_CODES)[number];
@@ -28,10 +30,12 @@ const PROGRESS_STEP_OWNERS = {
   "queued-message-deleted": "reviewer",
   "request-canceled": "reviewer",
   "claim-released": "reviewer",
+  "agent-disconnect-requested": "reviewer",
   "request-picked-up": "agent",
   "request-reclaimed": "agent",
   "response-ready": "agent",
   "agent-note": "agent",
+  "agent-disconnected": "agent",
 } as const satisfies Readonly<Record<ProgressStepCode, "reviewer" | "agent">>;
 
 const PROGRESS_STATES: ReadonlySet<string> = new Set([

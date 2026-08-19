@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { AGENT_DISCONNECTED_REASON } from "./agent-disconnect.js";
 import {
   AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
+  agentActivityIsAttached,
   agentConnectionEdgeAtMs,
+  agentDisconnectDropsWork,
   agentDisconnectReason,
   agentHasEverConnected,
   agentHoldsClaimedWork,
@@ -1086,6 +1089,21 @@ describe("observed session end", () => {
     expect(AGENT_SESSION_ENDED_REASON).toBe("The agent session ended");
   });
 
+  it("should name a disconnect the reviewer asked for ahead of both defaults", () => {
+    // The reviewer's act is a fact whether or not the agent lived long enough
+    // to acknowledge it, so it outranks a silence and outranks the agent's own
+    // report of the same end (BIG-190).
+    expect(agentDisconnectReason({ disconnectRequestedAtMs: NOW })).toBe(
+      AGENT_DISCONNECTED_REASON,
+    );
+    expect(
+      agentDisconnectReason({
+        endedAtMs: NOW,
+        disconnectRequestedAtMs: NOW,
+      }),
+    ).toBe(AGENT_DISCONNECTED_REASON);
+  });
+
   it("should date a stored edge from the report rather than the poll", () => {
     // The runtime's checker polls every 750ms, so dating a reported end from
     // the poll would put the durable log behind the fact by up to an interval.
@@ -1156,5 +1174,46 @@ describe("observed session end", () => {
     // The lease has not expired, so aging alone would have recorded nothing
     // and dated it now; the reported instant is what the log must carry.
     expect(Date.parse(edge?.at ?? "")).toBe(endedAtMs);
+  });
+});
+
+// BIG-190: the two questions the Disconnect control asks about the card it sits
+// on - is there anyone to disconnect, and would disconnecting cost an answer.
+describe("disconnecting the attached agent", () => {
+  it("should offer a disconnect wherever an agent is attached", () => {
+    for (const state of [
+      "working",
+      "waiting",
+      "stalled",
+      "errored",
+      "idle",
+    ] as const) {
+      expect(agentActivityIsAttached({ state })).toBe(true);
+    }
+  });
+
+  it("should offer no disconnect when nobody is on the other end", () => {
+    for (const state of [
+      "never-connected",
+      "disconnected",
+      "offline",
+    ] as const) {
+      expect(agentActivityIsAttached({ state })).toBe(false);
+    }
+  });
+
+  it("should warn about dropped work whenever a claim is held", () => {
+    // A stalled or errored turn is still a turn: it is the live claim that
+    // costs something, not how well the agent holding it is doing.
+    for (const state of ["working", "stalled", "errored"] as const) {
+      expect(agentDisconnectDropsWork({ state })).toBe(true);
+    }
+  });
+
+  it("should not warn about dropped work when the queue is merely waiting", () => {
+    // A request nobody picked up stays queued for the next agent.
+    for (const state of ["waiting", "idle", "disconnected"] as const) {
+      expect(agentDisconnectDropsWork({ state })).toBe(false);
+    }
   });
 });

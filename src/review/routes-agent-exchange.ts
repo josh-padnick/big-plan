@@ -20,6 +20,7 @@ import {
   cancelAgentRequest,
   deleteQueuedRequest,
   ensureAgentRequest,
+  releaseClaimsHeldBy,
   reviseQueuedRequest,
   type ProgressEventDraft,
 } from "./request-mailbox.js";
@@ -28,8 +29,10 @@ import {
   freezeRequestAttachments,
   randomId,
   readAgentConnectionEvents,
+  readAgentDisconnectRequestFor,
   readAgentPresence,
   readProgress,
+  writeAgentDisconnectRequest,
   writeSnapshot,
   type AgentRequestDeletionResult,
 } from "./store.js";
@@ -95,6 +98,10 @@ export const readAgentSnapshot = async (
     readerProgress.observe(revision);
   }
   const presence = await readAgentPresence({ store, sessionId });
+  // Read against this presence record, so a disconnect the reviewer asked for
+  // reports itself only while the agent it addressed is still the one the
+  // review names. The browser draws the control's pending state from it.
+  const disconnect = await readAgentDisconnectRequestFor({ store, presence });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
   return jsonResponse({
     status: 200,
@@ -104,7 +111,12 @@ export const readAgentSnapshot = async (
       // navigate the reviewer onto a transient parse error while an agent
       // is midway through editing the authoritative MDX.
       currentSnapshot: readerProgress.currentSnapshot(),
-      presence,
+      presence: {
+        ...presence,
+        ...(disconnect === undefined
+          ? {}
+          : { disconnectRequestedAtMs: disconnect.requestedAtMs }),
+      },
       connectionLog,
       plan: context.resolvedPlanPath,
       agentCommand: context.agentCommand,
@@ -374,6 +386,94 @@ export const deleteQueuedAgentRequest = async (
 };
 
 /** Withdraws a request the agent has not answered yet. */
+/**
+ * Tells the attached agent to disconnect, and frees the review for the next one.
+ *
+ * The directive is a message, not a kill: nothing here reaches into the agent's
+ * process. It records who the reviewer disconnected, and the agent reads that at
+ * its next command and ends its own session, which is what makes the connection
+ * log's end a reported one rather than a gap Big Plan inferred (BIG-156).
+ *
+ * The claim is released here rather than waiting for that acknowledgment,
+ * because a mid-turn agent may not run another command for minutes and the
+ * whole point of disconnecting is that the review is free now. The reviewer was
+ * told the in-flight answer would be dropped before they confirmed; this is that
+ * sentence coming true.
+ */
+export const disconnectAgent = async (
+  context: ReviewRouteContext,
+): Promise<ReviewRouteResponse> => {
+  const { store, sessionId, planId } = context;
+  const presence = await readAgentPresence({ store, sessionId });
+  const exchange = await readAgentExchange({ store, sessionId, planId });
+  // The same evidence the card shows the control from: an agent is here if it
+  // is signalling, or if it is holding work. Nothing renews the heartbeat while
+  // a turn runs (BIG-147), so requiring a live signal would refuse a disconnect
+  // in the one state where the reviewer most wants one.
+  const claimed = exchange.requests.find(
+    (request) =>
+      request.claimedBy !== undefined &&
+      request.answeredAt === undefined &&
+      request.canceledAt === undefined,
+  );
+  if (!presence.connected && claimed === undefined) {
+    return refusal({
+      status: 409,
+      reason: "No agent is connected to this review",
+    });
+  }
+  const claimToken = claimed?.claimedBy;
+  if (presence.writerId === undefined && claimToken === undefined) {
+    // A directive addressed to nobody would be a standing order against every
+    // agent that ever attaches, so it is refused rather than written.
+    return refusal({
+      status: 409,
+      reason: "This agent cannot be identified, so it cannot be disconnected",
+    });
+  }
+  const requestedAtMs = Date.now();
+  await writeAgentDisconnectRequest({
+    store,
+    directive: {
+      requestedAtMs,
+      ...(presence.writerId === undefined
+        ? {}
+        : { writerId: presence.writerId }),
+      ...(claimToken === undefined ? {} : { claimToken }),
+    },
+  });
+  const released =
+    claimToken === undefined
+      ? []
+      : await releaseClaimsHeldBy({
+          store,
+          sessionId,
+          planId,
+          claimedBy: claimToken,
+          step: "Claim released when the reviewer disconnected the agent",
+          detail:
+            "The answer that agent had in flight was dropped; the message itself is back in the queue for the next agent",
+        });
+  await appendProgressBestEffort({
+    context,
+    event: {
+      sessionId,
+      atMs: requestedAtMs,
+      stepCode: "agent-disconnect-requested",
+      step: "Disconnect requested by reviewer",
+      state: "done",
+      detail:
+        "The agent is told at its next command; the review is free for another agent now",
+      ...(claimed === undefined ? {} : { requestId: claimed.requestId }),
+    },
+    failureMessage: `Review progress update failed after requesting an agent disconnect for session ${sessionId}`,
+  });
+  return jsonResponse({
+    status: 200,
+    value: { requestedAtMs, releasedRequestIds: released },
+  });
+};
+
 export const cancelPendingAgentRequest = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,

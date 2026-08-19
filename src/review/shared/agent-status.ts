@@ -15,6 +15,7 @@ import {
   requestIsTerminal,
   type TerminalAgentRequest,
 } from "./agent-request-state.js";
+import { AGENT_DISCONNECTED_REASON } from "./agent-disconnect.js";
 import {
   AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
@@ -223,13 +224,27 @@ const abandonedHint =
 export const AGENT_SESSION_ENDED_REASON = "The agent session ended";
 export const AGENT_NO_SIGNAL_REASON = `No agent signal within ${AGENT_STALL_WINDOW_LABEL}`;
 
-/** Names why presence stopped, from the presence record alone. */
+/**
+ * Names why presence stopped, from what the review already knows.
+ *
+ * A disconnect the reviewer asked for outranks both other readings, and it
+ * outranks them whether or not the agent got as far as acknowledging: the
+ * reviewer's own act is the fact, so the end is reported rather than inferred
+ * even when the agent was killed before it could report anything (BIG-190).
+ */
 export const agentDisconnectReason = ({
   endedAtMs,
+  disconnectRequestedAtMs,
 }: {
   readonly endedAtMs?: number;
+  /** When the reviewer asked this agent to disconnect, if they did. */
+  readonly disconnectRequestedAtMs?: number;
 }): string =>
-  endedAtMs === undefined ? AGENT_NO_SIGNAL_REASON : AGENT_SESSION_ENDED_REASON;
+  disconnectRequestedAtMs !== undefined
+    ? AGENT_DISCONNECTED_REASON
+    : endedAtMs === undefined
+      ? AGENT_NO_SIGNAL_REASON
+      : AGENT_SESSION_ENDED_REASON;
 
 /**
  * Dates a connection edge from the report when there is one.
@@ -705,6 +720,36 @@ export const deriveCurrentAgentActivity = ({
       "Feedback is queued and will start when the agent is available.",
   };
 };
+
+/**
+ * Whether an agent is attached for the reviewer to act on.
+ *
+ * The three excluded states are the ones with nobody on the other end: no agent
+ * has ever connected, the agent has gone, or the review session itself is
+ * unreachable. Every other state has an agent the reviewer can address, however
+ * well or badly it is doing.
+ */
+export const agentActivityIsAttached = (
+  activity: Pick<CurrentAgentActivity, "state">,
+): boolean =>
+  activity.state !== "never-connected" &&
+  activity.state !== "disconnected" &&
+  activity.state !== "offline";
+
+/**
+ * Whether disconnecting right now would drop an answer already in flight.
+ *
+ * It is the presence of a live claim that costs something, not the health of
+ * the agent holding it: a stalled or errored turn is still a turn whose work
+ * goes when its agent does. A queued request nobody has picked up costs
+ * nothing, because it stays queued for the next agent (BIG-190).
+ */
+export const agentDisconnectDropsWork = (
+  activity: Pick<CurrentAgentActivity, "state">,
+): boolean =>
+  activity.state === "working" ||
+  activity.state === "stalled" ||
+  activity.state === "errored";
 
 export type AgentStatusStage =
   | "idle"
