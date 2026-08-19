@@ -574,8 +574,8 @@ const nextWork = async ({
         store: session.store,
         sessionId: session.sessionId,
         ...(requestId === undefined
-           ? { state: "waiting" as const }
-           : { state: "working" as const, requestId }),
+          ? { state: "waiting" as const }
+          : { state: "working" as const, requestId }),
         writerId,
         ...(model === undefined ? {} : { model }),
       });
