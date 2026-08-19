@@ -171,10 +171,25 @@ export const agentCommand = async (
   } catch (error: unknown) {
     if (error instanceof AxiError) throw error;
     if (!(error instanceof AgentWorkLoopRejected)) throw error;
+    /*
+    Being disconnected is its own code because a harness has to be able to branch
+    on it. Reported as INVALID_INPUT it was indistinguishable from a mistyped
+    flag, so the only safe response was to retry - which is the churn a
+    disconnected loop must not do (BIG-190). The usage block is withheld for it:
+    the command was well formed, and printing usage would suggest otherwise.
+    */
+    const code =
+      error.code === "validation-error"
+        ? "VALIDATION_ERROR"
+        : error.code === "agent-disconnected"
+          ? "AGENT_DISCONNECTED"
+          : "INVALID_INPUT";
     throw new AxiError(
       error.message,
-      error.code === "validation-error" ? "VALIDATION_ERROR" : "INVALID_INPUT",
-      error.details.length === 0 ? [USAGE] : [...error.details],
+      code,
+      error.details.length === 0 && error.code !== "agent-disconnected"
+        ? [USAGE]
+        : [...error.details],
     );
   }
 };

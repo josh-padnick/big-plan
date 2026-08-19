@@ -35,6 +35,7 @@ import {
   deriveReviewPlanId,
   prepareStore,
   randomId,
+  readAgentDisconnectRequest,
   readSnapshot,
   reviewStoreFor,
   writeAgentPrompt,
@@ -45,6 +46,12 @@ import {
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { SPAWNER_PPID, spawnerIsGone } from "./agent-spawner.js";
+import {
+  agentDisconnectAddresses,
+  AGENT_DISCONNECTED_HELP,
+  AGENT_DISCONNECTED_MESSAGE,
+  type AgentDisconnectDirective,
+} from "./shared/agent-disconnect.js";
 import { diffSnapshots } from "./snapshot-diff.js";
 import {
   liveReviewSessionForPlan,
@@ -111,7 +118,18 @@ export type AgentWorkLoopAction =
       readonly sessionId?: string;
     };
 
-export type AgentWorkLoopErrorCode = "invalid-input" | "validation-error";
+export type AgentWorkLoopErrorCode =
+  | "invalid-input"
+  | "validation-error"
+  /**
+   * The reviewer disconnected this agent from the review.
+   *
+   * It earns its own code because a harness has to tell it apart from a bad
+   * flag. Reported as an invalid input it is indistinguishable from a typo, and
+   * the only safe answer to a typo is to try again - which is exactly the churn
+   * a disconnected agent must not do (BIG-190).
+   */
+  | "agent-disconnected";
 
 export class AgentWorkLoopRejected extends Error {
   readonly code: AgentWorkLoopErrorCode;
@@ -131,6 +149,84 @@ export class AgentWorkLoopRejected extends Error {
 
 const fail = (message: string): never => {
   throw new AgentWorkLoopRejected(message);
+};
+
+/**
+ * Answers a disconnect the reviewer addressed to this session, once.
+ *
+ * Acknowledging is what makes the end a reported one: the loop marks its own
+ * session ended, exactly as it does when its spawner goes, so the connection log
+ * records an observed end rather than the silence that follows one (BIG-156).
+ * The end marker is written for the writer the directive named, because the
+ * process reading this may be `agent note` or `agent respond`, which know their
+ * pickup token and never learn the connection loop's writer id.
+ *
+ * The marker's own guard still decides: a newer agent holding the heartbeat
+ * refuses it, so a stale acknowledgment cannot end a live session.
+ *
+ * The directive is deliberately left in place. It is what the runtime's
+ * connection check reads to say WHO ended this session, and that check runs
+ * after this one: clearing it here left the reviewer a "Session ended" row that
+ * no longer knew they had asked for it. It stays addressed to an agent that has
+ * gone, which is inert - the next connector writes a different writer id and
+ * claims under a different token, so nothing matches it again.
+ *
+ * Returns the directive when this session was the one disconnected.
+ */
+const acknowledgeDisconnect = async ({
+  store,
+  sessionId,
+  writerId,
+  claimToken,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId?: string;
+  readonly claimToken?: string;
+  /** The request this session was holding, when it was holding one. */
+  readonly requestId?: string;
+}): Promise<AgentDisconnectDirective | undefined> => {
+  const directive = await readAgentDisconnectRequest({ store });
+  if (
+    directive === undefined ||
+    !agentDisconnectAddresses({
+      directive,
+      ...(writerId === undefined ? {} : { writerId }),
+      ...(claimToken === undefined ? {} : { claimToken }),
+    })
+  ) {
+    return undefined;
+  }
+  const endedWriterId = directive.writerId ?? writerId;
+  if (endedWriterId !== undefined) {
+    await writeAgentHeartbeatEnded({
+      store,
+      sessionId,
+      writerId: endedWriterId,
+    });
+  }
+  await appendProgressEvent({
+    store,
+    event: {
+      sessionId,
+      atMs: Date.now(),
+      stepCode: "agent-disconnected",
+      step: "Agent disconnected at the reviewer's request",
+      state: "done",
+      ...(requestId === undefined ? {} : { requestId }),
+    },
+  }).catch(() => undefined);
+  return directive;
+};
+
+/** Refuses a command from a session the reviewer has disconnected. */
+const failDisconnected = (): never => {
+  throw new AgentWorkLoopRejected(
+    AGENT_DISCONNECTED_MESSAGE,
+    "agent-disconnected",
+    [...AGENT_DISCONNECTED_HELP],
+  );
 };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
@@ -364,7 +460,8 @@ For each returned work item:
 5. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
 6. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates your candidate and the complete response, then publishes both as one revision of the plan. Until it succeeds, nothing you wrote has reached the plan; if your claim was taken over while you worked, it refuses and your candidate is discarded rather than published.
 7. Retain the agent_token returned with each work item. If this agent process restarts before responding, use the \`agent next --agent <token>\` resume path to continue that still-open pickup by running ${resumeCommand}.
-8. After responding, repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+8. After responding, repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete, the review server stops, or Big Plan tells you the reviewer disconnected you.
+9. The reviewer can disconnect you from Agent Status in the review. You are told at your next command: \`agent next\` returns \`disconnected\`, and \`agent note\` and \`agent respond\` refuse with AGENT_DISCONNECTED. Stop this loop when that happens and do not reconnect unless the reviewer asks you to; anything you had in flight was already dropped, and their comments are safe.
 
 Reviewer image references included in a changed candidate are materialized into source-owned ./assets files when the response publishes. Never edit rendered HTML. Never edit the plan path directly. Never invent a Changed outcome without changing candidate_plan.`;
   await writeAgentPrompt({ store: session.store, prompt });
@@ -473,6 +570,32 @@ const nextWork = async ({
     });
     fail("The process that started this agent loop has exited");
   };
+  /*
+  The reviewer's own answer to "is this agent still wanted".
+
+  It is checked on the same passes as the spawner, and for the same reason: a
+  loop that has been taken off the plan must stop vouching for itself and stop
+  taking work, and the only honest moment to notice is before it does either.
+  Being disconnected is not a failure, so it returns the way a stopped review
+  session does - with the reason, and nothing for a harness to retry.
+  */
+  const disconnectedResult = (): Record<string, unknown> => ({
+    pending: false,
+    ended: true,
+    disconnected: true,
+    plan: session.planPath,
+    reason: AGENT_DISCONNECTED_MESSAGE,
+    help: [...AGENT_DISCONNECTED_HELP],
+  });
+  const wasDisconnected = async (heldRequestId?: string): Promise<boolean> =>
+    (await acknowledgeDisconnect({
+      store: session.store,
+      sessionId: session.sessionId,
+      writerId,
+      ...(agentToken === undefined ? {} : { claimToken: agentToken }),
+      ...(heldRequestId === undefined ? {} : { requestId: heldRequestId }),
+    })) !== undefined;
+  if (await wasDisconnected()) return disconnectedResult();
   let request: AgentRequest | undefined;
   if (agentToken !== undefined) {
     const ownedRequest = resumeRequests?.find(
@@ -498,6 +621,7 @@ const nextWork = async ({
     });
     while (request === undefined && shouldWait) {
       await endWhenSpawnerIsGone();
+      if (await wasDisconnected()) return disconnectedResult();
       await writeAgentHeartbeat({
         store: session.store,
         sessionId: session.sessionId,
@@ -564,6 +688,7 @@ const nextWork = async ({
     });
     const pickup = pickupProgress(request);
     await endWhenSpawnerIsGone();
+    if (await wasDisconnected(request.requestId)) return disconnectedResult();
     // Written before the claim on purpose: preparing a pickup reads the plan,
     // writes a baseline snapshot, and takes locks, and the reviewer should see
     // the agent working through that window rather than idle. The claim can
@@ -760,6 +885,19 @@ const respond = async ({
   readonly agentToken: string;
 }): Promise<Record<string, unknown>> => {
   const session = await readPlanSession(planPath);
+  // Checked before the work rather than at publication. A disconnected agent
+  // that only found out when its answer was refused would have paid for a whole
+  // turn first, and a harness reading that refusal cannot tell it from a race
+  // worth retrying (BIG-190).
+  if (
+    (await acknowledgeDisconnect({
+      store: session.store,
+      sessionId: session.sessionId,
+      claimToken: agentToken,
+    })) !== undefined
+  ) {
+    failDisconnected();
+  }
   const snapshot = await readAgentExchange({
     store: session.store,
     sessionId: session.sessionId,
@@ -985,6 +1123,15 @@ const note = async ({
     return fail("Progress must be between 1 and 160 characters");
   }
   const session = await readPlanSession(planPath);
+  if (
+    (await acknowledgeDisconnect({
+      store: session.store,
+      sessionId: session.sessionId,
+      claimToken: agentToken,
+    })) !== undefined
+  ) {
+    failDisconnected();
+  }
   const snapshot = await readAgentExchange({
     store: session.store,
     sessionId: session.sessionId,
