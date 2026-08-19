@@ -30,18 +30,16 @@ describe("quoting a shell argument", () => {
       "/work/$(whoami)/plan.mdx",
       "/work/plan;rm -rf x.mdx",
     ]) {
-      await expect(
-        shellArguments(quoteShellArgument(value)),
-      ).resolves.toEqual([value]);
+      await expect(shellArguments(quoteShellArgument(value))).resolves.toEqual([
+        value,
+      ]);
     }
   });
 });
 
 describe("quoting only when the shell needs it", () => {
   it("should leave an ordinary path exactly as it reads", () => {
-    expect(quoteShellArgumentIfNeeded("/work/plan.mdx")).toBe(
-      "/work/plan.mdx",
-    );
+    expect(quoteShellArgumentIfNeeded("/work/plan.mdx")).toBe("/work/plan.mdx");
     expect(quoteShellArgumentIfNeeded("/Users/me/big_plan-2/plan.mdx")).toBe(
       "/Users/me/big_plan-2/plan.mdx",
     );

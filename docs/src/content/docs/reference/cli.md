@@ -292,6 +292,12 @@ login session ends.
 
 The service listens on `127.0.0.1` only and never makes an outbound request.
 
+Opening the port itself shows what the process is, when it started, and a
+`Stop the service` control that asks for confirmation and then does exactly what
+`service stop` does, so whoever finds the port can also shut it down. That page
+lists nothing about the plans this machine knows, so an address cannot be
+guessed into an index of someone's work.
+
 The port is fixed at `8790` because saved links point at it. Big Plan never
 moves to a different port on its own: when something else already holds the
 port, every command says so, names the process holding it where the platform can

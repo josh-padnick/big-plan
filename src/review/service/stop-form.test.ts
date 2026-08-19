@@ -37,7 +37,10 @@ const postToListener = async (
     port,
     method: "POST",
     path: "/stop",
-    headers: { "content-type": "application/x-www-form-urlencoded", ...headers },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      ...headers,
+    },
   });
   client.on("error", () => {});
   return { client, received };

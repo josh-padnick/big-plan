@@ -7,10 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  ensureServiceToken,
-  readServiceRuntimeRecord,
-} from "./lifecycle.js";
+import { ensureServiceToken, readServiceRuntimeRecord } from "./lifecycle.js";
 
 let stateDirectory: string;
 let previousStateDirectory: string | undefined;

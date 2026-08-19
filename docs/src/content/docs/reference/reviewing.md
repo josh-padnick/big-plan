@@ -347,6 +347,9 @@ Loopback is not an authentication boundary.
 The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
 It checks the `Host` header on every request and refuses a value that is not its own address.
 
+The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: it redirects to this runtime rather than proxying it, so every check below still happens here.
+[The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
+
 Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:
 
 - the document route `/`, which renders the selected MDX instead of serving arbitrary HTML;
