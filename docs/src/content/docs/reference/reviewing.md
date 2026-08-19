@@ -25,7 +25,30 @@ If it does have unsaved input, Refresh stays disabled and the page asks you to k
 It does not say why contact was lost, because a page that has lost contact cannot tell an idle expiry from a runtime someone stopped, or from one that is still serving another tab.
 For the same reason it never tells you to start a new review runtime; the command is the only place that decides whether starting or taking over a runtime is allowed, and it answers that question for you.
 When a newer review session for that plan was recorded before contact was lost, the page also links to it as **Open latest review**.
-Opening an old address after its runtime has already ended still reaches the browser's connection-error page; giving shared links an explicit lifetime remains a separate product decision.
+
+## The link worth saving
+
+The `http://127.0.0.1:<port>/` address belongs to this run: the port is assigned
+when the runtime starts, so it differs every time and stops answering when the
+session ends.
+
+The command also prints `link`, a second address of the form
+`http://127.0.0.1:8790/plan/<plan-id>`, where `8790` is the default port. That
+one is derived from the plan file's path, so it is the same for every review of
+the same plan, and it keeps answering after the session ends. Save or share the
+address the command printed rather than one you assembled from the default port:
+`BIG_PLAN_PORT` moves the service, and every link with it.
+
+Opening it while a review is running takes you straight to the running session.
+Opening it afterwards gives a page saying what happened - stopped normally after
+inactivity, stopped by the reviewer, or stopped unexpectedly - along with the
+command that starts the review again at the same address.
+
+The address is answered by a small local process described in
+[the CLI reference](/reference/cli/#big-plan-service); `big-plan service status`
+reports on it and `big-plan service stop` stops it. When it cannot run, `link`
+is absent and the command explains why, leaving the direct address exactly as it
+was.
 
 ## Starting a review that is already running
 
@@ -325,6 +348,9 @@ fuzzy matching or silently attach it to nearby prose.
 Loopback is not an authentication boundary.
 The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
 It checks the `Host` header on every request and refuses a value that is not its own address.
+
+The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: it redirects to this runtime rather than proxying it, so every check below still happens here.
+[The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
 
 Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:
 

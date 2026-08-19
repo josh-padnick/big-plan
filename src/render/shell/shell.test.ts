@@ -13,6 +13,15 @@ const shellFor = (contentHtml: string) =>
     contentHtml,
   }).html;
 
+const standaloneShellFor = (contentHtml: string) =>
+  renderShell({
+    nav: [],
+    title: "Big Plan service",
+    contentIds: [],
+    contentHtml,
+    chrome: "standalone",
+  }).html;
+
 const COLLAPSIBLE_CONTENT =
   '<div data-collapsible="slide" data-collapse-id="one"><div data-collapse-header><button data-collapse-toggle></button></div><div data-collapse-body><p>Body.</p></div></div>';
 
@@ -51,7 +60,7 @@ describe("bulk collapse controls", () => {
 });
 
 describe("scripts-disabled notice", () => {
-  it("should ship the readable-content notice in every rendered shell", () => {
+  it("should ship the readable-content notice in every rendered document", () => {
     const html = shellFor("<p>Readable plan content.</p>");
     expect(html).toContain("<noscript>");
     expect(html).toContain("data-noscript-notice");
@@ -59,5 +68,13 @@ describe("scripts-disabled notice", () => {
     expect(html).toContain(
       "Interactive affordances such as sorting, collapse, maximize, and comments are unavailable; comment screenshots require the local <code>big-plan review</code> runtime.",
     );
+  });
+
+  it("should not describe a plan on a page that has none", () => {
+    // Standalone chrome serves the service's own pages: no plan content, no
+    // comments, and nothing sortable or collapsible to lose.
+    const html = standaloneShellFor("<p>Welcome to Big Plan.</p>");
+    expect(html).not.toContain("data-noscript-notice");
+    expect(html).not.toContain("The full plan content is readable");
   });
 });

@@ -13,3 +13,4 @@ An outline-aware presentation crosses that same boundary after the deck transfor
 - Put plan-model composition in `compile-plan-model.ts`, human-document composition in `render-document.ts`, and final HTML serialization in `serialize-html.ts`; no composition owner absorbs CLI file handling.
 - Put reading layout, navigation, and viewer chrome in `shell/`.
 - Put doctype, head, embedded assets, favicons, and final HTML packaging in `page.ts`.
+- Put the review-link service's own pages in `service-page.ts`; they are the one delivery surface with no plan behind them, so they compose the shell, the envelope, and existing component recipes rather than inventing a second visual vocabulary.

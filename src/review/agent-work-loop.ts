@@ -57,8 +57,8 @@ import {
   agentNextCommand,
   agentNoteCommand,
   agentRespondCommand,
-  quoteShellArgument,
 } from "./shared/agent-command.js";
+import { quoteShellArgument } from "../shell-quoting/quote.js";
 import { projectConversationHistory } from "./shared/thread-projection.js";
 import {
   sniffReviewImage,

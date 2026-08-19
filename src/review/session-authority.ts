@@ -452,6 +452,27 @@ const wait = async (milliseconds: number): Promise<void> => {
   });
 };
 
+/**
+ * Reads the heartbeat, retrying while it reads as absent.
+ *
+ * The heartbeat is rewritten several times a second, and a reader can land in
+ * the gap between the write that removes the old value and the one that lands
+ * the new one. Every caller that classifies a session from this value has to
+ * retry, because the classification of an absent read - not running, unknown,
+ * interrupted - is the one answer that is wrong about a live session.
+ */
+const readHeartbeatValuePatiently = async (
+  store: ReviewStore,
+): Promise<unknown> => {
+  let value: unknown;
+  for (let attempt = 0; attempt < HEARTBEAT_READ_ATTEMPTS; attempt += 1) {
+    value = await readSessionHeartbeatValue(store);
+    if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) break;
+    await wait(HEARTBEAT_READ_RETRY_MS);
+  }
+  return value;
+};
+
 /** Returns matching server liveness and any explicit recorded stop reason. */
 export const reviewSessionIsRunning = async ({
   store,
@@ -464,13 +485,9 @@ export const reviewSessionIsRunning = async ({
   readonly now?: number;
   readonly maximumAgeMs?: number;
 }): Promise<ReviewSessionLiveness> => {
-  let value: unknown;
-  for (let attempt = 0; attempt < HEARTBEAT_READ_ATTEMPTS; attempt += 1) {
-    value = await readSessionHeartbeatValue(store);
-    if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) break;
-    await wait(HEARTBEAT_READ_RETRY_MS);
-  }
-  const heartbeat = validateReviewSessionHeartbeat(value);
+  const heartbeat = validateReviewSessionHeartbeat(
+    await readHeartbeatValuePatiently(store),
+  );
   if (heartbeat === undefined) return { running: false };
   const observedAtMs = now ?? Date.now();
   if (!heartbeatIsFresh({ heartbeat, sessionId, observedAtMs, maximumAgeMs })) {
@@ -532,6 +549,56 @@ export const refreshReviewSessionHeartbeat = async ({
     },
     timeoutError: () => new Error("Another process is writing this heartbeat"),
   });
+
+/**
+ * What became of one review session, as far as its own files can prove.
+ *
+ * `reviewSessionIsRunning` answers the yes-or-no question an open page asks.
+ * This answers the question a visitor arriving after the fact asks, and it
+ * keeps the distinction the heartbeat already records: a session that wrote a
+ * stop reason ended on purpose, and one whose heartbeat simply stopped
+ * advancing did not. Nothing here infers a clean ending it cannot prove.
+ */
+export type ReviewSessionOutcome =
+  | { readonly kind: "running" }
+  | { readonly kind: "ended"; readonly reason: string; readonly atMs: number }
+  | { readonly kind: "interrupted"; readonly lastSeenAtMs: number }
+  | { readonly kind: "unknown" };
+
+/** Reads what became of one session from its heartbeat alone. */
+export const readReviewSessionOutcome = async ({
+  store,
+  sessionId,
+  now,
+  maximumAgeMs = SESSION_MAXIMUM_AGE_MS,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly now?: number;
+  readonly maximumAgeMs?: number;
+}): Promise<ReviewSessionOutcome> => {
+  // Retried for the same reason `reviewSessionIsRunning` retries: an absent
+  // read becomes `unknown` here, and the service page renders that as an
+  // interruption. A live session must never be described as one.
+  const heartbeat = validateReviewSessionHeartbeat(
+    await readHeartbeatValuePatiently(store),
+  );
+  if (heartbeat === undefined || heartbeat.sessionId !== sessionId) {
+    return { kind: "unknown" };
+  }
+  const observedAtMs = now ?? Date.now();
+  if (heartbeatIsFresh({ heartbeat, sessionId, observedAtMs, maximumAgeMs })) {
+    return { kind: "running" };
+  }
+  if (!heartbeat.running && heartbeat.stopReason !== undefined) {
+    return {
+      kind: "ended",
+      reason: heartbeat.stopReason,
+      atMs: heartbeat.updatedAtMs,
+    };
+  }
+  return { kind: "interrupted", lastSeenAtMs: heartbeat.updatedAtMs };
+};
 
 /** Returns the current live session for one exact plan or a stable reason. */
 export const liveReviewSessionForPlan = async ({

@@ -32,6 +32,7 @@ Everything on this page is shipped and works today.
 - Confirmed decision answers are saved with the review and stay current only while their decision's content is unchanged; they are readable within the review session rather than delivered to the agent, and a standalone rendered document keeps answers for the reading session only.
 - An **Inputs** list names what the review is still waiting for - for now, every decision the plan asks - with each one marked answered, not answered, or stale, and the ones the plan's author called critical marked as such.
 - Review state and feedback packages stay in an ignored, owner-only `.big-plan/` directory beside the plan.
+- Every review also gets a permanent local address that keeps working after the session ends: it opens the live review while one runs, and otherwise explains how that review ended and how to start it again. A small loopback service answers it, starts itself when a command prints a link, and is inspected or stopped with `big-plan service`.
 
 See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence model, causal diff behavior, and trust boundaries.
 

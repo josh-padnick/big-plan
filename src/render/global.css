@@ -911,13 +911,17 @@ are declared, so a role or a scale step is the only thing a utility can name.
      resting light-mode backdrop utility. */
   @media (prefers-color-scheme: dark) {
     /* Override invariant: System dark mode must use the approved 80% dim. */
-    :root:not([data-theme]) [data-preferences-backdrop] {
+    :root:not([data-theme])
+      :is([data-preferences-backdrop], [data-modal-backdrop]) {
       background-color: color-mix(in srgb, var(--backdrop-c) 80%, transparent);
     }
   }
 
-  /* Override invariant: explicit Dark mode must use the approved 80% dim. */
-  :root[data-theme="dark"] [data-preferences-backdrop] {
+  /* Override invariant: explicit Dark mode must use the approved 80% dim.
+     Every modal backdrop shares it, so an alert dims the page exactly as far
+     as the settings sheet does. */
+  :root[data-theme="dark"]
+    :is([data-preferences-backdrop], [data-modal-backdrop]) {
     background-color: color-mix(in srgb, var(--backdrop-c) 80%, transparent);
   }
 

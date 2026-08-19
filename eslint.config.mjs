@@ -109,6 +109,15 @@ export default tseslint.config(
         imports: ["**/escape-html.js"],
         mayImport: [],
       },
+      // POSIX-shell argument quoting, shared by every surface that hands a
+      // person a command to run. It sits at the bottom because it is a pure
+      // string rule with no product concept in it, and because a second copy
+      // is exactly what a command that silently fails to run comes from.
+      shellQuoting: {
+        files: ["src/shell-quoting/**/*.ts"],
+        imports: ["**/shell-quoting/**"],
+        mayImport: [],
+      },
       // The persisted reviewer-preferences contract is shared by the head
       // bootstrap in the page envelope and the shell's settings script, so it
       // sits below both rather than inside either one.
@@ -198,6 +207,7 @@ export default tseslint.config(
           "src/render/page.ts",
           "src/render/escape-html.ts",
           "src/render/preferences*.ts",
+          "src/render/service-page*.ts",
         ],
         imports: [
           "**/compile-plan-model.js",
@@ -207,14 +217,35 @@ export default tseslint.config(
         ],
         mayImport: ["markdown", "shell", "page"],
       },
+      // The pages the service serves in its own right. They are the one
+      // renderer surface built from the product's recipes without a plan
+      // behind them, so they compose escaped prose, the icon catalog, and the
+      // shared figure-control vocabulary directly. That grant stays on this
+      // file rather than widening what every composer file may reach.
+      servicePage: {
+        files: ["src/render/service-page*.ts"],
+        imports: ["**/service-page.js"],
+        mayImport: [
+          "escapeHtml",
+          "icons",
+          "markdown",
+          "model",
+          "shell",
+          "page",
+          "shellQuoting",
+        ],
+      },
       // Browser-safe review models. These modules must stay usable by both the
       // browser island and the local review runtime.
       reviewShared: {
         files: ["src/review/shared/**/*.ts", "src/review/shared/**/*.tsx"],
         imports: ["**/review/shared/**"],
-        mayImport: [],
+        mayImport: ["shellQuoting"],
         blockedImports: ["node:*"],
-        blockedImportRegex: ["^\\.\\./"],
+        // Blocks the server-owned review modules one level up while leaving
+        // the bottom-tier layers above `src/review/` reachable, which the
+        // allow-list still gates.
+        blockedImportRegex: ["^\\.\\./(?!\\.)"],
       },
       // The browser island may use only browser-owned presentation code,
       // browser-safe review models, shared visual building blocks,
@@ -240,26 +271,40 @@ export default tseslint.config(
           "src/review/shared/**/*.tsx",
         ],
         imports: ["**/review/**"],
-        mayImport: ["composer", "icons", "model", "planLint", "reviewShared"],
+        mayImport: [
+          "composer",
+          "icons",
+          "model",
+          "planLint",
+          "reviewShared",
+          "servicePage",
+          "shellQuoting",
+        ],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
         imports: ["**/cli/**"],
         // The composer files are the renderer's public entry points; granting
         // only them keeps the CLI out of the renderer's internals.
-        mayImport: ["composer", "planLint", "review", "reviewShared"],
+        mayImport: [
+          "composer",
+          "planLint",
+          "review",
+          "reviewShared",
+          "shellQuoting",
+        ],
       },
     };
 
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
-      ["planVocabulary", "escapeHtml", "icons", "preferences"],
+      ["planVocabulary", "escapeHtml", "icons", "preferences", "shellQuoting"],
       ["model", "planLint"],
       ["page", "sharedUi"],
       ["ui"],
       ["components"],
       ["markdown", "shell"],
-      ["composer", "reviewShared"],
+      ["composer", "servicePage", "reviewShared"],
       ["review", "reviewBrowser"],
       ["cli"],
     ];

@@ -348,12 +348,22 @@ ${PALETTE_OPTIONS.map(renderPaletteOption).join("\n")}
 
 // The right side of the branding bar keeps status, Feedback, and Settings as
 // separate peer actions with one closed spacing-scale step between them.
-const renderHeaderActions = (): string =>
+// Feedback belongs to a document under review; a surface with no plan in it
+// omits it and keeps Settings, which still applies everywhere.
+const renderHeaderActions = ({
+  feedback,
+}: {
+  readonly feedback: boolean;
+}): string =>
   `<div class="ml-auto flex items-center gap-1">
-${renderCommentDraftControl()}
+${feedback ? renderCommentDraftControl() : ""}
 ${renderPreferencesControl()}
 </div>`;
 
+// What it names - plan content, sorting, collapse, maximize, comments - is
+// true of a plan document and of nothing else, so a standalone page does not
+// carry it: there is no plan there to describe.
+//
 // Browsers do not execute script inside noscript, so this dismissal is a
 // native checkbox rather than a dead button. It can hide the warning for the
 // current document without weakening the content floor. A cross-load
@@ -445,6 +455,7 @@ export const renderShell = ({
   title,
   contentIds,
   contentHtml,
+  chrome = "document",
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
   // The plan's own title, shown quietly in the bar so a reader deep in a long
@@ -452,7 +463,16 @@ export const renderShell = ({
   readonly title: string;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
+  /**
+   * How much of the bar this surface earns.
+   *
+   * A plan document gets the whole bar. A standalone page the service serves
+   * is not a plan: there is no title worth echoing and nothing to give
+   * feedback on, so it keeps the wordmark and Settings and drops the rest.
+   */
+  readonly chrome?: "document" | "standalone";
 }): ShellResult => {
+  const standalone = chrome === "standalone";
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-paper/90 backdrop-blur">
@@ -461,12 +481,12 @@ export const renderShell = ({
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
-<p class="truncate text-center text-sm leading-none text-subtle"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>
-${renderHeaderActions()}
+${standalone ? "<p></p>" : `<p class="truncate text-center text-sm leading-none text-subtle"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
+${renderHeaderActions({ feedback: !standalone })}
 </div>
   </header>
   ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
-${renderNoScriptNotice()}
+${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">

@@ -10,6 +10,7 @@ import { guidanceCommand } from "./guidance/command.js";
 import { renderCommand } from "./render/command.js";
 import { skillCommand } from "./skill/command.js";
 import { reviewCommand } from "./review/command.js";
+import { serviceCommand } from "./service/command.js";
 import { validateCommand } from "./validate/command.js";
 
 // The README tagline verbatim, so the CLI and the docs never drift apart.
@@ -37,6 +38,9 @@ Usage:
   big-plan review <input.mdx>                 Serve the plan on loopback for
                                              interactive review with anchored
                                              comments and real agent responses
+  big-plan service <action>                   Inspect or control the local
+                                             service that answers saved review
+                                             links: status, start, stop, restart
   big-plan agent <input.mdx>                  Print the ready-to-paste prompt
                                              for a real coding-agent review
                                              session; agent next and agent
@@ -82,6 +86,7 @@ export const main = async (): Promise<void> => {
       compile: (args) => compileCommand(args),
       validate: (args) => validateCommand(args),
       review: (args) => reviewCommand(args),
+      service: (args) => serviceCommand(args),
       agent: (args) => agentCommand(args),
     },
   });
