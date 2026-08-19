@@ -130,7 +130,9 @@ describe("approval message", () => {
 
   it("should reject corrupt, old, and mistyped records", () => {
     expect(parseApprovalMessageRecord("not json")).toBeNull();
-    expect(parseApprovalMessageRecord('{"version":2,"message":"a"}')).toBeNull();
+    expect(
+      parseApprovalMessageRecord('{"version":2,"message":"a"}'),
+    ).toBeNull();
     expect(parseApprovalMessageRecord('{"version":1}')).toBeNull();
     expect(parseApprovalMessageRecord('{"version":1,"message":7}')).toBeNull();
     expect(parseApprovalMessageRecord('["version",1]')).toBeNull();
@@ -199,7 +201,10 @@ describe("approval message", () => {
       '{"version":1,"message":""}',
       '{"version":1,"message":"   "}',
       '{"version":1,"message":"  Ship it.  "}',
-      JSON.stringify({ version: 1, message: "x".repeat(APPROVAL_MESSAGE_LIMIT) }),
+      JSON.stringify({
+        version: 1,
+        message: "x".repeat(APPROVAL_MESSAGE_LIMIT),
+      }),
       JSON.stringify({
         version: 1,
         message: "x".repeat(APPROVAL_MESSAGE_LIMIT + 1),
