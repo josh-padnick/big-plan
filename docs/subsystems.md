@@ -50,7 +50,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 - A change set's disposition is a review fact, not a browser preference.
   `src/review/change-dispositions-store.ts` owns the record and `src/review/shared/change-disposition.ts` owns the one selector that turns it into a count, so every surface showing how much of a set is still open reads the same number and a reload never reopens closed work.
 - What a review is waiting for is one derived contract, never a per-surface tally.
-  `src/review/input-contract.ts` joins the compiled decision inventory with the answers record into the inputs a review expects - decisions for now, growing to the rest of what a review waits on as each of those becomes enumerable; `src/review/shared/input-contract.ts` owns the one selector that turns them into a standing, including how many critical ones are still open.
+  `src/review/input-contract.ts` joins the compiled decision inventory and published change sets with the answers and dispositions records into every input a review expects; `src/review/shared/input-contract.ts` owns the one selector that turns them into a standing, including how many critical ones are still open.
   Criticality is authored on a decision and travels through `CompiledDecisionCard.isCritical`; it is deliberately excluded from the decision digest, because raising what approval demands does not change what the reviewer answered.
 - Delivery (getting a message to the runtime) belongs to Session Reliability, and furniture (composer, tooltips, layout) belongs to Commenting Surface; only Change Engine code changes when acceptance semantics change.
 

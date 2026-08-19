@@ -1,10 +1,10 @@
 // The route that answers what this review is still waiting for.
 //
 // It is a read over the two records the reviewer's work goes into, joined
-// against the plan the runtime just compiled. Nothing is stored, because
-// nothing here is a decision: which inputs exist is the plan's answer, which
-// are met is the records' answer, and holding a third copy of the join is what
-// would let a surface report readiness the records disagree with.
+// against the plan the runtime just compiled and the change sets it recorded.
+// Nothing is stored, because nothing here is a decision: those sources say
+// which inputs exist and whether they are met, and holding another copy of the
+// join is what would let a surface report readiness the sources disagree with.
 
 import { jsonResponse } from "./review-route-context.js";
 import type {

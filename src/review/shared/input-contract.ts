@@ -5,7 +5,7 @@
 // The contract exists because "is this plan ready to approve" was previously
 // unanswerable. Two records hold the reviewer's work - decision answers and
 // change dispositions - and each answers only its own question. Neither knows
-// what the plan asks in total, so neither can say what is still outstanding,
+// every input the review expects, so neither can say what is still outstanding,
 // and a surface that counted one of them would report readiness while the
 // other still held open work.
 //

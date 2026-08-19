@@ -3,9 +3,9 @@
 //
 // The list is the runtime's answer, not this panel's. Every state shown here -
 // answered, not answered, stale, critical - is derived server-side from the
-// plan the runtime compiled and the two records the reviewer's work goes into,
-// so a second browser reading the same review reads the same contract and a
-// reload cannot invent a different one.
+// plan the runtime compiled, its published change sets, and the two records the
+// reviewer's work goes into, so a second browser reading the same review reads
+// the same contract and a reload cannot invent a different one.
 //
 // The panel refetches on exactly the moments this page applied a newer copy of
 // a record the contract joins, and on a replaced article. A clock of its own

@@ -3,10 +3,10 @@
 // itself. Keeping the response a value is what lets the runtime decide, after
 // the handler has run, whether this session still holds write authority.
 //
-// The four owned objects here were loose `let` bindings inside the runtime
-// closure, mutated from places far apart in one very long function. Each is
-// named after the thing it means, because that is the state whose drift breaks
-// a review silently rather than loudly.
+// The stateful objects here replace loose `let` bindings inside the runtime
+// closure that were mutated from places far apart in one very long function.
+// Each is named after the thing it means, because that is the state whose drift
+// breaks a review silently rather than loudly.
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
@@ -189,9 +189,10 @@ export type DecisionAnswers = {
 };
 
 /**
- * The change dispositions this review has recorded. Unlike the answer record
- * there is no inventory to join against: a disposition names the two snapshot
- * digests it closed, so it already refers to exactly one revision's content.
+ * The change dispositions this review has recorded. Each disposition names the
+ * two snapshot digests it closed, so its write path needs no current-change-set
+ * inventory. The input contract separately joins it to published change sets
+ * to enumerate still-open work.
  */
 export type ChangeDispositions = {
   readonly read: () => Promise<StoredChangeDispositions>;

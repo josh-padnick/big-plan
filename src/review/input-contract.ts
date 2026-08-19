@@ -1,13 +1,14 @@
-// Derives the review's input contract: every input the plan expects, its
+// Derives the review's input contract: every input the review expects, its
 // criticality, and whether the reviewer has met it.
 //
-// The derivation lives on the server because both of its halves already do.
-// The runtime compiles the plan, so it alone knows which decisions are asked
-// and which of them the author marked critical the moment the source changes;
-// it also holds the two records the reviewer's work goes into. A browser
-// joining those from its own memory would be reconstructing, on every page,
-// the answer the runtime already has - and would disagree with the next
-// browser the moment the plan moved underneath one of them.
+// The derivation lives on the server because its sources already do. The
+// runtime compiles the plan, so it alone knows which decisions are asked and
+// which of them the author marked critical the moment the source changes. It
+// also owns the published change-set inventory and the two records the
+// reviewer's work goes into. A browser joining those from its own memory would
+// be reconstructing, on every page, the answer the runtime already has - and
+// would disagree with the next browser the moment the plan moved underneath
+// one of them.
 //
 // Nothing here writes. The contract is a read over inert data, so it needs no
 // reconciliation, no pruning, and no retry: change the plan, ask again, and the
