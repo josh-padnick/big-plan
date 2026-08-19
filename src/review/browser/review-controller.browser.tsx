@@ -428,6 +428,10 @@ const WIDE_QUERY = "(min-width: 80rem)";
 const MODIFIER_SHORTCUT = /Mac|iPhone|iPad/u.test(navigator.platform)
   ? "⌘+Enter"
   : "Ctrl+Enter";
+// Named beside the modifier shortcut because the two are read together: they
+// are the composer's whole keyboard vocabulary, now told at the controls they
+// drive rather than in a standing line of helper text.
+const ESCAPE_SHORTCUT = "Escape";
 const APPLE_PLATFORM = /Mac|iPhone|iPad/u.test(navigator.platform);
 const NEW_COMMENT_SHORTCUT = APPLE_PLATFORM ? "⌃+⌘+C" : "Ctrl+Alt+C";
 const isNewCommentShortcut = (event: globalThis.KeyboardEvent): boolean =>
@@ -2296,9 +2300,6 @@ const CommentComposer = ({
             of this highlight as a quote, and the whole highlight as the target.
           </p>
         ) : null}
-        <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
-          Escape closes · {MODIFIER_SHORTCUT} adds
-        </p>
         <div className="mt-2 block">
           <div className="flex items-center gap-1">
             <button
@@ -2316,11 +2317,25 @@ const CommentComposer = ({
             </button>
             <SubmitRightAwayHelp />
           </div>
+          {/*
+            Each action carries its own shortcut instead of a standing line of
+            helper text under the field: the same two facts, told where the
+            reader is already looking at the control they apply to.
+
+            Neither tooltip hangs off the button directly. A disabled button
+            swallows pointer events, so a tooltip anchored to it goes quiet
+            exactly when a reader is most likely to ask why the button will not
+            respond; anchoring to the wrapper keeps the answer available, and
+            Button's own `disabled:pointer-events-none` is what lets the hover
+            through to it.
+          */}
           <div className="mt-2 flex items-center justify-end gap-1">
-            <Button variant="outline" size="compact" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Tooltip label={MODIFIER_SHORTCUT} placement="below" asChild>
+            <Tooltip label={ESCAPE_SHORTCUT} placement="below">
+              <Button variant="outline" size="compact" onClick={onCancel}>
+                Cancel
+              </Button>
+            </Tooltip>
+            <Tooltip label={MODIFIER_SHORTCUT} placement="below">
               <Button
                 size="micro"
                 disabled={

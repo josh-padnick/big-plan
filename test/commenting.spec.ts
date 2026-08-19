@@ -2,7 +2,31 @@
 // rendered document: slide and selection composition, durable staged cards,
 // precision component targets, the Feedback rail, and both appearance themes.
 
-import { expect, test } from "./fixtures";
+import { boxOf, expect, test, type Locator, type Page } from "./fixtures";
+
+/**
+ * Waits for a control to stop moving. The floating composer can still be
+ * settling into its final slot when a test reaches it (see issue #178), and a
+ * pointer landed before it settles is left behind when it moves, closing any
+ * tooltip the hover opened.
+ */
+const settled = async (target: Locator): Promise<void> => {
+  let previous = Number.NaN;
+  await expect
+    .poll(async () => {
+      const { y } = await boxOf(target);
+      const stable = y === previous;
+      previous = y;
+      return stable;
+    })
+    .toBe(true);
+};
+
+/** Moves the real pointer onto a control, disabled ones included. */
+const hoverCentre = async (page: Page, target: Locator): Promise<void> => {
+  const box = await boxOf(target);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+};
 
 test("should keep the desktop toolbar actions compact and distinct", async ({
   page,
@@ -103,10 +127,6 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "12px",
   );
   await expect(input).toHaveCSS("font-size", "12px");
-  await expect(dialog.locator(".review-compose-hint")).toHaveCSS(
-    "font-size",
-    "11px",
-  );
   const cancel = dialog.getByRole("button", { name: "Cancel" });
   const submit = dialog.getByRole("button", { name: "Submit Now" });
   await expect(cancel).toHaveCSS("padding-left", "8px");
@@ -147,6 +167,11 @@ test("should stage and restore a slide comment through the legacy chrome", async
   );
   await expect(submit).toBeEnabled();
   const shortcutTooltip = page.getByRole("tooltip").last();
+  // Park the pointer clear of the composer first. The shortcut hangs off the
+  // action's wrapper, so a pointer that the scrolling above already left
+  // inside it produces no fresh enter, and the hover would assert nothing.
+  await page.mouse.move(0, 0);
+  await settled(submit);
   await expect(shortcutTooltip).not.toBeVisible();
   await submit.hover();
   await expect(shortcutTooltip).toBeVisible();
@@ -607,6 +632,52 @@ test("should remember the submit-right-away choice across new composers", async 
   );
   await help.blur();
   await expect(helpTooltip).toHaveCount(0);
+
+  // The primary action is disabled until the comment has a body, and that is
+  // exactly when a reader is most likely to ask what it wants. A disabled
+  // button swallows pointer events, so this only holds while the tooltip is
+  // anchored to the wrapper rather than to the button itself.
+  const submit = composer.getByRole("button", { name: "Submit Now" });
+  await expect(submit).toBeDisabled();
+  const modifierShortcut = await page.evaluate(() =>
+    /Mac|iPhone|iPad/u.test(navigator.platform) ? "\u2318+Enter" : "Ctrl+Enter",
+  );
+  const shortcut = page.getByRole("tooltip", { name: modifierShortcut });
+  await expect(shortcut).toHaveCount(0);
+  // Moved rather than hovered: Playwright refuses to hover a disabled control
+  // because its wrapper intercepts the pointer, which is the very mechanism
+  // that carries the tooltip here. A real pointer move is what a reader does.
+  await hoverCentre(page, submit);
+  await expect(shortcut).toBeVisible();
+
+  const cancel = composer.getByRole("button", { name: "Cancel" });
+  const escapeHint = page.getByRole("tooltip", { name: "Escape" });
+  await cancel.hover();
+  await expect(escapeHint).toBeVisible();
+  await expect(shortcut).toHaveCount(0);
+
+  // The composer carries no standing line of helper text; the shortcuts are
+  // told at the controls they drive.
+  await expect(composer).not.toContainText("Escape closes");
+
+  // The tooltip's measure is authored in rem, so a reader browsing at a larger
+  // default gets a wider one. It still has to stay inside the viewport, which
+  // only holds while the clamp is computed from the live root size.
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "20px";
+  });
+  await help.focus();
+  await expect(helpTooltip).toBeVisible();
+  const widened = await helpTooltip.boundingBox();
+  const viewportWidth = page.viewportSize()?.width ?? 0;
+  expect(widened?.x).toBeGreaterThanOrEqual(0);
+  expect((widened?.x ?? 0) + (widened?.width ?? 0)).toBeLessThanOrEqual(
+    viewportWidth,
+  );
+  await help.blur();
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty("font-size");
+  });
 
   await preference.click();
   await composer.getByRole("button", { name: "Cancel" }).click();
