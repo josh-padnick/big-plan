@@ -29,6 +29,7 @@ import { createPortal } from "react-dom";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
+import { INFO_ICON } from "../../icons/lucide/info.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { MESSAGES_SQUARE_ICON } from "../../icons/lucide/messages-square.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
@@ -2131,6 +2132,32 @@ const useThreadHosts = (
   return hosts;
 };
 
+// The trade-off behind Submit right away is real but not urgent: a reviewer
+// who already knows it should not have to read it again on every comment. A
+// quiet mark that answers on demand keeps the choice explained without turning
+// the composer into a second paragraph of instructions, and it stays a mark
+// rather than a control - it opens nothing and changes nothing.
+const SUBMIT_RIGHT_AWAY_HELP =
+  "On, the comment goes to the agent the moment you add it: the fastest answer, but the comments you write next wait until the agent finishes this one. Off, it is staged with the rest, and the agent works through the whole set in one pass when you send them.";
+
+/** Explains, on hover or keyboard focus, what Submit right away trades away. */
+const SubmitRightAwayHelp = () => (
+  <Tooltip
+    label={SUBMIT_RIGHT_AWAY_HELP}
+    variant="explanation"
+    placement="below"
+    asChild
+  >
+    <button
+      type="button"
+      className="inline-flex size-5 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 leading-none text-subtle transition-colors hover:text-muted focus-visible:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&>svg]:size-3.5"
+      aria-label="About Submit right away"
+    >
+      <Icon icon={INFO_ICON} />
+    </button>
+  </Tooltip>
+);
+
 const CommentComposer = ({
   compose,
   body,
@@ -2273,19 +2300,22 @@ const CommentComposer = ({
           Escape closes · {MODIFIER_SHORTCUT} adds
         </p>
         <div className="mt-2 block">
-          <button
-            type="button"
-            className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            role="switch"
-            aria-checked={submitRightAway}
-            onClick={() => onSubmitRightAwayChange(!submitRightAway)}
-          >
-            <span
-              className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
-              aria-hidden="true"
-            />
-            Submit right away
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              role="switch"
+              aria-checked={submitRightAway}
+              onClick={() => onSubmitRightAwayChange(!submitRightAway)}
+            >
+              <span
+                className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
+                aria-hidden="true"
+              />
+              Submit right away
+            </button>
+            <SubmitRightAwayHelp />
+          </div>
           <div className="mt-2 flex items-center justify-end gap-1">
             <Button variant="outline" size="compact" onClick={onCancel}>
               Cancel

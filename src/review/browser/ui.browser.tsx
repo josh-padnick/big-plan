@@ -282,6 +282,12 @@ export const Badge = ({
   />
 );
 
+/**
+ * A tooltip either names the control it hangs off or explains a choice the
+ * reader is about to make; the two want different measures.
+ */
+type TooltipVariant = "label" | "explanation";
+
 type TooltipChildProps = {
   readonly "aria-describedby"?: string;
   readonly ref?: Ref<HTMLElement>;
@@ -300,6 +306,29 @@ type TooltipProps = {
   readonly placement?: "above" | "below";
   readonly asChild?: boolean;
   readonly isInstant?: boolean;
+  readonly variant?: TooltipVariant;
+};
+
+// A tooltip carrying one short label centres in a narrow column, because a
+// centred line reads as a caption on the control it names. A tooltip that
+// explains a trade-off is prose: it needs a wider measure and a left edge to
+// return to, or the reader re-finds the start of every line.
+// Each variant states its widest measure twice on purpose, once as the static
+// Tailwind class the stylesheet can discover and once as the number the
+// positioner clamps against; the two must stay equal, so they sit together.
+const TOOLTIP_VARIANTS: Record<
+  TooltipVariant,
+  { readonly className: string; readonly maxWidth: number }
+> = {
+  label: {
+    className:
+      "max-w-[min(11rem,calc(100vw_-_2rem))] text-center font-semibold",
+    maxWidth: 11 * 16,
+  },
+  explanation: {
+    className: "max-w-[min(17rem,calc(100vw_-_2rem))] text-left font-normal",
+    maxWidth: 17 * 16,
+  },
 };
 
 /** A portal tooltip with a deliberate default pause before secondary help. */
@@ -311,6 +340,7 @@ export const Tooltip = ({
   placement = "above",
   asChild = false,
   isInstant = false,
+  variant = "label",
 }: TooltipProps) => {
   const tooltipId = useId();
   const anchorRef = useRef<HTMLElement>(null);
@@ -346,6 +376,7 @@ export const Tooltip = ({
         anchor: rect,
         viewport: { width: window.innerWidth, height: window.innerHeight },
         preferredPlacement: placement,
+        maxWidth: TOOLTIP_VARIANTS[variant].maxWidth,
       }),
     );
   };
@@ -404,7 +435,7 @@ export const Tooltip = ({
           <span
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-auto fixed z-[2147483647] w-max max-w-[min(11rem,calc(100vw_-_2rem))] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-ink px-2 py-1 text-center text-2xs leading-snug font-semibold whitespace-normal text-paper shadow-floating [overflow-wrap:anywhere] ${position.placement === "above" ? "-translate-y-full" : ""}`}
+            className={`pointer-events-auto fixed z-[2147483647] w-max -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-ink px-2 py-1 text-2xs leading-snug whitespace-normal text-paper shadow-floating [overflow-wrap:anywhere] ${TOOLTIP_VARIANTS[variant].className} ${position.placement === "above" ? "-translate-y-full" : ""}`}
             style={{
               top: position.top,
               left: position.left,

@@ -588,6 +588,26 @@ test("should remember the submit-right-away choice across new composers", async 
     name: "Submit right away",
   });
   await expect(preference).toHaveAttribute("aria-checked", "true");
+
+  // The trade-off help has to reach a reader who never touches a mouse, so the
+  // mark is asserted from the keyboard rather than from a hover.
+  const help = composer.getByRole("button", {
+    name: "About Submit right away",
+  });
+  const helpTooltip = page.getByRole("tooltip", { name: /goes to the agent/ });
+  await expect(helpTooltip).toHaveCount(0);
+  await preference.focus();
+  await page.keyboard.press("Tab");
+  await expect(help).toBeFocused();
+  await expect(helpTooltip).toBeVisible();
+  await expect(helpTooltip).toContainText("staged with the rest");
+  await expect(help).toHaveAttribute(
+    "aria-describedby",
+    (await helpTooltip.getAttribute("id")) ?? "",
+  );
+  await help.blur();
+  await expect(helpTooltip).toHaveCount(0);
+
   await preference.click();
   await composer.getByRole("button", { name: "Cancel" }).click();
 

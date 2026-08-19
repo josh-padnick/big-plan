@@ -2,7 +2,6 @@
 
 const TOOLTIP_GAP = 8;
 const VIEWPORT_INSET = 8;
-const TOOLTIP_MAX_WIDTH = 11 * 16;
 const TOOLTIP_MIN_READABLE_HEIGHT = 2 * 16;
 
 export type TooltipPosition = {
@@ -17,6 +16,7 @@ export const placeTooltip = ({
   anchor,
   viewport,
   preferredPlacement,
+  maxWidth,
 }: {
   readonly anchor: {
     readonly top: number;
@@ -29,6 +29,7 @@ export const placeTooltip = ({
     readonly height: number;
   };
   readonly preferredPlacement?: "above" | "below";
+  readonly maxWidth: number;
 }): TooltipPosition => {
   const roomAbove = Math.max(0, anchor.top - TOOLTIP_GAP - VIEWPORT_INSET);
   const roomBelow = Math.max(
@@ -44,8 +45,11 @@ export const placeTooltip = ({
       ? roomierPlacement
       : preferredPlacement;
   const center = anchor.left + (anchor.right - anchor.left) / 2;
+  // The caller owns the tooltip's widest measure, because the clamp has to
+  // match the width the tooltip actually renders at: a narrow clamp against a
+  // wide tooltip lets its far edge run off the viewport with nothing to say so.
   const horizontalEdge = Math.min(
-    TOOLTIP_MAX_WIDTH / 2 + VIEWPORT_INSET,
+    maxWidth / 2 + VIEWPORT_INSET,
     viewport.width / 2,
   );
   return {
