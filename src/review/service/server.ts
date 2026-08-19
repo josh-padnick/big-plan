@@ -89,8 +89,11 @@ const sendHtml = ({
     // is blocked on its own page. form-action is named explicitly because it
     // does not fall back to default-src, and the stop flow is a form: this is
     // what stops a page from being tricked into posting it somewhere else.
+    // frame-ancestors is what stops a page on another origin from framing the
+    // stop confirmation and harvesting a click against a nonce this process
+    // itself issued, which every same-origin check here would then accept.
     "content-security-policy":
-      "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
+      "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
   });
@@ -150,6 +153,12 @@ const readFormNonce = async (
       );
     });
     request.on("error", () => settle(undefined));
+    // A client that opens the post, sends no complete body, and then aborts -
+    // or is destroyed by the server's own request timeout - emits neither
+    // `end` nor necessarily `error`. Without this the promise never settles
+    // and the awaiting handler holds the request and response for the life of
+    // the process. Settling twice is harmless; never settling is not.
+    request.on("close", () => settle(undefined));
   });
 
 const constantTimeEquals = (supplied: string, expected: string): boolean => {

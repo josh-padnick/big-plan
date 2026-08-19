@@ -304,6 +304,9 @@ describe("the service listener", () => {
     const policy = (await get("/stop")).headers.get("content-security-policy");
     expect(policy).toContain("form-action 'self'");
     expect(policy).toContain("base-uri 'none'");
+    // A framed confirmation page would carry a nonce this process issued, and
+    // a click on it would pass every same-origin check below.
+    expect(policy).toContain("frame-ancestors 'none'");
   });
 
   it("should refuse a nonce replayed from another site", async () => {

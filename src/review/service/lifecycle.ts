@@ -298,10 +298,13 @@ export const ensureServiceRunning = async ({
     // A service outlives the CLI that spawned it, so an upgrade would
     // otherwise leave an old process serving old pages indefinitely. It holds
     // no state, so replacing it costs a sub-second gap and nothing else.
-    if (!(await stopService({ port }))) {
+    // `absent` is not a failure here: the old process exited on its own
+    // between the probe and the request, which is the outcome we wanted.
+    const stop = await stopService({ port });
+    if (stop.kind === "refused") {
       return {
         kind: "unavailable",
-        reason: `A Big Plan service from version ${probe.health.version} is running on port ${port} and could not be stopped to replace it with ${expected}. Run \`big-plan service restart\`.`,
+        reason: `A Big Plan service from version ${probe.health.version} is running on port ${port} and could not be stopped to replace it with ${expected}: ${stop.reason} Run \`big-plan service restart\`.`,
       };
     }
   }
@@ -309,32 +312,77 @@ export const ensureServiceRunning = async ({
   return spawnAndAwaitReady({ port });
 };
 
-/** Asks a running service to exit, reporting whether one was there to ask. */
+/**
+ * What asking the service to stop actually achieved.
+ *
+ * The three cases are kept apart because a caller reports them to a person,
+ * and collapsing them would let a stop that did not happen be announced as one
+ * that did. `refused` carries the sentence explaining why the port is still
+ * serving saved links.
+ */
+export type ServiceStop =
+  | { readonly kind: "absent" }
+  | { readonly kind: "stopped" }
+  | { readonly kind: "refused"; readonly reason: string };
+
+/** Asks a running service to exit, reporting what actually happened. */
 export const stopService = async ({
   port = servicePort(),
 }: {
   readonly port?: number;
-} = {}): Promise<boolean> => {
+} = {}): Promise<ServiceStop> => {
   const probe = await probeService({ port });
-  if (probe.kind !== "running") return false;
-  const token = await readServiceToken();
-  if (token === undefined) return false;
+  if (probe.kind === "absent") return { kind: "absent" };
+  if (probe.kind === "foreign") {
+    return {
+      kind: "refused",
+      reason: foreignPortMessage({
+        port,
+        occupier: await describePortOccupier({ port }),
+      }),
+    };
+  }
+  // Minted rather than merely read: the service reads its token per request
+  // precisely so a re-minted one is accepted, and a token missing from disk
+  // must not leave the operator unable to stop their own process.
+  let token: string;
+  try {
+    token = await ensureServiceToken();
+  } catch (error: unknown) {
+    return {
+      kind: "refused",
+      reason: `The Big Plan service on port ${port} could not be stopped because its token is unavailable: ${String(error)}`,
+    };
+  }
   try {
     const response = await fetch(`http://127.0.0.1:${port}/stop`, {
       method: "POST",
       headers: { "x-big-plan-service-token": token },
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    if (!response.ok) return false;
-  } catch {
-    return false;
+    if (!response.ok) {
+      return {
+        kind: "refused",
+        reason: `The Big Plan service on port ${port} refused the stop request with HTTP ${response.status}.`,
+      };
+    }
+  } catch (error: unknown) {
+    return {
+      kind: "refused",
+      reason: `The Big Plan service on port ${port} could not be asked to stop: ${String(error)}`,
+    };
   }
   // The process answers before it closes its listener, so a caller that
   // immediately probes again should see it gone rather than racing it.
   const deadline = Date.now() + READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
     await wait(READY_POLL_MS);
-    if ((await probeService({ port })).kind !== "running") return true;
+    if ((await probeService({ port })).kind !== "running") {
+      return { kind: "stopped" };
+    }
   }
-  return false;
+  return {
+    kind: "refused",
+    reason: `The Big Plan service on port ${port} accepted the stop request but is still listening.`,
+  };
 };

@@ -12,6 +12,7 @@ import {
   ensureServiceToken,
   probeService,
   readServiceToken,
+  stopService,
 } from "./lifecycle.js";
 import { servicePaths } from "./paths.js";
 import { foreignPortMessage } from "./port-occupier.js";
@@ -29,6 +30,50 @@ const listenWith = async (
       "content-type": "application/json; charset=utf-8",
     });
     response.end(answer.body);
+  });
+  await new Promise<void>((settle) => {
+    server.listen({ host: "127.0.0.1", port: 0 }, () => settle());
+  });
+  listener = server;
+  const address = server.address();
+  return typeof address === "object" && address !== null ? address.port : 0;
+};
+
+// A listener that identifies as this product, so `stopService` gets past the
+// probe and reaches the outcome under test.
+const listenAsService = async ({
+  stop,
+}: {
+  readonly stop: "accept" | "refuse";
+}): Promise<number> => {
+  const server = createServer((request, response) => {
+    const address = server.address();
+    const port =
+      typeof address === "object" && address !== null ? address.port : 0;
+    if (request.method === "POST" && request.url === "/stop") {
+      if (stop === "refuse") {
+        response.writeHead(403, { "content-type": "text/plain" });
+        response.end("refused");
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end('{"stopping":true}');
+      response.on("finish", () => {
+        server.closeAllConnections();
+        server.close();
+      });
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        product: "big-plan-service",
+        version: "1.2.3",
+        pid: process.pid,
+        port,
+        startedAt: "2026-08-17T12:00:00.000Z",
+      }),
+    );
   });
   await new Promise<void>((settle) => {
     server.listen({ host: "127.0.0.1", port: 0 }, () => settle());
@@ -154,5 +199,36 @@ describe("the message when the port is not ours", () => {
     const message = foreignPortMessage({ port: 8790, occupier: undefined });
     expect(message).toContain("8790");
     expect(message).toContain("BIG_PLAN_PORT");
+  });
+});
+
+describe("stopping the service", () => {
+  it("should report that nothing was running rather than a stop it performed", async () => {
+    // Port 1 is reserved and nothing serves it.
+    expect((await stopService({ port: 1 })).kind).toBe("absent");
+  });
+
+  it("should stop a service whose token has gone missing from disk", async () => {
+    // The service reads its token per request precisely so a re-minted one is
+    // accepted; without minting here, deleting the token file would leave the
+    // operator unable to stop their own process.
+    expect(await readServiceToken()).toBe(undefined);
+    const port = await listenAsService({ stop: "accept" });
+
+    expect((await stopService({ port })).kind).toBe("stopped");
+    expect((await probeService({ port })).kind).toBe("absent");
+    expect(await readServiceToken()).not.toBe(undefined);
+  });
+
+  it("should refuse to report a stop the service would not perform", async () => {
+    const port = await listenAsService({ stop: "refuse" });
+
+    const outcome = await stopService({ port });
+    expect(outcome.kind).toBe("refused");
+    expect(outcome.kind === "refused" && outcome.reason).toContain(
+      String(port),
+    );
+    // And the honest part: it is still there, serving saved review links.
+    expect((await probeService({ port })).kind).toBe("running");
   });
 });

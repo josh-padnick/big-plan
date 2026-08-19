@@ -44,16 +44,14 @@ const reportStatus = async (): Promise<Record<string, unknown>> => {
     listServiceRegistryEntries(),
   ]);
   if (probe.kind === "foreign") {
+    const occupier = await describePortOccupier({ port });
     return {
       service: "unavailable",
       port,
       plans: plans.length,
-      occupied_by: (await describePortOccupier({ port })) ?? "unknown",
+      occupied_by: occupier ?? "unknown",
       help: [
-        foreignPortMessage({
-          port,
-          occupier: await describePortOccupier({ port }),
-        }),
+        foreignPortMessage({ port, occupier }),
         "Then run `big-plan service start`",
       ],
     };
@@ -106,18 +104,30 @@ const reportStart = async (): Promise<Record<string, unknown>> => {
   };
 };
 
+// A stop that did not happen must never be reported as one that did: the
+// whole point of the command is that nobody is stuck with a background process
+// they cannot stop, and a false "stopped" is worse than a loud refusal.
+const refuseStop = (reason: string): never => {
+  throw new AxiError(reason, "INTERNAL_ERROR", [
+    reason,
+    "The service is still serving saved review links on this port",
+  ]);
+};
+
 const reportStop = async (): Promise<Record<string, unknown>> => {
   const port = servicePort();
-  const stopped = await stopService({ port });
+  const outcome = await stopService({ port });
+  if (outcome.kind === "refused") return refuseStop(outcome.reason);
   return {
     service: "stopped",
     port,
-    help: stopped
-      ? [
-          "Saved review links will not open until the service starts again",
-          "Any big-plan command that prints a link starts it again",
-        ]
-      : ["The service was not running"],
+    help:
+      outcome.kind === "stopped"
+        ? [
+            "Saved review links will not open until the service starts again",
+            "Any big-plan command that prints a link starts it again",
+          ]
+        : ["The service was not running"],
   };
 };
 
@@ -134,9 +144,11 @@ export const serviceCommand = async (
       return reportStart();
     case "stop":
       return reportStop();
-    case "restart":
-      await stopService();
+    case "restart": {
+      const stopped = await stopService();
+      if (stopped.kind === "refused") return refuseStop(stopped.reason);
       return reportStart();
+    }
     default:
       return invalidArguments();
   }

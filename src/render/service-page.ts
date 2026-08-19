@@ -165,7 +165,7 @@ const commandBlock = ({ command }: { readonly command: string }): string => {
   // The same figure the markdown pipeline builds around a fenced block, so the
   // control is the product's own: hover-revealed, icon-only, and wired by the
   // shell's viewer script through data-copy-code rather than by a script here.
-  return `<figure class="code-figure group/code-figure relative max-w-[var(--measure)] mb-6 [&>pre]:mb-0" data-maximizable="code">
+  return `<figure class="code-figure group/code-figure relative max-w-[var(--measure)] mb-6 [&>pre]:mb-0">
 <div class="figure-control-bar absolute top-[0.3rem] right-[0.4rem] z-[1] flex flex-row items-center justify-end gap-1 p-0 opacity-0 motion-safe:transition-opacity motion-safe:duration-150 group-hover/code-figure:opacity-100 group-focus-within/code-figure:opacity-100">
 <button class="${FIGURE_CONTROL_BUTTON_CLASSES}" type="button" aria-label="${label}" data-tooltip="${label}" data-tooltip-delay="1s" data-copy-code hidden>${lucideIconToHtml({ icon: COPY_ICON, className: "size-4" })}${lucideIconToHtml({ icon: CHECK_ICON, className: "size-4", hidden: true })}</button>
 </div>

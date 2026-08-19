@@ -4,7 +4,7 @@
 // uses. A bespoke visual vocabulary here would drift the moment the design
 // system moved.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GLOBAL_CSS } from "./global.generated.js";
 import {
   renderPlanEndedPage,
@@ -19,6 +19,26 @@ const atMs = Date.parse("2026-08-17T14:41:00.000Z");
 
 const welcome = (): string =>
   renderServiceWelcomePage({ port: 8790, startedAtMs: atMs });
+
+// The page is formatted with whatever locale the machine running it has, so a
+// rule about meridiems can only be checked against a locale the test names.
+const formatTime = Date.prototype.toLocaleTimeString;
+const welcomeIn = (locale: string, startedAtMs: number): string => {
+  const pinned = vi
+    .spyOn(Date.prototype, "toLocaleTimeString")
+    .mockImplementation(function (
+      this: Date,
+      _locales?: Intl.LocalesArgument,
+      options?: Intl.DateTimeFormatOptions,
+    ): string {
+      return formatTime.call(this, locale, options);
+    });
+  try {
+    return renderServiceWelcomePage({ port: 8790, startedAtMs });
+  } finally {
+    pinned.mockRestore();
+  }
+};
 
 describe("the service's pages", () => {
   it("should render the same toolbar a review document renders", () => {
@@ -70,12 +90,17 @@ describe("the service's pages", () => {
 
   it("should write a time the way a person says it", () => {
     // "6:15 PM" is how a formatter writes it; "6:15pm" is how a person does.
-    const html = renderServiceWelcomePage({
-      port: 8790,
-      startedAtMs: Date.parse("2026-08-18T18:15:00"),
-    });
-    expect(html).toMatch(/Running since \d+:\d{2}(am|pm)\./u);
-    expect(html).not.toMatch(/\d\s(AM|PM)/u);
+    const quarterPastSix = Date.parse("2026-08-18T18:15:00");
+    const spoken = welcomeIn("en-US", quarterPastSix);
+    expect(spoken).toContain("Running since 6:15pm.");
+    expect(spoken).not.toMatch(/\d\s(AM|PM)/u);
+  });
+
+  it("should leave a 24-hour locale's time exactly as that locale writes it", () => {
+    // There is no meridiem to rewrite, and inventing one would be wrong.
+    expect(welcomeIn("en-GB", Date.parse("2026-08-18T18:15:00"))).toContain(
+      "Running since 18:15.",
+    );
   });
 
   it("should name who the service page is for", () => {
