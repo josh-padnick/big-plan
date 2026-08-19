@@ -2,8 +2,10 @@
 // and what a reviewer's answer does to the roster.
 
 import { describe, expect, it } from "vitest";
+import { AGENT_RECOVERY_HORIZON_MS } from "./agent-timing.js";
 import {
   AGENT_CONTENTION_WINDOW_MS,
+  agentIsAttached,
   agentIsLive,
   agentPrimacyHealth,
   applyPrimacyDeclined,
@@ -143,6 +145,23 @@ describe("writersAreContending", () => {
   });
 });
 
+describe("agentIsAttached", () => {
+  it("should keep counting an agent through a long working turn", () => {
+    expect(
+      agentIsAttached({ agent: { signalAtMs: NOW - 90_000 }, nowMs: NOW }),
+    ).toBe(true);
+  });
+
+  it("should stop counting one past the recovery horizon", () => {
+    expect(
+      agentIsAttached({
+        agent: { signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1 },
+        nowMs: NOW,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("agentIsLive", () => {
   it("should count a fresh signal", () => {
     expect(
@@ -166,8 +185,18 @@ describe("selectPrimaryAgent", () => {
     expect(selectPrimaryAgent({ agents, nowMs: NOW })?.writerId).toBe("b");
   });
 
-  it("should ignore a primary whose signal has aged out", () => {
+  it("should keep a primary that is quiet because it is mid turn", () => {
+    // `agent next` hands its work item over and the process exits, so every
+    // working agent looks quiet. Dropping it here would hand the plan to a
+    // newcomer exactly while the primary was answering (BIG-147).
     const agents = [agent({ writerId: "b", signalAtMs: NOW - 90_000 })];
+    expect(selectPrimaryAgent({ agents, nowMs: NOW })?.writerId).toBe("b");
+  });
+
+  it("should ignore a primary that has been silent past the recovery horizon", () => {
+    const agents = [
+      agent({ writerId: "b", signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1 }),
+    ];
     expect(selectPrimaryAgent({ agents, nowMs: NOW })).toBeUndefined();
   });
 });
@@ -196,10 +225,24 @@ describe("roleForArrivingAgent", () => {
     ).toBe("observer");
   });
 
-  it("should promote an arrival when the previous primary has aged out", () => {
+  it("should not promote an arrival past a primary that is merely mid turn", () => {
     expect(
       roleForArrivingAgent({
         agents: [agent({ writerId: "a", signalAtMs: NOW - 90_000 })],
+        nowMs: NOW,
+      }),
+    ).toBe("observer");
+  });
+
+  it("should promote an arrival once the previous primary is past the horizon", () => {
+    expect(
+      roleForArrivingAgent({
+        agents: [
+          agent({
+            writerId: "a",
+            signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1,
+          }),
+        ],
         nowMs: NOW,
       }),
     ).toBe("primary");
@@ -249,14 +292,14 @@ describe("pendingPrimacyRequest and agentPrimacyHealth", () => {
     );
   });
 
-  it("should ignore a request from an observer that has gone quiet", () => {
+  it("should ignore a request from an observer that is gone for good", () => {
     const agents = [
       primary,
       agent({
         writerId: "gone",
         role: "observer",
         requestedPrimacyAtMs: NOW - 100,
-        signalAtMs: NOW - 90_000,
+        signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS - 1,
       }),
     ];
     expect(agentPrimacyHealth({ agents, nowMs: NOW })).toBe("settled");

@@ -12,7 +12,7 @@
 // whether two loops are really contending, which attached agent is the
 // primary, and whether the reviewer is being asked to decide something.
 
-import { AGENT_STALL_MS } from "./agent-timing.js";
+import { AGENT_RECOVERY_HORIZON_MS, AGENT_STALL_MS } from "./agent-timing.js";
 import { agentModelDisplayName } from "./agent-identity-catalog.js";
 import type { AgentModelIdentity } from "./agent-model.js";
 
@@ -159,7 +159,16 @@ export const agentModelLabel = (
     : `${agentModelDisplayName(name)} (${short})`;
 };
 
-/** True while an attached agent's own signal is recent enough to count. */
+/**
+ * True while an attached agent has reported recently.
+ *
+ * This is a presentation fact and nothing else: it decides what a card says
+ * about an agent, never whether that agent still holds the plan. `agent next`
+ * hands its work item to the harness and the process exits, so nothing renews
+ * anything for the length of a turn (BIG-147) - which means every working
+ * agent fails this test, and deciding primacy by it would hand the plan to a
+ * newcomer exactly while the primary was busy answering.
+ */
 export const agentIsLive = ({
   agent,
   nowMs,
@@ -172,6 +181,29 @@ export const agentIsLive = ({
   const age = nowMs - agent.signalAtMs;
   return age >= 0 && age <= maximumAgeMs;
 };
+
+/**
+ * True while an agent is still a member of this review.
+ *
+ * Membership is what every primacy question is answered from, and it is
+ * deliberately far more patient than liveness. A quiet agent is usually an
+ * agent mid turn, and dropping it after 75 seconds would delete the plan's
+ * own primary while it was working - re-creating, by a different route, the
+ * interleaving this whole change removes.
+ *
+ * The recovery horizon is the bound that already exists for exactly this
+ * judgment: past it, silence has stopped meaning "busy" everywhere else the
+ * reviewer can see (BIG-147), so it is the honest moment to stop counting an
+ * agent as here.
+ */
+export const agentIsAttached = ({
+  agent,
+  nowMs,
+}: {
+  readonly agent: Pick<AttachedAgent, "signalAtMs">;
+  readonly nowMs: number;
+}): boolean =>
+  agentIsLive({ agent, nowMs, maximumAgeMs: AGENT_RECOVERY_HORIZON_MS });
 
 /**
  * The agents a reviewer should be shown, oldest attachment first.
@@ -199,7 +231,7 @@ export const selectPrimaryAgent = ({
   readonly nowMs: number;
 }): AttachedAgent | undefined =>
   orderAttachedAgents(agents).find(
-    (agent) => agent.role === "primary" && agentIsLive({ agent, nowMs }),
+    (agent) => agent.role === "primary" && agentIsAttached({ agent, nowMs }),
   );
 
 /** The live observers, in the order the rail lists them. */
@@ -211,7 +243,7 @@ export const selectObserverAgents = ({
   readonly nowMs: number;
 }): ReadonlyArray<AttachedAgent> =>
   orderAttachedAgents(agents).filter(
-    (agent) => agent.role === "observer" && agentIsLive({ agent, nowMs }),
+    (agent) => agent.role === "observer" && agentIsAttached({ agent, nowMs }),
   );
 
 /**

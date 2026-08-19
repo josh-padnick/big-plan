@@ -1565,6 +1565,17 @@ const note = async ({
       state: "live",
     },
   }).catch(() => undefined);
+  // A note is this agent reporting, so it refreshes the registration too. The
+  // roster would survive without it - membership is bounded by the recovery
+  // horizon, not by the stall window - but a card that says an agent has gone
+  // quiet while it is plainly narrating would be wrong.
+  await attachAgentToRoster({
+    store: session.store,
+    sessionId: session.sessionId,
+    writerId: randomId(8),
+    adoptClaimToken: agentToken,
+    ...(model === undefined ? {} : { model }),
+  }).catch(() => undefined);
   await writeAgentHeartbeat({
     store: session.store,
     sessionId: session.sessionId,

@@ -11,12 +11,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  agentIsAttached,
   agentIsLive,
   pendingPrimacyRequest,
   selectObserverAgents,
   selectPrimaryAgent,
 } from "./shared/agent-primacy.js";
-import { AGENT_STALL_MS } from "./shared/agent-timing.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+} from "./shared/agent-timing.js";
 import {
   agentPresenceIsContended,
   attachAgentToRoster,
@@ -106,7 +110,35 @@ describe("attachAgentToRoster", () => {
     );
   });
 
-  it("should reap an agent that has been silent past the stall window", async () => {
+  it("should keep a primary that is quiet because it is working", async () => {
+    // The bug this pins: `agent next` exits once it hands work to the harness,
+    // so a working primary stops signalling. Reaping on the stall window
+    // deleted it mid turn and let the next arrival become primary - the same
+    // interleaving this change exists to remove, by another route.
+    const store = await temporaryStore();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "working",
+      now: 1_000,
+    });
+    const agents = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: 1_000 + AGENT_STALL_MS + 1,
+    });
+    expect(agents.map((agent) => agent.writerId)).toEqual([
+      "working",
+      "arriving",
+    ]);
+    expect(
+      selectPrimaryAgent({ agents, nowMs: 1_000 + AGENT_STALL_MS + 1 })
+        ?.writerId,
+    ).toBe("working");
+  });
+
+  it("should reap an agent that has been silent past the recovery horizon", async () => {
     const store = await temporaryStore();
     await attachAgentToRoster({
       store,
@@ -118,7 +150,7 @@ describe("attachAgentToRoster", () => {
       store,
       sessionId: SESSION,
       writerId: "fresh",
-      now: 1_000 + AGENT_STALL_MS + 1,
+      now: 1_000 + AGENT_RECOVERY_HORIZON_MS + 1,
     });
     expect(agents.map((agent) => agent.writerId)).toEqual(["fresh"]);
     // The departed primary freed the role rather than holding it forever.
@@ -431,7 +463,7 @@ describe("agentPresenceIsContended", () => {
 });
 
 describe("roster liveness", () => {
-  it("should stop counting an agent whose signal aged out", async () => {
+  it("should report a quiet agent as not reporting while keeping it attached", async () => {
     const store = await temporaryStore();
     await attachAgentToRoster({
       store,
@@ -440,11 +472,12 @@ describe("roster liveness", () => {
       now: 1_000,
     });
     const agents = await readAgentRoster({ store, sessionId: SESSION });
-    expect(
-      agentIsLive({
-        agent: agents[0] ?? { signalAtMs: 0 },
-        nowMs: 1_000 + AGENT_STALL_MS + 1,
-      }),
-    ).toBe(false);
+    const stalled = { nowMs: 1_000 + AGENT_STALL_MS + 1 };
+    const agent = agents[0] ?? { signalAtMs: 0 };
+    // Two different questions with two different answers, which is the whole
+    // point: the card may say "not reporting" while the plan still has a
+    // primary.
+    expect(agentIsLive({ agent, ...stalled })).toBe(false);
+    expect(agentIsAttached({ agent, ...stalled })).toBe(true);
   });
 });

@@ -473,10 +473,21 @@ const CurrentActivityCard = ({
 }) => {
   const body =
     activity.state === "working" ? activity.latestStep : activity.supporting;
-  // A live connection is the fact a reviewer checks this card for; what the
-  // agent happens to be doing is the detail underneath it. Only the working
-  // state buries the connection behind the activity, so only it is retitled.
-  const title = activity.state === "working" ? status.label : activity.headline;
+  /*
+  A live connection is the fact a reviewer checks this card for; what the agent
+  happens to be doing is the detail underneath it. Only the working state
+  buries the connection behind the activity, so only it is retitled.
+
+  The borrowed label is taken only while the health really is this agent's
+  health. A pending primacy question moves the shared indicator to a state that
+  describes a DIFFERENT agent (BIG-171), and titling this card with it read as
+  "Second agent needs an answer" above the working primary's own progress. When
+  the indicator is speaking for someone else, the card states its own activity.
+  */
+  const title =
+    activity.state === "working" && status.indicator === "working"
+      ? status.label
+      : activity.headline;
   const targetLabel =
     activity.state !== "disconnected" &&
     activity.state !== "never-connected" &&

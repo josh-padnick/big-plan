@@ -339,7 +339,7 @@ export const PrimacyHandoffDialog = ({
         <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
           What happens
         </p>
-        <ul className="m-0 grid gap-1 pl-4 text-xs text-ink">
+        <ul className="m-0 grid list-disc gap-1 pl-4 text-xs text-ink marker:text-muted">
           <li>
             {agentModelLabel(agent)} answers the open comment and every comment
             after it.

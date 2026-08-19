@@ -57,7 +57,7 @@ import {
   type AgentDisconnectDirective,
 } from "./shared/agent-disconnect.js";
 import {
-  agentIsLive,
+  agentIsAttached,
   applyPrimacyDeclined,
   applyPrimacyHandoff,
   roleForArrivingAgent,
@@ -2916,7 +2916,10 @@ export const attachAgentToRoster = async ({
           (agent) =>
             agent.writerId === writerId ||
             agent.writerId === adopted?.writerId ||
-            agentIsLive({ agent, nowMs: now }),
+            // Membership, never liveness: a working agent's process is gone for
+            // the length of its turn, so reaping on the stall window would
+            // delete the plan's own primary while it was answering (BIG-147).
+            agentIsAttached({ agent, nowMs: now }),
         )
         // The predecessor's record becomes this process's record, keeping the
         // role, the attachment time, and the token that identifies the work.
