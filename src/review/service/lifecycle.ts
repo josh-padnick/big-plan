@@ -171,11 +171,6 @@ export const writeServiceRuntimeRecord = async (
   });
 };
 
-/** Removes the runtime record on a clean exit. */
-export const clearServiceRuntimeRecord = async (): Promise<void> => {
-  await rm(servicePaths().runtimePath, { force: true });
-};
-
 /** Reads the runtime record, which is advisory: `/healthz` is authoritative. */
 export const readServiceRuntimeRecord = async (): Promise<
   RuntimeRecord | undefined
@@ -202,6 +197,25 @@ export const readServiceRuntimeRecord = async (): Promise<
   } catch {
     return undefined;
   }
+};
+
+/**
+ * Removes the runtime record, but only when it still describes one process.
+ *
+ * The path is shared by every start on this machine, and a start that loses
+ * the port race exits while the winner keeps listening. An unconditional
+ * delete there would remove the winner's record and leave every reader
+ * describing a live process from a default, so the caller names the pid it is
+ * entitled to remove and a record belonging to anyone else is left alone.
+ */
+export const clearServiceRuntimeRecord = async ({
+  pid,
+}: {
+  readonly pid: number;
+}): Promise<void> => {
+  const current = await readServiceRuntimeRecord();
+  if (current !== undefined && current.pid !== pid) return;
+  await rm(servicePaths().runtimePath, { force: true });
 };
 
 const wait = async (milliseconds: number): Promise<void> => {

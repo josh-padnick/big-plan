@@ -74,7 +74,11 @@ const reportStatus = async (): Promise<Record<string, unknown>> => {
     pid: probe.health.pid,
     started: probe.health.startedAt,
     plans: plans.length,
-    managed_by: record?.managedBy ?? "on-demand",
+    // The record is advisory and its path is shared by every start on this
+    // machine, so it only speaks for the process actually answering when it
+    // names that process. Anything else is reported as unknown rather than as
+    // a plausible default.
+    managed_by: record?.pid === probe.health.pid ? record.managedBy : "unknown",
     address: `http://127.0.0.1:${probe.health.port}`,
     help: [
       `Open http://127.0.0.1:${probe.health.port} to see what this process is`,

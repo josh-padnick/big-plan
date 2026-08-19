@@ -17,7 +17,10 @@ const shellArguments = async (command: string): Promise<Array<string>> =>
           fail(error);
           return;
         }
-        settle(stdout.split("\n").filter((line) => line !== ""));
+        // `printf '%s\n'` terminates every argument, including an empty one,
+        // so the trailing split fragment is dropped rather than every blank
+        // line: filtering blanks would erase the empty argument this asserts.
+        settle(stdout.split("\n").slice(0, -1));
       },
     );
   });
@@ -53,7 +56,7 @@ describe("quoting only when the shell needs it", () => {
     ]) {
       await expect(
         shellArguments(quoteShellArgumentIfNeeded(value)),
-      ).resolves.toEqual(value === "" ? [] : [value]);
+      ).resolves.toEqual([value]);
     }
   });
 });

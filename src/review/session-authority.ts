@@ -452,6 +452,27 @@ const wait = async (milliseconds: number): Promise<void> => {
   });
 };
 
+/**
+ * Reads the heartbeat, retrying while it reads as absent.
+ *
+ * The heartbeat is rewritten several times a second, and a reader can land in
+ * the gap between the write that removes the old value and the one that lands
+ * the new one. Every caller that classifies a session from this value has to
+ * retry, because the classification of an absent read - not running, unknown,
+ * interrupted - is the one answer that is wrong about a live session.
+ */
+const readHeartbeatValuePatiently = async (
+  store: ReviewStore,
+): Promise<unknown> => {
+  let value: unknown;
+  for (let attempt = 0; attempt < HEARTBEAT_READ_ATTEMPTS; attempt += 1) {
+    value = await readSessionHeartbeatValue(store);
+    if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) break;
+    await wait(HEARTBEAT_READ_RETRY_MS);
+  }
+  return value;
+};
+
 /** Returns matching server liveness and any explicit recorded stop reason. */
 export const reviewSessionIsRunning = async ({
   store,
@@ -464,13 +485,9 @@ export const reviewSessionIsRunning = async ({
   readonly now?: number;
   readonly maximumAgeMs?: number;
 }): Promise<ReviewSessionLiveness> => {
-  let value: unknown;
-  for (let attempt = 0; attempt < HEARTBEAT_READ_ATTEMPTS; attempt += 1) {
-    value = await readSessionHeartbeatValue(store);
-    if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) break;
-    await wait(HEARTBEAT_READ_RETRY_MS);
-  }
-  const heartbeat = validateReviewSessionHeartbeat(value);
+  const heartbeat = validateReviewSessionHeartbeat(
+    await readHeartbeatValuePatiently(store),
+  );
   if (heartbeat === undefined) return { running: false };
   const observedAtMs = now ?? Date.now();
   if (!heartbeatIsFresh({ heartbeat, sessionId, observedAtMs, maximumAgeMs })) {
@@ -560,8 +577,11 @@ export const readReviewSessionOutcome = async ({
   readonly now?: number;
   readonly maximumAgeMs?: number;
 }): Promise<ReviewSessionOutcome> => {
+  // Retried for the same reason `reviewSessionIsRunning` retries: an absent
+  // read becomes `unknown` here, and the service page renders that as an
+  // interruption. A live session must never be described as one.
   const heartbeat = validateReviewSessionHeartbeat(
-    await readSessionHeartbeatValue(store),
+    await readHeartbeatValuePatiently(store),
   );
   if (heartbeat === undefined || heartbeat.sessionId !== sessionId) {
     return { kind: "unknown" };

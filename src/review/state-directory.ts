@@ -18,10 +18,15 @@ import { join } from "node:path";
  * temporary directory is the fallback for sandboxes that block home writes.
  * The environment is read per call so a caller-scoped override takes effect
  * without rebuilding anything that depends on it.
+ *
+ * A blank override is treated as no override. An empty or whitespace-only
+ * value resolves every state path relative to the working directory, which
+ * would write the service token into whatever repository the command was run
+ * from rather than into user state.
  */
 export const candidateStateDirectories = (): ReadonlyArray<string> => {
   const override = process.env["BIG_PLAN_STATE_DIR"];
-  if (override !== undefined) {
+  if (override !== undefined && override.trim() !== "") {
     return [override];
   }
   return [join(homedir(), ".big-plan"), join(tmpdir(), "big-plan")];

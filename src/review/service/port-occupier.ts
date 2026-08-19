@@ -46,11 +46,14 @@ const parseLsof = (output: string): string | undefined => {
 
 // netstat prints "  TCP    127.0.0.1:8790   0.0.0.0:0   LISTENING   4812"
 const parseNetstat = (output: string, port: number): string | undefined => {
+  // Anchored to a non-digit boundary: `:879` is a substring of `:8790`, and a
+  // message that names the wrong process is worse than one that names none.
+  const listener = new RegExp(`:${port}(?!\\d)`);
   const line = output
     .split("\n")
     .find(
       (candidate) =>
-        candidate.includes(`:${port}`) &&
+        listener.test(candidate) &&
         candidate.toUpperCase().includes("LISTENING"),
     );
   if (line === undefined) return undefined;

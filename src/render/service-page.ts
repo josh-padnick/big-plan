@@ -342,7 +342,7 @@ export const renderServiceStopConfirmPage = ({
 <div class="w-full max-w-lg rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating" role="alertdialog" aria-modal="true" aria-labelledby="service-stop-title" aria-describedby="service-stop-description">
 <h2 class="m-0 text-xl font-semibold" id="service-stop-title">Stop the service?</h2>
 <p class="mt-3 text-base text-muted" id="service-stop-description">Big Plans on this machine will no longer be accessible through the web browser.</p>
-<p class="mt-3 text-base text-muted">To start the service again, run any <code${PROSE}>big-plan</code> command (or request a new big plan)</p>
+<p class="mt-3 text-base text-muted">To start the service again, run any <code${PROSE}>big-plan</code> command (or request a new big plan).</p>
 <div class="mt-4">
 ${tip({ bodyHtml: `<p${PROSE}>Stopping the service here is the same as running <code${PROSE}>big-plan service stop</code> in a terminal.</p>` })}
 </div>

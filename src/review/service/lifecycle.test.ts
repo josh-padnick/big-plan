@@ -9,11 +9,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  clearServiceRuntimeRecord,
   ensureServiceRunning,
   ensureServiceToken,
   probeService,
+  readServiceRuntimeRecord,
   readServiceToken,
   stopService,
+  writeServiceRuntimeRecord,
 } from "./lifecycle.js";
 import { servicePaths } from "./paths.js";
 import { foreignPortMessage } from "./port-occupier.js";
@@ -266,5 +269,39 @@ describe("stopping the service", () => {
     );
     // And the honest part: it is still there, serving saved review links.
     expect((await probeService({ port })).kind).toBe("running");
+  });
+});
+
+describe("the runtime record", () => {
+  it("should let the process it describes clear it", async () => {
+    await writeServiceRuntimeRecord({
+      pid: 4812,
+      port: 8790,
+      startedAt: new Date(0).toISOString(),
+      managedBy: "on-demand",
+    });
+
+    await clearServiceRuntimeRecord({ pid: 4812 });
+
+    expect(await readServiceRuntimeRecord()).toBe(undefined);
+  });
+
+  it("should keep the listening process's record when another start exits", async () => {
+    // Two starts race for the fixed port. The loser exits on EADDRINUSE while
+    // the winner keeps answering, and it must not take the winner's record
+    // with it: every reader would then describe a live process from a default.
+    await writeServiceRuntimeRecord({
+      pid: 4812,
+      port: 8790,
+      startedAt: new Date(0).toISOString(),
+      managedBy: "login-item",
+    });
+
+    await clearServiceRuntimeRecord({ pid: 5199 });
+
+    expect(await readServiceRuntimeRecord()).toMatchObject({
+      pid: 4812,
+      managedBy: "login-item",
+    });
   });
 });

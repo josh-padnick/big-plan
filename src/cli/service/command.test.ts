@@ -11,12 +11,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { writeServiceRuntimeRecord } from "../../review/service/lifecycle.js";
+import { startService } from "../../review/service/server.js";
+import type { ServiceRuntime } from "../../review/service/server.js";
 import { serviceCommand } from "./command.js";
 
 let stateDirectory: string;
 let previousStateDirectory: string | undefined;
 let previousPort: string | undefined;
 let listener: Server | undefined;
+let running: ServiceRuntime | undefined;
 
 // Someone else's listener, answering nothing this product would recognise.
 const occupyPort = async (): Promise<number> => {
@@ -40,6 +44,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (running !== undefined) {
+    await running.close();
+    running = undefined;
+  }
   if (listener !== undefined) {
     listener.closeAllConnections();
     await new Promise<void>((settle) => listener?.close(() => settle()));
@@ -79,6 +87,52 @@ describe("`big-plan service stop`", () => {
       service: "stopped",
       port: 1,
       help: ["The service was not running"],
+    });
+  });
+});
+
+describe("`big-plan service status`", () => {
+  // The advisory record and the process answering the port are two different
+  // facts on a machine where several starts race for one fixed port, so the
+  // report may only join them when the record names the process answering.
+  const serveOnAFreePort = async (): Promise<void> => {
+    running = await startService({
+      readToken: async () => undefined,
+      version: "9.9.9-test",
+      port: 0,
+    });
+    process.env["BIG_PLAN_PORT"] = String(running.port);
+  };
+
+  it("should report how the answering process was started", async () => {
+    await serveOnAFreePort();
+    await writeServiceRuntimeRecord({
+      pid: process.pid,
+      port: running?.port ?? 0,
+      startedAt: new Date(0).toISOString(),
+      managedBy: "login-item",
+    });
+
+    expect(await serviceCommand(["status"])).toMatchObject({
+      service: "running",
+      pid: process.pid,
+      managed_by: "login-item",
+    });
+  });
+
+  it("should refuse to describe the answering process from another one's record", async () => {
+    await serveOnAFreePort();
+    await writeServiceRuntimeRecord({
+      pid: process.pid + 1,
+      port: running?.port ?? 0,
+      startedAt: new Date(0).toISOString(),
+      managedBy: "login-item",
+    });
+
+    expect(await serviceCommand(["status"])).toMatchObject({
+      service: "running",
+      pid: process.pid,
+      managed_by: "unknown",
     });
   });
 });

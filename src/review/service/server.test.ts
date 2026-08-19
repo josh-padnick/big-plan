@@ -547,7 +547,9 @@ describe("the service listener", () => {
       readToken: async () => token,
       version: "9.9.9-test",
       port: 0,
-      onClosed: clearServiceRuntimeRecord,
+      onClosed: async () => {
+        await clearServiceRuntimeRecord({ pid: process.pid });
+      },
     });
     await writeServiceRuntimeRecord({
       pid: process.pid,
@@ -573,7 +575,9 @@ describe("the service listener", () => {
       readToken: async () => token,
       version: "9.9.9-test",
       port: 0,
-      onClosed: clearServiceRuntimeRecord,
+      onClosed: async () => {
+        await clearServiceRuntimeRecord({ pid: process.pid });
+      },
     });
     await writeServiceRuntimeRecord({
       pid: process.pid,
