@@ -300,10 +300,17 @@ ${controls}
 // The bound is the field's own maxlength as well as the contract's, because a
 // reviewer pasting a long note should be stopped by the control rather than by
 // a record that silently fails to parse on the next reload.
+//
+// The field is drawn the way the island draws its own inputs - the input ground
+// inside an edge-strong hairline - rather than as a well. A well is a recess in
+// a surface, and it reads as one only where the surface is lighter than the
+// recess; in dark, where the well and the page are the same colour, the field
+// lost its edges and the one thing on this page a reviewer can type into did
+// not look like it.
 const renderApprovalMessageControls = (): string =>
   `<div class="mt-3 min-w-0 wide:mt-4">
 <label class="mb-1 block text-xs font-medium text-muted" for="big-plan-approval-message">Message</label>
-<textarea class="block min-h-32 w-full resize-y rounded-md bg-well px-3 py-2 text-sm leading-normal text-ink inset-shadow-well focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-approval-message" data-approval-message-input maxlength="${APPROVAL_MESSAGE_LIMIT}" aria-describedby="big-plan-approval-message-hint">${escapeHtml(DEFAULT_APPROVAL_MESSAGE)}</textarea>
+<textarea class="block min-h-32 w-full resize-y rounded-md border border-edge-strong bg-input px-3 py-2 text-sm leading-normal text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-approval-message" data-approval-message-input maxlength="${APPROVAL_MESSAGE_LIMIT}" aria-describedby="big-plan-approval-message-hint">${escapeHtml(DEFAULT_APPROVAL_MESSAGE)}</textarea>
 <p class="mt-2 text-xs leading-normal text-muted" id="big-plan-approval-message-hint">The approval id, the pinned version, and your recorded answers are always attached; this text is the covering note.</p>
 <div class="mt-3">
 <button class="-ml-2 inline-flex min-h-9 cursor-pointer items-center rounded-md border-0 bg-transparent px-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-approval-message-reset>Reset to default</button>
