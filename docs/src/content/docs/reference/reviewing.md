@@ -271,10 +271,10 @@ A client is read the same way, except that a recognized one drops the version it
 declared - `grok-cli 0.2.99` shows as `Grok CLI` - because which build is running
 is a fact about the agent's machine rather than about your review.
 
-Identity belongs to the session's agent rather than to its heartbeat. Once
-declared it stays on the card through working turns, quiet periods, stalls, and
-disconnection - a disconnected card still names the agent that left - and it
-changes only when another agent declares something else.
+Identity belongs to the session's agent rather than to its heartbeat.
+Once declared it stays on the card through that agent's working turns, quiet periods, stalls, and disconnection - a disconnected card still names the agent that left.
+It never carries across agents.
+An agent that connects without declaring anything is shown with no identity rather than under the previous agent's name, and a picked-up request is named only by what was declared for that request, so an agent merely waiting for work cannot relabel another agent's turn.
 
 The reconnect prompt the review hands the reviewer asks the agent to export
 these itself before connecting, because the agent is the only party that knows
