@@ -788,3 +788,23 @@ test("should draw marks, a two-ended toolbar, and a surface that covers the page
     ).toBeVisible();
   });
 });
+
+// A control drawn as one mark has no words to give it size, so its target is
+// whatever the stylesheet last said - and a padding change that shrinks it
+// below what a finger can hit looks identical in the source and nearly
+// identical in the drawing.
+test("should hold the touch floor under an icon-only control", async ({
+  page,
+  wireframeFormFactorsViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(wireframeFormFactorsViewerUrl);
+
+  const control = page
+    .locator('[data-wireframe-screen="m-ticket"]')
+    .locator("[data-wireframe-icon-only]")
+    .first();
+  const box = await boxOf(control);
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+});
