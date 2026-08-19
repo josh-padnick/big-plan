@@ -1109,12 +1109,14 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
   >
     <Stack gap="md">
       <TopBar title="Notifications">
-        <Button
-          label="Settings"
-          icon="back"
-          emphasis="tertiary"
-          navigateTo="m-settings"
-        />
+        <Group>
+          <Button
+            label="Settings"
+            icon="back"
+            emphasis="tertiary"
+            navigateTo="m-settings"
+          />
+        </Group>
       </TopBar>
       <Stack gap="xs">
         <Text text="Delivery status" role="section" />

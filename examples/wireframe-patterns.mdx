@@ -335,7 +335,9 @@ Run | State | Cost
   <Screen id="ticket" name="Ticket" device="phone">
     <Stack gap="sm">
       <TopBar title="Ticket">
-        <Button label="‹ Inbox" navigateTo="inbox" />
+        <Group>
+          <Button label="Inbox" icon="back" navigateTo="inbox" />
+        </Group>
       </TopBar>
       <Heading text="Checkout freeze" level="2" />
       <Message

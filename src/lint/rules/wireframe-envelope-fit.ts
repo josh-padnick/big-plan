@@ -44,23 +44,25 @@ const COLUMN_BUDGETS: Readonly<Record<string, number>> = {
   phone: 1,
 };
 
+const isColumnElement = (node: Node): boolean => {
+  for (const name of COLUMN_ELEMENTS) {
+    if (isNamedFlowElement(node, name)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 // A Group is a run of items that travel together, not a column of its own, so
 // it is transparent here: what it holds still takes a share of the row, and
 // counting the group instead of its contents would let four panes hide behind
 // one wrapper and reach the reviewer as four unreadable columns.
 const columnChildren = (node: Parent): ReadonlyArray<Node> =>
   node.children.flatMap((child) => {
-    if (child.type !== "mdxJsxFlowElement" || !("name" in child)) {
-      return [];
-    }
-    const { name } = child;
-    if (typeof name !== "string") {
-      return [];
-    }
-    if (name === "Group" && isParent(child)) {
+    if (isNamedFlowElement(child, "Group")) {
       return columnChildren(child);
     }
-    return COLUMN_ELEMENTS.has(name) ? [child as Node] : [];
+    return isColumnElement(child) ? [child] : [];
   });
 
 const checkScreen = ({

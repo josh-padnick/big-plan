@@ -346,6 +346,22 @@ const containsElement = ({
   node.element === element ||
   childNodes(node).some((child) => containsElement({ node: child, element }));
 
+/**
+ * The panes a set of siblings really lays out, with every Group opened.
+ *
+ * A Group is a run of items that travel together as one item of a Row, not a
+ * pane of its own, so the panes it holds still take their share of the row.
+ * Reading a Group as one child would let three thirds or four outlined cards
+ * hide behind a wrapper and reach the reviewer as the arrangement these rules
+ * exist to refuse.
+ */
+const paneSiblings = (
+  nodes: ReadonlyArray<WireframeNode>,
+): ReadonlyArray<WireframeNode> =>
+  nodes.flatMap((node) =>
+    node.element === "Group" ? paneSiblings(node.children) : [node],
+  );
+
 const containsRecordCollection = (node: WireframeNode): boolean =>
   node.element === "Panel" &&
   node.children.some(
@@ -385,10 +401,11 @@ const checkSelection = ({
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
       if (node.element === "Row") {
-        const source = node.children.find(containsRecordCollection);
+        const siblings = paneSiblings(node.children);
+        const source = siblings.find(containsRecordCollection);
         const sourceIndex =
-          source === undefined ? -1 : node.children.indexOf(source);
-        const following = node.children.slice(sourceIndex + 1);
+          source === undefined ? -1 : siblings.indexOf(source);
+        const following = siblings.slice(sourceIndex + 1);
         const dependent =
           following.find((child) => child.element !== "Rail") ??
           following.find((child) => child.element === "Rail");
@@ -448,10 +465,11 @@ const checkEqualThirds = ({
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
       if (node.element === "Row") {
-        const flexible = node.children.filter((child) =>
+        const siblings = paneSiblings(node.children);
+        const flexible = siblings.filter((child) =>
           FLEXIBLE_PANES.has(child.element),
         );
-        const hasRail = node.children.some((child) => child.element === "Rail");
+        const hasRail = siblings.some((child) => child.element === "Rail");
         if (flexible.length >= 3 && !hasRail) {
           diagnostics.add({
             message: `Desktop Screen "${screen.id}" draws ${flexible.length} flexible panes in one Row; keep the primary surface dominant and wrap secondary content in Rail`,
@@ -476,7 +494,8 @@ const checkOutlinedSiblingBudget = ({
   readonly diagnostics: DiagnosticCollector;
 }): void => {
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
-    const outlined = nodes.filter(
+    const siblings = paneSiblings(nodes);
+    const outlined = siblings.filter(
       (node) => node.element === "Panel" && node.surface === "outlined",
     );
     if (outlined.length >= 4) {
@@ -485,7 +504,7 @@ const checkOutlinedSiblingBudget = ({
         position,
       });
     }
-    nodes.forEach((node) => visit(childNodes(node)));
+    siblings.forEach((node) => visit(childNodes(node)));
   };
   visit(screen.children);
 };
@@ -542,10 +561,11 @@ const checkChoiceComposition = ({
   }
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
+      const siblings =
+        node.element === "Row" ? paneSiblings(node.children) : [];
       if (
-        node.element === "Row" &&
-        node.children.length > 1 &&
-        node.children.some((child) =>
+        siblings.length > 1 &&
+        siblings.some((child) =>
           containsElement({ node: child, element: "ChoiceGroup" }),
         )
       ) {

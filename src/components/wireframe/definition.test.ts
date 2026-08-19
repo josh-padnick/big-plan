@@ -99,6 +99,31 @@ const render = (compiled: CompiledComponent): Element => {
 
 const html = (node: Element): string => JSON.stringify(node);
 
+// Finds one rendered element by the class it carries, so a test can assert on
+// the properties that element actually holds rather than on the order a
+// serialized tree happens to print them in.
+const elementWithClass = ({
+  node,
+  className,
+}: {
+  readonly node: Element;
+  readonly className: string;
+}): Element | undefined => {
+  const classes = node.properties["className"];
+  if (Array.isArray(classes) && classes.includes(className)) {
+    return node;
+  }
+  for (const child of node.children) {
+    if (child.type === "element") {
+      const found = elementWithClass({ node: child, className });
+      if (found !== undefined) {
+        return found;
+      }
+    }
+  }
+  return undefined;
+};
+
 const HOME = screen({
   id: "home",
   name: "Wallet home",
@@ -1371,6 +1396,88 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should see equal flexible thirds through the Group that holds them", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          attributes: { device: "desktop" },
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({ name: "Panel", attributes: { title: "Queue" } }),
+                    element({
+                      name: "Panel",
+                      attributes: { title: "Conversation" },
+                    }),
+                    element({
+                      name: "Panel",
+                      attributes: { title: "Properties" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Desktop Screen "ticket" draws 3 flexible panes in one Row; keep the primary surface dominant and wrap secondary content in Rail',
+    ]);
+  });
+
+  it("should still accept a toolbar Row whose two Groups hold only controls", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          attributes: { device: "desktop" },
+          children: [
+            element({
+              name: "Row",
+              attributes: { justify: "between" },
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({ name: "Heading", attributes: { text: "Plans" } }),
+                  ],
+                }),
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Search plans",
+                        icon: "search",
+                        iconOnly: true,
+                      },
+                    }),
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Workspace settings",
+                        icon: "settings",
+                        iconOnly: true,
+                      },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+  });
+
   it("should reject author-owned pane widths now that Rail owns the invariant", () => {
     const { diagnostics } = compile({
       scopedChildren: [
@@ -1665,6 +1772,37 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                   attributes: { title, surface: "outlined" },
                 }),
               ),
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "dashboard" outlines 4 sibling Panels; keep regions plain and spend boxes only on elements that behave like cards',
+    ]);
+  });
+
+  it("should count outlined siblings through the Group that holds them", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "dashboard",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Group",
+                  children: ["Balance", "Activity", "Loan", "Lesson"].map(
+                    (title) =>
+                      element({
+                        name: "Panel",
+                        attributes: { title, surface: "outlined" },
+                      }),
+                  ),
+                }),
+              ],
             }),
           ],
         }),
@@ -2369,14 +2507,25 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       ],
     });
     expect(diagnostics).toEqual([]);
-    const rendered = html(render(compiled));
+    const root = render(compiled);
+    const rendered = html(root);
     expect(rendered).toContain('"data-lucide":"wireframe-placeholder"');
     expect(rendered).toContain('"data-wireframe-icon-unnamed":""');
     expect(rendered).toContain('"value":"rocket"');
     // The drawn mark hides itself, but the name beside it must not be hidden
     // too: a reader who cannot see the drawing has no other way to learn that
     // this glyph was never drawn.
-    expect(rendered).not.toContain('"wireframe-glyph","ariaHidden"');
+    const glyph = elementWithClass({
+      node: root,
+      className: "wireframe-glyph",
+    });
+    expect(glyph?.properties["ariaHidden"]).toBeUndefined();
+    const drawn = glyph?.children.find(
+      (child) => child.type === "element" && child.tagName === "svg",
+    );
+    expect(
+      drawn?.type === "element" ? drawn.properties["ariaHidden"] : undefined,
+    ).toBe("true");
   });
 
   it("should keep an icon-only control's words as its name and tooltip", () => {

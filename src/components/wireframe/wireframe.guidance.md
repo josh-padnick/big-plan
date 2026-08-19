@@ -426,7 +426,9 @@ Phone list → detail:
 <Screen id="ticket" name="Ticket" device="phone">
   <Stack>
     <TopBar title="Ticket">
-      <Button label="Inbox" icon="back" navigateTo="inbox" />
+      <Group>
+        <Button label="Inbox" icon="back" navigateTo="inbox" />
+      </Group>
     </TopBar>
     <Text text="Checkout freeze" />
     <BottomBar>
