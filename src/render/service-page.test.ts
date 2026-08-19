@@ -61,7 +61,7 @@ describe("the service's pages", () => {
     // Not a lookalike: the shell's own branding bar, from renderShell.
     const html = welcome();
     expect(html).toContain(
-      '<header class="sticky top-0 z-40 h-11 border-b border-edge bg-paper/90 backdrop-blur" data-shell-chrome>',
+      '<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>',
     );
     expect(html).toContain("data-logo-light");
     expect(html).toContain("data-logo-dark");

@@ -173,12 +173,15 @@ document painted in another and never restate a colour to preview it.
   --note-800: #2c2d59;
   --note-900: #2a2f4e;
 
-  /* The one neutral pair, and a deliberate exception to the warm ramp above.
-     A column-header band is chrome that has to read as a band rather than as
-     more paper, and at that lightness the warm steps sit too close to the
-     caption to separate. The captain asked for a true neutral here twice; it
-     is scoped to that one role and never becomes a utility. */
+  /* The chrome neutrals, and a deliberate exception to the warm ramp above.
+     A chrome band has to read as a band rather than as more paper, and at that
+     lightness the warm steps sit too close to what they separate from. The
+     captain asked for a true neutral here; it is scoped to the chrome roles
+     and never becomes a utility. The two light steps are the two bands: the
+     lighter one carries a column header inside the reading column, the deeper
+     one carries the toolbar above it. */
   --neutral-100: #eeeeee;
+  --neutral-150: #e8e8e8;
   --neutral-800: #2b2b2b;
 
   /* The one role a palette carries with its ramps; THE PALETTES says why. */
@@ -233,6 +236,12 @@ its light counterpart so the three-deep ladder keeps the same separation.
   --well-c: light-dark(var(--grey-100), var(--grey-950));
   --input-c: light-dark(var(--grey-0), var(--grey-950));
   --header-bg: light-dark(var(--grey-125), var(--grey-875));
+  /* The toolbar at the top of the page. It is chrome rather than the first
+     inch of the document, so it takes the deeper chrome neutral and reads as
+     a band the plan sits below. A translucent bar would take its colour from
+     whatever scrolled under it, which is the distinction this role exists to
+     make, so the toolbar is opaque. */
+  --toolbar-bg: light-dark(var(--neutral-150), var(--neutral-800));
   /* Captain-approved local colour: the thread band stays distinct from both
      the raised comment body and the page in dark mode. */
   --comment-header-c: light-dark(var(--grey-125), #1c1a14);
@@ -466,6 +475,7 @@ scripts/design-system/palettes.mjs is what closes that list.
   --note-900: #391a19;
 
   --neutral-100: #efe6de;
+  --neutral-150: #e9e0d8;
   --neutral-800: #2b2740;
 
   --ink-c: light-dark(#403a5e, var(--grey-150));
@@ -536,6 +546,7 @@ scripts/design-system/palettes.mjs is what closes that list.
   --note-900: #2f232c;
 
   --neutral-100: #e3e7ee;
+  --neutral-150: #dde1e8;
   --neutral-800: #39404f;
 
   --ink-c: light-dark(#2e3440, var(--grey-150));
@@ -606,6 +617,7 @@ scripts/design-system/palettes.mjs is what closes that list.
   --note-900: #0d1545;
 
   --neutral-100: #e2e5ec;
+  --neutral-150: #dcdfe6;
   --neutral-800: #2b2c3f;
 
   --ink-c: light-dark(#4c4f69, var(--grey-150));
@@ -677,6 +689,7 @@ scripts/design-system/palettes.mjs is what closes that list.
   --note-900: #291230;
 
   --neutral-100: #e2ded0;
+  --neutral-150: #dcd8ca;
   --neutral-800: #1f1f1f;
 
   --ink-c: light-dark(#0b0b09, var(--grey-150));
@@ -788,6 +801,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-well: var(--well-c);
   --color-input: var(--input-c);
   --color-header: var(--header-bg);
+  --color-toolbar: var(--toolbar-bg);
   --color-comment-body: var(--comment-body-c);
   --color-comment-toolbar: var(--comment-toolbar-c);
   --color-comment-rest: var(--comment-rest-c);

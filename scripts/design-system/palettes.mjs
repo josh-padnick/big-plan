@@ -76,6 +76,7 @@ const BAND_GROUNDS = [
   "--tray-c",
   "--well-c",
   "--header-bg",
+  "--toolbar-bg",
   "--diff-content-bg",
   "--diff-hunk-bg",
   "--table-head-bg",

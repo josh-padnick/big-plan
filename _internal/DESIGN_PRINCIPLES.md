@@ -149,6 +149,7 @@ Markup names a **role**.
 | `surface`     | A quiet separated area: a hover state, a chip, a table head      |
 | `well`        | A recessed area inside a card: a code body, a diff body          |
 | `header`      | A chrome band inside a card                                      |
+| `toolbar`     | The page's own chrome band, above the document                   |
 | `ink`         | Primary text, the thing being read                               |
 | `muted`       | Secondary text, supporting the primary                           |
 | `subtle`      | Tertiary text, a label the reader consults rather than reads     |

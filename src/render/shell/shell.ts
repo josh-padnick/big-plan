@@ -517,13 +517,13 @@ export const renderShell = ({
   const standalone = chrome === "standalone";
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-paper/90 backdrop-blur" data-shell-chrome>
+  const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-6">
 <a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
-${standalone ? "<p></p>" : `<p class="truncate text-center text-sm text-subtle"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
+${standalone ? "<p></p>" : `<p class="truncate text-center text-sm text-muted"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 ${renderHeaderActions({ feedback: !standalone })}
 </div>
   </header>
