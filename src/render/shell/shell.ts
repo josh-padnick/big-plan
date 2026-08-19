@@ -250,11 +250,6 @@ const renderPaletteOption = ({
 // One sidebar item, and the settings page it opens. The sidebar exists so a
 // later setting joins the list instead of lengthening one page: a new entry
 // here is a new item and a new panel, and nothing else moves.
-//
-// Beside the page the list is a column and grows downward. Above it, on a
-// phone, the items wrap onto a second row rather than scrolling sideways: a
-// settings category the reviewer has to discover by dragging a row is a
-// category they never find.
 const renderPreferencesSection = ({
   section,
   title,
@@ -319,6 +314,11 @@ const renderApprovalMessageControls = (): string =>
 // settings on the left, the chosen one on the right. Every setting is a peer
 // there, so none competes with another for the reviewer's attention and the
 // next one costs one more sidebar item.
+//
+// Beside the page the sidebar is a column and grows downward. Above it, on a
+// phone, it wraps onto a second row rather than scrolling sideways: a settings
+// category the reviewer has to discover by dragging a row is a category they
+// never find.
 //
 // The sheet is titled rather than labelled: Settings names the whole surface
 // and sits one type step above the page title it contains, so the ladder reads
