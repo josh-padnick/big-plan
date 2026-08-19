@@ -101,6 +101,59 @@ describe("compilePlanModel", () => {
     }
   });
 
+  // Machine delivery is what an agent reads before it edits a plan. Without
+  // the address a reviewer's comment resolves to, the agent holds a model it
+  // cannot connect to anything the reviewer said about it.
+  it("should carry the block address a comment on each component resolves to", () => {
+    const plan = compilePlanModel({ markdown: PLAN, fallbackTitle: "x" });
+    const { html } = renderDocument({ markdown: PLAN, fallbackTitle: "x" });
+
+    expect(
+      plan.components.map(({ component, blockId }) => ({
+        component,
+        blockId,
+      })),
+    ).toEqual([
+      { component: "Callout", blockId: "section/decision/callout-1" },
+      {
+        component: "DecisionAnalysis",
+        blockId: "section/decision/decision-analysis-1",
+      },
+    ]);
+    for (const { blockId } of plan.components) {
+      expect(html).toContain(`data-block-id="${String(blockId)}"`);
+    }
+  });
+
+  // A component rendered inside another component's markup is private: no
+  // reader can point at it, so claiming an address for it would be a lie.
+  it("should leave a component with no address of its own without a blockId", () => {
+    const plan = compilePlanModel({
+      markdown:
+        '<Decision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</Decision>\n',
+      fallbackTitle: "x",
+    });
+
+    expect(
+      plan.components.map(({ component, blockId }) => ({
+        component,
+        blockId,
+      })),
+    ).toEqual([
+      { component: "Decision", blockId: "document/decision-1" },
+      { component: "Callout", blockId: undefined },
+    ]);
+  });
+
+  // The key that makes the join exact is delivery-local: it names one instance
+  // inside one compilation, so publishing it would invite a consumer to store
+  // an address that means nothing on the next compile.
+  it("should keep the delivery-local instance key out of machine delivery", () => {
+    const plan = compilePlanModel({ markdown: PLAN, fallbackTitle: "x" });
+
+    expect(JSON.stringify(plan)).not.toContain("instanceKey");
+  });
+
   it("should fall back to the caller's title when the plan has no h1", () => {
     const plan = compilePlanModel({
       markdown: '<Callout type="tip">\n\nJust a tip.\n\n</Callout>\n',

@@ -1,19 +1,13 @@
-// The renderer's document entry points: render HTML or exercise HTML and model
-// delivery together for validation.
+// The renderer's document entry points: render a plan as HTML, or exercise
+// that same rendering while publishing the machine-readable model it collected.
 
-import {
-  componentsInDocumentOrder,
-  type PlanModel,
-} from "./compile-plan-model.js";
+import { planComponents, type PlanModel } from "./compile-plan-model.js";
 import type {
   BlockDescriptor,
   CompiledMarkdown,
   Section,
 } from "./markdown/compile-markdown.js";
-import {
-  compileMarkdown,
-  compileMarkdownWithModels,
-} from "./markdown/compile-markdown.js";
+import { compileMarkdown } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 export type { BlockDescriptor } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
@@ -149,7 +143,7 @@ export const validateDocument = ({
   readonly markdown: string;
   readonly fallbackTitle: string;
 }): PlanModel => {
-  const compiled = compileMarkdownWithModels({ markdown });
+  const compiled = compileMarkdown({ markdown });
   const rendered = renderCompiledDocument({
     compiled,
     fallbackTitle,
@@ -158,6 +152,9 @@ export const validateDocument = ({
   return {
     title: rendered.title,
     sections: compiled.sections,
-    components: componentsInDocumentOrder(compiled.components),
+    components: planComponents({
+      components: compiled.components,
+      blocks: compiled.blocks,
+    }),
   };
 };

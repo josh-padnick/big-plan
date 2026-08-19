@@ -118,7 +118,9 @@ The JSON written by `compile` is Big Plan's **compiled plan model**: a structure
 
 - `title`: the document title.
 - `sections`: the level-two section outline with `id`, structural `name`, h2 `title`, and optional registered `type`.
-- `components`: every component instance in document order, each with its `component` name, source `line` and `column`, and its compiled `model` - the same typed model the renderer consumes, so structure can never drift from rendering.
+- `components`: every component instance in document order, each with its `component` name, source `line` and `column`, its `blockId`, and its compiled `model` - the same typed model the renderer consumes, so structure can never drift from rendering.
+  `blockId` is the address a reviewer's comment on that component resolves to, so a tool holding the model already holds the anchor feedback arrives against.
+  It is absent for a component the reader cannot point at on its own: one rendered privately inside another component's markup, or one that is a slide scope rather than a block.
 
 Prose fields inside models (context paragraphs, option bodies) are HAST subtrees: plain JSON objects describing the markdown content.
 Generated element ids inside models match the ids in the rendered HTML, so a tool can link a model entry to its rendered element.

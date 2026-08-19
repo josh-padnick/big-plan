@@ -642,6 +642,21 @@ describe("block identity boundaries", () => {
     });
   });
 
+  // Presentation used to be sniffed back out of the markup the component had
+  // just produced, which is why teaching the walk a new component meant
+  // editing this file. It reads the model now, so this case asserts the fact
+  // arrives from the model rather than from a rendered attribute.
+  it("should read a wireframe's presented screen from its compiled model", () => {
+    const { blocks } = compile(
+      '## Screens\n\n<Wireframe id="checkout" initialScreen="review">\n\n<Screen id="cart" name="Cart" device="desktop">\n\n<Text text="Cart" />\n\n</Screen>\n\n<Screen id="review" name="Review" device="desktop">\n\n<Text text="Review" />\n\n</Screen>\n\n</Wireframe>\n',
+    );
+    const wireframe = blocks.find((block) => block.kind === "wireframe");
+    expect(wireframe?.presentation).toEqual({
+      aspect: "wireframe",
+      currentScreenId: "review",
+    });
+  });
+
   it("should keep block boundaries apart when component text is flattened", () => {
     const { blocks } = compile(
       "## Summary\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n<How>\n\n- Move retries out.\n- Record every attempt.\n\n</How>\n\n</QuickSummary>\n",
@@ -653,5 +668,57 @@ describe("block identity boundaries", () => {
     expect(facet?.text).toMatch(
       /Move retries out\.\s*\nRecord every attempt\./,
     );
+  });
+});
+
+// The join that lets a later reader of a block address ask the component what
+// it asserted, instead of re-deriving it from the markup the component just
+// produced.
+describe("block identity component models", () => {
+  it("should record the authored name and compiled model on a component root", () => {
+    const { blocks } = compile(
+      '## Risks\n\n<Callout type="danger" title="Rollback risk">\n\nData loss until verified.\n\n</Callout>\n',
+    );
+    const callout = blocks.find((block) => block.kind === "callout");
+
+    expect(callout?.component).toBe("Callout");
+    expect(callout?.model).toMatchObject({
+      type: "danger",
+      title: "Rollback risk",
+    });
+  });
+
+  it("should leave a block that no component produced without a model", () => {
+    const { blocks } = compile("## Risks\n\nA plain paragraph.\n");
+    const paragraph = blocks.find((block) => block.kind === "paragraph");
+
+    expect(paragraph?.component).toBeUndefined();
+    expect(paragraph?.model).toBeUndefined();
+    expect(paragraph?.componentInstance).toBeUndefined();
+  });
+
+  it("should give every component root a distinct instance key", () => {
+    const { blocks } = compile(
+      '## Risks\n\n<Callout type="note">\n\nOne.\n\n</Callout>\n\n<Callout type="tip">\n\nTwo.\n\n</Callout>\n',
+    );
+    const keys = blocks
+      .filter((block) => block.kind === "callout")
+      .map((block) => block.componentInstance);
+
+    expect(keys).toHaveLength(2);
+    expect(keys.every((key) => typeof key === "string")).toBe(true);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it("should not carry a model on a declared sub-target of a component", () => {
+    const { blocks } = compile(
+      "## Summary\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n<How>\n\n- Ship it.\n\n</How>\n\n</QuickSummary>\n",
+    );
+    const root = blocks.find((block) => block.kind === "quick-summary");
+    const facet = blocks.find((block) => block.kind === "quick-summary-facet");
+
+    expect(root?.component).toBe("QuickSummary");
+    expect(facet?.component).toBeUndefined();
+    expect(facet?.model).toBeUndefined();
   });
 });
