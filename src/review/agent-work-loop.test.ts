@@ -1197,31 +1197,76 @@ describe("agent work loop lifecycle", () => {
       now: new Date().toISOString(),
     });
 
+    let waitingPickup: Promise<Record<string, unknown>> | undefined;
     try {
-      // The reviewer's cancel is the only thing that changes here, and the
-      // canceled claim's lease still has the whole window left to run. Without
-      // cancellation releasing the plan, this waits out that lease and the
-      // reviewer watches a queued message that never starts (BIG-159). That
-      // counterfactual was verified before this test passed.
+      waitingPickup = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        executablePath,
+        shouldWait: true,
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({ state: "waiting" });
+        },
+        { timeout: 5_000 },
+      );
+      const beforeCancel = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(beforeCancel.requests).toEqual([
+        expect.objectContaining({
+          requestId: active.requestId,
+          claimedBy: "eeeeeeeeeeeeeeee",
+        }),
+        expect.objectContaining({ requestId: queued.requestId }),
+      ]);
+      expect(beforeCancel.requests[0]?.canceledAt).toBeUndefined();
+      expect(beforeCancel.requests[1]?.claimedBy).toBeUndefined();
+
+      // The reviewer's cancel is the only thing that changes after the second
+      // agent is waiting, and the active claim's lease still has the whole
+      // window left to run. Without cancellation releasing the plan, this
+      // waits out that lease and the reviewer watches a queued message that
+      // never starts (BIG-159). That counterfactual was verified before this
+      // test passed.
       await cancelAgentRequest({
         store: review.store,
         requestId: active.requestId,
         now: new Date().toISOString(),
       });
 
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "next",
-          planPath,
-          executablePath,
-          shouldWait: true,
-        }),
-      ).resolves.toMatchObject({
+      await expect(waitingPickup).resolves.toMatchObject({
         pending: true,
         work: { requestId: queued.requestId },
       });
+      const promoted = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(promoted.requests).toEqual([
+        expect.objectContaining({
+          requestId: active.requestId,
+          canceledAt: expect.any(String),
+        }),
+        expect.objectContaining({
+          requestId: queued.requestId,
+          claimedBy: expect.any(String),
+        }),
+      ]);
+      expect(promoted.requests[1]?.canceledAt).toBeUndefined();
+      expect(promoted.requests[1]?.answeredAt).toBeUndefined();
     } finally {
       await review.close();
+      await waitingPickup;
       await rm(directory, { recursive: true, force: true });
     }
   });
