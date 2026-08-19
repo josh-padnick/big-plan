@@ -54,6 +54,22 @@ test("rejects a spacing step that is not on the scale", async () => {
   assert.match(result.output, /off-scale spacing "px-5"/);
 });
 
+test("rejects a clipping container that also tightens its leading", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      'export const V = () => <p className="truncate text-sm leading-none" />;\n',
+  });
+  assert.equal(result.failed, true);
+  assert.match(result.output, /clipped leading/);
+});
+
+test("accepts a clipping container that keeps its type step's leading", async () => {
+  const result = await runAgainst({
+    "view.tsx": 'export const V = () => <p className="truncate text-sm" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
 test("rejects an invented shadow and radius", async () => {
   const result = await runAgainst({
     "view.tsx":

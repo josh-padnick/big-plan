@@ -523,7 +523,7 @@ export const renderShell = ({
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
-${standalone ? "<p></p>" : `<p class="truncate text-center text-sm leading-none text-subtle"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
+${standalone ? "<p></p>" : `<p class="truncate text-center text-sm text-subtle"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 ${renderHeaderActions({ feedback: !standalone })}
 </div>
   </header>
