@@ -158,10 +158,10 @@ import {
 } from "./routes-dispositions.js";
 import { readReviewInputContract } from "./routes-input-contract.js";
 import { readRuntimeSession } from "./routes-session.js";
+import { drainAndCloseServer } from "./http-shutdown.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
-const SHUTDOWN_GRACE_MS = 100;
 const STALL_CHECK_INTERVAL_MS = 5_000;
 const GROWTH_CHECK_INTERVAL_MS = 60_000;
 // Persistent review state is reported on a ladder rather than every minute, so
@@ -654,27 +654,6 @@ const initializeOwnedReviewState = async ({
   }
 
   return readAgentExchange({ store, sessionId, planId });
-};
-
-/**
- * Closes a bound server without waiting on its connections: idle ones are
- * dropped at once and the rest are forced shut after the shutdown grace, so a
- * request arriving at the wrong moment cannot keep close() from settling.
- */
-const drainAndCloseServer = async (server: Server): Promise<void> => {
-  const closedServer = new Promise<void>((settle) => {
-    server.close(() => settle());
-  });
-  server.closeIdleConnections();
-  const forceClose = setTimeout(() => {
-    server.closeAllConnections();
-  }, SHUTDOWN_GRACE_MS);
-  forceClose.unref();
-  try {
-    await closedServer;
-  } finally {
-    clearTimeout(forceClose);
-  }
 };
 
 /**

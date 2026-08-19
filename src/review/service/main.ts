@@ -36,19 +36,15 @@ export const runService = async (): Promise<void> => {
   // The token is read per mutating request, not captured here: the CLI may
   // re-mint it, and a service holding a boot-time copy would then refuse its
   // own operator until it was restarted.
-  const runtime = await startService({
-    readToken: readServiceToken,
-    version: await serviceVersion(),
-    port,
-    // The record describes a process that is about to stop existing, and the
-    // stop that ends it is usually an HTTP one rather than a signal.
-    onClosed: clearServiceRuntimeRecord,
-  });
-
+  // Written before anything can answer: the record is created once, and
+  // cleared once, by a process that is listening in between. A record written
+  // after the port opened could be cleared by a stop that arrived first and
+  // then recreated by this write, describing a process that has already gone.
+  const startedAtMs = Date.now();
   await writeServiceRuntimeRecord({
     pid: process.pid,
-    port: runtime.port,
-    startedAt: new Date(runtime.startedAtMs).toISOString(),
+    port,
+    startedAt: new Date(startedAtMs).toISOString(),
     // The login item sets this to "login-item" when it starts the process;
     // until that ships, every start is on demand.
     managedBy:
@@ -56,6 +52,24 @@ export const runService = async (): Promise<void> => {
         ? "login-item"
         : "on-demand",
   });
+
+  let runtime;
+  try {
+    runtime = await startService({
+      readToken: readServiceToken,
+      version: await serviceVersion(),
+      port,
+      now: startedAtMs,
+      // The record describes a process that is about to stop existing, and the
+      // stop that ends it is usually an HTTP one rather than a signal.
+      onClosed: clearServiceRuntimeRecord,
+    });
+  } catch (error: unknown) {
+    // Nothing ever listened, so the record would outlive a process that never
+    // served a link.
+    await clearServiceRuntimeRecord();
+    throw error;
+  }
 
   // The only thing that expires. An entry whose plan file is gone can never
   // explain anything useful again; everything else is kept, because losing an

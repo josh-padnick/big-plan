@@ -273,6 +273,7 @@ const spawnAndAwaitReady = async ({
   // because something else already has it. Waiting out the full deadline for
   // an answer that is never coming only delays the explanation.
   let childExited = false;
+  let forkFailure: string | undefined;
   try {
     const child = spawn(process.execPath, [serviceEntryPoint()], {
       detached: true,
@@ -280,6 +281,14 @@ const spawnAndAwaitReady = async ({
       env: process.env,
     });
     child.once("exit", () => {
+      childExited = true;
+    });
+    // A fork that never happened - no descriptors left, no permission to
+    // execute - arrives here rather than as a throw, and an `error` event
+    // nobody listens for is re-thrown as an uncaught exception. That would
+    // take down the command this was supposed to leave working.
+    child.once("error", (error: Error) => {
+      forkFailure = String(error);
       childExited = true;
     });
     child.unref();
@@ -311,6 +320,12 @@ const spawnAndAwaitReady = async ({
       };
     }
     if (childExited) break;
+  }
+  if (forkFailure !== undefined) {
+    return {
+      kind: "unavailable",
+      reason: `The Big Plan service could not be started: ${forkFailure}`,
+    };
   }
   return { kind: "unavailable", reason: await startFailureReason({ port }) };
 };

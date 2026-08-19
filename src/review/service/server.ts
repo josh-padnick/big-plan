@@ -24,6 +24,7 @@ import {
   renderServiceStoppedPage,
   renderServiceWelcomePage,
 } from "../../render/service-page.js";
+import { drainAndCloseServer } from "../http-shutdown.js";
 import { answerForPlan } from "./plan-status.js";
 import { readFormNonce } from "./stop-form.js";
 import { servicePort } from "./paths.js";
@@ -43,10 +44,6 @@ const PLAN_ROUTE = /^\/plan\/([a-z0-9]+)\/?$/;
 // shutting down anyway. Long enough for a slow page load, short enough that an
 // abandoned stop is still a stop.
 const ABANDONED_STOP_MS = 10_000;
-
-// How long a connection that is not idle gets to finish before it is dropped,
-// matching the session runtime's own shutdown grace.
-const SHUTDOWN_GRACE_MS = 100;
 
 /** What `GET /healthz` answers, and the only thing that proves identity. */
 export const SERVICE_PRODUCT = "big-plan-service";
@@ -439,23 +436,9 @@ export const startService = async ({
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
-    // The session runtime's shutdown shape: idle connections go at once and
-    // the rest are forced shut after the grace, because a client parked
-    // mid-request is not idle and would otherwise keep this from ever
-    // settling - leaving a listener-less process and a record of it on disk.
-    const closedServer = new Promise<void>((settle) => {
-      server.close(() => settle());
-    });
-    server.closeIdleConnections();
-    const forceClose = setTimeout(() => {
-      server.closeAllConnections();
-    }, SHUTDOWN_GRACE_MS);
-    forceClose.unref();
-    try {
-      await closedServer;
-    } finally {
-      clearTimeout(forceClose);
-    }
+    // A client parked mid-request is not idle, so waiting on it would leave a
+    // listener-less process and a record of it on disk.
+    await drainAndCloseServer(server);
     try {
       await onClosed?.();
     } catch {
