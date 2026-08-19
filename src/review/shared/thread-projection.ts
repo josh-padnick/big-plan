@@ -20,7 +20,6 @@ import {
 } from "./agent-request-state.js";
 import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
-import { compareTimestamps } from "./timestamp-order.js";
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
 import { requestIsOutstanding } from "./request-lifecycle.js";
@@ -564,13 +563,12 @@ export const projectConversationHistory = ({
   readonly responses: ReadonlyArray<ThreadResponse>;
 }): ReadonlyArray<Readonly<Record<string, unknown>>> => {
   if (request.kind === "feedback") return [];
+  const requestIndex = requests.findIndex(
+    (candidate) => candidate.requestId === request.requestId,
+  );
+  if (requestIndex < 0) return [];
   const history: Array<Readonly<Record<string, unknown>>> = [];
-  for (const candidate of requests) {
-    // Compared as instants, not as strings: an ISO timestamp has more than one
-    // spelling, and "2026-08-10T18:00:00Z" sorts after
-    // "2026-08-10T18:00:00.000Z" lexically while naming the same moment.
-    if (compareTimestamps(candidate.createdAt, request.createdAt) >= 0)
-      continue;
+  for (const candidate of requests.slice(0, requestIndex)) {
     const response = responses.find(
       (entry) => entry.requestId === candidate.requestId,
     );

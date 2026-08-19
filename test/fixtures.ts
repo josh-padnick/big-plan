@@ -1074,7 +1074,7 @@ export const agentIdOf = (stdout: string, field: string): string => {
   // a whole id. Either way the test would compare something it did not ask for.
   const literal = field.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const id = new RegExp(
-    `(?<![A-Za-z0-9_])${literal}: (?:"([a-f0-9]{16})"|([a-f0-9]{16})(?![a-f0-9]))`,
+    `(?<![A-Za-z0-9_])${literal}: (?:"([a-f0-9]{16})"|([a-f0-9]{16}))(?![A-Za-z0-9_])`,
     "u",
   ).exec(stdout);
   const value = id?.[1] ?? id?.[2];
