@@ -15,6 +15,12 @@
 // expose a semantic sub-target with `data-commentable-kind`; everything else
 // inside it stays private. Code figures also expose `data-block-line` so a
 // comment can name a line range the way an authored Annotation does.
+//
+// A subtree marked `data-diff-side="baseline"` is not this walk's to stamp.
+// Entering it would advance the per-scope counter every later block in that
+// scope shares, and stored comment targets would then resolve to the wrong
+// content or nowhere. The side-isolation module owns that mark; this walk
+// skips the subtree without touching any counter the proposed side reads.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import {
@@ -24,6 +30,7 @@ import {
 import { componentInstanceKeyOf } from "./component-pipeline/component-instance.js";
 import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js";
+import { isBaselineDiffSide } from "./side-isolation.js";
 
 // The meaning-bearing presentation facts a snapshot must record so a diff can
 // replay a block without consulting the live document. Only a fact that
@@ -303,7 +310,7 @@ const findDescendant = ({
   readonly match: (candidate: Element) => boolean;
 }): Element | undefined => {
   for (const child of node.children) {
-    if (!isElement(child)) {
+    if (!isElement(child) || isBaselineDiffSide(child)) {
       continue;
     }
     if (match(child)) {
@@ -325,7 +332,7 @@ const forEachDescendant = ({
   readonly visit: (candidate: Element) => void;
 }): void => {
   for (const child of node.children) {
-    if (!isElement(child)) {
+    if (!isElement(child) || isBaselineDiffSide(child)) {
       continue;
     }
     visit(child);
@@ -792,6 +799,9 @@ const stampScope = ({
     if (!isElement(child) || NEVER_A_BLOCK.has(child.tagName)) {
       continue;
     }
+    if (isBaselineDiffSide(child)) {
+      continue;
+    }
     if (isRedundantKicker(child) || isNestedScope(child)) {
       continue;
     }
@@ -1017,7 +1027,7 @@ export const rehypeBlockIdentity =
     let slideIndex = 0;
     const stampSlides = (container: Root | Element): void => {
       for (const child of container.children) {
-        if (!isElement(child)) {
+        if (!isElement(child) || isBaselineDiffSide(child)) {
           continue;
         }
         const isSlide = child.properties["data-slide"] !== undefined;

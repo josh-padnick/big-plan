@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { Root } from "hast";
+import type { Element, Root } from "hast";
 import { compileMarkdown } from "./compile-markdown.js";
 import { rehypeBlockIdentity, type BlockDescriptor } from "./block-identity.js";
 import { serializeHtml } from "../serialize-html.js";
+import { DIFF_BASELINE_SIDE, DIFF_SIDE_ATTRIBUTE } from "./side-isolation.js";
 
 const compile = (markdown: string) => {
   const { root, blocks } = compileMarkdown({ markdown });
@@ -720,5 +721,74 @@ describe("block identity component models", () => {
     expect(root?.component).toBe("QuickSummary");
     expect(facet?.component).toBeUndefined();
     expect(facet?.model).toBeUndefined();
+  });
+});
+
+const commentableTarget = ({
+  kind,
+  label,
+}: {
+  readonly kind: string;
+  readonly label: string;
+}): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    "data-commentable-kind": kind,
+    "data-commentable-label": label,
+  },
+  children: [{ type: "text", value: label }],
+});
+
+const customComponent = (children: ReadonlyArray<Element>): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: { "data-component": "Custom" },
+  children: [...children],
+});
+
+const stamp = (tree: Root): ReadonlyArray<string> => {
+  const blocks: Array<BlockDescriptor> = [];
+  rehypeBlockIdentity({ blocks })(tree);
+  return blocks.map((block) => block.id);
+};
+
+describe("block identity baseline-side skip", () => {
+  it("should mint the same ids when a baseline-side subtree with declared targets is present", () => {
+    const withoutBaseline: Root = {
+      type: "root",
+      children: [
+        customComponent([
+          commentableTarget({ kind: "table-row", label: "First" }),
+          commentableTarget({ kind: "table-row", label: "Second" }),
+        ]),
+        customComponent([
+          commentableTarget({ kind: "table-row", label: "Third" }),
+        ]),
+        {
+          type: "element",
+          tagName: "p",
+          properties: {},
+          children: [{ type: "text", value: "After." }],
+        },
+      ],
+    };
+    const withBaseline = structuredClone(withoutBaseline);
+    const first = withBaseline.children[0];
+    if (first === undefined || first.type !== "element") {
+      throw new Error("expected a component root");
+    }
+    first.children.unshift({
+      type: "element",
+      tagName: "div",
+      properties: { [DIFF_SIDE_ATTRIBUTE]: DIFF_BASELINE_SIDE },
+      children: [
+        commentableTarget({ kind: "table-row", label: "Was first" }),
+        commentableTarget({ kind: "table-row", label: "Was second" }),
+        commentableTarget({ kind: "table-row", label: "Was third" }),
+      ],
+    });
+
+    expect(stamp(withBaseline)).toEqual(stamp(withoutBaseline));
   });
 });
