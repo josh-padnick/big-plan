@@ -75,8 +75,11 @@ export const STYLESHEET_BUDGETS = {
     // the title stays centred in the bar rather than in what the controls left
     // over, and to keep the quiet link stroke off a control drawn as one mark.
     // Paid back down by dropping the bar's own trailing-edge margins, which
-    // the trailing slot's utility already carries from a later layer.
-    declarations: 1075,
+    // the trailing slot's utility already carries from a later layer. Raised
+    // once more for the disclosure mark a list row draws when it names the
+    // screen it pushes to: the mark itself, and the metadata step of the icon
+    // ramp it is drawn at so it never competes with the value beside it.
+    declarations: 1082,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,
