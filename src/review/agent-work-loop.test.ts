@@ -2473,7 +2473,7 @@ describe("agent work loop lifecycle", () => {
     // Written once the loop is provably waiting. A request that lands before
     // then is claimed straight away, and the scripted dead reads land on the
     // claim rather than on the wait this test is about.
-    void heartbeat.agentIsWaiting.then(() =>
+    const requestWritten = heartbeat.agentIsWaiting.then(() =>
       writeAgentRequest({ store: review.store, request }),
     );
     const recoveryLog = vi
@@ -2496,6 +2496,13 @@ describe("agent work loop lifecycle", () => {
     } finally {
       heartbeat.reads.mockRestore();
       recoveryLog.mockRestore();
+      // Settle the detached write before the store goes away. A rejection left
+      // floating would surface as an unhandled rejection that can take the
+      // whole worker down, and reporting it here rather than rethrowing keeps
+      // it from masking whatever the assertions above already found.
+      await requestWritten.catch((error: unknown) => {
+        console.error("the agent request under test failed to write", error);
+      });
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
