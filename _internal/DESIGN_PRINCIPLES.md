@@ -139,8 +139,9 @@ A palette is eight ramps: `grey`, `neutral`, `primary`, `success`, `warning`, `d
 The product's own ramps were built in HSL from each middle shade outward.
 Its greys are warm through their whole range, which is what makes the page read as paper.
 
-A ramp number is a lightness position: a higher number is never lighter.
-The chrome band's dark half cannot say that - its band is the darkest shade it owns and its control edge the lightest - so those four shades are named for what they are rather than numbered, and `scripts/design-system/palettes.mjs` enforces both orders.
+In the `neutral` chrome ramp a number is a lightness position: a higher number is never lighter, and `scripts/design-system/palettes.mjs` enforces it.
+The reading ramps carry no such promise, because they park role anchors at fixed numbers rather than at ladder positions - `--grey-150` carries the dark half's ink, and the brutalist palette hangs its hard structural edge on `--grey-200`, `--grey-250`, `--grey-750` and `--grey-800` - so read a reading-ramp step's value rather than inferring it from the number.
+The chrome band's dark half cannot use a number at all: its band is the darkest shade it owns and its control edge the lightest, so those four shades are named for what they are, and the same check enforces that they climb from the band to the firmest edge.
 
 Markup never names a ramp step.
 Markup names a **role**.
@@ -182,7 +183,7 @@ Rules:
    Text on its ground clears 4.5:1; the edge that tells a reader where a control is, and the firmer edge that says it is under the pointer or open, clear 3:1 against every ground they appear on.
    Every colour theme in both light and dark appearances, every change.
    When white on a colour fails, flip to dark text on a light tint of that colour.
-   Pick the lightest edge that still clears the floor: a boundary is a hairline that happens to be legible, not a rule drawn for its own sake.
+   Pick the edge closest to its band that still clears the floor - darker in the light half, lighter in the dark one: a boundary is a hairline that happens to be legible, not a rule drawn for its own sake.
 6. **Accent is scarce.**
    One accent per surface.
    If two things are both the most important, neither is.

@@ -318,13 +318,17 @@ const contrastRatio = (left, right) => {
 };
 
 /**
- * Reads one declared shade as a literal colour, or null when it is absent or
- * is not a plain literal. A shade is authored as a hex, so anything else is
- * something other than a shade and is not this check's business.
+ * Reads one shade's luminance the same way the contrast checks read a role:
+ * through resolveValue, so a shade written as a reference is followed rather
+ * than skipped. Returns null when it cannot be reduced to a colour at all, and
+ * the caller turns that into a failure - a rung this check cannot see is a
+ * rung it cannot vouch for.
  */
-const shadeLuminance = (declared) => {
+const shadeLuminance = ({ name, lookup, mode }) => {
+  const declared = lookup(name);
   if (declared === undefined) return null;
-  const color = parseColor(declared.trim());
+  const resolved = resolveValue({ value: declared, mode, lookup });
+  const color = resolved === null ? null : parseColor(resolved);
   return color === null ? null : relativeLuminance(color);
 };
 
@@ -332,6 +336,12 @@ const shadeLuminance = (declared) => {
  * Checks that a set of shades, given darkest-first or lightest-first, actually
  * runs that way. Returns the first pair that breaks the order, so the message
  * can name the two shades a reader has to look at rather than the whole ladder.
+ *
+ * A ladder that must climb has to climb at every rung: two shades of the same
+ * lightness are a rung that does not exist, and a lift that does not lift is
+ * the defect the ladder is here to refuse. A ramp only promises that a higher
+ * number is never lighter, so there equal steps are the palette's own business
+ * and the ramps already carry deliberate pairs of them.
  */
 const brokenRung = (ordered, luminanceOf, direction) => {
   let previous = null;
@@ -343,8 +353,8 @@ const brokenRung = (ordered, luminanceOf, direction) => {
     }
     if (previous !== null) {
       const climbs = luminance > previous.luminance + 1e-9;
-      const sinks = luminance < previous.luminance - 1e-9;
-      if (direction === "lighter" ? sinks : climbs) {
+      const broken = direction === "lighter" ? !climbs : climbs;
+      if (broken) {
         return { from: previous, to: { name, luminance } };
       }
     }
@@ -444,31 +454,63 @@ export const checkPalettes = async ({
   // fails loudly: a step out of order still renders, it just quietly stops
   // saying what its name says.
   for (const id of paletteIds) {
+    const overrides = palettes.get(id) ?? new Map();
     const declared = palettes.get(id) ?? base;
-    const luminanceOf = (name) =>
-      shadeLuminance(declared.get(name) ?? base.get(name));
-    for (const namespace of LADDER_RAMPS) {
-      const steps = [...declared.keys()]
-        .filter((name) => name.startsWith(`${namespace}-`))
-        .filter((name) => RAMP_STEP_PATTERN.test(name))
-        .sort(
-          (left, right) =>
-            Number(left.slice(namespace.length + 1)) -
-            Number(right.slice(namespace.length + 1)),
+    const lookup = (name) => overrides.get(name) ?? base.get(name);
+    // A shade written as light-dark() would only show one half per pass, so
+    // both are walked; a ladder that holds in both reports each failure once.
+    const reported = new Set();
+    for (const mode of ["light", "dark"]) {
+      const luminanceOf = (name) => shadeLuminance({ name, lookup, mode });
+      const rungs = [];
+      for (const namespace of LADDER_RAMPS) {
+        rungs.push(
+          [...declared.keys()]
+            .filter((name) => name.startsWith(`${namespace}-`))
+            .filter((name) => RAMP_STEP_PATTERN.test(name))
+            .sort(
+              (left, right) =>
+                Number(left.slice(namespace.length + 1)) -
+                Number(right.slice(namespace.length + 1)),
+            ),
         );
-      const broken = brokenRung(steps, luminanceOf, "darker");
-      if (broken !== null) {
-        failures.push(
-          `global.css: palette "${id}" ramp --${broken.from.name} (${broken.from.luminance.toFixed(3)}) is darker than --${broken.to.name} (${broken.to.luminance.toFixed(3)}); a higher ramp number must never be lighter`,
+      }
+      for (const steps of rungs) {
+        for (const step of steps) {
+          if (luminanceOf(step) === null) {
+            reported.add(
+              `global.css: palette "${id}" could not resolve ramp step --${step} to a colour`,
+            );
+          }
+        }
+        const broken = brokenRung(steps, luminanceOf, "darker");
+        if (broken !== null) {
+          reported.add(
+            `global.css: palette "${id}" ramp --${broken.from.name} (${broken.from.luminance.toFixed(3)}) is darker than --${broken.to.name} (${broken.to.luminance.toFixed(3)}); a higher ramp number must never be lighter`,
+          );
+        }
+      }
+      // A shade the stylesheet never declares is not this check's business,
+      // the same way an undeclared role is not: the theme owns which shades
+      // exist, this check owns how the ones that exist have to behave.
+      const chromeLadder = CHROME_DARK_LADDER.filter(
+        (shade) => base.get(shade) !== undefined,
+      );
+      for (const shade of chromeLadder) {
+        if (luminanceOf(shade) === null) {
+          reported.add(
+            `global.css: palette "${id}" could not resolve chrome shade --${shade} to a colour`,
+          );
+        }
+      }
+      const brokenChrome = brokenRung(chromeLadder, luminanceOf, "lighter");
+      if (brokenChrome !== null) {
+        reported.add(
+          `global.css: palette "${id}" chrome shade --${brokenChrome.to.name} (${brokenChrome.to.luminance.toFixed(3)}) is not lighter than --${brokenChrome.from.name} (${brokenChrome.from.luminance.toFixed(3)}); the dark chrome ladder climbs from the band to its firmest edge`,
         );
       }
     }
-    const brokenChrome = brokenRung(CHROME_DARK_LADDER, luminanceOf, "lighter");
-    if (brokenChrome !== null) {
-      failures.push(
-        `global.css: palette "${id}" chrome shade --${brokenChrome.to.name} (${brokenChrome.to.luminance.toFixed(3)}) is not lighter than --${brokenChrome.from.name} (${brokenChrome.from.luminance.toFixed(3)}); the dark chrome ladder climbs from the band to its firmest edge`,
-      );
-    }
+    for (const failure of reported) failures.push(failure);
   }
 
   for (const id of paletteIds) {

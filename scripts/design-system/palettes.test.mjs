@@ -316,6 +316,63 @@ test("rejects a dark chrome lift that sinks below its own band", async () => {
   );
 });
 
+test("rejects a dark chrome lift that only matches its band", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({
+      ...SOUND_CHROME,
+      band: "#1f1f1f",
+      lift: "#1f1f1f",
+    }),
+  });
+  assert.equal(
+    result.failures.some(
+      (failure) =>
+        failure.includes("--chrome-dark-lift") &&
+        failure.includes("--chrome-dark-band") &&
+        failure.includes("the dark chrome ladder climbs"),
+    ),
+    true,
+    result.failures.join("\n"),
+  );
+});
+
+test("follows a chrome shade written as a reference instead of a literal", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({
+      ...SOUND_CHROME,
+      band: "#1f1f1f",
+      lift: "var(--grey-950)",
+    }),
+  });
+  assert.equal(
+    result.failures.some(
+      (failure) =>
+        failure.includes("--chrome-dark-lift") &&
+        failure.includes("the dark chrome ladder climbs"),
+    ),
+    true,
+    result.failures.join("\n"),
+  );
+});
+
+test("refuses a chrome shade it cannot reduce to a colour", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({ ...SOUND_CHROME, lift: "var(--nowhere)" }),
+  });
+  assert.equal(
+    result.failures.some((failure) =>
+      failure.includes(
+        "could not resolve chrome shade --chrome-dark-lift to a colour",
+      ),
+    ),
+    true,
+    result.failures.join("\n"),
+  );
+});
+
 test("rejects a palette that omits a named chrome shade the roles reach", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
