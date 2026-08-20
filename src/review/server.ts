@@ -53,6 +53,7 @@ import {
   deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
+  readAgentDisconnectExplaining,
   readAgentExchange,
   readValidatedAgentRequests,
   requestBlocksPlanPickup,
@@ -71,7 +72,6 @@ import {
   deriveReviewPlanId,
   prepareStore,
   randomId,
-  readAgentDisconnectRequestFor,
   readAgentPresence,
   readComments,
   readResolvedCommentIds,
@@ -1171,10 +1171,14 @@ export const startReviewRuntime = async ({
         const presence = await readAgentPresence({ store, sessionId });
         // A disconnect the reviewer asked for explains this edge better than
         // either default, and it explains it whether or not the agent lived long
-        // enough to acknowledge. It is read against this presence record, so it
-        // can never explain the departure of an agent it was not about.
-        const disconnect = await readAgentDisconnectRequestFor({
+        // enough to acknowledge. It is read against this presence record and the
+        // pickup the plan still holds - the two handles a directive can be
+        // addressed by - so it can never explain the departure of an agent it
+        // was not about.
+        const disconnect = await readAgentDisconnectExplaining({
           store,
+          sessionId,
+          planId,
           ...(presence.writerId === undefined
             ? {}
             : { writerId: presence.writerId }),

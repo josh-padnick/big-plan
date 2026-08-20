@@ -39,7 +39,9 @@ import {
 import {
   agentMutationJournalPath,
   readAgentConnectionEvents,
+  readAgentDisconnectRequestFor,
   readAgentDisconnectRequests,
+  readAgentPresence,
   writeAgentHeartbeat,
   writeAgentHeartbeatEnded,
   writeAgentResponseValue,
@@ -5553,10 +5555,12 @@ describe("review runtime agent disconnect", () => {
     await attachAgent({ writerId: "1111111111111111" });
     const response = await ask({ path: "/api/agent-disconnect" });
     expect(response.status).toBe(200);
+    // With no claim to name, the review's own writer id speaks for the
+    // connection - and it speaks alone, so the directive can reach one agent.
     await expect(
       readAgentDisconnectRequests({ store: disconnected.store }),
     ).resolves.toEqual([
-      expect.objectContaining({ writerId: "1111111111111111" }),
+      { writerId: "1111111111111111", requestedAtMs: expect.any(Number) },
     ]);
   });
 
@@ -5685,12 +5689,18 @@ describe("review runtime agent disconnect", () => {
       readAgentDisconnectRequests({ store: disconnected.store }),
     ).resolves.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          writerId: "3333333333333333",
-          claimToken: "aaaaaaaaaaaaaaaa",
-        }),
+        { claimToken: "aaaaaaaaaaaaaaaa", requestedAtMs: expect.any(Number) },
       ]),
     );
+    // The claim names the agent, so the writer id is not also written: a
+    // directive carrying both is matched by either, and the review's writer may
+    // be a different agent entirely.
+    await expect(
+      readAgentDisconnectRequestFor({
+        store: disconnected.store,
+        writerId: "3333333333333333",
+      }),
+    ).resolves.toBeUndefined();
     const after = await readAgentExchange({
       store: disconnected.store,
       sessionId: disconnected.sessionId,
@@ -5702,6 +5712,65 @@ describe("review runtime agent disconnect", () => {
     expect(released).toMatchObject({ requestId: pending.requestId });
     expect(released?.claimedBy).toBeUndefined();
     expect(released?.canceledAt).toBeUndefined();
+  });
+
+  it("should disconnect the agent holding work and leave a bystander attached", async () => {
+    /*
+    Two agents attached is a state Big Plan supports: one holds the plan's
+    single claim while another waits for it. The waiting loop is the one
+    writing the heartbeat every half second, so the review's writer id names
+    the bystander while the card describes the working agent's turn. Naming
+    both on one directive ended both, and the reviewer never saw the second
+    (BIG-190).
+    */
+    const sent = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", body: "Who is answering this?" },
+    });
+    expect(sent.status).toBe(200);
+    const pending = nextPendingAgentRequest(
+      await readAgentExchange({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+        planId: disconnected.planId,
+      }),
+      { claimedBy: "cccccccccccccccc", nowMs: Date.now() },
+    );
+    if (pending === undefined)
+      throw new Error("The chat request was not stored");
+    await claimAgentRequest({
+      store: disconnected.store,
+      activeSessionId: disconnected.sessionId,
+      requestId: pending.requestId,
+      claimedBy: "cccccccccccccccc",
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    // The bystander's waiting loop, which is what the presence record names.
+    await attachAgent({ writerId: "8888888888888888" });
+    expect((await ask({ path: "/api/agent-disconnect" })).status).toBe(200);
+    await expect(
+      readAgentDisconnectRequestFor({
+        store: disconnected.store,
+        claimToken: "cccccccccccccccc",
+      }),
+    ).resolves.toMatchObject({ requestedAtMs: expect.any(Number) });
+    await expect(
+      readAgentDisconnectRequestFor({
+        store: disconnected.store,
+        writerId: "8888888888888888",
+      }),
+    ).resolves.toBeUndefined();
+    // The bystander is still attached and was told nothing.
+    await expect(
+      readAgentPresence({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+      }),
+    ).resolves.toMatchObject({
+      connected: true,
+      writerId: "8888888888888888",
+    });
   });
 
   it("should state the reported end after a stalled agent's silence", async () => {

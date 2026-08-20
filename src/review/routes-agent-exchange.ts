@@ -13,6 +13,7 @@ import {
   AgentExchangeRejected,
   deriveSnapshotDigest,
   messageAgentRequest,
+  readAgentDisconnectExplaining,
   readAgentExchange,
 } from "./agent-exchange.js";
 import {
@@ -20,6 +21,7 @@ import {
   cancelAgentRequest,
   deleteQueuedRequest,
   ensureAgentRequest,
+  recordAgentConnectionState,
   releaseClaimsHeldBy,
   reviseQueuedRequest,
   withPlanClaimLock,
@@ -30,7 +32,6 @@ import {
   freezeRequestAttachments,
   randomId,
   readAgentConnectionEvents,
-  readAgentDisconnectRequestFor,
   readAgentPresence,
   readProgress,
   writeAgentDisconnectRequest,
@@ -45,6 +46,8 @@ import {
 import { readCommittedRevisionsToObserve } from "./change-set-commit.js";
 import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
+import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
+import { heldAgentClaim } from "./shared/agent-claim.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 
 const appendProgressBestEffort = async ({
@@ -102,8 +105,10 @@ export const readAgentSnapshot = async (
   // Read against this presence record, so a disconnect the reviewer asked for
   // reports itself only while the agent it addressed is still the one the
   // review names. The browser draws the control's pending state from it.
-  const disconnect = await readAgentDisconnectRequestFor({
+  const disconnect = await readAgentDisconnectExplaining({
     store,
+    sessionId,
+    planId,
     ...(presence.writerId === undefined ? {} : { writerId: presence.writerId }),
   });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
@@ -394,6 +399,7 @@ type DisconnectDecision =
   | { readonly refusal: string }
   | {
       readonly requestedAtMs: number;
+      readonly presenceWasConnected: boolean;
       readonly claimToken?: string;
       readonly requestId?: string;
     };
@@ -444,17 +450,34 @@ export const disconnectAgent = async (
       // it is signalling, or if it is holding work. Nothing renews the heartbeat
       // while a turn runs (BIG-147), so requiring a live signal would refuse a
       // disconnect in the one state where the reviewer most wants one.
-      const claimed = exchange.requests.find(
-        (request) =>
-          request.claimedBy !== undefined &&
-          request.answeredAt === undefined &&
-          request.canceledAt === undefined,
-      );
+      const claimed = heldAgentClaim(exchange.requests);
       if (!presence.connected && claimed === undefined) {
         return { refusal: "No agent is connected to this review" };
       }
       const claimToken = claimed?.claimedBy;
-      if (presence.writerId === undefined && claimToken === undefined) {
+      /*
+      One agent, named once.
+
+      Presence and the live claim are read from two different agents whenever
+      two are attached: a waiting loop writes the heartbeat every half second
+      while the agent that is actually working renews only its claim, so the
+      card can describe one agent's work under the other's name. A directive
+      carrying both names is matched by either, and one click ended a bystander
+      the reviewer never saw.
+
+      So the claim decides when there is one. The claim-derived state is exactly
+      what the card showed and exactly what the dialog's "the answer it has in
+      flight is dropped" warned about, which makes the agent holding it the one
+      agent the reviewer chose. Only with no claim to name does the review's own
+      writer id speak for the connection (BIG-190).
+      */
+      const addressee =
+        claimToken === undefined
+          ? presence.writerId === undefined
+            ? undefined
+            : { writerId: presence.writerId }
+          : { claimToken };
+      if (addressee === undefined) {
         // A directive addressed to nobody would be a standing order against
         // every agent that ever attaches, so it is refused rather than written.
         return {
@@ -465,16 +488,11 @@ export const disconnectAgent = async (
       const requestedAtMs = Date.now();
       await writeAgentDisconnectRequest({
         store: claimStore,
-        directive: {
-          requestedAtMs,
-          ...(presence.writerId === undefined
-            ? {}
-            : { writerId: presence.writerId }),
-          ...(claimToken === undefined ? {} : { claimToken }),
-        },
+        directive: { requestedAtMs, ...addressee },
       });
       return {
         requestedAtMs,
+        presenceWasConnected: presence.connected,
         ...(claimToken === undefined ? {} : { claimToken }),
         ...(claimed === undefined ? {} : { requestId: claimed.requestId }),
       };
@@ -500,6 +518,31 @@ export const disconnectAgent = async (
           detail:
             "The answer that agent had in flight was dropped; the message itself is back in the queue for the next agent",
         });
+  /*
+  The reviewer's decision, recorded on the connection log at the instant it was
+  taken rather than left for the agent to confirm.
+
+  It is written only when the review's presence has already stopped - a stalled
+  turn, an agent killed mid-answer, a session restarted underneath a live claim.
+  In every one of those the connection the log describes has ended and the
+  reviewer is the only one left who can say why, and nothing renews the plan
+  heartbeat during a turn (BIG-147), so this is the state a disconnect is most
+  often reached for. While presence is still live the log is still describing a
+  connected review, and the ordinary edge reports the end when it arrives.
+
+  The record supersedes an inferred gap and never replaces it, so the silence
+  Big Plan honestly wrote down keeps its row and the end somebody asked for is
+  stated after it (BIG-156).
+  */
+  if (!decision.presenceWasConnected) {
+    await recordAgentConnectionState({
+      store,
+      sessionId,
+      connected: false,
+      at: new Date(requestedAtMs).toISOString(),
+      disconnectReason: AGENT_DISCONNECTED_REASON,
+    }).catch(() => undefined);
+  }
   await appendProgressBestEffort({
     context,
     event: {

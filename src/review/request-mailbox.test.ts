@@ -2228,6 +2228,45 @@ describe("request mailbox", () => {
     ]);
   });
 
+  // The log can open on a review no agent has reached, and a reviewer can still
+  // end a connection it never got to describe - a session restarted underneath
+  // a live claim, say. Silence must not restate that opening; a reported end
+  // must still be recorded after it.
+  it("should let only a reported end follow an unexplained opening edge", async () => {
+    const { store } = await preparedReview();
+    const state = (at: string, disconnectReason: string) =>
+      recordAgentConnectionState({
+        store,
+        sessionId,
+        connected: false,
+        at,
+        disconnectReason,
+      });
+
+    await expect(
+      state("2026-08-10T12:00:00.000Z", AGENT_NO_SIGNAL_REASON),
+    ).resolves.toBe(true);
+    for (let pass = 0; pass < 4; pass += 1) {
+      await expect(
+        state("2026-08-10T12:00:01.000Z", AGENT_NO_SIGNAL_REASON),
+      ).resolves.toBe(false);
+    }
+    await expect(
+      state("2026-08-10T12:00:02.000Z", AGENT_DISCONNECTED_REASON),
+    ).resolves.toBe(true);
+
+    const edges = await readAgentConnectionEvents({ store, sessionId });
+    expect(edges).toMatchObject([
+      { connected: false, at: "2026-08-10T12:00:00.000Z" },
+      {
+        connected: false,
+        at: "2026-08-10T12:00:02.000Z",
+        reason: AGENT_DISCONNECTED_REASON,
+      },
+    ]);
+    expect(edges[0]).not.toHaveProperty("reason");
+  });
+
   it("should refuse a reply that names a resolved thread", async () => {
     const { store } = await preparedReview();
     const commentId = "4444444444444444";

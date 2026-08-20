@@ -1487,14 +1487,10 @@ export const recordAgentConnectionState = async ({
       });
       const last = events.at(-1);
       const previous = last?.connected;
-      // An edge naming no reason is the log opening on a review no agent has
-      // reached yet, not an account of an ending that a better one could
-      // replace, so nothing supersedes it.
       const explainsItBetter =
         !connected &&
-        last?.reason !== undefined &&
         agentConnectionReasonSupersedes({
-          recorded: last.reason,
+          ...(last?.reason === undefined ? {} : { recorded: last.reason }),
           next: disconnectReason,
         });
       if (previous === connected && !explainsItBetter) return false;

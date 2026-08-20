@@ -195,6 +195,27 @@ describe("summarizeAgentConnection", () => {
     ).toMatchObject({ quietPeriods: 0, sessionsEnded: 1, resumed: 1 });
   });
 
+  it("counts a disconnect that follows a gap as its own ended session", () => {
+    // The runtime records the reported end after the silence it explains, so
+    // the summary states both facts: the agent went quiet, and then the
+    // reviewer ended it. Reporting only the gap would invert the one
+    // distinction this tally exists to draw (BIG-156, BIG-190).
+    expect(
+      summarizeAgentConnection({
+        events: [
+          { connected: false, at: at(0) },
+          connectedEdge(1),
+          quietEdge(2),
+          {
+            connected: false,
+            at: at(3),
+            reason: AGENT_DISCONNECTED_REASON,
+          },
+        ],
+      }),
+    ).toMatchObject({ quietPeriods: 1, sessionsEnded: 1, resumed: 0 });
+  });
+
   it("counts nothing for a session that has only ever been connected", () => {
     expect(
       summarizeAgentConnection({ events: [connectedEdge(1)] }),

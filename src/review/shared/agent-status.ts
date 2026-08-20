@@ -252,17 +252,23 @@ const CONNECTION_END_REASONS: ReadonlyArray<string> = [
  *
  * A reason from outside the ordered set moves nothing, which keeps an
  * unrecognized string from displacing an account the reviewer can rely on.
+ *
+ * An edge that named no reason is the log opening on a review no agent has
+ * reached yet. It ranks with silence rather than below it, so the check that
+ * runs several times a second cannot follow it with a row inferring that a
+ * signal was lost from an agent that never arrived - while an end somebody
+ * reported still earns its row.
  */
 export const agentConnectionReasonSupersedes = ({
   recorded,
   next,
 }: {
-  /** The reason on the last recorded edge, which named a connection ending. */
-  readonly recorded: string;
+  /** The reason on the last recorded edge, absent when it named none. */
+  readonly recorded?: string;
   readonly next: string;
 }): boolean =>
   CONNECTION_END_REASONS.indexOf(next) >
-  CONNECTION_END_REASONS.indexOf(recorded);
+  (recorded === undefined ? 0 : CONNECTION_END_REASONS.indexOf(recorded));
 
 /**
  * Names why presence stopped, from what the review already knows.
