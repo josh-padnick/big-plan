@@ -26,6 +26,26 @@ const pastePng = async (composer: Locator, name: string) => {
   );
 };
 
+const dropPng = async (composer: Locator, name: string) => {
+  await composer.evaluate(
+    (element, value) => {
+      const bytes = Uint8Array.from(atob(value.encoded), (character) =>
+        character.charCodeAt(0),
+      );
+      const file = new File([bytes], value.name, { type: "image/png" });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      element.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          dataTransfer: transfer,
+        }),
+      );
+    },
+    { encoded: PASTED_PNG_BASE64, name },
+  );
+};
+
 const openChatComposer = async ({
   page,
   reviewRuntimeUrl,
@@ -68,6 +88,33 @@ const deferred = () => {
   return { promise, resolve };
 };
 
+test("should omit the file picker from image composers", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const { dialog } = await openSlideCommentComposer(page);
+
+  await expect(
+    dialog.getByRole("button", { name: "Choose image" }),
+  ).toHaveCount(0);
+  await expect(dialog.locator('input[type="file"]')).toHaveCount(0);
+});
+
+test("should capture images through paste and drag-drop", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const { composer } = await openChatComposer({ page, reviewRuntimeUrl });
+
+  await pastePng(composer, "pasted.png");
+  await expect(composer).toHaveValue(/review-image:/u);
+  await dropPng(composer, "dropped.png");
+  await expect(composer).toHaveValue(
+    /review-image:[a-f0-9]{64}[^]*review-image:[a-f0-9]{64}/u,
+  );
+});
+
 test("should refuse a second image capture while one is uploading", async ({
   page,
   reviewRuntimeUrl,
@@ -91,11 +138,7 @@ test("should refuse a second image capture while one is uploading", async ({
   await pastePng(composer, "first.png");
   await uploadStarted.promise;
   await expect(rail.getByText("Uploading…", { exact: true })).toBeVisible();
-  await rail.locator('input[type="file"]').setInputFiles({
-    name: "second.png",
-    mimeType: "image/png",
-    buffer: Buffer.from(PASTED_PNG_BASE64, "base64"),
-  });
+  await pastePng(composer, "second.png");
   await expect(
     rail.getByText("Wait for the current image upload to finish.", {
       exact: true,

@@ -1,4 +1,4 @@
-// Shared paste, drop, and picker capture for every reviewer composer. Upload
+// Shared paste and drop capture for every reviewer composer. Upload
 // completion inserts a digest reference at the captured caret position.
 
 import {
@@ -27,7 +27,7 @@ import {
   reviewWriteRefusal,
   type ReviewWriteAvailability,
 } from "./review-write-availability.js";
-import { Button, Textarea } from "./ui.browser.js";
+import { Textarea } from "./ui.browser.js";
 
 // Uploading is the one image action that still needs the live session: it
 // writes into the plan's review store, so it carries the session token the
@@ -71,7 +71,6 @@ export const ComposeImages = ({
   readonly id?: string;
 }) => {
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const picker = useRef<HTMLInputElement>(null);
   const captureActive = useRef(false);
   const bodyGeneration = useRef(0);
   const insertionAnchor = useRef<ComposerInsertionAnchor>({ body, offset: 0 });
@@ -229,34 +228,9 @@ export const ComposeImages = ({
           ))}
         </div>
       ) : null}
-      {/* Paste and drop cover the common capture, but neither is available to
-          a reader working from the keyboard or from a file they already have
-          on disk, so the picker is the third way in rather than a fourth
-          convenience. */}
-      <input
-        ref={picker}
-        className="hidden"
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        multiple
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(event) => {
-          const files = Array.from(event.target.files ?? []);
-          event.target.value = "";
-          if (files.length > 0) capture(files);
-        }}
-      />
-      <div className="mt-1 flex flex-wrap items-center gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => picker.current?.click()}
-        >
-          Choose image
-        </Button>
-        <p className="m-0 text-2xs text-muted">Markdown and images supported</p>
-      </div>
+      <p className="mt-1 mb-0 text-2xs text-muted">
+        Markdown and images supported
+      </p>
       <div className="mt-1 flex items-center gap-2">
         {pending ? (
           <span className="text-2xs text-muted">Uploading…</span>
