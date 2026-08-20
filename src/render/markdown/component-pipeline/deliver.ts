@@ -242,9 +242,7 @@ const renderFlowElement = ({
   // presentation inside its parent body, which is a property of where this
   // element is being rendered rather than a second thing to thread.
   const materializeModel =
-    insideComponentBody &&
-    delivery.kind === "render" &&
-    delivery.materializeNestedModels;
+    insideComponentBody && delivery.materializeNestedModels;
   // An outline-aware component defers its presentation behind a placeholder
   // until the deck transform has computed the document outline. A model being
   // materialized inside a parent's body never reaches the document tree, so
