@@ -1993,6 +1993,15 @@ const useThreadHosts = (
       const host = document.createElement("div");
       host.dataset.reviewThreadFor = comment.id;
       host.dataset.reviewThreadSide = "";
+      // A thread has no place on the page until a positioning pass measures
+      // one, and an absolutely positioned host without coordinates does not
+      // wait quietly for that pass: it takes its static position, which is the
+      // page's left edge below the end of the article - the one place a thread
+      // must never appear. The hosts are appended here and positioned in the
+      // next frame, so hidden until placed is what keeps that gap invisible.
+      // The positioning pass reveals a host in the same task that gives it
+      // coordinates, so a placed thread is never seen anywhere else.
+      host.hidden = true;
       document.body.append(host);
       mounted.set(comment.id, host);
     }

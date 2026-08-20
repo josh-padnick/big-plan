@@ -864,6 +864,82 @@ test("should keep a comment thread on the right whether the sidebar is open or c
 });
 
 /*
+BIG-188, the frame before the first placement. A thread host is appended to the
+document body and positioned in the next animation frame, and an absolutely
+positioned host without coordinates does not wait out of sight in between: it
+takes its static position, the page's left edge below the end of the article,
+which is the left margin every other journey here exists to keep threads out
+of. A reader sees that as a card flashing into the left margin, and anything
+measuring the thread in that window reads the flash as a placement.
+
+The observer answers with the host's state at the microtask after it entered
+the document, which is before the frame that positions it and before any paint
+that could show it, so this pins the one state a reader could otherwise catch.
+*/
+test("should never show a comment thread before it has a place on the page", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  type ThreadArrival = {
+    readonly hidden: boolean;
+    readonly top: string;
+    readonly left: string;
+  };
+  await page.evaluate(() => {
+    Object.assign(window, { __bigPlanThreadArrivals: [] });
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (!node.matches("[data-review-thread-side]")) continue;
+          (
+            window as unknown as {
+              __bigPlanThreadArrivals: Array<{
+                hidden: boolean;
+                top: string;
+                left: string;
+              }>;
+            }
+          ).__bigPlanThreadArrivals.push({
+            hidden: node.hidden,
+            top: node.style.top,
+            left: node.style.left,
+          });
+        }
+      }
+    }).observe(document.body, { childList: true });
+  });
+
+  const subSlide = page.locator('[data-collapsible="subslide"]').first();
+  await subSlide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer
+    .getByLabel("Add a comment")
+    .fill("This thread belongs nowhere until it has a place.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+  await expect(page.locator("[data-review-thread-side]")).toHaveCount(1);
+
+  const arrivals = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __bigPlanThreadArrivals: Array<ThreadArrival>;
+        }
+      ).__bigPlanThreadArrivals,
+  );
+  expect(arrivals.length).toBeGreaterThan(0);
+  expect(
+    arrivals.filter((arrival) => !arrival.hidden && arrival.top === ""),
+  ).toEqual([]);
+});
+
+/*
 BIG-188, the vertical half of the same mistake. A thread remembers how far its
 target sat below the card when the comment was made, so a lens re-rendering the
 block in place cannot drag the thread off the words it points at. Collapsing
@@ -943,9 +1019,15 @@ test("should keep a comment thread level with a card it collapsed after the comm
 
   const threadHost = page.locator("[data-review-thread-side]");
   await expect(threadHost).toHaveCount(1);
+  /*
+  A host is appended before the frame that positions it, and it stays hidden
+  until that frame arrives. Reading a distance from an unplaced host would not
+  be reading a placement at all, so every measurement below answers with the
+  distance or with the fact that there is none yet.
+  */
   const pageTop = (locator: typeof threadHost) =>
-    locator.evaluate(
-      (node) => node.getBoundingClientRect().top + window.scrollY,
+    locator.evaluate((node) =>
+      node.hidden ? null : node.getBoundingClientRect().top + window.scrollY,
     );
   const cardBand = () =>
     card.evaluate((node) => {
@@ -958,9 +1040,23 @@ test("should keep a comment thread level with a card it collapsed after the comm
 
   // While the target is on screen the remembered distance is what keeps the
   // thread beside the words it was written about.
-  const drop = async () => (await pageTop(threadHost)) - (await cardBand()).top;
-  await expect.poll(drop).toBeGreaterThan(remembered - 1);
+  const drop = async () => {
+    const threadTop = await pageTop(threadHost);
+    return threadTop === null ? null : threadTop - (await cardBand()).top;
+  };
+  await expect
+    .poll(async () => {
+      const dropped = await drop();
+      if (dropped === null) return "not placed yet";
+      return dropped > remembered - 1
+        ? "beside its block"
+        : `${Math.round(remembered - dropped)} above its block`;
+    })
+    .toBe("beside its block");
   const droppedWhileOpen = await drop();
+  if (droppedWhileOpen === null) {
+    throw new Error("A placed thread must answer with the distance it holds");
+  }
 
   await card
     .locator(":scope > [data-collapse-header] button[data-collapse-toggle]")
@@ -978,6 +1074,7 @@ test("should keep a comment thread level with a card it collapsed after the comm
     .poll(async () => {
       const band = await cardBand();
       const threadTop = await pageTop(threadHost);
+      if (threadTop === null) return "not placed yet";
       if (threadTop < band.top)
         return `above the card by ${band.top - threadTop}`;
       if (threadTop > band.bottom) {
@@ -1011,6 +1108,7 @@ test("should keep a comment thread level with a card it collapsed after the comm
   await expect
     .poll(async () => {
       const restored = await drop();
+      if (restored === null) return "not placed yet";
       if (Math.abs(restored - droppedWhileOpen) <= 1) {
         return "back beside its block";
       }
@@ -1099,17 +1197,31 @@ test("should place a comment thread beside its block after opening with the card
 
   const threadHost = page.locator("[data-review-thread-side]");
   await expect(threadHost).toHaveCount(1);
+  // A host is appended before the frame that positions it, and it stays hidden
+  // until that frame arrives, so an unplaced thread answers with no distance
+  // rather than with the one its static position would imply.
   const drop = async () => {
     const cardTop = await card.evaluate(
       (node) => node.getBoundingClientRect().top + window.scrollY,
     );
-    const threadTop = await threadHost.evaluate(
-      (node) => node.getBoundingClientRect().top + window.scrollY,
+    const threadTop = await threadHost.evaluate((node) =>
+      node.hidden ? null : node.getBoundingClientRect().top + window.scrollY,
     );
-    return threadTop - cardTop;
+    return threadTop === null ? null : threadTop - cardTop;
   };
-  await expect.poll(drop).toBeGreaterThan(deepest.offset - 1);
+  await expect
+    .poll(async () => {
+      const dropped = await drop();
+      if (dropped === null) return "not placed yet";
+      return dropped > deepest.offset - 1
+        ? "beside its block"
+        : `${Math.round(deepest.offset - dropped)} above its block`;
+    })
+    .toBe("beside its block");
   const droppedWhileOpen = await drop();
+  if (droppedWhileOpen === null) {
+    throw new Error("A placed thread must answer with the distance it holds");
+  }
 
   const toggle = card.locator(
     ":scope > [data-collapse-header] button[data-collapse-toggle]",
@@ -1131,6 +1243,7 @@ test("should place a comment thread beside its block after opening with the card
   await expect
     .poll(async () => {
       const restored = await drop();
+      if (restored === null) return "not placed yet";
       if (Math.abs(restored - droppedWhileOpen) <= 1) {
         return "beside its block";
       }
