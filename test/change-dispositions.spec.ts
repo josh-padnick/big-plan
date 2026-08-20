@@ -128,6 +128,13 @@ test("should keep an accepted change accepted across a reload and a restart", as
 
     await test.step("accepting the rest closes the set everywhere at once", async () => {
       await stepper(page).getByRole("button", { name: "Next change" }).click();
+      // The page shows the acceptance before the runtime has stored it, so the
+      // record on disk is read only once the write it came from has answered.
+      const written = page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/change-dispositions") &&
+          response.request().method() === "POST",
+      );
       await stepper(page)
         .getByRole("button", { name: "Accept this change" })
         .click();
@@ -137,6 +144,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
       await expect(
         rail(page).locator("[data-review-changes-accepted]"),
       ).toContainText("Change set accepted");
+      expect((await written).ok()).toBe(true);
       expect(await recordedChanges(dispositionsPath)).toHaveLength(2);
     });
 
