@@ -21,7 +21,12 @@ import { X_ICON } from "../../icons/lucide/x.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
-import { PALETTES, type Palette } from "../preferences.js";
+import {
+  APPROVAL_MESSAGE_LIMIT,
+  DEFAULT_APPROVAL_MESSAGE,
+  PALETTES,
+  type Palette,
+} from "../preferences.js";
 import { lucideIconToHtml } from "./lucide-icon-html.js";
 import { PREFERENCES_SCRIPT } from "./preferences-script.js";
 import { VIEWER_SCRIPT } from "./viewer-script.js";
@@ -260,7 +265,7 @@ const renderPreferencesSection = ({
 
 // A settings page: its own heading, its own explanation, and one control
 // group. Beside the sidebar the heading is the page title, so the pane says
-// what it is once the reviewer's eye has left the rail. Stacked under the
+// what it is once the reviewer's eye has left the sidebar. Stacked under the
 // sidebar it would only repeat the chip one line above it, so there it stays
 // in the accessibility tree and out of the reading order.
 //
@@ -288,10 +293,39 @@ const renderPreferencesPanel = ({
 ${controls}
 </section>`;
 
+// The one setting that is written rather than chosen. The default wording is
+// server-rendered into the field, so a document with no storage and no script
+// still shows the note an approval would carry rather than an empty box.
+//
+// The bound is the field's own maxlength as well as the contract's, because a
+// reviewer pasting a long note should be stopped by the control rather than by
+// a record that silently fails to parse on the next reload.
+//
+// The field is drawn the way the island draws its own inputs - the input ground
+// inside an edge-strong hairline - rather than as a well. A well is a recess in
+// a surface, and it reads as one only where the surface is lighter than the
+// recess; in dark, where the well and the page are the same colour, the field
+// lost its edges and the one thing on this page a reviewer can type into did
+// not look like it.
+const renderApprovalMessageControls = (): string =>
+  `<div class="mt-3 min-w-0 wide:mt-4">
+<label class="mb-1 block text-xs font-medium text-muted" for="big-plan-approval-message">Message</label>
+<textarea class="block min-h-32 w-full resize-y rounded-md border border-edge-strong bg-input px-3 py-2 text-sm leading-normal text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-approval-message" data-approval-message-input maxlength="${APPROVAL_MESSAGE_LIMIT}" aria-describedby="big-plan-approval-message-hint">${escapeHtml(DEFAULT_APPROVAL_MESSAGE)}</textarea>
+<p class="mt-2 text-xs leading-normal text-muted" id="big-plan-approval-message-hint">One note covers every plan. It starts from a standard wording you can rewrite, and Reset to default puts that wording back.</p>
+<div class="mt-3">
+<button class="-ml-2 inline-flex min-h-9 cursor-pointer items-center rounded-md border-0 bg-transparent px-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-approval-message-reset>Reset to default</button>
+</div>
+</div>`;
+
 // The dialog is a settings surface rather than one long page: a sidebar of
-// settings on the left, the chosen one on the right. Appearance and Color theme
-// are peers there, so neither competes with the other for the reviewer's
-// attention and a later setting costs one more sidebar item.
+// settings on the left, the chosen one on the right. Every setting is a peer
+// there, so none competes with another for the reviewer's attention and the
+// next one costs one more sidebar item.
+//
+// Beside the page the sidebar is a column and grows downward. Above it, on a
+// phone, it wraps onto a second row rather than scrolling sideways: a settings
+// category the reviewer has to discover by dragging a row is a category they
+// never find.
 //
 // The sheet is titled rather than labelled: Settings names the whole surface
 // and sits one type step above the page title it contains, so the ladder reads
@@ -313,9 +347,10 @@ const renderPreferencesDialog = (): string =>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
 <div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:grid wide:grid-cols-[12rem_1fr] wide:gap-6 wide:pt-6">
-<div class="flex min-w-0 gap-1 overflow-x-auto border-b border-edge pb-3 wide:flex-col wide:overflow-x-visible wide:border-r wide:border-b-0 wide:pr-4 wide:pb-0" role="tablist" aria-label="Settings sections" data-preferences-sections>
+<div class="flex min-w-0 flex-wrap gap-1 border-b border-edge pb-3 wide:flex-col wide:flex-nowrap wide:border-r wide:border-b-0 wide:pr-4 wide:pb-0" role="tablist" aria-label="Settings sections" data-preferences-sections>
 ${renderPreferencesSection({ section: "appearance", title: "Appearance", icon: SUN_MOON_ICON, selected: true })}
 ${renderPreferencesSection({ section: "palette", title: "Color theme", icon: PALETTE_ICON, selected: false })}
+${renderPreferencesSection({ section: "approval-message", title: "Approval message", icon: MESSAGE_SQUARE_ICON, selected: false })}
 </div>
 <div class="mt-4 grid min-w-0 wide:mt-0">
 ${renderPreferencesPanel({
@@ -340,6 +375,13 @@ ${renderPreferencesPanel({
 <legend class="sr-only">Color theme</legend>
 ${PALETTE_OPTIONS.map(renderPaletteOption).join("\n")}
 </fieldset>`,
+})}
+${renderPreferencesPanel({
+  section: "approval-message",
+  title: "Approval message",
+  description: "The covering note that goes with a plan approval.",
+  selected: false,
+  controls: renderApprovalMessageControls(),
 })}
 </div>
 </div>
