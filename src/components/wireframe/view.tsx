@@ -328,12 +328,15 @@ const WireframeElement = ({
         </div>
       );
     case "TopBar": {
-      const leadingBarItems = node.children.filter(
-        (child) => child.element === "Group",
-      );
-      const trailingBarItems = node.children.filter(
-        (child) => child.element !== "Group",
-      );
+      // Position decides the slot, not element type: the bar has one leading
+      // slot, and the author claims it by writing a Group first. Reading every
+      // Group as leading would put a two-ended bar's trailing cluster on the
+      // left, which is the one arrangement the author plainly did not write.
+      const [firstBarItem, ...laterBarItems] = node.children;
+      const leadsBar =
+        firstBarItem !== undefined && firstBarItem.element === "Group";
+      const leadingBarItems = leadsBar ? [firstBarItem] : [];
+      const trailingBarItems = leadsBar ? laterBarItems : node.children;
       return (
         <div className="wireframe-top-bar flex flex-wrap items-center gap-3">
           {/* A product's top bar names where the reader is on the left and
@@ -341,9 +344,10 @@ const WireframeElement = ({
               against the title is the one arrangement no real application
               uses. But a bar has two leading jobs, not one: a phone puts its
               back control before the title, which no amount of trailing
-              placement can express. So a Group leads and loose controls
-              trail - grouped items travel with the identity, which is what a
-              Group means everywhere else in the vocabulary. */}
+              placement can express. So a Group written first leads and
+              everything after it trails - grouped items travel with the
+              identity, which is what a Group means everywhere else in the
+              vocabulary. */}
           {leadingBarItems.length === 0 ? null : (
             <div className="wireframe-top-bar-leading flex flex-wrap items-center gap-2">
               <WireframeElements nodes={leadingBarItems} />

@@ -407,12 +407,15 @@ const checkSelection = ({
 };
 
 /**
- * Inside a Row, a Group clusters loose controls; it never wraps a pane.
+ * A Group clusters loose controls; it never holds a pane.
  *
- * A Row lays out its own panes, so a Group holding one would have to be both a
- * single travelling item and a pane at the same time. Only the first meaning
- * survives, and an author who wrote the other one is told the shape that works
- * rather than shown a layout they did not write.
+ * A Group is a run of items that travel together as one item of a row, so a
+ * Group holding a pane would have to be both that one travelling item and a
+ * region taking its own share of the row. Only the first meaning survives,
+ * wherever the Group stands: a Group with no Row around it draws panes side by
+ * side with none of the row rules that keep them readable, which is the same
+ * layout refused here for the same reason. The outermost Group reports,
+ * because a pane reached through several Groups is still one mistake.
  */
 const checkGroupedPanes = ({
   screen,
@@ -423,28 +426,33 @@ const checkGroupedPanes = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
+  const visit = ({
+    nodes,
+    insideGroup,
+  }: {
+    readonly nodes: ReadonlyArray<WireframeNode>;
+    readonly insideGroup: boolean;
+  }): void => {
     for (const node of nodes) {
-      if (node.element === "Row") {
-        for (const child of node.children) {
-          if (child.element !== "Group") {
-            continue;
-          }
-          const pane = paneSiblings(child.children).find((candidate) =>
-            ROW_PANES.has(candidate.element),
-          );
-          if (pane !== undefined) {
-            diagnostics.add({
-              message: `Screen "${screen.id}": a Group inside a Row holds a ${pane.element}, so the row cannot lay it out as a pane. Inside a Row, a Group clusters loose controls - buttons, text, badges - so they travel together as one item. Panes are direct children of the Row: write the ${pane.element} as a child of the Row itself and use the Row gap and justify to space them`,
-              position,
-            });
-          }
+      if (node.element === "Group") {
+        const pane = insideGroup
+          ? undefined
+          : paneSiblings(node.children).find((candidate) =>
+              ROW_PANES.has(candidate.element),
+            );
+        if (pane !== undefined) {
+          diagnostics.add({
+            message: `Screen "${screen.id}": a Group holds a ${pane.element}, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Panes are direct children of a Row: write the ${pane.element} as a child of a Row and use the Row gap and justify to space the panes`,
+            position,
+          });
         }
+        visit({ nodes: node.children, insideGroup: true });
+        continue;
       }
-      visit(childNodes(node));
+      visit({ nodes: childNodes(node), insideGroup: false });
     }
   };
-  visit(screen.children);
+  visit({ nodes: screen.children, insideGroup: false });
 };
 
 /** Three flexible desktop panes create equal thirds; a Rail owns secondary width. */

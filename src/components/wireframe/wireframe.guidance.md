@@ -111,9 +111,9 @@ Implementation principles:
 - Reach for `iconOnly` only where the product would: a toolbar of marks a user already recognizes, a close control, a copy affordance beside the thing it copies. An icon-only control still carries its `label`, which becomes its accessible name and its tooltip, so hiding the words never hides the meaning. A row of unrecognizable icon-only controls is worse than a row of short labels.
 - Size an icon by its job rather than by taste: `sm` rides a line of metadata, `md` stands with body copy, and `lg` is the one mark a screen is about or a target a finger reaches for. The steps are multiples of the artboard's own body type, so the same authored size is correct on every device.
 - Anchor a bar's two ends with two `Group`s inside `<Row justify="between">`. A `Row` gives a flexible share only to a `Panel`, `Stack`, `Row`, or `Center`; loose children such as a `Heading`, a `Text`, or a `Button` keep their natural width and cluster at the start, and `justify="between"` then spreads all four of a title and three buttons evenly rather than settling two ends. Wrapping each side in a `Group` makes the row exactly two items, and those two settle where the product puts them. `TopBar` already reads this way - its title leads and its loose controls trail - so reach for `Group` when a `Row`, a panel header, or a command bar needs the same split.
-- Put a bar's leading control in a `Group` inside the `TopBar`. A phone puts its back control before the title, and trailing placement cannot express that no matter how it is ordered; a `Group` there draws ahead of the title, and loose controls still trail. Follow the device: a back control leads on a phone, and a desktop or tablet bar usually has nothing leading but its title.
+- Put a bar's leading control in a `Group` written first inside the `TopBar`. A phone puts its back control before the title, and trailing placement cannot express that no matter how it is ordered; a `Group` written first draws ahead of the title, and everything after it trails. Follow the device: a back control leads on a phone, and a desktop or tablet bar usually has nothing leading but its title. A bar needs two ends rather than a leading control? That is a `Row` of two `Group`s, not a second `Group` in the bar.
 - Use a `Group` for what travels together, not as a spacer. Three groups in one row distribute rather than anchor, and a group holding one element in a row of loose children changes nothing; if a bar still looks wrong after grouping, the row is carrying more than one bar's worth of content.
-- A `Group` inside a `Row` has one job: clustering loose controls into a single row item, which is what lets `justify="between"` separate two clusters instead of spreading every loose child evenly. It never wraps a pane. A `Panel`, `Stack`, `Row`, `Center`, or `Rail` is always a direct child of its `Row`, spaced by that row's `gap` and `justify`; wrapping one in a `Group` is refused at compilation, because the row cannot lay out as a pane something the author declared as one travelling item.
+- A `Group` has one job: clustering loose controls into a single row item, which is what lets `justify="between"` separate two clusters instead of spreading every loose child evenly. It never holds a pane, wherever it sits. A `Panel`, `Stack`, `Row`, `Center`, or `Rail` is always a direct child of a `Row`, spaced by that row's `gap` and `justify`; wrapping one in a `Group` is refused at compilation, whether or not a `Row` is around it, because a Group cannot be both one travelling item and a region that takes its own share of a row. If you wanted panes side by side and reached for a `Group`, write a `Row` instead and make the panes its direct children.
 - A meaning the named set does not hold draws a crossed placeholder carrying that name, which is a prompt rather than a finished drawing: pick a named meaning, or say plainly in the surrounding prose that the mark is still undecided. Never work around it by typing a character that looks close.
 
 The two shapes, side by side - panes directly in the row, controls clustered at its ends:
@@ -144,7 +144,7 @@ The two shapes, side by side - panes directly in the row, controls clustered at 
 
 Reject equal-weight regions, a simple tablet choice split into columns, thin-line pseudo-selection, graph paper louder than the decision, a shrunken desktop form floating in an iPad, four squeezed full-screen panes, card walls, floating metadata or actions, cramped comparison headers, criteria styled like option titles, definitions that read as answers, comment borders crossing text, repeated anchored context, detached tray actions, unrelated dependencies, recommendation/value ambiguity, oversized empty panels, nonparallel choices, decorative filler, icons typed into labels as characters, unlabelled icon-only controls, placeholder glyphs left in a delivered plan, toolbar controls clustered against their own title, and anything visually louder than its importance.
 
-Defaults keep panels plain, derive dominant panes, give secondary width to `Rail`, draw a push chevron on any `ListItem` that names a screen, and lead a `TopBar` with any `Group` and then its title while its loose controls trail; a `Group` hugs what it holds so two of them anchor a row's two ends. The derivation names exactly one collection per row - the first pane holding a `List` or `Table` - so a detail pane that also holds a list (properties, context, a checklist) stays the primary surface instead of becoming a second bounded column. That derivation is device-independent: a tablet master/detail row is proportioned the same way a desktop one is. Compilation blocks equal desktop thirds, four-or-more outlined sibling panels, and a pane wrapped in a `Group` inside a `Row`; lint blocks a Row past its device's column budget; a ramp test keeps the type roles a visible step apart; geometry tests block cramped panes, overlap, manufactured dead bands, painted type below the legibility floor, and a primary surface less than a third wider than the panes beside it.
+Defaults keep panels plain, derive dominant panes, give secondary width to `Rail`, draw a push chevron on any `ListItem` that names a screen, and lead a `TopBar` with any `Group` and then its title while its loose controls trail; a `Group` hugs what it holds so two of them anchor a row's two ends. The derivation names exactly one collection per row - the first pane holding a `List` or `Table` - so a detail pane that also holds a list (properties, context, a checklist) stays the primary surface instead of becoming a second bounded column. That derivation is device-independent: a tablet master/detail row is proportioned the same way a desktop one is. Compilation blocks equal desktop thirds, four-or-more outlined sibling panels, and a pane wrapped in a `Group`; lint blocks a Row past its device's column budget; a ramp test keeps the type roles a visible step apart; geometry tests block cramped panes, overlap, manufactured dead bands, painted type below the legibility floor, and a primary surface less than a third wider than the panes beside it.
 
 ## E · Explicit change
 
@@ -493,5 +493,29 @@ Destructive confirmation over a page:
       />
     </Row>
   </Overlay>
+</Screen>
+<Screen
+  id="plans-kept"
+  name="Plans, kept"
+  device="desktop"
+  url="app.example.com/plans"
+>
+  <PageHeader title="Plans" />
+  <Panel title="Plans">
+    <List>
+      <ListItem label="Checkout rewrite" meta="Draft" />
+    </List>
+  </Panel>
+</Screen>
+<Screen
+  id="plans-deleted"
+  name="Plans, after deleting"
+  device="desktop"
+  url="app.example.com/plans"
+>
+  <PageHeader title="Plans" description="Checkout rewrite was deleted." />
+  <Panel title="Plans">
+    <Text text="No plans yet." role="helper" />
+  </Panel>
 </Screen>
 ```

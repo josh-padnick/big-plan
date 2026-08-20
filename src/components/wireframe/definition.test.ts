@@ -1747,37 +1747,6 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
-  it("should count outlined siblings through the Group that holds them", () => {
-    const { diagnostics } = compile({
-      scopedChildren: [
-        screen({
-          id: "dashboard",
-          attributes: { device: "tablet" },
-          children: [
-            element({
-              name: "Stack",
-              children: [
-                element({
-                  name: "Group",
-                  children: ["Balance", "Activity", "Loan", "Lesson"].map(
-                    (title) =>
-                      element({
-                        name: "Panel",
-                        attributes: { title, surface: "outlined" },
-                      }),
-                  ),
-                }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    });
-    expect(diagnostics.map((entry) => entry.message)).toEqual([
-      'Screen "dashboard" outlines 4 sibling Panels; keep regions plain and spend boxes only on elements that behave like cards',
-    ]);
-  });
-
   it("should keep three card-like siblings inside the border budget", () => {
     const { diagnostics } = compile({
       scopedChildren: [
@@ -2568,7 +2537,42 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       ],
     });
     expect(diagnostics.map((entry) => entry.message)).toEqual([
-      'Screen "home": a Group inside a Row holds a Panel, so the row cannot lay it out as a pane. Inside a Row, a Group clusters loose controls - buttons, text, badges - so they travel together as one item. Panes are direct children of the Row: write the Panel as a child of the Row itself and use the Row gap and justify to space them',
+      'Screen "home": a Group holds a Panel, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Panes are direct children of a Row: write the Panel as a child of a Row and use the Row gap and justify to space the panes',
+    ]);
+  });
+
+  it("should refuse a pane in a Group with no Row around it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { device: "phone" },
+          children: [
+            element({
+              name: "Group",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "A" },
+                  children: [
+                    element({ name: "Text", attributes: { text: "One" } }),
+                  ],
+                }),
+                element({
+                  name: "Panel",
+                  attributes: { title: "B" },
+                  children: [
+                    element({ name: "Text", attributes: { text: "Two" } }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home": a Group holds a Panel, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Panes are direct children of a Row: write the Panel as a child of a Row and use the Row gap and justify to space the panes',
     ]);
   });
 
@@ -2607,7 +2611,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       ],
     });
     expect(diagnostics.map((entry) => entry.message)).toEqual([
-      'Screen "home": a Group inside a Row holds a Stack, so the row cannot lay it out as a pane. Inside a Row, a Group clusters loose controls - buttons, text, badges - so they travel together as one item. Panes are direct children of the Row: write the Stack as a child of the Row itself and use the Row gap and justify to space them',
+      'Screen "home": a Group holds a Stack, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Panes are direct children of a Row: write the Stack as a child of a Row and use the Row gap and justify to space the panes',
     ]);
   });
 
@@ -2931,6 +2935,71 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     const rendered = html(render(compiled));
     // The back control has to reach the reader before the title, which is the
     // only thing this slot exists for.
+    expect(rendered.indexOf("wireframe-top-bar-leading")).toBeLessThan(
+      rendered.indexOf("wireframe-brand"),
+    );
+    expect(rendered.indexOf("wireframe-brand")).toBeLessThan(
+      rendered.indexOf("wireframe-top-bar-actions"),
+    );
+  });
+
+  it("should split a top bar's two Groups to its two ends", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "TopBar",
+              attributes: { title: "Plans" },
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: { label: "Back", icon: "back" },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Workspace settings",
+                        icon: "settings",
+                        iconOnly: true,
+                      },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // Only the Group written first claims the leading slot; the second one is
+    // the bar's other end, so it has to reach the reader after the title.
+    const bar = elementWithClass({
+      node: render(compiled),
+      className: "wireframe-top-bar",
+    });
+    const leading = elementWithClass({
+      node: bar as Element,
+      className: "wireframe-top-bar-leading",
+    });
+    const trailing = elementWithClass({
+      node: bar as Element,
+      className: "wireframe-top-bar-actions",
+    });
+    expect(html(leading as Element)).toContain("Back");
+    expect(html(leading as Element)).not.toContain("Workspace settings");
+    expect(html(trailing as Element)).toContain("Workspace settings");
+    const rendered = html(bar as Element);
     expect(rendered.indexOf("wireframe-top-bar-leading")).toBeLessThan(
       rendered.indexOf("wireframe-brand"),
     );

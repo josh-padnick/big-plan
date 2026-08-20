@@ -379,7 +379,7 @@ const CATALOG = {
     category: "layout",
     acceptsChildren: true,
     summary:
-      'A run of elements that travel together as one item of a Row. Two Groups inside <Row justify="between"> put one set at the start and the other at the end, which is how a real toolbar carries its title on the left and its controls on the right.',
+      'A run of loose controls that travel together as one item of a Row; it never holds a Panel, Stack, Row, Center, or Rail. Two Groups inside <Row justify="between"> put one set at the start and the other at the end, which is how a real toolbar carries its title on the left and its controls on the right.',
     example:
       '<Row justify="between"><Group><Heading text="Plans" /></Group><Group><Button icon="settings" label="Settings" iconOnly /></Group></Row>',
     compile: ({ attributes, children, position, diagnostics }) => {
@@ -649,7 +649,7 @@ const CATALOG = {
     // Stack is allowed so authors can group the bar with the page body.
     allowedParents: ["AppShell", "Screen", "Stack"],
     summary:
-      "A strip across the top of a shell or a screen. The title leads and loose controls trail, which is how a desktop or tablet bar reads. A Group leads too, before the title, which is how a phone draws the back control iOS puts there.",
+      "A strip across the top of a shell or a screen. The title leads and loose controls trail, which is how a desktop or tablet bar reads. A Group written first leads, before the title, which is how a phone draws the back control iOS puts there; every later child trails.",
     example:
       '<TopBar title="Dashboard"><Button label="Settings" icon="settings" iconOnly /></TopBar>',
     compile: ({ attributes, children, position, diagnostics }) => {

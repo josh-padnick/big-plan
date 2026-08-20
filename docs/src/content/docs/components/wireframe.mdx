@@ -159,14 +159,14 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Stack`            | `gap="none\|xs\|sm\|md\|lg\|xl"` and `align="start\|center\|end\|stretch"`.                                                                       |
 | `Row`              | `gap`, `align`, and `justify="start\|center\|end\|between"`; a direct record collection derives a master pane while remaining content dominates. |
 | `Panel`            | Optional `title`, `eyebrow`, `surface="plain\|filled\|outlined"`, and `status="done\|attention\|waiting\|blocked"`; defaults to a plain, unboxed region.        |
-| `Group`            | A run of loose controls that travels together as one item of a `Row`; two of them inside `<Row justify="between">` anchor one set at the start and the other at the end. Inside a `Row` it may not hold a `Panel`, `Stack`, `Row`, `Center`, or `Rail` - a pane is a direct child of its row. Optional `gap` and `align`. |
+| `Group`            | A run of loose controls that travels together as one item of a `Row`; two of them inside `<Row justify="between">` anchor one set at the start and the other at the end. It may not hold a `Panel`, `Stack`, `Row`, `Center`, or `Rail` anywhere - a pane is a direct child of a `Row`. Optional `gap` and `align`. |
 | `Overlay`          | A surface drawn over the page. Optional `title`, `kind="dialog\|alert"`, and `backdrop="dim\|clear"`; holds any drawing elements; valid only directly in `Screen`.                              |
 | `Rail`             | The only secondary-width primitive; owns a readable fixed width and wraps rather than squeezing the primary pane.                            |
 | `Center`           | `measure="narrow\|prose\|wide"` for horizontally centered, bounded content; as the only direct child of a screen canvas or desktop `AppContent`, it also fills the available height and centers its content vertically. |
 | `AppShell`         | Holds only `Sidebar`, optional `TopBar`, and `AppContent`; unavailable on phone.                                                           |
 | `Sidebar`          | Optional `brand` and `mode`; valid only directly in `AppShell`.                                                                           |
 | `AppContent`       | Main product region; valid only directly in `AppShell`.                                                                                   |
-| `TopBar`           | Optional `title`; valid in `AppShell`, `Screen`, or `Stack`. Title and any `Group` children lead; loose children trail.                     |
+| `TopBar`           | Optional `title`; valid in `AppShell`, `Screen`, or `Stack`. A `Group` written first leads, before the title; every later child trails.     |
 | `BottomBar`        | Phone tab strip; valid in `Screen` or `Stack`.                                                                                            |
 | `PageHeader`       | Required `title`, optional `description` and `badge`.                                                                                      |
 | `SegmentedControl` | Holds only `Button` children; mark its selected mode with `emphasis="primary"`.                                                          |
