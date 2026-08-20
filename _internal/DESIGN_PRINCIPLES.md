@@ -181,12 +181,12 @@ Rules:
 4. **Colour is never the only signal.**
    Anywhere colour carries meaning - a diff side, a status, a recommendation - an icon, a word, or a weight carries it too.
    A reader who cannot see the difference still gets the plan.
-5. **Every pairing meets WCAG AA, and every control boundary meets WCAG 1.4.11.**
-   Text on its ground clears 4.5:1; the edge that tells a reader where a control is, and the firmer edge that says it is under the pointer or open, clear 3:1 against every ground they appear on.
+5. **Every text pairing meets WCAG AA, and every shape-dependent control boundary meets WCAG 1.4.11.**
+   Text on its ground clears 4.5:1; a general control edge that tells a reader where a control is, and its firmer edge under the pointer or while open, clear 3:1 against every ground they appear on.
    Every colour theme in both light and dark appearances, every change.
    When white on a colour fails, flip to dark text on a light tint of that colour.
    Pick the edge closest to its band that still clears the floor - darker in the light half, lighter in the dark one: a boundary is a hairline that happens to be legible, not a rule drawn for its own sake.
-   BIG-214 is the explicit product exception: in light mode, the labeled Agent Status and Feedback controls use subtle `review-panel-edge` values because their shape does not rely on the boundary alone.
+   BIG-214 is the explicit product exception: in light mode, the labeled Agent Status and Feedback controls use subtle `review-panel-edge` values with a 1.4:1 product-distinction floor because their shape does not rely on the boundary alone.
    In dark mode, those roles use the general 3:1 toolbar edges that the captain prefers.
 6. **Accent is scarce.**
    One accent per surface.
