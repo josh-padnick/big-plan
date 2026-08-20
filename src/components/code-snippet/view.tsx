@@ -20,13 +20,13 @@ import { INFO_ICON } from "../../icons/lucide/info.js";
 // /* off-scale */ Phase A preserves the legacy header/body radii, 0.6rem
 // body padding, and annotation-rail width exactly for the zero-pixel contract.
 const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
-  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-1 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1 text-xs">
+  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-1 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
     {filePath === undefined ? (
       <span className="code-snippet-label text-xs font-semibold text-muted">
         Code snippet
       </span>
     ) : (
-      <FileIdentity filePath={filePath} />
+      <FileIdentity filePath={filePath} size="compact" />
     )}
     <span className="code-snippet-controls flex shrink-0 items-center gap-1">
       <span className="figure-action-group inline-flex items-center gap-1">
