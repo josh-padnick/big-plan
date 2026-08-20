@@ -135,7 +135,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(cancel).toHaveCSS("padding-left", "8px");
   await expect(cancel).toHaveCSS("padding-top", "4px");
   await expect(cancel).toHaveCSS("border-top-width", "1px");
-  await expect(submit).toBeDisabled();
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
   await expect(submit).toHaveCSS("padding-left", "8px");
   await expect(submit).toHaveCSS("font-size", "11px");
   await expect(submit).toHaveCSS("background-color", "rgb(239, 236, 227)");
@@ -168,7 +168,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await input.fill(
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
-  await expect(submit).toBeEnabled();
+  await expect(submit).toHaveAttribute("aria-disabled", "false");
   const shortcutTooltip = page.getByRole("tooltip").last();
   // Park the pointer clear of the composer first. The shortcut hangs off the
   // action's wrapper, so a pointer that the scrolling above already left
@@ -672,19 +672,25 @@ test("should remember the submit-right-away choice across new composers", async 
   await help.blur();
   await expect(helpTooltip).toHaveCount(0);
 
-  // The primary action is disabled until the comment has a body, and that is
-  // exactly when a reader is most likely to ask what it wants. A disabled
-  // button swallows pointer events, so this only holds while the tooltip is
-  // anchored to the wrapper rather than to the button itself.
   const submit = composer.getByRole("button", { name: "Submit Now" });
-  await expect(submit).toBeDisabled();
+  const cancel = composer.getByRole("button", { name: "Cancel" });
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
   const shortcut = page.getByRole("tooltip", {
     name: /to submit this comment now/,
   });
   await expect(shortcut).toHaveCount(0);
-  // Moved rather than hovered: Playwright refuses to hover a disabled control
-  // because its wrapper intercepts the pointer, which is the very mechanism
-  // that carries the tooltip here. A real pointer move is what a reader does.
+  await help.focus();
+  await page.keyboard.press("Tab");
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(submit).toBeFocused();
+  await expect(shortcut).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(composer).toBeVisible();
+  await expect(composer.getByLabel("Add a comment")).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(shortcut).toHaveCount(0);
+  await expect(composer).toBeVisible();
   await hoverCentre(page, submit);
   await expect(shortcut).toBeVisible();
 
@@ -697,7 +703,6 @@ test("should remember the submit-right-away choice across new composers", async 
   );
   await expect(shortcut.locator("kbd")).toHaveText(modifierKeys);
 
-  const cancel = composer.getByRole("button", { name: "Cancel" });
   const escapeHint = page.getByRole("tooltip", {
     name: /to close without adding/,
   });
@@ -775,7 +780,7 @@ test("should dismiss composer tooltips before closing a typed comment", async ({
   const submitTooltip = page.getByRole("tooltip", {
     name: /to submit this comment now/,
   });
-  await expect(submit).toBeDisabled();
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
   await hoverCentre(page, submit);
   await expect(submitTooltip).toBeVisible();
   await page.keyboard.press("Escape");

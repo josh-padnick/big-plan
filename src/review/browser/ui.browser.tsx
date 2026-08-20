@@ -479,7 +479,7 @@ export const Tooltip = ({
     },
     [],
   );
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (position === null) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;

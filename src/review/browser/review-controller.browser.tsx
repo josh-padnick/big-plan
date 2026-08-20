@@ -2247,10 +2247,9 @@ const CommentComposer = ({
       cancelAnimationFrame(frame);
     };
   }, [compose.left, compose.top, inline]);
-  const save = () =>
-    body.trim() !== "" &&
-    (!submitRightAway || canSubmitRightAway) &&
-    onSave(body.trim(), submitRightAway);
+  const canSave =
+    body.trim() !== "" && (!submitRightAway || canSubmitRightAway);
+  const save = () => canSave && onSave(body.trim(), submitRightAway);
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -2333,12 +2332,11 @@ const CommentComposer = ({
             helper text under the field: the same two facts, told where the
             reader is already looking at the control they apply to.
 
-            Neither tooltip hangs off the button directly. A disabled button
-            swallows pointer events, so a tooltip anchored to it goes quiet
-            exactly when a reader is most likely to ask why the button will not
-            respond; anchoring to the wrapper keeps the answer available, and
-            Button's own `disabled:pointer-events-none` is what lets the hover
-            through to it.
+            Neither tooltip hangs off the button directly. An unavailable
+            button ignores pointer events, so a tooltip anchored to it goes
+            quiet exactly when a reader is most likely to ask why the button
+            will not respond; anchoring to the wrapper keeps the answer
+            available while the button itself remains in the keyboard order.
           */}
           <div className="mt-2 flex items-center justify-end gap-1">
             <Tooltip
@@ -2361,9 +2359,8 @@ const CommentComposer = ({
             >
               <Button
                 size="micro"
-                disabled={
-                  body.trim() === "" || (submitRightAway && !canSubmitRightAway)
-                }
+                className="aria-disabled:pointer-events-none aria-disabled:border-edge aria-disabled:bg-surface aria-disabled:text-subtle aria-disabled:opacity-100 aria-disabled:shadow-none"
+                aria-disabled={!canSave}
                 onClick={save}
               >
                 {submitRightAway ? "Submit Now" : "Add Comment"}
