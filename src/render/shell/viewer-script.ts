@@ -276,7 +276,20 @@ const installColumnPointerReorder = ({
 let applyScrollSpy = () => {};
 let pendingDesktopTocNavigation = null;
 const wiredDesktopTocNavigationLinks = new WeakSet();
+addEventListener("scrollend", () => {
+  const navigation = pendingDesktopTocNavigation;
+  if (navigation === null) return;
+  requestAnimationFrame(() => {
+    if (pendingDesktopTocNavigation === navigation)
+      pendingDesktopTocNavigation = null;
+  });
+});
 const wireScrollSpy = () => {
+  if (
+    pendingDesktopTocNavigation !== null &&
+    !pendingDesktopTocNavigation.list.isConnected
+  )
+    pendingDesktopTocNavigation = null;
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
   const overviewLinks = Array.from(
     document.querySelectorAll("[data-overview-link]"),
@@ -301,7 +314,19 @@ const wireScrollSpy = () => {
     )
       continue;
     wiredDesktopTocNavigationLinks.add(link);
-    link.addEventListener("click", () => {
+    link.addEventListener("click", (event) => {
+      const target = link.getAttribute("target");
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        link.hasAttribute("download") ||
+        (target !== null && target.toLowerCase() !== "_self")
+      )
+        return;
       const list = link.closest("[data-desktop-toc-list]");
       if (!(list instanceof HTMLElement)) return;
       if (link.getAttribute("aria-current") === "true") {
@@ -311,9 +336,6 @@ const wireScrollSpy = () => {
       pendingDesktopTocNavigation = {
         list,
         scrollTop: list.scrollTop,
-        targetId: decodeURIComponent(
-          (link.getAttribute("href") || "").slice(1),
-        ),
       };
     });
   }
@@ -364,8 +386,6 @@ const wireScrollSpy = () => {
       pendingDesktopTocNavigation.list === list
     ) {
       list.scrollTop = pendingDesktopTocNavigation.scrollTop;
-      if (heading.id === pendingDesktopTocNavigation.targetId)
-        pendingDesktopTocNavigation = null;
       return;
     }
     const linkRect = link.getBoundingClientRect();

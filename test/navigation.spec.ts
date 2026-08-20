@@ -215,6 +215,30 @@ test("should keep a long desktop TOC usable while the plan scrolls", async ({
     const lastLink = toc.getByRole("link", {
       name: "Sustainability section 35",
     });
+    const navigationSamplesPromise = list.evaluate((node) => {
+      return new Promise<{
+        readonly samples: ReadonlyArray<number>;
+        readonly scrollEvents: number;
+      }>((resolve) => {
+        const samples = [node.scrollTop];
+        let scrollEvents = 0;
+        let frame = 0;
+        const sample = () => {
+          samples.push(node.scrollTop);
+          frame = requestAnimationFrame(sample);
+        };
+        const finish = () => {
+          cancelAnimationFrame(frame);
+          samples.push(node.scrollTop);
+          resolve({ samples, scrollEvents });
+        };
+        window.addEventListener("scroll", () => {
+          scrollEvents += 1;
+        });
+        window.addEventListener("scrollend", finish, { once: true });
+        frame = requestAnimationFrame(sample);
+      });
+    });
     await lastLink.click();
     await expect(page).toHaveURL(/#sustainability-section-35$/);
     await expect(
@@ -223,9 +247,74 @@ test("should keep a long desktop TOC usable while the plan scrolls", async ({
         name: "Sustainability section 35",
       }),
     ).toBeInViewport();
+    const navigation = await navigationSamplesPromise;
+    expect(navigation.scrollEvents).toBeGreaterThan(1);
+    expect(navigation.samples.length).toBeGreaterThan(2);
+    expect(new Set(navigation.samples)).toEqual(new Set([listScrollBefore]));
+  });
+
+  await test.step("active-entry reveal resumes after distant navigation", async () => {
+    const listScrollBefore = await list.evaluate((node) => node.scrollTop);
+    await page
+      .getByRole("heading", {
+        level: 2,
+        name: "Sustainability section 01",
+      })
+      .evaluate((node) => node.scrollIntoView({ behavior: "instant" }));
+    const firstLink = toc.getByRole("link", {
+      name: "Sustainability section 01",
+    });
+    await expect(firstLink).toHaveAttribute("aria-current", "true");
     await expect
       .poll(() => list.evaluate((node) => node.scrollTop))
-      .toBe(listScrollBefore);
+      .toBeLessThan(listScrollBefore);
+    await expect(firstLink).toBeInViewport();
+  });
+
+  await test.step("modified and new-context clicks do not suppress tracking", async () => {
+    const distantLink = toc.getByRole("link", {
+      name: "Sustainability section 30",
+    });
+    await list.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    const modifiedPagePromise = page.context().waitForEvent("page");
+    await distantLink.click({ modifiers: ["ControlOrMeta"] });
+    const modifiedPage = await modifiedPagePromise;
+    await modifiedPage.close();
+
+    await page
+      .getByRole("heading", {
+        level: 2,
+        name: "Sustainability section 02",
+      })
+      .evaluate((node) => node.scrollIntoView({ behavior: "instant" }));
+    const secondLink = toc.getByRole("link", {
+      name: "Sustainability section 02",
+    });
+    await expect(secondLink).toHaveAttribute("aria-current", "true");
+    await expect(secondLink).toBeInViewport();
+
+    await list.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    await distantLink.evaluate((node) => node.setAttribute("target", "_blank"));
+    const targetPagePromise = page.context().waitForEvent("page");
+    await distantLink.click();
+    const targetPage = await targetPagePromise;
+    await targetPage.close();
+
+    await page
+      .getByRole("heading", {
+        level: 2,
+        name: "Sustainability section 03",
+      })
+      .evaluate((node) => node.scrollIntoView({ behavior: "instant" }));
+    const thirdLink = toc.getByRole("link", {
+      name: "Sustainability section 03",
+    });
+    await expect(thirdLink).toHaveAttribute("aria-current", "true");
+    await expect(thirdLink).toBeInViewport();
   });
 
   await test.step("the current section remains visible as reading advances", async () => {
