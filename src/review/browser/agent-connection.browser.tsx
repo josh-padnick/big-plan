@@ -407,9 +407,16 @@ const DisconnectAgentControl = ({
       <AlertDialog
         open={isConfirming}
         title="Disconnect this agent?"
+        /* The destructive copy names the claim, never the agent's health.
+           `agentDisconnectDropsWork` is true for working, stalled AND errored,
+           because it is the live claim that costs something rather than how
+           well its holder is doing. Wording that said the agent was answering
+           right now asserted a state the card directly above it denied - it
+           reads "Agent may be stalled" - so this says the one thing true in all
+           three, and cannot drift out of step with that headline again. */
         description={
           dropsWork
-            ? "The agent is answering right now. Disconnecting tells it to stop, and the answer it has in flight is dropped rather than delivered. Your comments and questions stay where they are, and the next agent you connect picks them up."
+            ? "This agent is holding work on this review. Disconnecting tells it to stop, and the answer it has in flight is dropped rather than delivered. Your comments and questions stay where they are, and the next agent you connect picks them up."
             : "The agent is told to end its session, and the review is free for a different agent to connect. Your comments and questions stay where they are."
         }
         actionLabel="Disconnect agent"
