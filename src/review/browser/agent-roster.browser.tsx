@@ -111,7 +111,7 @@ const PrimacyRequestCard = ({
   readonly onAnswer: AgentRosterProps["onAnswer"];
 }) => (
   <article
-    className="grid min-w-0 gap-2 rounded-lg border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] p-3"
+    className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] p-3"
     data-review-agent-card="request"
   >
     <h3 className="m-0 flex min-w-0 items-center gap-1.5 text-sm text-ink [&>span>svg]:size-3.5">
@@ -130,8 +130,8 @@ const PrimacyRequestCard = ({
         This session is read-only, so it cannot answer for the plan.
       </p>
     ) : (
-      <div className="grid gap-2">
-        <div className="grid gap-1">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
           <Button
             variant="default"
             size="sm"
@@ -150,7 +150,7 @@ const PrimacyRequestCard = ({
             }
           />
         </div>
-        <div className="grid gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
           <Button
             variant="secondary"
             size="sm"
@@ -163,7 +163,7 @@ const PrimacyRequestCard = ({
           </Button>
           <ConsequenceNote text="It keeps reading this review and cannot answer you." />
         </div>
-        <div className="grid gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
           <Button
             variant="ghost"
             size="sm"
@@ -196,7 +196,7 @@ const AgentCard = ({
   readonly onAnswer: AgentRosterProps["onAnswer"];
 }) => (
   <article
-    className="grid min-w-0 gap-1.5 rounded-lg border border-edge bg-raised p-3"
+    className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg border border-edge bg-raised p-3"
     data-review-agent-card={isPrimary ? "primary" : "observer"}
   >
     <p className="m-0 flex items-center gap-1.5 text-2xs font-semibold tracking-caps text-muted uppercase [&>span>svg]:size-3">
@@ -319,7 +319,10 @@ export const AgentRoster = ({
   } = readAgentRosterFor({ agents, nowMs });
   if (!isShown) return null;
   return (
-    <section className="grid min-w-0 gap-2" data-review-agent-roster="">
+    <section
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2"
+      data-review-agent-roster=""
+    >
       {requesting === undefined ? null : (
         <PrimacyRequestCard
           agent={requesting}
@@ -392,7 +395,7 @@ export const PrimacyHandoffDialog = ({
       <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
         What happens
       </p>
-      <ul className="m-0 grid list-disc gap-1 pl-4 text-xs text-ink marker:text-muted">
+      <ul className="m-0 grid grid-cols-[minmax(0,1fr)] list-disc gap-1 pl-4 text-xs text-ink marker:text-muted">
         <li>
           {agentModelLabel(agent)} answers the open comment and every comment
           after it.

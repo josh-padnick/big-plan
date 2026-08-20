@@ -271,8 +271,8 @@ export const agentCommand = async (
       error.message,
       code,
       error.details.length === 0 &&
-      error.code !== "agent-disconnected" &&
-      error.code !== "primacy-lost"
+        error.code !== "agent-disconnected" &&
+        error.code !== "primacy-lost"
         ? [USAGE]
         : [...error.details],
     );
