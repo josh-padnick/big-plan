@@ -776,6 +776,7 @@ test("should dismiss composer tooltips before closing a typed comment", async ({
     name: /to submit this comment now/,
   });
   await expect(submit).toHaveAttribute("aria-disabled", "true");
+  await settled(submit);
   await hoverCentre(page, submit);
   await expect(submitTooltip).toBeVisible();
   await page.keyboard.press("Escape");
