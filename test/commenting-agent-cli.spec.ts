@@ -15,7 +15,9 @@ import { startReviewRuntime } from "../src/review/server.js";
 import {
   grantAgentPrimacy,
   readProgress,
+  readStoreJson,
   writeAgentRequestValue,
+  writeStoreJson,
 } from "../src/review/store.js";
 import { releaseClaimsForPrimacyHandoff } from "../src/review/request-mailbox.js";
 import {
@@ -365,11 +367,13 @@ test("should report a quiet working agent as stalled rather than disconnected", 
   }
 });
 
-// BIG-147. Agent Status's recovery section is always on screen, so its copy is
-// the only thing between a reviewer and an adr/0002 takeover of an agent that is
-// still working. This drives the harm itself through the real CLI: the takeover
-// displaces the working agent, whose finished answer is then refused.
-test("should warn about a takeover before inviting one while work is held", async ({
+// BIG-147, then BIG-171. Agent Status's connect section is always on screen, so
+// its copy is the only thing telling a reviewer what a second agent will do to
+// the one already here. The copy is gated on the roster rather than on held
+// work now, so this drives both halves through the real CLI: which wording each
+// state of the roster earns, and then the displacement itself - the reviewer
+// moves the primary, and the first agent's finished answer is refused.
+test("should say what connecting a second agent does while one is attached", async ({
   page,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-held-"));
@@ -387,7 +391,7 @@ test("should warn about a takeover before inviting one while work is held", asyn
   const plainRecovery = page.getByText("Reconnect your agent", {
     exact: true,
   });
-  const takeoverRecovery = page.getByText("Connect a new agent", {
+  const joiningRecovery = page.getByText("Connect another agent", {
     exact: true,
   });
   // The agent surface has its own control in viewer chrome now; it is no longer
@@ -423,6 +427,50 @@ test("should warn about a takeover before inviting one while work is held", asyn
       },
     });
     await rm(runtime.store.agentHeartbeatPath, { force: true });
+    /*
+    The roster is aged in step with the claim, because it is the same silence.
+
+    What this helper simulates is wall-clock quiet, and every record of the
+    agent has to age together or the surfaces disagree about whether anyone is
+    there. The connect section is gated on roster membership now (BIG-171), so
+    a roster left at the present moment would report an attached agent through
+    a silence long enough for every other surface to have given up on it.
+    */
+    const roster = await readStoreJson(runtime.store.agentRosterPath);
+    if (
+      typeof roster === "object" &&
+      roster !== null &&
+      !Array.isArray(roster)
+    ) {
+      const document = roster as Record<string, unknown>;
+      const agents = Array.isArray(document["agents"])
+        ? document["agents"]
+        : [];
+      // Set, never decremented: this helper is called several times in one
+      // journey and each call states how long ago the agent was last heard
+      // from, exactly as the claim expiry above does. Subtracting instead
+      // accumulated every earlier silence into the next one.
+      const lastHeardFrom = Date.now() - quietForMs;
+      await writeStoreJson({
+        path: runtime.store.agentRosterPath,
+        value: {
+          ...document,
+          agents: agents.map((agent: unknown) => {
+            if (typeof agent !== "object" || agent === null) return agent;
+            const record = agent as Record<string, unknown>;
+            return {
+              ...record,
+              signalAtMs: lastHeardFrom,
+              // A finished turn ages with the signal that ended it, so a
+              // record between two turns leaves on the same schedule.
+              ...(typeof record["claimClosedAtMs"] === "number"
+                ? { claimClosedAtMs: lastHeardFrom }
+                : {}),
+            };
+          }),
+        },
+      });
+    }
   };
 
   try {
@@ -461,30 +509,37 @@ test("should warn about a takeover before inviting one while work is held", asyn
     await expect(
       agentSidebar(page).locator("[data-review-current-activity]"),
     ).toHaveAttribute("data-review-current-activity", "stalled");
-    // The claim explains the quiet, so the section is present but warns before
-    // the reviewer copies anything.
-    await expect(takeoverRecovery).toBeVisible();
+    // The agent is still on the roster, so the section says what connecting a
+    // second one would actually do before the reviewer copies anything.
+    await expect(joiningRecovery).toBeVisible();
     await expect(plainRecovery).toHaveCount(0);
     await expect(recoveryPanel).toHaveAttribute(
       "data-review-agent-recovery",
-      "takeover",
+      "joining",
     );
-    await takeoverRecovery.click();
-    await expect(recoveryPanel).toContainText("may still be working on it");
-    // The consequence has to be stated, and stated as the mailbox behaves: a
-    // displaced holder's response is refused, so its work is dropped.
-    await expect(recoveryPanel).toContainText("dropped rather than delivered");
+    await joiningRecovery.click();
+    await expect(recoveryPanel).toContainText("joins as an observer");
+    /*
+    The consequence has to be stated as the code behaves. Connecting displaces
+    nobody: the attached agent keeps answering until the reviewer moves the
+    primary, which is the sentence the old takeover copy got backwards
+    (BIG-171).
+    */
+    await expect(recoveryPanel).toContainText(
+      "unless you make the new agent the primary",
+    );
 
     await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS - 60_000);
     await openAgentTab();
-    await expect(takeoverRecovery).toBeVisible();
+    await expect(joiningRecovery).toBeVisible();
 
     // Matrix case 4. Nothing reaps a claim, so past the recovery horizon the
-    // pickup stops explaining the quiet: the card falls out of stalled and the
-    // section drops the takeover warning for the plain recovery instruction.
+    // pickup stops explaining the quiet: the card falls out of stalled, the
+    // roster stops counting the agent as here, and the section drops the
+    // joining copy for the plain recovery instruction.
     await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS + 60_000);
     await openAgentTab();
-    await expect(takeoverRecovery).toHaveCount(0);
+    await expect(joiningRecovery).toHaveCount(0);
     await expect(plainRecovery).toBeVisible();
     await expect(recoveryPanel).toHaveAttribute(
       "data-review-agent-recovery",
@@ -498,11 +553,11 @@ test("should warn about a takeover before inviting one while work is held", asyn
       agentSidebar(page).locator("[data-review-current-activity]"),
     ).toHaveAttribute("data-review-current-activity", "disconnected");
 
-    // Back inside the horizon the pickup explains the quiet again, so the
-    // warning returns.
+    // Back inside the horizon the roster counts the agent as here again, so the
+    // section returns to describing what a second agent joining would do.
     await goQuiet(requestId);
     await openAgentTab();
-    await expect(takeoverRecovery).toBeVisible();
+    await expect(joiningRecovery).toBeVisible();
     await expect(plainRecovery).toHaveCount(0);
 
     /*
@@ -560,8 +615,8 @@ test("should warn about a takeover before inviting one while work is held", asyn
       }),
     ).resolves.toMatchObject({ responses: [] });
 
-    // The advice returns as soon as nobody is holding work, because then the
-    // quiet really is all the evidence there is.
+    // The plain instruction returns once the roster has nobody left on it,
+    // because then the quiet really is all the evidence there is.
     const takeoverAgent = agentIdOf(takeover.stdout, "agent_token");
     await writeFile(
       takeoverDraft,
@@ -578,11 +633,11 @@ test("should warn about a takeover before inviting one while work is held", asyn
       "--agent",
       takeoverAgent,
     ]);
-    await rm(runtime.store.agentHeartbeatPath, { force: true });
+    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS + 60_000);
 
     await openAgentTab();
     await expect(plainRecovery).toBeVisible();
-    await expect(takeoverRecovery).toHaveCount(0);
+    await expect(joiningRecovery).toHaveCount(0);
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
