@@ -164,6 +164,29 @@ const RULES = [
   },
 ];
 
+// Combinations the scales cannot catch one token at a time. A type step ships
+// its own line height, and `truncate` clips at the line box, so a tighter
+// leading turns a clipping container into a descender guillotine: the g, j, p,
+// q and y of an ordinary title are sliced flat and nothing errors. The type
+// step's own line height is the fix, so the pair is refused rather than the
+// utility. These run ahead of the approved-metric marker below and ignore it:
+// the marker licenses a value the captain approved over the scale, and clipped
+// text is a defect nobody approves. Matching is line-scoped, so a class list
+// Prettier wrapped across lines, or one assembled from two constants, still
+// reproduces the clipping without tripping the guard; widening it to whole
+// files is deliberately out of scope.
+const PAIR_RULES = [
+  {
+    name: "clipped leading",
+    parts: [
+      /(?<![a-zA-Z0-9-])truncate(?![a-zA-Z0-9-])/,
+      /(?<![a-zA-Z0-9-])leading-none(?![a-zA-Z0-9-])/,
+    ],
+    advice:
+      'a clipping container ("truncate") plus "leading-none" cuts the descenders off its own text; drop the leading and let the type step\'s line height stand',
+  },
+];
+
 const ARTBOARD_RAMP_STYLESHEET = "components/wireframe/styles.css";
 
 const ARTBOARD_DEVICES = [
@@ -563,7 +586,19 @@ export const checkDesignSystem = async ({
     lines.forEach((line, index) => {
       const trimmed = line.trim();
       const isComment =
-        trimmed === "" || trimmed.startsWith("//") || trimmed.startsWith("*");
+        trimmed === "" ||
+        trimmed.startsWith("//") ||
+        trimmed.startsWith("/*") ||
+        trimmed.startsWith("*");
+      if (!isComment) {
+        for (const rule of PAIR_RULES) {
+          if (rule.parts.every((part) => part.test(line))) {
+            failures.push(
+              `${relative(resolve(sourceRoot, ".."), module)}:${index + 1}: ${rule.name}; ${rule.advice}`,
+            );
+          }
+        }
+      }
       if (line.includes(APPROVED_MARKER)) {
         markerReach = APPROVED_MARKER_REACH;
         return;

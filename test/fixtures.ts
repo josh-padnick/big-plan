@@ -51,6 +51,7 @@ type WorkerFixtures = {
   readonly nestedWeightedDecisionAnalysisViewerUrl: string;
   readonly deckViewerUrl: string;
   readonly decisionViewerUrl: string;
+  readonly descenderTitleViewerUrl: string;
   readonly nestedDecisionMatrixViewerUrl: string;
   readonly flowDiagramViewerUrl: string;
   readonly mermaidDiagramViewerUrl: string;
@@ -353,6 +354,21 @@ const REVIEW_RUNTIME_SCROLL_TAIL = Array.from(
     `Following context ${index + 1} leaves enough document below the target to align it at the top.`,
 ).join("\n\n");
 
+// A title whose every descender class is represented - g, y, p and q - so the
+// toolbar's clipping container is measured against the glyphs it has to draw.
+const DESCENDER_TITLE_MDX = `# Paging quality: agent typography guardrails
+
+The toolbar shows this title in italic, truncated to the width it is given.
+
+## Background
+
+Descenders are the part of a glyph that hangs below the baseline.
+
+## Approach
+
+The clipping container keeps the leading its type step ships.
+`;
+
 const REVIEW_RUNTIME_MDX = `# Review persistence
 
 Keep every reviewer note safe while the plan is discussed.
@@ -423,6 +439,20 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       }
     },
     { scope: "test" },
+  ],
+  descenderTitleViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-descender-title-"),
+      );
+      const inputPath = join(outputDir, "descender-title.mdx");
+      const outputPath = join(outputDir, "descender-title.html");
+      await writeFile(inputPath, DESCENDER_TITLE_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
   ],
   annotationCodeViewerUrl: [
     async ({}, use) => {

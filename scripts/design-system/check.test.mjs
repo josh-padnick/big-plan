@@ -54,6 +54,63 @@ test("rejects a spacing step that is not on the scale", async () => {
   assert.match(result.output, /off-scale spacing "px-5"/);
 });
 
+test("rejects a clipping container that also tightens its leading", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      'export const V = () => <p className="truncate text-sm leading-none" />;\n',
+  });
+  assert.equal(result.failed, true);
+  assert.match(result.output, /clipped leading/);
+});
+
+test("accepts a clipping container that keeps its type step's leading", async () => {
+  const result = await runAgainst({
+    "view.tsx": 'export const V = () => <p className="truncate text-sm" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
+test("accepts a comment that names the clipping pair it warns against", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      '// The title uses truncate, so never add leading-none - it slices the descenders.\nexport const V = () => <p className="truncate text-sm" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
+test("accepts a block comment that names the clipping pair it warns against", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      '/** The title uses truncate, so never add leading-none - it slices descenders. */\nexport const V = () => <p className="truncate text-sm" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
+test("accepts a block comment continuation that names the clipping pair", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      '/**\n * The title uses truncate, so never add leading-none - it slices descenders.\n */\nexport const V = () => <p className="truncate text-sm" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
+test("rejects a clipped leading even under an approved-metric marker", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      '// approved-metric: the bar height the captain signed off on.\nexport const V = () => <p className="truncate text-sm leading-none" />;\n',
+  });
+  assert.equal(result.failed, true);
+  assert.match(result.output, /clipped leading/);
+});
+
+test("keeps the approved-metric marker's licence over the value scales", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      '// approved-metric: the bar height the captain signed off on.\nexport const V = () => <p className="px-5" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
 test("rejects an invented shadow and radius", async () => {
   const result = await runAgainst({
     "view.tsx":

@@ -58,7 +58,12 @@ export const STYLESHEET_BUDGETS = {
   "src/components/flow-diagram/styles.css": { declarations: 467 },
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },
   "src/components/wireframe/styles.css": { declarations: 1012 },
-  "src/render/global.css": { declarations: 508 },
+  "src/render/global.css": {
+    // Bought for the toolbar band: its own ground, the lift a control on it
+    // takes under the pointer, and the two edges its controls take, plus the
+    // chrome-neutral ramp steps every palette has to declare for them.
+    declarations: 529,
+  },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },
   "src/render/markdown/syntax-highlighting.css": { declarations: 71 },

@@ -1,9 +1,12 @@
 // Enforces the colour-theme contract described in _internal/DESIGN_PRINCIPLES.md: a
 // palette is a set of shade ramps behind one shared role mapping, so every
-// palette must supply every ramp step the roles reach, and every text pairing a
-// document can produce must meet WCAG AA in that palette's light and dark half.
+// palette must supply every shade the roles reach, its chrome shades must run
+// in the order their names claim, every text pairing a document can produce
+// must meet WCAG AA in that palette's light and dark half, and every control
+// boundary on a chrome band must meet the WCAG 1.4.11 non-text floor in both
+// halves too.
 //
-// This check owns the exact required pairings and the exact contrast floor;
+// This check owns the exact required pairings and the exact contrast floors;
 // DESIGN_PRINCIPLES.md owns why colour is expressed as roles over ramps. The
 // palette id list is authored in src/render/preference-options.js and
 // re-exported by src/render/preferences.ts for application consumers. A palette
@@ -27,7 +30,8 @@ const SYNTAX_CSS = resolve(
 );
 
 // The ramp namespaces a palette owns. A role may only reach a shade through one
-// of these, which is what makes "a palette is its ramps" a complete statement.
+// of these, plus the named chrome shades below, which is what makes "a palette
+// is its shades" a complete statement.
 const RAMP_NAMESPACES = [
   "grey",
   "primary",
@@ -42,6 +46,37 @@ const RAMP_NAMESPACES = [
 const RAMP_STEP_PATTERN = new RegExp(
   `^(?:${RAMP_NAMESPACES.join("|")})-[0-9]+$`,
 );
+
+// The chrome shades a palette declares by name rather than by ramp position.
+// A ramp number is a lightness position, lowest lightest, and the dark half of
+// the chrome ladder cannot honour that: its band is the darkest shade and its
+// control edge the lightest, so the ladder climbs where the numbers descend.
+// Naming them keeps every numeric step a lightness position. src/render/global.css
+// states the ladder; CHROME_DARK_LADDER below is the executable form of it.
+const CHROME_DARK_SHADES = [
+  "chrome-dark-band",
+  "chrome-dark-lift",
+  "chrome-dark-edge",
+  "chrome-dark-edge-strong",
+];
+
+const CHROME_SHADE_PATTERN = new RegExp(
+  `^(?:${CHROME_DARK_SHADES.join("|")})$`,
+);
+
+// The dark chrome ladder, darkest first. A lift that does not lift, or an edge
+// that sinks under the band it bounds, is the palette-conditional defect this
+// order exists to refuse: it fails silently, because every shade on its own
+// still looks like a plausible chrome grey.
+const CHROME_DARK_LADDER = CHROME_DARK_SHADES;
+
+// Ramps whose numbers a palette must keep as a lightness ladder, lowest
+// lightest. Only the chrome ramp qualifies today: the reading ramps park role
+// anchors at fixed numbers rather than ladder positions - --grey-150 carries
+// the dark half's ink, and the brutalist palette hangs its hard structural
+// edge on --grey-200, --grey-250, --grey-750 and --grey-800 - so their numbers
+// have never been a lightness order and this check does not pretend otherwise.
+const LADDER_RAMPS = ["neutral"];
 
 // What a palette block is allowed to say, beyond its ramps. A theme is its
 // shades; the shape scales are open to it because a stark reading surface is a
@@ -67,20 +102,40 @@ const COMMENT_SURFACE_TOKEN_PATTERN = /^comment-[a-z]+-c$/;
 // text allowance never applies: a plan is read at reading size.
 const CONTRAST_FLOOR = 4.5;
 
+// WCAG 1.4.11 for non-text contrast: the boundary that tells a reader where a
+// control is, and the firmer one that says the control is under the pointer or
+// open. A boundary below this floor is a control that dissolves into its band,
+// which is how a palette silently loses a control the other palettes keep.
+const NON_TEXT_FLOOR = 3;
+
 // Reading surfaces a document can put primary or secondary text on. Tertiary
 // text is deliberately absent from the bands: _internal/DESIGN_PRINCIPLES.md holds that a
 // band carries primary or secondary text and never tertiary.
 const PAGE_GROUNDS = ["--bg", "--raised-c"];
 const BAND_GROUNDS = [
   "--surface-c",
+  "--toolbar-surface-c",
   "--tray-c",
   "--well-c",
   "--header-bg",
+  "--toolbar-bg",
   "--diff-content-bg",
   "--diff-hunk-bg",
   "--table-head-bg",
 ];
 const CODE_GROUNDS = ["--diff-hunk-bg", "--diff-content-bg"];
+
+// Control boundaries on the toolbar band, and the ground each one is seen
+// against. A control's edge is the only thing separating it from the band it
+// sits on, so it answers to the non-text floor rather than to the text one.
+// The reading surface's own hairlines are deliberately absent: they divide
+// passages of a document rather than bound a control, and 1.4.11 governs
+// controls.
+const CONTROL_EDGE_PAIRINGS = [
+  { edge: "--toolbar-edge-c", ground: "--toolbar-bg" },
+  { edge: "--toolbar-edge-strong-c", ground: "--toolbar-bg" },
+  { edge: "--toolbar-edge-strong-c", ground: "--toolbar-surface-c" },
+];
 
 const SYNTAX_TOKENS = [
   "--syntax-keyword-c",
@@ -263,6 +318,52 @@ const contrastRatio = (left, right) => {
 };
 
 /**
+ * Reads one shade's luminance the same way the contrast checks read a role:
+ * through resolveValue, so a shade written as a reference is followed rather
+ * than skipped. Returns null when it cannot be reduced to a colour at all, and
+ * the caller turns that into a failure - a rung this check cannot see is a
+ * rung it cannot vouch for.
+ */
+const shadeLuminance = ({ name, lookup, mode }) => {
+  const declared = lookup(name);
+  if (declared === undefined) return null;
+  const resolved = resolveValue({ value: declared, mode, lookup });
+  const color = resolved === null ? null : parseColor(resolved);
+  return color === null ? null : relativeLuminance(color);
+};
+
+/**
+ * Checks that a set of shades, given darkest-first or lightest-first, actually
+ * runs that way. Returns the first pair that breaks the order, so the message
+ * can name the two shades a reader has to look at rather than the whole ladder.
+ *
+ * A ladder that must climb has to climb at every rung: two shades of the same
+ * lightness are a rung that does not exist, and a lift that does not lift is
+ * the defect the ladder is here to refuse. A ramp only promises that a higher
+ * number is never lighter, so there equal steps are the palette's own business
+ * and the ramps already carry deliberate pairs of them.
+ */
+const brokenRung = (ordered, luminanceOf, direction) => {
+  let previous = null;
+  for (const name of ordered) {
+    const luminance = luminanceOf(name);
+    if (luminance === null) {
+      previous = null;
+      continue;
+    }
+    if (previous !== null) {
+      const climbs = luminance > previous.luminance + 1e-9;
+      const broken = direction === "lighter" ? !climbs : climbs;
+      if (broken) {
+        return { from: previous, to: { name, luminance } };
+      }
+    }
+    previous = { name, luminance };
+  }
+  return null;
+};
+
+/**
  * Checks one palette set and returns every failure it found, so the caller
  * decides how to report. Inputs are injectable because the test exercises the
  * contract against a throwaway palette rather than today's five.
@@ -308,6 +409,7 @@ export const checkPalettes = async ({
       .filter(
         (name) =>
           !RAMP_STEP_PATTERN.test(name) &&
+          !CHROME_SHADE_PATTERN.test(name) &&
           !PALETTE_SCALE_PATTERN.test(name) &&
           !SYNTAX_TOKEN_PATTERN.test(name) &&
           !COMMENT_SURFACE_TOKEN_PATTERN.test(name) &&
@@ -316,7 +418,7 @@ export const checkPalettes = async ({
       .sort();
     if (stray.length > 0) {
       failures.push(
-        `global.css: palette "${id}" declares ${stray.map((name) => `--${name}`).join(", ")}; a palette may declare ramp steps, syntax tokens, comment-surface tokens, the closed radius, weight, tracking, and elevation scales, and ${[...PALETTE_ROLE_EXCEPTIONS].map((name) => `--${name}`).join(", ")}`,
+        `global.css: palette "${id}" declares ${stray.map((name) => `--${name}`).join(", ")}; a palette may declare ramp steps, chrome shades, syntax tokens, comment-surface tokens, the closed radius, weight, tracking, and elevation scales, and ${[...PALETTE_ROLE_EXCEPTIONS].map((name) => `--${name}`).join(", ")}`,
       );
     }
   }
@@ -325,9 +427,13 @@ export const checkPalettes = async ({
   // palette silently borrows a shade from the default warm-grey ramp.
   const reachedSteps = new Set();
   for (const [name, value] of base) {
-    if (RAMP_STEP_PATTERN.test(name)) continue;
-    for (const [, step] of value.matchAll(/var\(--([a-z]+-[0-9]+)\)/g)) {
-      if (RAMP_STEP_PATTERN.test(step)) reachedSteps.add(step);
+    if (RAMP_STEP_PATTERN.test(name) || CHROME_SHADE_PATTERN.test(name)) {
+      continue;
+    }
+    for (const [, step] of value.matchAll(/var\(--([a-z0-9-]+)\)/g)) {
+      if (RAMP_STEP_PATTERN.test(step) || CHROME_SHADE_PATTERN.test(step)) {
+        reachedSteps.add(step);
+      }
     }
   }
   for (const id of themed) {
@@ -338,15 +444,112 @@ export const checkPalettes = async ({
       .sort();
     if (missing.length > 0) {
       failures.push(
-        `global.css: palette "${id}" is missing ramp steps the roles reach: ${missing.map((step) => `--${step}`).join(", ")}`,
+        `global.css: palette "${id}" is missing shades the roles reach: ${missing.map((step) => `--${step}`).join(", ")}`,
       );
     }
+  }
+
+  // A number in a ramp is a lightness position, and a named chrome shade is a
+  // rung on the dark ladder. Both only mean anything if they hold, and neither
+  // fails loudly: a step out of order still renders, it just quietly stops
+  // saying what its name says.
+  for (const id of paletteIds) {
+    const overrides = palettes.get(id) ?? new Map();
+    const declared = palettes.get(id) ?? base;
+    const lookup = (name) => overrides.get(name) ?? base.get(name);
+    // A shade written as light-dark() would only show one half per pass, so
+    // both are walked; a ladder that holds in both reports each failure once.
+    const reported = new Set();
+    for (const mode of ["light", "dark"]) {
+      const luminanceOf = (name) => shadeLuminance({ name, lookup, mode });
+      const rungs = [];
+      for (const namespace of LADDER_RAMPS) {
+        rungs.push(
+          [...declared.keys()]
+            .filter((name) => name.startsWith(`${namespace}-`))
+            .filter((name) => RAMP_STEP_PATTERN.test(name))
+            .sort(
+              (left, right) =>
+                Number(left.slice(namespace.length + 1)) -
+                Number(right.slice(namespace.length + 1)),
+            ),
+        );
+      }
+      for (const steps of rungs) {
+        for (const step of steps) {
+          if (luminanceOf(step) === null) {
+            reported.add(
+              `global.css: palette "${id}" could not resolve ramp step --${step} to a colour`,
+            );
+          }
+        }
+        const broken = brokenRung(steps, luminanceOf, "darker");
+        if (broken !== null) {
+          reported.add(
+            `global.css: palette "${id}" ramp --${broken.from.name} (${broken.from.luminance.toFixed(3)}) is darker than --${broken.to.name} (${broken.to.luminance.toFixed(3)}); a higher ramp number must never be lighter`,
+          );
+        }
+      }
+      // A shade the stylesheet never declares is not this check's business,
+      // the same way an undeclared role is not: the theme owns which shades
+      // exist, this check owns how the ones that exist have to behave.
+      const chromeLadder = CHROME_DARK_LADDER.filter(
+        (shade) => base.get(shade) !== undefined,
+      );
+      for (const shade of chromeLadder) {
+        if (luminanceOf(shade) === null) {
+          reported.add(
+            `global.css: palette "${id}" could not resolve chrome shade --${shade} to a colour`,
+          );
+        }
+      }
+      const brokenChrome = brokenRung(chromeLadder, luminanceOf, "lighter");
+      if (brokenChrome !== null) {
+        reported.add(
+          `global.css: palette "${id}" chrome shade --${brokenChrome.to.name} (${brokenChrome.to.luminance.toFixed(3)}) is not lighter than --${brokenChrome.from.name} (${brokenChrome.from.luminance.toFixed(3)}); the dark chrome ladder climbs from the band to its firmest edge`,
+        );
+      }
+    }
+    for (const failure of reported) failures.push(failure);
   }
 
   for (const id of paletteIds) {
     const overrides = palettes.get(id) ?? new Map();
     const lookup = (name) => overrides.get(name) ?? base.get(name);
     for (const mode of ["light", "dark"]) {
+      for (const { edge, ground } of CONTROL_EDGE_PAIRINGS) {
+        if (
+          base.get(edge.slice(2)) === undefined ||
+          base.get(ground.slice(2)) === undefined
+        ) {
+          continue;
+        }
+        const edgeValue = resolveValue({
+          value: lookup(edge.slice(2)) ?? "",
+          mode,
+          lookup,
+        });
+        const groundValue = resolveValue({
+          value: lookup(ground.slice(2)) ?? "",
+          mode,
+          lookup,
+        });
+        const edgeColor = edgeValue === null ? null : parseColor(edgeValue);
+        const groundColor =
+          groundValue === null ? null : parseColor(groundValue);
+        if (edgeColor === null || groundColor === null) {
+          failures.push(
+            `${id}/${mode}: could not resolve ${edge} on ${ground} to a colour`,
+          );
+          continue;
+        }
+        const ratio = contrastRatio(edgeColor, groundColor);
+        if (ratio < NON_TEXT_FLOOR) {
+          failures.push(
+            `${id}/${mode}: ${edge} (${edgeValue}) on ${ground} (${groundValue}) is ${ratio.toFixed(2)}:1, below the ${NON_TEXT_FLOOR}:1 WCAG 1.4.11 non-text floor`,
+          );
+        }
+      }
       for (const { ink, ground } of requiredPairings()) {
         // A role the stylesheet does not declare is not this check's business:
         // the Tailwind theme owns which roles exist, this check owns how the
@@ -395,7 +598,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { failures, paletteCount } = await checkPalettes();
   if (failures.length > 0) {
     console.error(
-      "palettes: every palette must declare every ramp step the roles reach and meet WCAG AA in both halves",
+      "palettes: every palette must declare every shade the roles reach, keep its ladders in order, meet WCAG AA on text, and meet the WCAG 1.4.11 non-text floor on control edges in both halves",
     );
     for (const failure of failures) console.error(`  ${failure}`);
     process.exitCode = 1;
