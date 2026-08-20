@@ -190,17 +190,18 @@ document painted in another and never restate a colour to preview it.
      numeric ramp a lightness position everywhere it appears; scripts/design-
      system/palettes.mjs enforces both ladders.
 
-     Both halves' edges clear the 3:1 WCAG 1.4.11 non-text floor against the
-     band and against the lift, at the lightest value that still clears it, so
-     a control on the band reads as a control without giving up the hairline. */
+     BIG-214 restores the quieter edge values the captain chose for Agent
+     Status and Feedback. Those labeled controls remain identifiable without
+     their boundary, so their edge is guarded as a subtle distinction rather
+     than as the sole 3:1 non-text cue. */
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
-  --neutral-300: #828282;
-  --neutral-400: #787878;
+  --neutral-300: #c4c4c4;
+  --neutral-400: #a9a9a9;
   --chrome-dark-band: #2b2b2b;
   --chrome-dark-lift: #424242;
-  --chrome-dark-edge: #767676;
-  --chrome-dark-edge-strong: #8f8f8f;
+  --chrome-dark-edge: #474747;
+  --chrome-dark-edge-strong: #5f5f5f;
 
   /* The one role a palette carries with its ramps; THE PALETTES says why. */
   --ink-c: light-dark(var(--grey-925), var(--grey-150));
@@ -528,12 +529,12 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #efe6de;
   --neutral-150: #e9e0d8;
-  --neutral-300: #837d78;
-  --neutral-400: #78726e;
+  --neutral-300: #c5bcb5;
+  --neutral-400: #aaa19a;
   --chrome-dark-band: #2b2740;
   --chrome-dark-lift: #423e57;
-  --chrome-dark-edge: #78709a;
-  --chrome-dark-edge-strong: #9188b9;
+  --chrome-dark-edge: #48435e;
+  --chrome-dark-edge-strong: #605b77;
 
   --ink-c: light-dark(#403a5e, var(--grey-150));
 
@@ -604,12 +605,12 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e3e7ee;
   --neutral-150: #dde1e8;
-  --neutral-300: #7b7e82;
-  --neutral-400: #707377;
+  --neutral-300: #b9bdc4;
+  --neutral-400: #9ea2a9;
   --chrome-dark-band: #39404f;
   --chrome-dark-lift: #4f5564;
-  --chrome-dark-edge: #838da4;
-  --chrome-dark-edge-strong: #9ca8c3;
+  --chrome-dark-edge: #575e6e;
+  --chrome-dark-edge-strong: #6f7787;
 
   --ink-c: light-dark(#2e3440, var(--grey-150));
 
@@ -680,12 +681,12 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e2e5ec;
   --neutral-150: #dcdfe6;
-  --neutral-300: #7a7c81;
-  --neutral-400: #707277;
+  --neutral-300: #b8bbc2;
+  --neutral-400: #9ea0a7;
   --chrome-dark-band: #2b2c3f;
   --chrome-dark-lift: #424255;
-  --chrome-dark-edge: #757695;
-  --chrome-dark-edge-strong: #8d8eb3;
+  --chrome-dark-edge: #48495d;
+  --chrome-dark-edge-strong: #606076;
 
   --ink-c: light-dark(#4c4f69, var(--grey-150));
 
@@ -757,12 +758,12 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e2ded0;
   --neutral-150: #dcd8ca;
-  --neutral-300: #7c7868;
-  --neutral-400: #716d5f;
+  --neutral-300: #b8b5a7;
+  --neutral-400: #9d9a8d;
   --chrome-dark-band: #1f1f1f;
   --chrome-dark-lift: #383838;
-  --chrome-dark-edge: #6c6c6c;
-  --chrome-dark-edge-strong: #848484;
+  --chrome-dark-edge: #3a3a3a;
+  --chrome-dark-edge-strong: #515151;
 
   --ink-c: light-dark(#0b0b09, var(--grey-150));
 

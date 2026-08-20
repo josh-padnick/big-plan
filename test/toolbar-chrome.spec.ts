@@ -11,8 +11,10 @@ import {
 } from "../src/render/preferences.js";
 import { expect, test, type Page } from "./fixtures";
 
-// WCAG 1.4.11 asks for 3:1 between a control's boundary and its ground.
-const NON_TEXT_FLOOR = 3;
+// BIG-214 makes these labeled controls intentionally subtle. This product
+// floor guards visible separation without treating the border as their only
+// identifying cue or making a WCAG 1.4.11 claim for it.
+const TOOLBAR_EDGE_CONTRAST_FLOOR = 1.4;
 
 const channel = (value: number): number => {
   const c = value / 255;
@@ -156,7 +158,7 @@ test("should give the toolbar its own band and legible control edges in every pa
         expect(
           contrastRatio(edge.color, chrome.band),
           `${where} edge on "${edge.label}" against the band`,
-        ).toBeGreaterThanOrEqual(NON_TEXT_FLOOR);
+        ).toBeGreaterThanOrEqual(TOOLBAR_EDGE_CONTRAST_FLOOR);
       }
 
       // The ground a control takes under the pointer is measured from the
@@ -188,4 +190,18 @@ test("should paint the default light toolbar the requested chrome grey", async (
   for (const band of await page.locator("[data-shell-chrome]").all()) {
     await expect(band).toHaveCSS("background-color", "rgb(232, 232, 232)");
   }
+});
+
+test("should keep the default toolbar controls on the subtle chrome edges", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const feedback = page.getByRole("button", { name: "Feedback" });
+
+  await applyTheme(page, { mode: "light", palette: "default" });
+  await expect(feedback).toHaveCSS("border-top-color", "rgb(196, 196, 196)");
+
+  await applyTheme(page, { mode: "dark", palette: "default" });
+  await expect(feedback).toHaveCSS("border-top-color", "rgb(71, 71, 71)");
 });

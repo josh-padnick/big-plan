@@ -152,12 +152,12 @@ test("rejects a palette pairing below WCAG AA", async () => {
 const CHROME_BASE_CSS = `${BASE_CSS}:root {
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
-  --neutral-300: #828282;
-  --neutral-400: #787878;
+  --neutral-300: #c4c4c4;
+  --neutral-400: #a9a9a9;
   --chrome-dark-band: #2b2b2b;
   --chrome-dark-lift: #424242;
-  --chrome-dark-edge: #767676;
-  --chrome-dark-edge-strong: #8f8f8f;
+  --chrome-dark-edge: #474747;
+  --chrome-dark-edge-strong: #5f5f5f;
   --toolbar-bg: light-dark(var(--neutral-150), var(--chrome-dark-band));
   --toolbar-edge-c: light-dark(var(--neutral-300), var(--chrome-dark-edge));
   --toolbar-edge-strong-c: light-dark(
@@ -197,29 +197,30 @@ const chromePalette = ({
 
 /** The shipped brutalist chrome shades, which clear every floor and ladder. */
 const SOUND_CHROME = {
-  n300: "#7c7868",
-  n400: "#716d5f",
+  n300: "#b8b5a7",
+  n400: "#9d9a8d",
   lift: "#383838",
-  edge: "#6c6c6c",
-  edgeStrong: "#848484",
+  edge: "#3a3a3a",
+  edgeStrong: "#515151",
 };
 
-test("rejects a control edge that dissolves into the band it sits on", async () => {
+test("rejects a toolbar edge that dissolves into its chrome grounds", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
     paletteCss: chromePalette({
       ...SOUND_CHROME,
-      n300: "#b8b5a7",
-      n400: "#9d9a8d",
-      edge: "#3a3a3a",
-      edgeStrong: "#515151",
+      n300: "#d5d1c5",
+      n400: "#cbc7bb",
+      lift: "#242424",
+      edge: "#292929",
+      edgeStrong: "#303030",
     }),
   });
-  const nonText = result.failures.filter((failure) =>
-    failure.includes("WCAG 1.4.11 non-text floor"),
+  const toolbarEdges = result.failures.filter((failure) =>
+    failure.includes("toolbar-edge distinction floor"),
   );
   assert.deepEqual(
-    nonText.map((failure) => failure.split(":")[0]),
+    toolbarEdges.map((failure) => failure.split(":")[0]),
     [
       "sample/light",
       "sample/light",
@@ -231,29 +232,29 @@ test("rejects a control edge that dissolves into the band it sits on", async () 
     result.failures.join("\n"),
   );
   assert.equal(
-    nonText.some((failure) =>
-      failure.includes("--toolbar-edge-c (#b8b5a7) on --toolbar-bg (#dcd8ca)"),
+    toolbarEdges.some((failure) =>
+      failure.includes("--toolbar-edge-c (#d5d1c5) on --toolbar-bg (#dcd8ca)"),
     ),
     true,
-    nonText.join("\n"),
+    toolbarEdges.join("\n"),
   );
   assert.equal(
-    nonText.some((failure) =>
-      failure.includes("--toolbar-edge-c (#b8b5a7) on --toolbar-bg (#dcd8ca)"),
+    toolbarEdges.some((failure) =>
+      failure.includes("--toolbar-edge-c (#292929) on --toolbar-bg (#1f1f1f)"),
     ),
     true,
-    nonText.join("\n"),
+    toolbarEdges.join("\n"),
   );
 });
 
-test("accepts a control edge that clears the non-text floor on band and lift", async () => {
+test("accepts a subtle toolbar edge that stays distinct from band and lift", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
     paletteCss: chromePalette(SOUND_CHROME),
   });
   assert.deepEqual(
     result.failures.filter((failure) =>
-      failure.includes("WCAG 1.4.11 non-text floor"),
+      failure.includes("toolbar-edge distinction floor"),
     ),
     [],
     result.failures.join("\n"),

@@ -2,9 +2,8 @@
 // palette is a set of shade ramps behind one shared role mapping, so every
 // palette must supply every shade the roles reach, its chrome shades must run
 // in the order their names claim, every text pairing a document can produce
-// must meet WCAG AA in that palette's light and dark half, and every control
-// boundary on a chrome band must meet the WCAG 1.4.11 non-text floor in both
-// halves too.
+// must meet WCAG AA in that palette's light and dark half, and every toolbar
+// control edge must meet the explicit distinction floor in both halves too.
 //
 // This check owns the exact required pairings and the exact contrast floors;
 // DESIGN_PRINCIPLES.md owns why colour is expressed as roles over ramps. The
@@ -102,11 +101,11 @@ const COMMENT_SURFACE_TOKEN_PATTERN = /^comment-[a-z]+-c$/;
 // text allowance never applies: a plan is read at reading size.
 const CONTRAST_FLOOR = 4.5;
 
-// WCAG 1.4.11 for non-text contrast: the boundary that tells a reader where a
-// control is, and the firmer one that says the control is under the pointer or
-// open. A boundary below this floor is a control that dissolves into its band,
-// which is how a palette silently loses a control the other palettes keep.
-const NON_TEXT_FLOOR = 3;
+// BIG-214 restores the captain's subtle toolbar boundaries on two controls
+// whose text, icons, and persistent shape already identify them. This lower
+// product floor is not a WCAG claim; it keeps those chosen edges from silently
+// dissolving into their band while the chrome ladder guard keeps their order.
+const TOOLBAR_EDGE_CONTRAST_FLOOR = 1.4;
 
 // Reading surfaces a document can put primary or secondary text on. Tertiary
 // text is deliberately absent from the bands: _internal/DESIGN_PRINCIPLES.md holds that a
@@ -125,12 +124,9 @@ const BAND_GROUNDS = [
 ];
 const CODE_GROUNDS = ["--diff-hunk-bg", "--diff-content-bg"];
 
-// Control boundaries on the toolbar band, and the ground each one is seen
-// against. A control's edge is the only thing separating it from the band it
-// sits on, so it answers to the non-text floor rather than to the text one.
-// The reading surface's own hairlines are deliberately absent: they divide
-// passages of a document rather than bound a control, and 1.4.11 governs
-// controls.
+// Subtle control boundaries on the toolbar band, and the ground each one is
+// seen against. The reading surface's own hairlines are deliberately absent:
+// they divide passages of a document rather than bound these labeled controls.
 const CONTROL_EDGE_PAIRINGS = [
   { edge: "--toolbar-edge-c", ground: "--toolbar-bg" },
   { edge: "--toolbar-edge-strong-c", ground: "--toolbar-bg" },
@@ -544,9 +540,9 @@ export const checkPalettes = async ({
           continue;
         }
         const ratio = contrastRatio(edgeColor, groundColor);
-        if (ratio < NON_TEXT_FLOOR) {
+        if (ratio < TOOLBAR_EDGE_CONTRAST_FLOOR) {
           failures.push(
-            `${id}/${mode}: ${edge} (${edgeValue}) on ${ground} (${groundValue}) is ${ratio.toFixed(2)}:1, below the ${NON_TEXT_FLOOR}:1 WCAG 1.4.11 non-text floor`,
+            `${id}/${mode}: ${edge} (${edgeValue}) on ${ground} (${groundValue}) is ${ratio.toFixed(2)}:1, below the ${TOOLBAR_EDGE_CONTRAST_FLOOR}:1 toolbar-edge distinction floor`,
           );
         }
       }
@@ -598,7 +594,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { failures, paletteCount } = await checkPalettes();
   if (failures.length > 0) {
     console.error(
-      "palettes: every palette must declare every shade the roles reach, keep its ladders in order, meet WCAG AA on text, and meet the WCAG 1.4.11 non-text floor on control edges in both halves",
+      "palettes: every palette must declare every shade the roles reach, keep its ladders in order, meet WCAG AA on text, and keep toolbar control edges distinct in both halves",
     );
     for (const failure of failures) console.error(`  ${failure}`);
     process.exitCode = 1;

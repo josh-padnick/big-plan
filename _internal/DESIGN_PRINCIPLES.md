@@ -184,6 +184,7 @@ Rules:
    Every colour theme in both light and dark appearances, every change.
    When white on a colour fails, flip to dark text on a light tint of that colour.
    Pick the edge closest to its band that still clears the floor - darker in the light half, lighter in the dark one: a boundary is a hairline that happens to be legible, not a rule drawn for its own sake.
+   BIG-214 is the explicit product exception: the labeled Agent Status and Feedback toolbar controls use the captain's subtle chrome edges because their text, icons, and persistent button shape identify them without relying on the boundary alone.
 6. **Accent is scarce.**
    One accent per surface.
    If two things are both the most important, neither is.
