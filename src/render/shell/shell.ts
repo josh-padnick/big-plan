@@ -89,6 +89,11 @@ const MOBILE_TOC_GROUPED_LINK_CLASSES =
 const MOBILE_TOC_PART_HEADER_CLASSES =
   "block border-l-2 border-transparent px-6 pt-3 pb-1 text-2xs font-bold tracking-caps uppercase text-accent hover:text-ink";
 
+// approved-metric: the desktop TOC's sticky offset and bottom breathing room
+// bound a long section list to the viewport without crowding the page edge.
+const DESKTOP_TOC_CLASSES =
+  "hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:flex wide:max-h-[calc(100dvh-5.75rem-3rem)] wide:self-start wide:flex-col";
+
 // The sidebar's own eyebrow, sitting over the section list.
 // approved-metric: the Contents eyebrow tracking
 const TOC_EYEBROW_CLASSES =
@@ -440,7 +445,7 @@ const renderDesktopToc = ({
     groupedLinkClasses: TOC_GROUPED_LINK_CLASSES,
     partHeaderClasses: TOC_PART_HEADER_CLASSES,
   });
-  return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:flex wide:max-h-[calc(100dvh-5.75rem-3rem)] wide:self-start wide:flex-col" data-desktop-toc aria-label="Contents">
+  return `<nav class="${DESKTOP_TOC_CLASSES}" data-desktop-toc aria-label="Contents">
 <p class="${TOC_EYEBROW_CLASSES}" data-toc-header><a class="rounded-sm text-subtle hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
 <ol class="min-h-0 overflow-y-auto overscroll-contain pr-1" data-desktop-toc-list>
 ${items}
