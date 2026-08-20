@@ -56,13 +56,15 @@ export const COLLECTIONS: ReadonlySet<WireframeNode["element"]> = new Set([
 ]);
 
 /**
- * The panes a set of siblings really lays out, with every Group opened.
+ * The items a set of siblings really lays out, with every Group opened.
  *
- * A Group is a run of items that travel together as one item of a Row, not a
- * pane of its own, so the panes it holds still take their share of the row.
- * Reading a Group as one child would let three thirds or four outlined cards
- * hide behind a wrapper and reach the reviewer as the arrangement these rules
- * exist to refuse.
+ * A Group holds only loose items - compilation refuses one holding a pane or a
+ * collection - so this no longer uncovers a hidden pane. What it uncovers is
+ * the loose items themselves, and two rules still need to see them. A Group of
+ * buttons beside a record collection is not the detail pane that would demand
+ * exactly one selected record, and a Group holding a ChoiceGroup beside
+ * another control is still a decision sharing its row. Reading such a Group as
+ * one opaque child answers both questions wrongly.
  */
 export const paneSiblings = (
   nodes: ReadonlyArray<WireframeNode>,

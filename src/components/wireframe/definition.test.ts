@@ -2230,6 +2230,37 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     );
   });
 
+  it("should judge a choice apart from the overlay drawn over it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            choiceGroup(),
+            element({
+              name: "Overlay",
+              attributes: { title: "Before you choose" },
+              children: [
+                element({
+                  name: "Text",
+                  attributes: { text: "Both options are reversible." },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Got it", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+  });
+
   it("should ignore selected navigation state before a deliberate choice", () => {
     const { diagnostics } = compile({
       scopedChildren: [

@@ -521,6 +521,33 @@ const checkOutlinedSiblingBudget = ({
 };
 
 /**
+ * The layers a screen draws: the page, then each overlay over it.
+ *
+ * An overlay is judged on its own rather than with the page it covers, because
+ * only one of the two layers is answerable at a time: the page's primary
+ * action is exactly what the overlay took away. Counting them together would
+ * force an author to demote the confirm button on a dialog, or would read a
+ * dialog's control as a continuation for a decision drawn on the page, which
+ * is the opposite of the honest drawing. Every rule that counts controls
+ * across a whole screen reads them through here, so no two of those rules can
+ * disagree about where a layer ends.
+ */
+const screenLayers = (
+  screen: WireframeScreen,
+): ReadonlyArray<{
+  readonly where: string;
+  readonly nodes: ReadonlyArray<WireframeNode>;
+}> => [
+  {
+    where: "",
+    nodes: screen.children.filter((node) => node.element !== "Overlay"),
+  },
+  ...screen.children
+    .filter((node) => node.element === "Overlay")
+    .map((overlay) => ({ where: " Overlay", nodes: childNodes(overlay) })),
+];
+
+/**
  * A small choice is one dominant touch interaction, not a record workspace.
  *
  * ChoiceGroup is deliberately a deep primitive: once an author names this
@@ -536,36 +563,46 @@ const checkChoiceComposition = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const all = flattenNodes(screen.children);
-  const groups = all.filter((node) => node.element === "ChoiceGroup");
-  if (groups.length === 0) {
+  if (
+    !flattenNodes(screen.children).some(
+      (node) => node.element === "ChoiceGroup",
+    )
+  ) {
     return;
   }
-  const selected = groups.flatMap((group) =>
-    group.children.filter(
-      (node) => node.element === "ChoiceCard" && node.selected,
-    ),
-  );
-  if (selected.length > 1) {
-    diagnostics.add({
-      message: `Screen "${screen.id}" selects ${selected.length} ChoiceCards; a simple decision shows at most one deliberate selection`,
-      position,
-    });
-  }
-  const primaryActions = workActionButtons(screen.children).filter(
-    (node) => node.element === "Button" && node.emphasis === "primary",
-  );
-  if (selected.length === 0 && primaryActions.length > 0) {
-    diagnostics.add({
-      message: `Screen "${screen.id}" shows a primary continuation before any ChoiceCard is selected; hide it until a deliberate tap reveals the selected state`,
-      position,
-    });
-  }
-  if (selected.length === 1 && primaryActions.length === 0) {
-    diagnostics.add({
-      message: `Screen "${screen.id}" selects a ChoiceCard but offers no primary continuation; add one short next action after the deliberate choice`,
-      position,
-    });
+  for (const layer of screenLayers(screen)) {
+    const groups = flattenNodes(layer.nodes).filter(
+      (node) => node.element === "ChoiceGroup",
+    );
+    if (groups.length === 0) {
+      continue;
+    }
+    const selected = groups.flatMap((group) =>
+      group.children.filter(
+        (node) => node.element === "ChoiceCard" && node.selected,
+      ),
+    );
+    if (selected.length > 1) {
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} selects ${selected.length} ChoiceCards; a simple decision shows at most one deliberate selection`,
+        position,
+      });
+    }
+    const primaryActions = workActionButtons(layer.nodes).filter(
+      (node) => node.element === "Button" && node.emphasis === "primary",
+    );
+    if (selected.length === 0 && primaryActions.length > 0) {
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} shows a primary continuation before any ChoiceCard is selected; hide it until a deliberate tap reveals the selected state`,
+        position,
+      });
+    }
+    if (selected.length === 1 && primaryActions.length === 0) {
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} selects a ChoiceCard but offers no primary continuation; add one short next action after the deliberate choice`,
+        position,
+      });
+    }
   }
   if (screen.device !== "tablet" && screen.device !== "tablet-portrait") {
     return;
@@ -831,15 +868,7 @@ const filledActionsIn = (
   return filled;
 };
 
-/**
- * Each layer of a screen has one filled action.
- *
- * An overlay is counted on its own rather than with the page it covers,
- * because only one of the two layers is answerable at a time: the page's
- * primary action is exactly what the overlay took away. Counting them together
- * would force an author to demote the confirm button on a dialog, which is the
- * opposite of the honest drawing.
- */
+/** Each layer of a screen has one filled action. */
 const checkOneFilledAction = ({
   screen,
   position,
@@ -849,21 +878,7 @@ const checkOneFilledAction = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const overlays = screen.children.filter((node) => node.element === "Overlay");
-  const layers: ReadonlyArray<{
-    readonly where: string;
-    readonly nodes: ReadonlyArray<WireframeNode>;
-  }> = [
-    {
-      where: "",
-      nodes: screen.children.filter((node) => node.element !== "Overlay"),
-    },
-    ...overlays.map((overlay) => ({
-      where: " Overlay",
-      nodes: childNodes(overlay),
-    })),
-  ];
-  for (const layer of layers) {
+  for (const layer of screenLayers(screen)) {
     const filled = filledActionsIn(layer.nodes);
     if (filled.size > 1) {
       const labels = [...filled].flatMap((node) =>
