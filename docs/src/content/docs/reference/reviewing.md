@@ -265,6 +265,7 @@ Either way your comments and questions stay exactly where they are, and the mess
 
 The disconnect is a message rather than a kill: Big Plan never reaches into the agent's process.
 The agent is told at its next command - `big-plan agent next`, `agent note`, or `agent respond` - and ends its own session there, which is why the connection log records a **Session ended** row stating that the reviewer disconnected the agent rather than a quiet period it had to infer.
+That row is recorded even when the agent had already gone quiet long enough for the log to write the silence off as a gap: the earlier row stays, because it was honest when it was written, and the end you asked for is recorded after it.
 `agent next` reports the disconnect as an ordinary end; `agent note` and `agent respond` refuse with the `AGENT_DISCONNECTED` code, so a harness stops instead of retrying.
 The review itself is free the moment you confirm, so a second agent can connect without waiting for the first one to notice.
 

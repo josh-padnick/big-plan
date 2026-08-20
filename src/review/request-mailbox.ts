@@ -55,6 +55,7 @@ import {
   claimIsLive,
   claimLeaseExpiryMs,
 } from "./shared/agent-claim.js";
+import { agentConnectionReasonSupersedes } from "./shared/agent-status.js";
 import type { AgentModelIdentity } from "./shared/agent-model.js";
 import type {
   AgentRequestDeletionResult,
@@ -1446,7 +1447,16 @@ export const appendProgressEvent = async ({
   });
 };
 
-/** Appends a connection edge once, even when several checks see it. */
+/**
+ * Appends a connection edge once, even when several checks see it.
+ *
+ * A connection that has already stopped can still be explained better than it
+ * was. An agent that goes quiet is recorded as silence, and the reviewer may
+ * then end that session outright - so the log takes a second edge at the same
+ * state when the new reason supersedes the recorded one, and the end the
+ * reviewer asked for is stated as one rather than left as the gap that preceded
+ * it (BIG-156, BIG-190). Every other repeat still writes nothing.
+ */
 export const recordAgentConnectionState = async ({
   store,
   sessionId,
@@ -1475,15 +1485,30 @@ export const recordAgentConnectionState = async ({
         store,
         sessionId,
       });
-      const previous = events.at(-1)?.connected;
-      if (previous === connected) return false;
+      const last = events.at(-1);
+      const previous = last?.connected;
+      // An edge naming no reason is the log opening on a review no agent has
+      // reached yet, not an account of an ending that a better one could
+      // replace, so nothing supersedes it.
+      const explainsItBetter =
+        !connected &&
+        last?.reason !== undefined &&
+        agentConnectionReasonSupersedes({
+          recorded: last.reason,
+          next: disconnectReason,
+        });
+      if (previous === connected && !explainsItBetter) return false;
       await appendAgentConnectionEvent({
         store,
         event: {
           sessionId,
           connected,
           at,
-          ...(previous === true && !connected
+          // A first edge names no reason because nothing stopped before it.
+          // Every later edge that reports a connection ending carries the
+          // account it is being recorded for, including the second one this
+          // rule allows.
+          ...(previous !== undefined && !connected
             ? { reason: disconnectReason }
             : {}),
         },

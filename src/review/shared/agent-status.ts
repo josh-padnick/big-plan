@@ -225,6 +225,46 @@ export const AGENT_SESSION_ENDED_REASON = "The agent session ended";
 export const AGENT_NO_SIGNAL_REASON = `No agent signal within ${AGENT_STALL_WINDOW_LABEL}`;
 
 /**
+ * The reasons a connection edge can carry, ordered by how much each is known
+ * rather than inferred.
+ *
+ * The order is the same precedence `agentDisconnectReason` picks by, stated
+ * once so the two cannot drift: silence is the weakest account of a connection
+ * that stopped, the loop's own report of its end is stronger, and the
+ * reviewer's decision to end it is the strongest, because it is the only one
+ * that was a fact before Big Plan looked.
+ */
+const CONNECTION_END_REASONS: ReadonlyArray<string> = [
+  AGENT_NO_SIGNAL_REASON,
+  AGENT_SESSION_ENDED_REASON,
+  AGENT_DISCONNECTED_REASON,
+];
+
+/**
+ * True when a new reason for an already-ended connection says more than the
+ * reason the log has recorded for it.
+ *
+ * A log that appended on any change of reason could be talked backwards: the
+ * connection check runs several times a second, and one quiet reading landing
+ * after a reported end would leave the story finishing on the inference it
+ * replaced. Movement is one way, toward what is known, so the same silence
+ * gains at most one row per reason and the last row is always its best account.
+ *
+ * A reason from outside the ordered set moves nothing, which keeps an
+ * unrecognized string from displacing an account the reviewer can rely on.
+ */
+export const agentConnectionReasonSupersedes = ({
+  recorded,
+  next,
+}: {
+  /** The reason on the last recorded edge, which named a connection ending. */
+  readonly recorded: string;
+  readonly next: string;
+}): boolean =>
+  CONNECTION_END_REASONS.indexOf(next) >
+  CONNECTION_END_REASONS.indexOf(recorded);
+
+/**
  * Names why presence stopped, from what the review already knows.
  *
  * A disconnect the reviewer asked for outranks both other readings, and it

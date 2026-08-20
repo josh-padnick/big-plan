@@ -61,7 +61,11 @@ import {
 } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
-import { AGENT_RECOVERY_HORIZON_MS } from "./shared/agent-timing.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+} from "./shared/agent-timing.js";
+import { AGENT_NO_SIGNAL_REASON } from "./shared/agent-status.js";
 import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import { REVIEW_POLL_INTERVAL_MS } from "./shared/review-polling.js";
@@ -5449,13 +5453,6 @@ describe("review runtime queued messages", () => {
   });
 });
 
-/**
- * The commit writes its journal before the rename, so a crash can leave one
- * behind for work that never published. Every reviewer control that takes a
- * message back is what someone reaches for then, so each settles that journal
- * before it decides - otherwise a journal nothing is left alive to settle
- * would lock the message for good.
- */
 // BIG-190: disconnecting is a message to the agent and a release of the review,
 // and the log has to record it as an end somebody asked for rather than a gap.
 describe("review runtime agent disconnect", () => {
@@ -5706,8 +5703,101 @@ describe("review runtime agent disconnect", () => {
     expect(released?.claimedBy).toBeUndefined();
     expect(released?.canceledAt).toBeUndefined();
   });
+
+  it("should state the reported end after a stalled agent's silence", async () => {
+    /*
+    The state a reviewer is most likely to reach for Disconnect in: the agent
+    holds a message, has narrated nothing for longer than a turn takes, and the
+    log has already written the silence off as a gap. Ending it there has to
+    leave the log saying somebody asked for the end, not repeating the guess it
+    replaced (BIG-156).
+    */
+    const sent = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", body: "Are you still on this?" },
+    });
+    expect(sent.status).toBe(200);
+    const pending = nextPendingAgentRequest(
+      await readAgentExchange({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+        planId: disconnected.planId,
+      }),
+      { claimedBy: "bbbbbbbbbbbbbbbb", nowMs: Date.now() },
+    );
+    if (pending === undefined)
+      throw new Error("The chat request was not stored");
+    await claimAgentRequest({
+      store: disconnected.store,
+      activeSessionId: disconnected.sessionId,
+      requestId: pending.requestId,
+      claimedBy: "bbbbbbbbbbbbbbbb",
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    const lastEdge = async () =>
+      (
+        await readAgentConnectionEvents({
+          store: disconnected.store,
+          sessionId: disconnected.sessionId,
+        })
+      ).at(-1);
+    await attachAgent({
+      writerId: "7777777777777777",
+      state: "working",
+      requestId: pending.requestId,
+    });
+    await vi.waitFor(
+      async () => expect(await lastEdge()).toMatchObject({ connected: true }),
+      { timeout: 8_000, interval: 100 },
+    );
+    // Nothing renews the plan heartbeat while a turn runs, so an agent that
+    // stops narrating ages out of presence while still holding the claim.
+    await writeAgentHeartbeat({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+      state: "working",
+      requestId: pending.requestId,
+      writerId: "7777777777777777",
+      now: Date.now() - AGENT_STALL_MS - 5_000,
+    });
+    await vi.waitFor(
+      async () =>
+        expect(await lastEdge()).toMatchObject({
+          connected: false,
+          reason: AGENT_NO_SIGNAL_REASON,
+        }),
+      { timeout: 8_000, interval: 100 },
+    );
+    expect((await ask({ path: "/api/agent-disconnect" })).status).toBe(200);
+    await vi.waitFor(
+      async () =>
+        expect(await lastEdge()).toMatchObject({
+          connected: false,
+          reason: AGENT_DISCONNECTED_REASON,
+        }),
+      { timeout: 8_000, interval: 100 },
+    );
+    // The silence was honest when it was written, so it stays; the reported end
+    // is recorded after it rather than over it.
+    const edges = await readAgentConnectionEvents({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+    });
+    expect(edges.at(-2)).toMatchObject({
+      connected: false,
+      reason: AGENT_NO_SIGNAL_REASON,
+    });
+  }, 20_000);
 });
 
+/**
+ * The commit writes its journal before the rename, so a crash can leave one
+ * behind for work that never published. Every reviewer control that takes a
+ * message back is what someone reaches for then, so each settles that journal
+ * before it decides - otherwise a journal nothing is left alive to settle
+ * would lock the message for good.
+ */
 describe("review runtime reviewer controls versus an interrupted commit", () => {
   const strandedJournal = async ({
     runtime: live,

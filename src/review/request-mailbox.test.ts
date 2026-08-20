@@ -33,6 +33,11 @@ import { buildFeedbackPackage } from "./feedback-package.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import { AGENT_RECOVERY_HORIZON_MS } from "./shared/agent-timing.js";
 import {
+  AGENT_NO_SIGNAL_REASON,
+  AGENT_SESSION_ENDED_REASON,
+} from "./shared/agent-status.js";
+import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
+import {
   appendProgressEvent,
   assertResolvableComment,
   cancelAgentRequest,
@@ -2162,6 +2167,64 @@ describe("request mailbox", () => {
       { connected: false },
       { connected: true },
       { connected: false, reason: "Heartbeat timed out" },
+    ]);
+  });
+
+  // BIG-190: the reviewer can end a session Big Plan had already written off as
+  // silence, and the log has to be able to say so after the fact.
+  it("should record a reported end after the silence it explains", async () => {
+    const { store } = await preparedReview();
+    const state = (at: string, disconnectReason: string) =>
+      recordAgentConnectionState({
+        store,
+        sessionId,
+        connected: false,
+        at,
+        disconnectReason,
+      });
+
+    await recordAgentConnectionState({
+      store,
+      sessionId,
+      connected: true,
+      at: "2026-08-10T12:00:00.000Z",
+      disconnectReason: AGENT_NO_SIGNAL_REASON,
+    });
+    await expect(
+      state("2026-08-10T12:00:01.000Z", AGENT_NO_SIGNAL_REASON),
+    ).resolves.toBe(true);
+    // The common case: the check runs several times a second and reads the
+    // same silence every time, which is not news.
+    for (let pass = 0; pass < 6; pass += 1) {
+      await expect(
+        state("2026-08-10T12:00:02.000Z", AGENT_NO_SIGNAL_REASON),
+      ).resolves.toBe(false);
+    }
+    await expect(
+      state("2026-08-10T12:00:03.000Z", AGENT_DISCONNECTED_REASON),
+    ).resolves.toBe(true);
+    // One row per account, and the reported end cannot be talked back into the
+    // inference it replaced.
+    await expect(
+      state("2026-08-10T12:00:04.000Z", AGENT_NO_SIGNAL_REASON),
+    ).resolves.toBe(false);
+    await expect(
+      state("2026-08-10T12:00:05.000Z", AGENT_SESSION_ENDED_REASON),
+    ).resolves.toBe(false);
+    await expect(
+      state("2026-08-10T12:00:06.000Z", AGENT_DISCONNECTED_REASON),
+    ).resolves.toBe(false);
+
+    await expect(
+      readAgentConnectionEvents({ store, sessionId }),
+    ).resolves.toMatchObject([
+      { connected: true },
+      { connected: false, reason: AGENT_NO_SIGNAL_REASON },
+      {
+        connected: false,
+        at: "2026-08-10T12:00:03.000Z",
+        reason: AGENT_DISCONNECTED_REASON,
+      },
     ]);
   });
 
