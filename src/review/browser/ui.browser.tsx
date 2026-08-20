@@ -532,7 +532,7 @@ export const AlertDialog = ({
       // a page that still looked active. bg-backdrop/70 is the treatment the
       // settings sheet and the image viewer already use, and the data
       // attribute opts this backdrop into the approved 80% dark-mode dim.
-      className="fixed inset-0 z-50 grid place-items-center bg-backdrop/70 p-4"
+      className="fixed inset-0 z-50 grid grid-cols-[minmax(0,1fr)] place-items-center bg-backdrop/70 p-4"
       data-modal-backdrop
       onKeyDown={handleKeyDown}
     >

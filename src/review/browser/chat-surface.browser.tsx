@@ -51,7 +51,7 @@ export const ChatSurface = ({
   return (
     <div
       id="review-panel-chat"
-      className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 grid content-start gap-3"
+      className="review-feedback-panel grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-3 overflow-x-hidden overflow-y-auto p-3"
       role="tabpanel"
       aria-labelledby="review-tab-chat"
     >
@@ -113,7 +113,7 @@ export const ChatSurface = ({
                   Archive
                 </Button>
               </div>
-              <ol className="m-0 grid list-none gap-3 p-0">
+              <ol className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-3 p-0">
                 {model.exchanges}
               </ol>
             </>
@@ -129,7 +129,7 @@ export const ChatSurface = ({
               <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                 Archived ({model.archivedCount})
               </summary>
-              <ol className="mt-3 mb-0 grid list-none gap-3 p-0">
+              <ol className="mt-3 mb-0 grid grid-cols-[minmax(0,1fr)] list-none gap-3 p-0">
                 {model.archivedExchanges}
               </ol>
             </details>

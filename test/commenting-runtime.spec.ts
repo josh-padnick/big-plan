@@ -2939,6 +2939,171 @@ test("should not keep an answered feedback batch active without its response", a
   ).toHaveCount(0);
 });
 
+// BIG-185. A comment card belongs to the sidebar, so the sidebar decides how
+// wide it is. The batch's threads are laid out as a grid, and a grid item keeps
+// `min-width: auto`: the single implicit track was therefore floored at the
+// widest card's min-content width, which one pasted code block pushed far past
+// the sidebar. Every card in that batch - the expanded one and the collapsed
+// rows beside it - then rendered wider than the panel and was clipped mid-word
+// by its hidden horizontal overflow, with no ellipsis and no card edge to say
+// anything had been cut. Geometry is the only place this shows up, so it is
+// asserted here rather than at a lower rung.
+test("should keep every sidebar comment card inside the sidebar", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const sidebar = page.getByRole("complementary", { name: "Feedback" });
+
+  // A reviewer quoting the call they mean is ordinary feedback, and it is what
+  // gives the message a min-content width wider than the sidebar.
+  const quotedCall =
+    "await retrySchedule.claimNextDueBatch({ merchantId, limit: 100, lockTimeoutMs: 30000 });";
+  await stageComment(page, "Name the recovery owner before the rollout.");
+  await stageComment(
+    page,
+    `Call out the claim we make:\n\n\`\`\`ts\n${quotedCall}\n\`\`\``,
+  );
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await sidebar
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submitted).ok()).toBe(true);
+
+  // A batch heads its own threads only once an agent has picked it up, and the
+  // list those threads render into is what this journey measures.
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = exchange.requests.find(
+    (candidate) => candidate.kind === "feedback",
+  );
+  if (request === undefined) {
+    throw new Error("The containment journey never sent a feedback batch");
+  }
+  await claimAgentRequest({
+    store,
+    activeSessionId: session.sessionId,
+    requestId: request.requestId,
+    claimedBy: agentSessionId,
+    baselineSnapshot: deriveSnapshotDigest(
+      await readFile(session.plan, "utf8"),
+    ),
+    now: new Date().toISOString(),
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
+
+  const batch = sidebar.locator(
+    `section[data-review-batch="${request.requestId}"]`,
+  );
+  const cards = batch.locator("[data-review-comment-id]");
+  await expect(cards).toHaveCount(2);
+
+  // The quoted call only reaches the page when its thread is open, so the
+  // collapsed row beside it is measured against the same widened track.
+  await sidebar
+    .getByRole("button", { name: /Expand .* comment: .*claimNextDueBatch/su })
+    .click();
+  await expect(batch.getByText(quotedCall)).toBeVisible();
+
+  const sidebarBox = await boxOf(sidebar);
+  for (let index = 0; index < (await cards.count()); index += 1) {
+    const cardBox = await boxOf(cards.nth(index));
+    // Measured against the sidebar, not against the list: the cards are tied
+    // to the list's own track, so a card is the width of the list even when
+    // the track has blown past the panel. Only the panel's edge is the edge
+    // the reader sees.
+    expect(Math.round(cardBox.x + cardBox.width)).toBeLessThanOrEqual(
+      Math.round(sidebarBox.x + sidebarBox.width),
+    );
+  }
+  // ...and the pasted call stays inside the card that holds it. This is the
+  // half a geometry check against the panel cannot see: a bare `pre` keeps
+  // `white-space: pre`, so the line runs past the card's edge and the card's
+  // hidden overflow cuts it mid-word rather than wrapping it.
+  const quotedBox = await boxOf(batch.locator("pre code"));
+  const quotedCardBox = await boxOf(
+    batch.locator("[data-review-comment-id]").filter({ hasText: "claimNext" }),
+  );
+  expect(Math.round(quotedBox.x + quotedBox.width)).toBeLessThanOrEqual(
+    Math.round(quotedCardBox.x + quotedCardBox.width),
+  );
+});
+
+// The same containment, on the staged path: a comment is drawn by a different
+// renderer before it is sent, so it needs its own proof that a pasted code
+// block stays inside the card rather than being clipped by it (BIG-185).
+test("should keep a staged comment's code block inside its sidebar card", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const sidebar = page.getByRole("complementary", { name: "Feedback" });
+
+  const quotedCall =
+    "await retrySchedule.claimNextDueBatch({ merchantId, limit: 100, lockTimeoutMs: 30000, onExhausted: reportToOncall });";
+  await stageComment(
+    page,
+    [
+      "Name the recovery owner here, and call out the claim below explicitly",
+      "so a reviewer can check it against the retry schedule we already ship:",
+      "",
+      "```ts",
+      quotedCall,
+      "```",
+    ].join("\n"),
+  );
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+
+  // A staged card starts collapsed and its body starts clamped, so the pasted
+  // call only reaches the page once both are open.
+  await sidebar
+    .getByRole("button", {
+      name: /Expand staged comment: .*claimNextDueBatch/su,
+    })
+    .click();
+  const card = sidebar.locator('[data-review-surface="rail"]');
+  await expect(card).toHaveCount(1);
+  await card.getByRole("button", { name: "… more" }).click();
+
+  const quoted = card.locator("pre code");
+  await expect(quoted).toHaveText(quotedCall);
+
+  const sidebarBox = await boxOf(sidebar);
+  const cardBox = await boxOf(card);
+  const quotedBox = await boxOf(quoted);
+
+  // The card fits the sidebar, and the quoted call fits the card. Comparing
+  // the card to the list holding it would prove nothing: the card is tied to
+  // the list's track, so the two agree even when the track has blown past the
+  // panel. The second assertion is what a bare `pre` breaks: it keeps
+  // `white-space: pre`, so the line runs past the card's edge and the card's
+  // hidden overflow cuts it mid-word instead of wrapping it.
+  expect(Math.round(cardBox.x + cardBox.width)).toBeLessThanOrEqual(
+    Math.round(sidebarBox.x + sidebarBox.width),
+  );
+  expect(Math.round(quotedBox.x + quotedBox.width)).toBeLessThanOrEqual(
+    Math.round(cardBox.x + cardBox.width),
+  );
+});
+
 // BIG-158 and BIG-162. A batch header speaks for one batch, so it may not
 // borrow the sidebar's working group: while an earlier batch runs, that group
 // holds work this batch has nothing to do with. Reading it dressed a batch

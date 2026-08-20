@@ -825,7 +825,10 @@ const ComponentSnapshotComparison = ({
     document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));
   }, [renderedHtml]);
   return (
-    <div className="grid min-w-0 gap-2" data-review-component-diff="">
+    <div
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2"
+      data-review-component-diff=""
+    >
       {/* A single-screen wireframe has no switcher in the non-diff view
           either - there is nothing to switch between - so the diff view
           only grows one once a second screen makes it meaningful. The
@@ -1002,7 +1005,7 @@ export const DiffLensContent = ({
       : "What changed";
   return (
     <section
-      className="grid w-full min-w-0 max-w-[var(--measure)] gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
+      className="grid w-full min-w-0 max-w-[var(--measure)] grid-cols-[minmax(0,1fr)] gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
       aria-label={title}
       data-review-diff-lens=""
       data-review-diff-note={place.note}
@@ -1030,7 +1033,7 @@ export const DiffLensContent = ({
           <WordRunContent runs={only.runs} presentation={presentation} />
         )
       ) : (
-        <div className="grid min-w-0 gap-2">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
           {!hasOldText ? null : (
             <div className="min-w-0 rounded-lg bg-[var(--diff-remove-bg)] p-3 text-[var(--diff-remove-c)] inset-shadow-well">
               <strong className="mb-1 block text-2xs uppercase tracking-caps">

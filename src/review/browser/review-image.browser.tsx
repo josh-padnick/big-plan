@@ -187,6 +187,10 @@ export const ReviewImage = ({
                 <Icon icon={X_ICON} />
               </Button>
             </div>
+            {/* A zoomed picture is meant to overflow this stage and be
+                scrolled to, so clamping the track to the viewport would take
+                the lightbox's reach away. */}
+            {/* eslint-disable-next-line no-restricted-syntax */}
             <div className="grid min-h-0 flex-1 place-items-center overflow-auto">
               {isLightboxBroken ? (
                 <UnavailableImage alt={alt} />

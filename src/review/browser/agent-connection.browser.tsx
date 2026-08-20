@@ -89,7 +89,7 @@ const ReadOnlySessionCard = ({
   readonly replacementUrl: string | null;
 }) => (
   <article
-    className="grid min-w-0 gap-2 rounded-lg border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] p-3 text-xs leading-[1.45] text-[var(--callout-warning-c)]"
+    className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] p-3 text-xs leading-[1.45] text-[var(--callout-warning-c)]"
     data-review-current-activity="read-only"
   >
     <div className="flex min-w-0 items-center gap-2">
@@ -223,6 +223,10 @@ const CopyBlock = ({
         stacked on top of it. Reserving the width in the layout is what makes
         this stable across fonts rather than a guess in pixels.
         */}
+        {/* The reserved width is the point: this stack is sized by its
+            widest child, so it is the one grid here that wants the
+            content-based track the fence otherwise refuses. */}
+        {/* eslint-disable-next-line no-restricted-syntax */}
         <span className="grid">
           <span
             className="invisible col-start-1 row-start-1"
@@ -417,7 +421,7 @@ const CurrentActivityCard = ({
         : null;
   return (
     <article
-      className={`grid min-w-0 gap-1.5 rounded-lg border p-3 text-xs leading-[1.45] ${STATUS_CARD_TONE[status.indicator]}`}
+      className={`grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg border p-3 text-xs leading-[1.45] ${STATUS_CARD_TONE[status.indicator]}`}
       data-review-current-activity={activity.state}
     >
       {/* Six pixels rather than eight: the mark is round and the title starts
@@ -501,7 +505,7 @@ const CurrentActivityCard = ({
            of it: one border, one step of ground away from the card it sits in,
            and no rule above, which would draw the same separation twice. */
         <div
-          className="grid min-w-0 gap-1 rounded-md border border-current/25 bg-[color-mix(in_srgb,currentColor_6%,transparent)] p-2"
+          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-md border border-current/25 bg-[color-mix(in_srgb,currentColor_6%,transparent)] p-2"
           data-review-agent-target={targetLabel ?? subjectLabel}
         >
           {requestId === undefined ? (
@@ -571,7 +575,7 @@ const CurrentActivityCard = ({
           {showsSinceAndEvents ? (
             <div className="min-w-0">
               <dt className="font-semibold">Events</dt>
-              <dd className="m-0 grid text-ink [overflow-wrap:anywhere]">
+              <dd className="m-0 grid grid-cols-[minmax(0,1fr)] text-ink [overflow-wrap:anywhere]">
                 <span>
                   {connection.quietPeriods} quiet{" "}
                   {connection.quietPeriods === 1 ? "period" : "periods"}
@@ -602,7 +606,7 @@ const CurrentActivityCard = ({
 
 const AgentPresenceUnavailableCard = () => (
   <article
-    className="grid min-w-0 gap-1 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted"
+    className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted"
     data-review-connection-health="unobservable"
   >
     <strong className="text-sm text-ink">Agent status unavailable</strong>
@@ -614,7 +618,7 @@ const AgentPresenceUnavailableCard = () => (
 
 const AgentPresenceLoadingCard = () => (
   <article
-    className="grid min-w-0 gap-1 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted"
+    className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted"
     data-review-connection-health="loading"
   >
     <strong className="text-sm text-ink">Checking agent status</strong>
@@ -793,7 +797,7 @@ const ConnectionLog = ({
               <h3 className="mt-0 mb-1 border-b border-edge pb-1 text-2xs font-semibold text-muted">
                 {date}
               </h3>
-              <ol className="m-0 grid list-none gap-1.5 p-0">
+              <ol className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-1.5 p-0">
                 {rows.map((event) => {
                   const index = ordered.indexOf(event);
                   const next = ordered[index + 1];
@@ -997,7 +1001,7 @@ export const AgentConnectionPanel = ({
                 ? "Connect your agent"
                 : "Reconnect your agent"}
           </summary>
-          <div className="grid gap-2 border-t border-edge px-3 py-3">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge px-3 py-3">
             {heldWork === "explained" ? (
               /*
               The consequence is stated as the code behaves, not as it would be

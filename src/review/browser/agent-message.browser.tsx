@@ -1,5 +1,7 @@
 // Owns the shared legacy-compatible You/Agent turn, status-strip, activity,
-// Markdown, panel-pill, and change-digest presentation for the review island.
+// message-body, panel-pill, and change-digest presentation for the review
+// island. The Markdown walkers a body renders through are owned by
+// message-markdown-view.browser.tsx so every renderer shares one.
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
@@ -7,14 +9,8 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
-import {
-  parseMessageMarkdown,
-  type MessageNode,
-} from "../shared/message-markdown.js";
-import {
-  parseReviewerMarkdown,
-  type ReviewerMarkdownNode,
-} from "../shared/reviewer-markdown.js";
+import { parseMessageMarkdown } from "../shared/message-markdown.js";
+import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
 import { messageTimeLabel } from "../shared/time-label.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
@@ -24,7 +20,10 @@ import {
   useDiffTour,
 } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
-import { ReviewImage } from "./review-image.browser.js";
+import {
+  renderMessageNode,
+  renderReviewerNode,
+} from "./message-markdown-view.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
 import { Badge, Button, Tooltip, WorkingMark } from "./ui.browser.js";
 
@@ -54,125 +53,6 @@ const absoluteTime = (at: number): string =>
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(at));
-
-/** Renders only the bounded Markdown node vocabulary owned by the parser. */
-const renderMessageNode = (node: MessageNode, key: string): ReactNode => {
-  if (node.type === "text") return node.value;
-  if (node.type === "inlineCode") {
-    return (
-      <code
-        key={key}
-        className="max-w-full rounded-sm border border-edge bg-surface px-1 font-mono text-[0.9em] [overflow-wrap:anywhere]"
-      >
-        {node.value}
-      </code>
-    );
-  }
-  if (node.type === "code") {
-    return (
-      <pre
-        key={key}
-        className="relative mt-1 min-w-0 max-w-full overflow-x-auto rounded-md border border-edge bg-surface p-2 whitespace-pre-wrap [overflow-wrap:anywhere]"
-      >
-        {node.language === undefined ? null : (
-          <span className="mb-1 block text-2xs text-muted uppercase tracking-caps">
-            {node.language}
-          </span>
-        )}
-        <code className="min-w-0 max-w-full font-mono text-2xs whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {node.value}
-        </code>
-      </pre>
-    );
-  }
-  const children = node.children.map((child, index) =>
-    renderMessageNode(child, `${key}-${index}`),
-  );
-  if (node.type === "paragraph") {
-    return (
-      <p key={key} className="mt-0 mb-2">
-        {children}
-      </p>
-    );
-  }
-  if (node.type === "strong") return <strong key={key}>{children}</strong>;
-  if (node.type === "emphasis") return <em key={key}>{children}</em>;
-  if (node.type === "blockquote") {
-    return (
-      <blockquote
-        key={key}
-        className="mt-1 border-l-2 border-edge pl-2 text-muted"
-      >
-        {children}
-      </blockquote>
-    );
-  }
-  if (node.type === "listItem") return <li key={key}>{children}</li>;
-  if (node.type === "list") {
-    const className =
-      "mt-1 mb-0 pl-4 " + (node.ordered ? "list-decimal" : "list-disc");
-    return node.ordered ? (
-      <ol key={key} className={className}>
-        {children}
-      </ol>
-    ) : (
-      <ul key={key} className={className}>
-        {children}
-      </ul>
-    );
-  }
-  if (node.type !== "link") return null;
-  return (
-    <a
-      key={key}
-      className="text-accent underline"
-      href={node.url}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {children}
-    </a>
-  );
-};
-
-/** Renders the same inert vocabulary for reviewer-authored user turns. */
-const renderReviewerNode = (
-  node: ReviewerMarkdownNode,
-  key: string,
-): ReactNode => {
-  if (node.type === "text") return node.value;
-  if (node.type === "inlineCode") return <code key={key}>{node.value}</code>;
-  if (node.type === "code")
-    return (
-      <pre key={key}>
-        <code>{node.value}</code>
-      </pre>
-    );
-  if (node.type === "image") {
-    return <ReviewImage key={key} id={node.id} alt={node.alt} />;
-  }
-  const children = node.children.map((child, index) =>
-    renderReviewerNode(child, `${key}-${index}`),
-  );
-  if (node.type === "paragraph") return <p key={key}>{children}</p>;
-  if (node.type === "strong") return <strong key={key}>{children}</strong>;
-  if (node.type === "emphasis") return <em key={key}>{children}</em>;
-  if (node.type === "blockquote")
-    return <blockquote key={key}>{children}</blockquote>;
-  if (node.type === "listItem") return <li key={key}>{children}</li>;
-  if (node.type === "list")
-    return node.ordered ? (
-      <ol key={key}>{children}</ol>
-    ) : (
-      <ul key={key}>{children}</ul>
-    );
-  if (node.type !== "link") return null;
-  return (
-    <a key={key} href={node.url} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  );
-};
 
 const MessageBody = ({
   body,
@@ -356,7 +236,7 @@ export const RequestStatusStrip = ({
     ) : null;
   return (
     <div
-      className={`my-1.5 grid min-w-0 gap-1 rounded-md border border-l-[3px] px-2 py-2 text-2xs ${STATUS_TONES[status.tone]}`}
+      className={`my-1.5 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-md border border-l-[3px] px-2 py-2 text-2xs ${STATUS_TONES[status.tone]}`}
       data-review-thread-status={status.stage}
     >
       <div className="flex items-center gap-1.5 [&>svg]:size-[0.85rem] [&>svg]:shrink-0">
@@ -432,7 +312,7 @@ export const RequestStatusStrip = ({
         </button>
       ) : null}
       {isWorking && isExpanded && earlier.length > 0 ? (
-        <ol className="m-0 grid max-h-36 min-w-0 list-none overflow-y-auto pl-1 text-ink">
+        <ol className="m-0 grid max-h-36 min-w-0 grid-cols-[minmax(0,1fr)] list-none overflow-y-auto pl-1 text-ink">
           {earlier.map((event) => (
             <li
               key={event.seq}
@@ -612,7 +492,7 @@ export const AgentChangeDigest = ({
     return null;
   };
   return (
-    <div className="mt-2 grid min-w-0 gap-2 border-t border-edge pt-2">
+    <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge pt-2">
       <button
         type="button"
         className="flex w-full cursor-pointer items-center gap-1 rounded-sm bg-transparent px-1 py-0.5 text-left text-2xs font-bold text-muted hover:bg-surface hover:text-accent [&>svg]:size-3"

@@ -56,10 +56,7 @@ import {
 import { selectAgentModelIdentity } from "../shared/agent-model.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
-import {
-  parseReviewerMarkdown,
-  type ReviewerMarkdownNode,
-} from "../shared/reviewer-markdown.js";
+import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
@@ -129,8 +126,8 @@ import {
   type MessageSurface,
 } from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
+import { renderReviewerNode } from "./message-markdown-view.browser.js";
 import { ComposeImages } from "./compose-images.browser.js";
-import { ReviewImage } from "./review-image.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
 import {
   deriveReviewCommentSubmitAvailability,
@@ -790,7 +787,7 @@ const RecoveryConflictDialog = ({
       onAction={() => onKeep("runtime")}
       onDismiss={onDismiss}
     >
-      <div className="mt-4 grid gap-3">
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3">
         <div>
           <p className="m-0 text-2xs font-semibold text-subtle uppercase">
             Yours
@@ -1499,46 +1496,6 @@ const replacePlanArticle = (nextDocument: Document): void => {
   }
   currentArticle.replaceWith(document.importNode(nextArticle, true));
   document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
-};
-
-const renderReviewerNode = (
-  node: ReviewerMarkdownNode,
-  key: string,
-): ReactNode => {
-  if (node.type === "text") return node.value;
-  if (node.type === "inlineCode") return <code key={key}>{node.value}</code>;
-  if (node.type === "code") {
-    return (
-      <pre key={key}>
-        <code>{node.value}</code>
-      </pre>
-    );
-  }
-  if (node.type === "image") {
-    return <ReviewImage key={key} id={node.id} alt={node.alt} />;
-  }
-  const children = node.children.map((child, index) =>
-    renderReviewerNode(child, `${key}-${index}`),
-  );
-  if (node.type === "paragraph") return <p key={key}>{children}</p>;
-  if (node.type === "strong") return <strong key={key}>{children}</strong>;
-  if (node.type === "emphasis") return <em key={key}>{children}</em>;
-  if (node.type === "blockquote")
-    return <blockquote key={key}>{children}</blockquote>;
-  if (node.type === "listItem") return <li key={key}>{children}</li>;
-  if (node.type === "list") {
-    return node.ordered ? (
-      <ol key={key}>{children}</ol>
-    ) : (
-      <ul key={key}>{children}</ul>
-    );
-  }
-  if (node.type !== "link") return null;
-  return (
-    <a key={key} href={node.url} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  );
 };
 
 const MarkdownBody = ({
@@ -3860,7 +3817,7 @@ const SentThread = ({
           <div className="mt-3 border-t border-edge pt-3">
             {latestExchange?.response === undefined ? null : (
               <section
-                className="mb-3 grid gap-2"
+                className="mb-3 grid grid-cols-[minmax(0,1fr)] gap-2"
                 data-review-thread-next-steps
               >
                 <strong className="text-2xs font-bold uppercase tracking-caps text-subtle">
@@ -3988,7 +3945,7 @@ const ChatExchange = ({
     (request.baselineSnapshot ?? request.premiseSnapshot) !==
       response.resultSnapshot;
   return (
-    <li className="grid min-w-0 gap-2">
+    <li className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
       <MessageTurn
         role="user"
         surface="chat"

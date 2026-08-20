@@ -224,7 +224,7 @@ export const DiffTourProvider = ({
             // it, and holds a wide enough measure that the change it is
             // reviewing and the thread that caused it read as two separate
             // ends of the same row.
-            className="fixed right-4 bottom-11 left-4 z-40 mx-auto grid w-auto min-w-0 overflow-hidden rounded-xl border border-edge-strong bg-raised text-xs text-ink shadow-floating wide:w-fit wide:min-w-lg"
+            className="fixed right-4 bottom-11 left-4 z-40 mx-auto grid w-auto min-w-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border border-edge-strong bg-raised text-xs text-ink shadow-floating wide:w-fit wide:min-w-lg"
             data-review-diff-stepper=""
           >
             <div className="flex min-w-0 items-center gap-2 border-b border-accent bg-[color-mix(in_srgb,var(--accent-c)_10%,var(--raised))] px-3 py-2">
