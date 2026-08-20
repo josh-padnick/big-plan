@@ -110,7 +110,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** Reading and writing comments is comfortable and safe: room to read, a composer that grows, tooltips and Escape that behave correctly, and no UI that lies about what happened.
 
-**Code anchors.** `src/review/browser/ui.browser.tsx`, `src/review/browser/comments-surface.browser.tsx`, `src/review/browser/chat-surface.browser.tsx`, `src/review/browser/compose-images.browser.tsx`, `src/review/browser/tooltip-position.ts`, `src/review/browser/agent-connection.browser.tsx`, shared card markup in `src/review/shared/comment-markdown.ts`.
+**Code anchors.** `src/review/browser/ui.browser.tsx`, `src/review/browser/comments-surface.browser.tsx`, `src/review/browser/chat-surface.browser.tsx`, `src/review/browser/compose-images.browser.tsx`, `src/review/browser/tooltip-position.ts`, `src/review/browser/thread-anchor.browser.ts` and `src/review/shared/thread-layout.ts` (the rect a floating thread is measured against, and the left edge and stacking that follow from it), `src/review/browser/agent-connection.browser.tsx`, shared card markup in `src/review/shared/comment-markdown.ts`.
 
 **Boundary rules.**
 
