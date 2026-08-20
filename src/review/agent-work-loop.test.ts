@@ -518,6 +518,81 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should keep answering the reviewer turn after turn as one agent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-turns-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer two questions in a row.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const ask = async (requestId: string, body: string): Promise<void> => {
+      await writeAgentRequest({
+        store: review.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId,
+          sessionId: review.sessionId,
+          planId: review.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-12T12:00:00.000Z",
+          body,
+        }),
+      });
+    };
+    // One turn of the loop the agent prompt describes: take the work, report
+    // progress the way the returned command does, answer, and come back.
+    const takeOneTurn = async (requestId: string): Promise<void> => {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      expect(pickup).toMatchObject({
+        pending: true,
+        work: expect.objectContaining({ requestId }),
+      });
+      if (
+        typeof pickup.note_command !== "string" ||
+        typeof pickup.respond_command !== "string" ||
+        typeof pickup.response_file !== "string"
+      ) {
+        throw new Error("Pickup did not return executable agent commands");
+      }
+      await execAsync(pickup.note_command, { cwd: directory });
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId, message: "Answered." }),
+      );
+      await execAsync(pickup.respond_command, { cwd: directory });
+    };
+
+    try {
+      await ask("1212121212121212", "What is the first answer?");
+      await takeOneTurn("1212121212121212");
+      await ask("3434343434343434", "What is the second answer?");
+      // The second turn is the whole test. Nothing else has connected, so the
+      // only agent this review has ever seen must still be its primary - a
+      // loop that comes back to find itself an observer of its own last turn
+      // stops answering the reviewer entirely (BIG-171).
+      await takeOneTurn("3434343434343434");
+
+      // One agent connected, so the review has one agent - not a queue of
+      // strangers, and never a question to the reviewer about a second agent
+      // that does not exist.
+      const attached = await reviewStore.readAgentRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(attached).toHaveLength(1);
+      expect(
+        pendingPrimacyRequest({ agents: attached, nowMs: Date.now() }),
+      ).toBeUndefined();
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should not hand one request to two agents on the same review", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-two-"));
     const planPath = join(directory, "plan.mdx");
@@ -2024,7 +2099,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should refuse a resume token whose request is already terminal", async () => {
+  it("should give a returning agent its next request under a fresh token", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nAnswer two questions in order.\n";
@@ -2082,15 +2157,21 @@ describe("agent work loop lifecycle", () => {
         agentToken: firstPickup.agent_token,
       });
 
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "next",
-          planPath,
-          shouldWait: false,
-          executablePath,
-          agentToken: firstPickup.agent_token,
-        }),
-      ).rejects.toThrow(/already answered|terminal/i);
+      // The answered token is spent as work and still good as a name. It
+      // buys the agent its own registration back, never a second turn on the
+      // request it already closed.
+      const secondPickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        agentToken: firstPickup.agent_token,
+      });
+      expect(secondPickup).toMatchObject({
+        pending: true,
+        work: expect.objectContaining({ requestId: secondRequest.requestId }),
+      });
+      expect(secondPickup.agent_token).not.toBe(firstPickup.agent_token);
       const exchange = await readAgentExchange({
         store: review.store,
         sessionId: review.sessionId,
@@ -2098,9 +2179,16 @@ describe("agent work loop lifecycle", () => {
       });
       expect(
         exchange.requests.find(
-          (candidate) => candidate.requestId === secondRequest.requestId,
-        ),
-      ).not.toHaveProperty("claimedBy");
+          (candidate) => candidate.requestId === firstRequest.requestId,
+        )?.answeredAt,
+      ).toEqual(expect.any(String));
+      // One agent, one row: coming back is not arriving.
+      await expect(
+        reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toHaveLength(1);
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

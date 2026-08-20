@@ -38,16 +38,30 @@ const connectionFlag = (connectionToken: string | undefined): string =>
     ? ""
     : ` --connection ${quoteShellArgument(connectionToken)}`;
 
+/**
+ * Asks for the next piece of review work.
+ *
+ * The agent token is optional and means one thing: this is the agent that used
+ * it, coming back. A returning loop is otherwise indistinguishable from a
+ * second agent connecting - both are fresh processes with nothing of their own
+ * to show - and being mistaken for one costs it the right to answer at all
+ * (BIG-171). The token is handed back at pickup for exactly this, so the loop
+ * always has one to offer after its first turn.
+ */
 export const agentNextCommand = ({
   executablePath,
   planPath,
+  agentToken,
   connectionToken,
 }: {
   readonly executablePath: string;
   readonly planPath: string;
+  readonly agentToken?: string;
   readonly connectionToken?: string;
 }): string =>
-  `node ${quoteShellArgument(executablePath)} agent next ${quoteShellArgument(planPath)} --wait${connectionFlag(connectionToken)}`;
+  `node ${quoteShellArgument(executablePath)} agent next ${quoteShellArgument(planPath)} --wait${
+    agentToken === undefined ? "" : ` --agent ${quoteShellArgument(agentToken)}`
+  }${connectionFlag(connectionToken)}`;
 
 export const AGENT_NOTE_INITIAL_PROGRESS = "Working on the request";
 

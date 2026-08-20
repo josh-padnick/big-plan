@@ -61,7 +61,7 @@ import {
   applyPrimacyDeclined,
   applyPrimacyHandoff,
   roleForArrivingAgent,
-  writersAreContending,
+  selectPrimaryAgent,
   type AttachedAgent,
 } from "./shared/agent-primacy.js";
 import {
@@ -2428,7 +2428,6 @@ const withAgentHeartbeatLock = async ({
 
 type StoredHeartbeatContinuity = {
   readonly writerId?: string;
-  readonly displacedWriterId?: string;
   readonly updatedAtMs?: number;
   readonly model?: AgentModelIdentity;
 };
@@ -2455,10 +2454,6 @@ const storedHeartbeatContinuity = async ({
     "writerId" in value && typeof value.writerId === "string"
       ? value.writerId
       : undefined;
-  const displacedWriterId =
-    "displacedWriterId" in value && typeof value.displacedWriterId === "string"
-      ? value.displacedWriterId
-      : undefined;
   const updatedAtMs =
     "updatedAtMs" in value &&
     typeof value.updatedAtMs === "number" &&
@@ -2469,7 +2464,6 @@ const storedHeartbeatContinuity = async ({
     "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
   return {
     ...(writerId === undefined ? {} : { writerId }),
-    ...(displacedWriterId === undefined ? {} : { displacedWriterId }),
     ...(updatedAtMs === undefined ? {} : { updatedAtMs }),
     ...(model === undefined ? {} : { model }),
   };
@@ -2536,24 +2530,6 @@ export const writeAgentHeartbeat = async ({
           ? true
           : writerId === stored.writerId;
       const declaredModel = model ?? (isSameWriter ? stored.model : undefined);
-      /*
-      Who this write displaced, carried so the next write can tell a handover
-      from a fight.
-
-      A changed writer alone proves nothing: a fresh connector replacing a dead
-      one changes it too. Only a writer coming BACK - reclaiming the record that
-      displaced it, while that record is still fresh - proves two live loops,
-      because nothing dead reclaims anything (BIG-171). Recording the displaced
-      name here is what makes that return trip visible, and it costs no read:
-      the stored record is already open under this lock.
-
-      A write that keeps the same writer carries the displacement forward
-      untouched, so one loop refreshing twice a second cannot erase the evidence
-      before its rival's next write lands.
-      */
-      const displacedWriterId = isSameWriter
-        ? stored.displacedWriterId
-        : stored.writerId;
       await writeStoreJson({
         path: store.agentHeartbeatPath,
         value: {
@@ -2561,7 +2537,6 @@ export const writeAgentHeartbeat = async ({
           state,
           ...(requestId === undefined ? {} : { requestId }),
           ...(writer === undefined ? {} : { writerId: writer }),
-          ...(displacedWriterId === undefined ? {} : { displacedWriterId }),
           ...(declaredModel === undefined ? {} : { model: declaredModel }),
           updatedAtMs: now,
         },
@@ -2735,30 +2710,6 @@ export const readAgentDisconnectRequestFor = async ({
     }),
   );
 
-/**
- * Reports whether this presence write proved a second connection loop is live.
- *
- * The roster below is the ordinary evidence, because each agent signs its own
- * record and liveness is then observed rather than inferred. This exists for
- * the case the roster cannot cover: a loop that is writing the shared
- * heartbeat without having registered. It reads the record this write is about
- * to replace, so it costs nothing beyond the read the write already does.
- */
-export const agentPresenceIsContended = async ({
-  store,
-  sessionId,
-  writerId,
-  now = Date.now(),
-}: {
-  readonly store: ReviewStore;
-  readonly sessionId: string;
-  readonly writerId: string;
-  readonly now?: number;
-}): Promise<boolean> => {
-  const stored = await storedHeartbeatContinuity({ store, sessionId });
-  return writersAreContending({ stored, writerId, nowMs: now });
-};
-
 const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return undefined;
@@ -2781,6 +2732,7 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
   }
   const requestedPrimacyAtMs = record["requestedPrimacyAtMs"];
   const claimToken = record["claimToken"];
+  const claimClosedAtMs = record["claimClosedAtMs"];
   const inheritedDraftPath = record["inheritedDraftPath"];
   const model = decodeAgentModelIdentity(record["model"]);
   return {
@@ -2794,6 +2746,9 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
       : {}),
     ...(typeof claimToken === "string" && claimToken !== ""
       ? { claimToken }
+      : {}),
+    ...(typeof claimClosedAtMs === "number" && Number.isFinite(claimClosedAtMs)
+      ? { claimClosedAtMs }
       : {}),
     ...(typeof inheritedDraftPath === "string" && inheritedDraftPath !== ""
       ? { inheritedDraftPath }
@@ -2867,20 +2822,34 @@ const withAgentRoster = async ({
       new Error("Another process is updating the agent roster"),
   });
 
+/** What one process's registration leaves it holding on the roster. */
+export type AgentRegistration = {
+  readonly agents: ReadonlyArray<AttachedAgent>;
+  /** The record this process is now acting as. */
+  readonly agent: AttachedAgent;
+};
+
 /**
- * Registers this connection loop, or refreshes the registration it already has.
+ * Registers this agent, or refreshes the registration it already has.
  *
  * The role is decided here rather than by the caller, because it is a fact
  * about the set: the first live agent owns the plan and every later one
  * observes. An arriving loop can therefore never take primacy by arriving,
  * which is the behavior this whole change exists to remove (BIG-171).
  *
+ * `writerId` is only a proposal. A process that names a pickup token this
+ * review has already seen is the agent that used it, coming back, so it
+ * assumes that record's identity instead of its own - which is what keeps one
+ * agent one row on the reviewer's rail across the several short-lived
+ * processes a single turn takes, and what stops an agent returning from its
+ * own answered turn from being mistaken for a second agent arriving.
+ *
  * A refresh keeps the role, the attachment time, and any pending request. Only
  * the signal moves, so a long working turn cannot demote the agent running it,
  * and a reviewer's answer cannot be undone by the next heartbeat.
  *
- * Agents that have been silent past the stall window are dropped in the same
- * step. Reaping on write rather than on a timer keeps the roster honest with no
+ * Agents that have been silent past their window are dropped in the same step.
+ * Reaping on write rather than on a timer keeps the roster honest with no
  * scheduler, and it means a departed primary frees the role for the next
  * arrival instead of holding it forever.
  */
@@ -2894,91 +2863,207 @@ export const attachAgentToRoster = async ({
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
+  /** The identity to register under when this agent has no record yet. */
   readonly writerId: string;
   /**
-   * A pickup token this process is resuming.
+   * A pickup token this process is acting under.
    *
-   * A restarted connection loop is the same agent with a new process, so it
-   * adopts the registration its predecessor left rather than arriving as a
-   * stranger. Without this, resuming would demote the plan's own primary to an
-   * observer of itself and strand the request it still holds.
+   * Every command after the pickup - a progress note, the next `next` once the
+   * answer is published - knows the token and not the loop, so the token is
+   * how they find the registration they belong to. Without it each of them
+   * would arrive as a stranger: mid turn that demotes the plan's own primary
+   * to an observer of itself, and after the turn it strands the agent as an
+   * observer of a record nothing will ever refresh.
    */
   readonly adoptClaimToken?: string;
+  readonly model?: AgentModelIdentity;
+  readonly now?: number;
+}): Promise<AgentRegistration> => {
+  let registered: AttachedAgent | undefined;
+  const agents = await withAgentRoster({
+    store,
+    sessionId,
+    change: (existingAgents) => {
+      const adopted =
+        adoptClaimToken === undefined
+          ? undefined
+          : existingAgents.find(
+              (agent) => agent.claimToken === adoptClaimToken,
+            );
+      // The identity this process answers to: the record it adopted, or the
+      // one it proposed when it has no record here yet.
+      const identity = adopted?.writerId ?? writerId;
+      const live = existingAgents.filter(
+        (agent) =>
+          agent.writerId === identity ||
+          // Membership, never liveness: a working agent's process is gone for
+          // the length of its turn, so reaping on the stall window would
+          // delete the plan's own primary while it was answering (BIG-147).
+          agentIsAttached({ agent, nowMs: now }),
+      );
+      const existing = live.find((agent) => agent.writerId === identity);
+      if (existing !== undefined) {
+        /*
+        A finished claim is forgotten as its agent comes back.
+
+        The token was this record's way of being found again, and it has now
+        done that job. Keeping it would leave the record claiming a turn that
+        is over, so the moment the agent returns it goes back to standing on
+        its own signal like any waiting loop.
+        */
+        const returned =
+          adopted !== undefined && existing.claimClosedAtMs !== undefined;
+        const {
+          claimToken: _finished,
+          claimClosedAtMs: _closed,
+          ...withoutFinishedClaim
+        } = existing;
+        /*
+        An observer with nobody above it stops waiting.
+
+        Roles are assigned on arrival, so an observer whose primary has since
+        gone would otherwise stay an observer of an empty seat forever - still
+        asking a question about an agent that is no longer there, and taking no
+        work while the reviewer's requests pile up. This takes primacy from
+        nobody: it fires only when the review has no attached primary at all,
+        which is the same rule an arriving agent is already given.
+        */
+        const succeedsAnEmptySeat =
+          existing.role === "observer" &&
+          selectPrimaryAgent({
+            agents: live.filter((agent) => agent.writerId !== identity),
+            nowMs: now,
+          }) === undefined;
+        const { requestedPrimacyAtMs: _answered, ...withoutRequest } = returned
+          ? withoutFinishedClaim
+          : existing;
+        registered = {
+          ...(succeedsAnEmptySeat
+            ? { ...withoutRequest, role: "primary" }
+            : returned
+              ? withoutFinishedClaim
+              : existing),
+          signalAtMs: now,
+          // A refresh that declares nothing keeps what this agent already said
+          // about itself; it never inherits another's.
+          ...(model === undefined ? {} : { model }),
+        };
+        const refreshed = registered;
+        return live.map((agent) =>
+          agent.writerId === identity ? refreshed : agent,
+        );
+      }
+      const role = roleForArrivingAgent({ agents: live, nowMs: now });
+      registered = {
+        writerId: identity,
+        role,
+        attachedAtMs: now,
+        signalAtMs: now,
+        /*
+        Arriving as an observer is itself the request to be primary.
+
+        Requiring a separate flag would mean the pasted connect prompt never
+        carries it, so a second agent would attach in silence and the reviewer
+        would never be asked - which is the confusion this change exists to
+        end. Showing up is the ask; the reviewer's answer is what settles it.
+
+        Only a new arrival raises it. A refresh above leaves the field alone,
+        so "leave it as observer" stays answered instead of being re-asked
+        twice a second by the same loop.
+        */
+        ...(role === "observer" ? { requestedPrimacyAtMs: now } : {}),
+        ...(model === undefined ? {} : { model }),
+      };
+      return [...live, registered];
+    },
+  });
+  if (registered === undefined) {
+    throw new Error("The agent roster did not record this registration");
+  }
+  return { agents, agent: registered };
+};
+
+/**
+ * Refreshes the registration one pickup token belongs to, and creates none.
+ *
+ * A progress note is an agent reporting on work it already holds, so its whole
+ * identity is the token. Letting it register instead - under an id nobody else
+ * knows, because the note process mints its own - would rename the agent the
+ * browser is pointing at mid turn, so the reviewer's next click on that card
+ * would miss. If the token matches nothing, this agent has been reaped or
+ * displaced, and the answer to that is the refusal its next command already
+ * gives, not a fresh record standing in for an agent nobody promoted.
+ */
+export const refreshAgentByClaimToken = async ({
+  store,
+  sessionId,
+  claimToken,
+  model,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly claimToken: string;
   readonly model?: AgentModelIdentity;
   readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withAgentRoster({
     store,
     sessionId,
-    change: (agents) => {
-      const adopted =
-        adoptClaimToken === undefined
-          ? undefined
-          : agents.find((agent) => agent.claimToken === adoptClaimToken);
-      const live = agents
-        .filter(
-          (agent) =>
-            agent.writerId === writerId ||
-            agent.writerId === adopted?.writerId ||
-            // Membership, never liveness: a working agent's process is gone for
-            // the length of its turn, so reaping on the stall window would
-            // delete the plan's own primary while it was answering (BIG-147).
-            agentIsAttached({ agent, nowMs: now }),
-        )
-        // The predecessor's record becomes this process's record, keeping the
-        // role, the attachment time, and the token that identifies the work.
-        .map((agent) =>
-          adopted !== undefined && agent.writerId === adopted.writerId
-            ? { ...agent, writerId }
-            : agent,
-        );
-      const existing = live.find((agent) => agent.writerId === writerId);
-      if (existing !== undefined) {
-        return live.map((agent) =>
-          agent.writerId === writerId
-            ? {
-                ...agent,
-                signalAtMs: now,
-                // A refresh that declares nothing keeps what this agent
-                // already said about itself; it never inherits another's.
-                ...(model === undefined ? {} : { model }),
-              }
-            : agent,
-        );
-      }
-      const role = roleForArrivingAgent({ agents: live, nowMs: now });
-      return [
-        ...live,
-        {
-          writerId,
-          role,
-          attachedAtMs: now,
-          signalAtMs: now,
-          /*
-          Arriving as an observer is itself the request to be primary.
-
-          Requiring a separate flag would mean the pasted connect prompt never
-          carries it, so a second agent would attach in silence and the reviewer
-          would never be asked - which is the confusion this change exists to
-          end. Showing up is the ask; the reviewer's answer is what settles it.
-
-          Only a new arrival raises it. A refresh above leaves the field alone,
-          so "leave it as observer" stays answered instead of being re-asked
-          twice a second by the same loop.
-          */
-          ...(role === "observer" ? { requestedPrimacyAtMs: now } : {}),
-          ...(model === undefined ? {} : { model }),
-        },
-      ];
-    },
+    change: (agents) =>
+      agents.map((agent) =>
+        agent.claimToken === claimToken
+          ? {
+              ...agent,
+              signalAtMs: now,
+              ...(model === undefined ? {} : { model }),
+            }
+          : agent,
+      ),
   });
 
 /**
- * Links one loop's registration to the pickup token it claimed with.
+ * Removes this process's registration as it exits.
+ *
+ * A record stands for an agent that is here, and the only thing that keeps one
+ * standing after its process is gone is something still in flight: a claim it
+ * holds mid turn, or a question about primacy the reviewer has not answered.
+ * A record with neither describes nobody, and leaving it behind is what turns
+ * a harness that polls for work into a queue of ghosts - each poll attaching,
+ * finding nothing, exiting, and blocking the next one from ever being the
+ * primary.
+ */
+export const detachExitingAgent = async ({
+  store,
+  sessionId,
+  writerId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) =>
+      agents.filter((agent) => {
+        if (agent.writerId !== writerId) return true;
+        const holdsOpenClaim =
+          agent.claimToken !== undefined && agent.claimClosedAtMs === undefined;
+        return holdsOpenClaim || agent.requestedPrimacyAtMs !== undefined;
+      }),
+  });
+
+/**
+ * Links one agent's registration to the pickup token it claimed with.
  *
  * `agent note` and `agent respond` are separate processes that know their token
  * and not their loop, so without this they cannot ask what role they hold and a
  * displaced agent learns of its displacement only when publication is refused.
+ *
+ * Recording a token also reopens the record: this agent is mid turn again, and
+ * the patience that protects a working agent is owed to it from here until the
+ * claim closes.
  */
 export const recordAgentClaimToken = async ({
   store,
@@ -2995,9 +3080,71 @@ export const recordAgentClaimToken = async ({
     store,
     sessionId,
     change: (agents) =>
+      agents.map((agent) => {
+        if (agent.writerId !== writerId) return agent;
+        const { claimClosedAtMs: _reopened, ...rest } = agent;
+        return { ...rest, claimToken };
+      }),
+  });
+
+/**
+ * Records that the claim this token names is over.
+ *
+ * Holding an open claim is the one reason an unheard-from agent is presumed
+ * busy rather than gone, so the moment that stops being true the roster has to
+ * say so. Otherwise an agent that answered and exited goes on occupying the
+ * primary role for the whole recovery horizon, and the next agent to connect -
+ * including that same agent, coming back for its next turn - is told the plan
+ * already has someone answering it (BIG-171).
+ */
+export const closeAgentClaim = async ({
+  store,
+  sessionId,
+  claimToken,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly claimToken: string;
+  readonly now?: number;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) =>
       agents.map((agent) =>
-        agent.writerId === writerId ? { ...agent, claimToken } : agent,
+        agent.claimToken === claimToken
+          ? { ...agent, claimClosedAtMs: now }
+          : agent,
       ),
+  });
+
+/**
+ * Forgets an inherited draft once its agent has been handed it.
+ *
+ * The reviewer carried one draft to one agent for one hand-off. Left on the
+ * record it would ride every later pickup, pointing a fresh turn at a stage
+ * from a request that finished long ago and telling the agent to read it as
+ * reference.
+ */
+export const clearInheritedDraft = async ({
+  store,
+  sessionId,
+  writerId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+}): Promise<ReadonlyArray<AttachedAgent>> =>
+  withAgentRoster({
+    store,
+    sessionId,
+    change: (agents) =>
+      agents.map((agent) => {
+        if (agent.writerId !== writerId) return agent;
+        const { inheritedDraftPath: _handed, ...rest } = agent;
+        return rest;
+      }),
   });
 
 /** Records that one attached agent has asked to become the primary. */

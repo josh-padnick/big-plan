@@ -22,7 +22,6 @@ import {
   AGENT_STALL_MS,
 } from "./shared/agent-timing.js";
 import {
-  agentPresenceIsContended,
   attachAgentToRoster,
   declineAgentPrimacy,
   detachAgentFromRoster,
@@ -32,7 +31,6 @@ import {
   recordAgentClaimToken,
   requestAgentPrimacy,
   reviewStoreFor,
-  writeAgentHeartbeat,
 } from "./store.js";
 
 const SESSION = "0123456789abcdef";
@@ -60,7 +58,7 @@ describe("attachAgentToRoster", () => {
   it("should make the first agent the primary and the second an observer", async () => {
     const store = await temporaryStore();
     await attachAgentToRoster({ store, sessionId: SESSION, writerId: "first" });
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "second",
@@ -86,7 +84,7 @@ describe("attachAgentToRoster", () => {
       writerId: "second",
       now: 1_500,
     });
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "first",
@@ -130,7 +128,7 @@ describe("attachAgentToRoster", () => {
       writerId: "working",
       claimToken: "held",
     });
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "arriving",
@@ -160,7 +158,7 @@ describe("attachAgentToRoster", () => {
       writerId: "gone",
       claimToken: "held",
     });
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "fresh",
@@ -179,7 +177,7 @@ describe("attachAgentToRoster", () => {
       writerId: "first",
       model: { name: "claude-opus-5" },
     });
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "second",
@@ -195,7 +193,7 @@ describe("attachAgentToRoster", () => {
   it("should treat arriving as an observer as the request itself", async () => {
     const store = await temporaryStore();
     await attachAgentToRoster({ store, sessionId: SESSION, writerId: "first" });
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "second",
@@ -219,7 +217,7 @@ describe("attachAgentToRoster", () => {
       writerId: "second",
     });
     // The observer keeps heartbeating; that must not reopen the question.
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "second",
@@ -231,7 +229,7 @@ describe("attachAgentToRoster", () => {
 
   it("should not raise a request for the agent that owns the plan", async () => {
     const store = await temporaryStore();
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "first",
@@ -379,7 +377,7 @@ describe("the reviewer's answer", () => {
       sessionId: SESSION,
       writerId: "second",
     });
-    const agents = await attachAgentToRoster({
+    const { agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
       writerId: "third",
@@ -387,122 +385,6 @@ describe("the reviewer's answer", () => {
     expect(selectPrimaryAgent({ agents, nowMs: Date.now() })?.writerId).toBe(
       "third",
     );
-  });
-});
-
-describe("agentPresenceIsContended", () => {
-  it("should stay quiet while one loop writes on its own", async () => {
-    const store = await temporaryStore();
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "only",
-    });
-    expect(
-      await agentPresenceIsContended({
-        store,
-        sessionId: SESSION,
-        writerId: "only",
-      }),
-    ).toBe(false);
-  });
-
-  it("should stay quiet for a fresh connector replacing a dead one", async () => {
-    const store = await temporaryStore();
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "dead",
-    });
-    expect(
-      await agentPresenceIsContended({
-        store,
-        sessionId: SESSION,
-        writerId: "fresh",
-      }),
-    ).toBe(false);
-  });
-
-  it("should report a return trip as contention", async () => {
-    const store = await temporaryStore();
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "first",
-    });
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "second",
-    });
-    expect(
-      await agentPresenceIsContended({
-        store,
-        sessionId: SESSION,
-        writerId: "first",
-      }),
-    ).toBe(true);
-  });
-
-  it("should carry the displacement across the displacing writer's own refreshes", async () => {
-    const store = await temporaryStore();
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "first",
-    });
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "second",
-    });
-    // The winner refreshing twice must not erase the evidence before its
-    // rival's next write lands.
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "second",
-    });
-    expect(
-      await agentPresenceIsContended({
-        store,
-        sessionId: SESSION,
-        writerId: "first",
-      }),
-    ).toBe(true);
-  });
-
-  it("should not report contention against a stale record", async () => {
-    const store = await temporaryStore();
-    const past = Date.now() - 60_000;
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "first",
-      now: past,
-    });
-    await writeAgentHeartbeat({
-      store,
-      sessionId: SESSION,
-      state: "waiting",
-      writerId: "second",
-      now: past + 10,
-    });
-    expect(
-      await agentPresenceIsContended({
-        store,
-        sessionId: SESSION,
-        writerId: "first",
-      }),
-    ).toBe(false);
   });
 });
 

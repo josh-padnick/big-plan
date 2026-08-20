@@ -35,13 +35,17 @@ import {
 import {
   anchorReviewStore,
   attachAgentToRoster,
+  clearInheritedDraft,
+  closeAgentClaim,
   deriveReviewPlanId,
+  detachExitingAgent,
   prepareStore,
   randomId,
   readAgentDisconnectRequestFor,
   readAgentRoster,
   recordAgentClaimToken,
   readSnapshot,
+  refreshAgentByClaimToken,
   reviewStoreFor,
   writeAgentPrompt,
   writeAgentHeartbeat,
@@ -169,13 +173,6 @@ export type AgentWorkLoopErrorCode =
    * retry - which is exactly the churn a displaced loop must not do.
    */
   | "primacy-lost";
-
-export class AgentPrimacyLost extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AgentPrimacyLost";
-  }
-}
 
 export class AgentWorkLoopRejected extends Error {
   readonly code: AgentWorkLoopErrorCode;
@@ -700,7 +697,7 @@ For each returned work item:
 5. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
 6. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates your candidate and the complete response, then publishes both as one revision of the plan. Until it succeeds, nothing you wrote has reached the plan; if your claim was taken over while you worked, it refuses and your candidate is discarded rather than published.
 7. Retain the agent_token returned with each work item. If this agent process restarts before responding, use the \`agent next --agent <token>\` resume path to continue that still-open pickup by running ${resumeCommand}.
-8. After responding, run the next_command that ${nextCommand} returned - not the command above - so replies continue in the same agent session. It carries the connection_token this session was given, which is what keeps Agent Status naming one agent rather than a new one at every command; without it a decision the reviewer takes between two of your commands cannot reach you. Stay in this loop until the reviewer says the review is complete, the review server stops, or Big Plan tells you the reviewer disconnected you.
+8. After responding, run the next command that respond returns - not the command above - so replies continue in the same agent session. It is ${resumeCommand} carrying both the token you just answered under and the connection_token this session was given: the first is how Big Plan knows this is the same agent coming back rather than a second one connecting, and the second is what keeps Agent Status naming one agent rather than a new one at every command. A bare ${nextCommand} can leave you attached as an observer of your own last turn, with no way to answer the reviewer again, and without the connection_token a decision the reviewer takes between two of your commands cannot reach you. Stay in this loop until the reviewer says the review is complete, the review server stops, or Big Plan tells you the reviewer disconnected you.
 9. The reviewer can disconnect you from Agent Status in the review. You are told at your next command: \`agent next\` returns \`disconnected\`, and \`agent note\` and \`agent respond\` refuse with AGENT_DISCONNECTED. Stop this loop when that happens and do not reconnect unless the reviewer asks you to; anything you had in flight was already dropped, and their comments are safe.
 
 Reviewer image references included in a changed candidate are materialized into source-owned ./assets files when the response publishes. Never edit rendered HTML. Never edit the plan path directly. Never invent a Changed outcome without changing candidate_plan.`;
@@ -789,8 +786,26 @@ const nextWork = async ({
   // An agent that still holds a token from an earlier pickup passes it back to
   // resume that claim, so restarting mid-request continues the work instead of
   // waiting out its own lease.
-  const claimedBy = agentToken ?? randomId(8);
-  const resumingClaim = agentToken !== undefined;
+  /*
+  Whether this token is work to finish or only a name to be recognised by.
+
+  Both arrive the same way. A loop that restarted mid request passes the token
+  of a pickup that is still open and continues it; a loop that has just
+  published passes the token of the turn it finished, which owns no work at all
+  and is here to say "this is the same agent, coming back". Reading the second
+  as a failed resume is what left an agent registering as a stranger after
+  every answer, and attaching as an observer of its own last turn (BIG-171).
+  */
+  const ownedRequest =
+    agentToken === undefined
+      ? undefined
+      : resumeRequests?.find((candidate) => candidate.claimedBy === agentToken);
+  const resumingClaim =
+    ownedRequest !== undefined && !requestIsTerminal(ownedRequest);
+  // A finished token is spent: it named one turn, and this loop is starting
+  // another. Only a still-open pickup is continued under the token it began on.
+  const claimedBy =
+    resumingClaim && agentToken !== undefined ? agentToken : randomId(8);
   /*
   The agent session's own identity, minted at its first command and handed back
   on every command after it.
@@ -871,18 +886,47 @@ const nextWork = async ({
   Arriving as an observer is also the request the reviewer answers, so a second
   agent showing up is what raises the question rather than a flag nobody pastes.
   */
+  /*
+  The identity this loop answers to on the roster, which is not the same thing
+  as the identity of the process running it.
+
+  A process id is minted here and lives as long as this command. An agent's
+  place on the reviewer's rail has to outlast that: it is one row for one
+  agent, across the pickup, the notes, the answer, and the next pickup. So the
+  first registration decides which record this loop is, and every later one
+  goes back to that record rather than proposing a new name for it.
+  */
+  let rosterWriterId = writerId;
+  let adoptClaimToken = agentToken;
   const refreshRoster = async (): Promise<AgentRole> => {
-    const agents = await attachAgentToRoster({
+    const { agent } = await attachAgentToRoster({
       store: session.store,
       sessionId: session.sessionId,
-      writerId,
-      // A resume is this agent continuing after a restart, not a newcomer.
-      ...(agentToken === undefined ? {} : { adoptClaimToken: agentToken }),
+      writerId: rosterWriterId,
+      // Offered once. After it has found this agent's record, the record's own
+      // id is the handle, and a spent token would find nothing to adopt.
+      ...(adoptClaimToken === undefined ? {} : { adoptClaimToken }),
       ...(model === undefined ? {} : { model }),
     });
-    return (
-      agents.find((agent) => agent.writerId === writerId)?.role ?? "observer"
-    );
+    rosterWriterId = agent.writerId;
+    adoptClaimToken = undefined;
+    return agent.role;
+  };
+  /*
+  Gives up this loop's place as it exits.
+
+  A record stands for an agent that is here, and this process is leaving. The
+  store keeps the record anyway when it still carries an open claim or an
+  unanswered question, so nothing in flight is dropped; everything else is a
+  registration nobody is behind.
+  */
+  const detachOnExit = async <Result>(result: Result): Promise<Result> => {
+    await detachExitingAgent({
+      store: session.store,
+      sessionId: session.sessionId,
+      writerId: rosterWriterId,
+    }).catch(() => undefined);
+    return result;
   };
   const observerResult = (): Record<string, unknown> => ({
     pending: false,
@@ -898,24 +942,28 @@ const nextWork = async ({
     ],
   });
   let role = await refreshRoster();
-  if (role === "observer" && !shouldWait) return observerResult();
+  // The record this loop registered under is its own only when no token found
+  // an older one, which is exactly what "this agent has been here before" means.
+  const recognisedByToken = rosterWriterId !== writerId;
+  if (role === "observer" && !shouldWait) {
+    return detachOnExit(observerResult());
+  }
   let request: AgentRequest | undefined;
   if (agentToken !== undefined) {
-    const ownedRequest = resumeRequests?.find(
-      (candidate) => candidate.claimedBy === agentToken,
-    );
-    if (ownedRequest === undefined) {
+    if (ownedRequest?.canceledAt !== undefined) {
+      return fail("The reviewer canceled this agent request");
+    }
+    if (resumingClaim) {
+      request = ownedRequest;
+    } else if (ownedRequest === undefined && !recognisedByToken) {
+      // A token that owns no request and matches no registration proves
+      // nothing at all. It is the takeover case, or a build that never
+      // registered, and handing it a fresh turn would silently forgive the
+      // displacement it is meant to discover.
       return fail(
         "This agent token no longer owns an open request; another agent may have taken it over",
       );
     }
-    if (ownedRequest?.canceledAt !== undefined) {
-      return fail("The reviewer canceled this agent request");
-    }
-    if (ownedRequest.answeredAt !== undefined) {
-      return fail("The agent has already answered this request");
-    }
-    request = ownedRequest;
   }
   while (true) {
     // An observer never selects work. It keeps its registration fresh so the
@@ -945,13 +993,13 @@ const nextWork = async ({
         const reason =
           liveness.stopReason ??
           "The review server stopped while the agent was waiting.";
-        return {
+        return detachOnExit({
           pending: false,
           ended: true,
           plan: session.planPath,
           reason,
           help: ["Start a new review session to receive more feedback"],
-        };
+        });
       }
       await wait(500);
       role = await refreshRoster();
@@ -969,14 +1017,14 @@ const nextWork = async ({
             });
     }
     if (request === undefined) {
-      if (role === "observer") return observerResult();
-      return {
+      if (role === "observer") return detachOnExit(observerResult());
+      return detachOnExit({
         pending: false,
         plan: session.planPath,
         connection_token: writerId,
         next_command: nextCommand,
         help: ["Run again with --wait to wait for the reviewer's next message"],
-      };
+      });
     }
     const selectedRequestId = request.requestId;
     let verifiedAttachments = request.attachments;
@@ -1168,7 +1216,7 @@ const nextWork = async ({
     await recordAgentClaimToken({
       store: session.store,
       sessionId: session.sessionId,
-      writerId,
+      writerId: rosterWriterId,
       claimToken: claimedBy,
     }).catch(() => undefined);
     const respondCommand = agentRespondCommand({
@@ -1207,7 +1255,17 @@ const nextWork = async ({
         store: session.store,
         sessionId: session.sessionId,
       }).catch(() => [])
-    ).find((agent) => agent.writerId === writerId)?.inheritedDraftPath;
+    ).find((agent) => agent.writerId === rosterWriterId)?.inheritedDraftPath;
+    if (inheritedDraft !== undefined) {
+      // Handed over, and so spent. The reviewer carried one draft across one
+      // hand-off; leaving it on the record would attach it to every later
+      // pickup, pointing a fresh turn at a request that ended long ago.
+      await clearInheritedDraft({
+        store: session.store,
+        sessionId: session.sessionId,
+        writerId: rosterWriterId,
+      }).catch(() => undefined);
+    }
     return {
       pending: true,
       plan: session.planPath,
@@ -1449,6 +1507,20 @@ const respond = async ({
     // here and nowhere earlier.
     return fail(`Cannot publish the plan revision: ${String(error)}`);
   }
+  /*
+  The turn is over, so the roster stops treating this agent as busy.
+
+  An open claim is the one thing that lets an agent go unheard from without
+  being presumed gone, because its process is handed to the harness for the
+  length of a turn (BIG-147). Once the answer is published that is no longer
+  true of anybody, and a record that went on claiming it kept the agent's own
+  next `next` out of the primary seat for half an hour (BIG-171).
+  */
+  await closeAgentClaim({
+    store: session.store,
+    sessionId: session.sessionId,
+    claimToken: agentToken,
+  }).catch(() => undefined);
   await appendProgressEvent({
     store: session.store,
     event: {
@@ -1474,11 +1546,12 @@ const respond = async ({
     next: agentNextCommand({
       executablePath: resolve(executablePath),
       planPath: session.planPath,
+      agentToken,
       ...(connectionToken === undefined ? {} : { connectionToken }),
     }),
     help: [
       "The live review will replace its waiting chip with this real agent response",
-      "Run next and wait so the reviewer can continue this conversation",
+      "Run the returned next command as given and wait; it carries the token that keeps this the same agent to the reviewer",
     ],
   };
 };
@@ -1591,11 +1664,10 @@ const note = async ({
   // roster would survive without it - membership is bounded by the recovery
   // horizon, not by the stall window - but a card that says an agent has gone
   // quiet while it is plainly narrating would be wrong.
-  await attachAgentToRoster({
+  await refreshAgentByClaimToken({
     store: session.store,
     sessionId: session.sessionId,
-    writerId: randomId(8),
-    adoptClaimToken: agentToken,
+    claimToken: agentToken,
     ...(model === undefined ? {} : { model }),
   }).catch(() => undefined);
   await writeAgentHeartbeat({

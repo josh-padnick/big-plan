@@ -8,9 +8,14 @@
 // at the lease boundary (BIG-171).
 //
 // This module is that missing authority, and nothing here stores state or
-// depends on the browser or Node. It answers three questions from plain data:
-// whether two loops are really contending, which attached agent is the
-// primary, and whether the reviewer is being asked to decide something.
+// depends on the browser or Node. It answers two questions from plain data:
+// which attached agent is the primary, and whether the reviewer is being asked
+// to decide something.
+//
+// Contention is not one of them, and deliberately so. Under the observer model
+// two live loops cannot interleave: the second one attaches without the right
+// to claim, so there is nothing left to detect. The roster below is the whole
+// evidence, and every agent on it signed its own record.
 
 import { AGENT_RECOVERY_HORIZON_MS, AGENT_STALL_MS } from "./agent-timing.js";
 import { agentModelDisplayName } from "./agent-identity-catalog.js";
@@ -26,77 +31,18 @@ import type { AgentModelIdentity } from "./agent-model.js";
  */
 export type AgentRole = "primary" | "observer";
 
-/**
- * How long a presence record stays fresh enough to prove its writer is alive,
- * for the contention test alone.
- *
- * The connection loop writes twice a second, so two cadences is the smallest
- * window that cannot be crossed by a dead process: a writer that returns
- * within it was demonstrably running when the record that displaced it was
- * written. Nothing here uses AGENT_STALL_MS's 75 seconds, because that window
- * answers a different question - has anyone been here lately - and would call
- * an ordinary reconnect a contention.
- */
-export const AGENT_CONTENTION_WINDOW_MS = 1_500;
-
-/** The plan-wide presence facts the contention rule reads. */
-export type ContendedPresence = {
-  /** The writer the stored record currently names. */
-  readonly writerId?: string;
-  /** The writer the stored record displaced when it was written. */
-  readonly displacedWriterId?: string;
-  readonly updatedAtMs?: number;
-};
-
-/**
- * True when a presence write proves two connection loops are live at once.
- *
- * The rule is a return trip, and the asymmetry is the whole point. A writer
- * changing once is the healthiest transition Big Plan has: a fresh connector
- * replacing one that died writes a different id, and so does the loop that
- * takes over after an observed end. Treating that as contention would put a
- * warning on a clean reconnect.
- *
- * A writer coming BACK - writing again while the record that displaced it is
- * still fresh - cannot be explained that way. Nothing dead reclaims a record
- * it already lost, so both writers were running inside the same window. That
- * is contention, proven rather than inferred.
- *
- * The freshness bound is required, not decorative. Without it, two loops that
- * ran hours apart and happened to alternate across a long-idle store would
- * read as contending.
- */
-export const writersAreContending = ({
-  stored,
-  writerId,
-  nowMs,
-}: {
-  readonly stored: ContendedPresence;
-  /** The writer performing this presence write. */
-  readonly writerId: string;
-  readonly nowMs: number;
-}): boolean => {
-  const { writerId: storedWriterId, displacedWriterId, updatedAtMs } = stored;
-  if (
-    storedWriterId === undefined ||
-    displacedWriterId === undefined ||
-    updatedAtMs === undefined ||
-    !Number.isFinite(updatedAtMs)
-  ) {
-    return false;
-  }
-  // A writer that never left cannot have returned.
-  if (writerId === storedWriterId) return false;
-  // Only the writer the stored record displaced proves a return trip. A third
-  // writer arriving is one more handover, not evidence about the first two.
-  if (writerId !== displacedWriterId) return false;
-  const age = nowMs - updatedAtMs;
-  return age >= 0 && age <= AGENT_CONTENTION_WINDOW_MS;
-};
-
 /** One agent attached to a review, as the store records it. */
 export type AttachedAgent = {
-  /** The connection loop's own identity, minted per invocation. */
+  /**
+   * This agent's identity on the roster, carried across its processes.
+   *
+   * One agent answers a reviewer through a series of short-lived commands -
+   * `next` hands over the work and exits, `note` and `respond` are separate
+   * processes again - so an id minted per invocation would rename the agent
+   * several times a turn. It is minted by the first process that registers and
+   * then adopted by every later one, which is what lets the browser hold a
+   * handle on an agent for longer than one command.
+   */
   readonly writerId: string;
   readonly role: AgentRole;
   /** When this agent first attached to the review. */
@@ -106,14 +52,25 @@ export type AttachedAgent = {
   /** When it asked to become the primary, if it has. */
   readonly requestedPrimacyAtMs?: number;
   /**
-   * The pickup token this loop last claimed with.
+   * The pickup token this agent last claimed with.
    *
    * It is what lets `agent note` and `agent respond` - separate processes that
    * know their token and not their loop - find out whose role they are acting
    * under, so a displaced agent can be told at its next command instead of at
-   * publication.
+   * publication. It is also how the agent's own next `next` finds its way back
+   * to this record instead of arriving as a stranger.
    */
   readonly claimToken?: string;
+  /**
+   * When the claim named above stopped being open, if it has.
+   *
+   * Holding an open claim is the one thing that makes an unheard-from agent
+   * presumed busy rather than gone, so the roster has to know when that stops
+   * being true. Without it, "has ever claimed" was read as "is mid turn", and
+   * an agent that finished answering half an hour ago went on counting as the
+   * plan's primary.
+   */
+  readonly claimClosedAtMs?: number;
   /**
    * A displaced agent's unpublished draft, handed to this agent as reference.
    *
@@ -209,28 +166,54 @@ export const agentIsAttached = ({
   agent,
   nowMs,
 }: {
-  readonly agent: Pick<AttachedAgent, "signalAtMs" | "claimToken">;
+  readonly agent: Pick<
+    AttachedAgent,
+    "signalAtMs" | "claimToken" | "claimClosedAtMs"
+  >;
   readonly nowMs: number;
-}): boolean =>
-  agentIsLive({
+}): boolean => {
+  /*
+  An agent that has not been heard from since its turn ended is gone.
+
+  This is the one case where silence says something definite. Every other
+  quiet agent might be mid answer, because `agent next` hands its work to the
+  harness and the process exits, so nothing renews anything for the length of
+  a turn (BIG-147). But a claim closes only when the answer is published, and
+  at that moment the process that ran the turn has already exited and the
+  commands that finished it have too. Nobody is behind this record.
+
+  Leaving it standing is what made a single agent unable to keep working: it
+  came back for its next turn, found the seat still held by the record of its
+  own last one, and attached as an observer of itself - taking no further work
+  and asking the reviewer, every turn, whether to promote a second agent that
+  did not exist (BIG-171).
+  */
+  if (
+    agent.claimClosedAtMs !== undefined &&
+    agent.signalAtMs <= agent.claimClosedAtMs
+  ) {
+    return false;
+  }
+  return agentIsLive({
     agent,
     nowMs,
     /*
     Patience is for agents whose silence might mean "busy", and only an agent
-    that has held work can be busy. One that never claimed anything is either
-    running - in which case it is signalling twice a second and this window is
+    holding an open claim can be busy. One that holds none is either running -
+    in which case it is signalling twice a second and this window is
     irrelevant - or gone, and dropping it costs nothing because it re-attaches
     on its next command.
 
-    The distinction also bounds a real pile-up: every `agent next` invocation
-    mints its own writer id, so a harness that polls without --wait would
-    otherwise accumulate one dead observer per poll for the whole horizon.
+    The distinction also bounds a real pile-up: a harness that polls without
+    --wait would otherwise accumulate one dead record per poll for the whole
+    horizon.
     */
     maximumAgeMs:
-      agent.claimToken === undefined
+      agent.claimToken === undefined || agent.claimClosedAtMs !== undefined
         ? AGENT_STALL_MS
         : AGENT_RECOVERY_HORIZON_MS,
   });
+};
 
 /**
  * The agents a reviewer should be shown, oldest attachment first.
@@ -340,6 +323,12 @@ export const roleForArrivingAgent = ({
  * reads this list to answer "who is answering me" - a question that must never
  * have two answers, even for a poll.
  *
+ * An answer about an agent that is no longer on the roster changes nothing.
+ * The agent may have been reaped between the reviewer's click and this write,
+ * and demoting the incumbent for a successor that cannot arrive would leave
+ * the plan with no primary at all - a worse state than the one the reviewer
+ * was trying to fix, and one no later write repairs on its own.
+ *
  * The request is cleared on both sides: the promoted agent got what it asked
  * for, and the demoted one never asked. A stale flag would keep the toolbar in
  * hazard after the reviewer had already decided.
@@ -354,8 +343,9 @@ export const applyPrimacyHandoff = ({
   readonly writerId: string;
   /** The outgoing agent's draft, when the reviewer chose to carry it over. */
   readonly inheritedDraftPath?: string;
-}): ReadonlyArray<AttachedAgent> =>
-  agents.map((agent) => {
+}): ReadonlyArray<AttachedAgent> => {
+  if (!agents.some((agent) => agent.writerId === writerId)) return agents;
+  return agents.map((agent) => {
     /*
     Only the two agents this answer was about are touched.
 
@@ -380,6 +370,7 @@ export const applyPrimacyHandoff = ({
     const { requestedPrimacyAtMs: _demoted, ...rest } = agent;
     return { ...rest, role: "observer" };
   });
+};
 
 /**
  * Applies a reviewer's decision to leave an agent where it is.

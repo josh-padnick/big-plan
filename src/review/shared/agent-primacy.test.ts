@@ -4,7 +4,6 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_RECOVERY_HORIZON_MS } from "./agent-timing.js";
 import {
-  AGENT_CONTENTION_WINDOW_MS,
   agentIsAttached,
   agentIsLive,
   agentPrimacyHealth,
@@ -15,7 +14,6 @@ import {
   roleForArrivingAgent,
   selectObserverAgents,
   selectPrimaryAgent,
-  writersAreContending,
   type AttachedAgent,
 } from "./agent-primacy.js";
 
@@ -27,122 +25,6 @@ const agent = (overrides: Partial<AttachedAgent> = {}): AttachedAgent => ({
   attachedAtMs: NOW - 10_000,
   signalAtMs: NOW,
   ...overrides,
-});
-
-describe("writersAreContending", () => {
-  it("should report a return trip inside the window as contention", () => {
-    expect(
-      writersAreContending({
-        stored: {
-          writerId: "second",
-          displacedWriterId: "first",
-          updatedAtMs: NOW - 20,
-        },
-        writerId: "first",
-        nowMs: NOW,
-      }),
-    ).toBe(true);
-  });
-
-  it("should not report a first handover, which is an ordinary reconnect", () => {
-    expect(
-      writersAreContending({
-        stored: { writerId: "first", updatedAtMs: NOW - 20 },
-        writerId: "second",
-        nowMs: NOW,
-      }),
-    ).toBe(false);
-  });
-
-  it("should not report a writer refreshing its own record", () => {
-    expect(
-      writersAreContending({
-        stored: {
-          writerId: "first",
-          displacedWriterId: "older",
-          updatedAtMs: NOW - 20,
-        },
-        writerId: "first",
-        nowMs: NOW,
-      }),
-    ).toBe(false);
-  });
-
-  it("should not report a third writer arriving after a handover", () => {
-    expect(
-      writersAreContending({
-        stored: {
-          writerId: "second",
-          displacedWriterId: "first",
-          updatedAtMs: NOW - 20,
-        },
-        writerId: "third",
-        nowMs: NOW,
-      }),
-    ).toBe(false);
-  });
-
-  it("should not report a return trip past the freshness window", () => {
-    expect(
-      writersAreContending({
-        stored: {
-          writerId: "second",
-          displacedWriterId: "first",
-          updatedAtMs: NOW - AGENT_CONTENTION_WINDOW_MS - 1,
-        },
-        writerId: "first",
-        nowMs: NOW,
-      }),
-    ).toBe(false);
-  });
-
-  it("should report a return trip exactly at the window edge", () => {
-    expect(
-      writersAreContending({
-        stored: {
-          writerId: "second",
-          displacedWriterId: "first",
-          updatedAtMs: NOW - AGENT_CONTENTION_WINDOW_MS,
-        },
-        writerId: "first",
-        nowMs: NOW,
-      }),
-    ).toBe(true);
-  });
-
-  it("should refuse a record whose timestamp is in the future", () => {
-    expect(
-      writersAreContending({
-        stored: {
-          writerId: "second",
-          displacedWriterId: "first",
-          updatedAtMs: NOW + 50,
-        },
-        writerId: "first",
-        nowMs: NOW,
-      }),
-    ).toBe(false);
-  });
-
-  it("should refuse a record that names no displaced writer", () => {
-    expect(
-      writersAreContending({
-        stored: { writerId: "second", updatedAtMs: NOW - 20 },
-        writerId: "first",
-        nowMs: NOW,
-      }),
-    ).toBe(false);
-  });
-
-  it("should refuse a record with no stored timestamp", () => {
-    expect(
-      writersAreContending({
-        stored: { writerId: "second", displacedWriterId: "first" },
-        writerId: "first",
-        nowMs: NOW,
-      }),
-    ).toBe(false);
-  });
 });
 
 describe("agentIsAttached", () => {
@@ -380,6 +262,29 @@ describe("applyPrimacyHandoff", () => {
   it("should clear the request so the toolbar leaves its hazard state", () => {
     const next = applyPrimacyHandoff({ agents, writerId: "new" });
     expect(agentPrimacyHealth({ agents: next, nowMs: NOW })).toBe("settled");
+  });
+});
+
+describe("applyPrimacyHandoff when the chosen agent has gone", () => {
+  it("should change nothing rather than leave the plan with no primary", () => {
+    // The two halves of a hand-off cannot be one write, so the caller does the
+    // demotion and the promotion here and frees the incumbent's claim after.
+    // If this demoted for a successor that had been reaped in between, the
+    // review would be left with nobody able to answer it and nothing that ever
+    // notices - the reviewer would simply stop getting replies.
+    const incumbent = agent({ writerId: "incumbent", role: "primary" });
+    const other = agent({
+      writerId: "watching",
+      role: "observer",
+      requestedPrimacyAtMs: NOW,
+    });
+
+    expect(
+      applyPrimacyHandoff({
+        agents: [incumbent, other],
+        writerId: "departed",
+      }),
+    ).toEqual([incumbent, other]);
   });
 });
 
