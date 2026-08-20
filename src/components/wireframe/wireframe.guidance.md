@@ -85,7 +85,7 @@ Implementation principles:
 - Group by user concepts, not by available data. Hierarchy should come from meaning, not a wall of containers.
 - Nest a dependent control directly beneath its parent in one shared group; never make a channel, time, or other dependency look like an unrelated peer section.
 - Keep parallel options parallel in grammar, visual weight, information depth, and target treatment so the layout does not bias one accidentally.
-- Make a touch option look touchable across its whole surface: complete border or fill, comfortable padding, hand-drawn identifying icon, title, one-line consequence, and a clear state target. Do not make a thin row edge carry the interaction alone.
+- Make a touch option look touchable across its whole surface: complete border or fill, comfortable padding, title, one-line consequence, whatever card art the group carries, and a clear state target. Do not make a thin row edge carry the interaction alone.
 - Inside an option, make the option name a distinct title, then place a rule before its criteria. Criterion labels are smaller than the option name, bold, and end with `:`; values remain regular weight.
 - Keep comparison labels readable at their longest realistic value. Widen or break out the matrix, abbreviate with a nearby legend, or choose another explicit composition before allowing one-word-per-line headers. Center collapsed row actions on both axes.
 - Set a one-sentence definition apart from answer rows with breathing room and a consistent dashed-underline definition affordance; it must read as framing help, never as another option.

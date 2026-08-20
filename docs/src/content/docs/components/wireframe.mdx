@@ -179,8 +179,8 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | `Heading`          | Required `text`; optional `level="1\|2\|3"`.                                                                        |
 | `Text`             | Required `text`; optional `role="body\|helper\|muted\|section"`.                                                      |
-| `Button`           | Required `label`; optional `icon`, `iconOnly`, `emphasis="primary\|secondary\|tertiary\|destructive"`, and `navigateTo`. `iconOnly` draws the glyph alone while `label` stays the accessible name and tooltip. |
-| `Icon`             | Required `name` and `label`; optional `labelled` and `size="sm\|md\|lg"`. A mark, never a control.                     |
+| `Button`           | Required `label`; optional `icon`, `iconOnly`, `emphasis="primary\|secondary\|tertiary\|destructive"`, and `navigateTo`. `iconOnly` draws the glyph alone while `label` stays the accessible name and tooltip, so it needs an `icon` to draw. |
+| `Icon`             | Required `name` and `label`; optional `labelled` and `size="sm\|md\|lg"`. A mark, never a control. `label` always reaches assistive technology; `labelled` also draws those words beside the glyph. |
 | `Nav`              | Optional `label`; holds only `NavItem`.                                                                             |
 | `NavItem`          | Required `label`; optional `active` and `navigateTo`; valid only in `Nav`.                                           |
 | `Metric`           | Required `label` and `value`; optional `note`.                                                                      |
