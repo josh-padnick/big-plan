@@ -18,9 +18,9 @@ big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
 big-plan service status|start|stop|restart
 big-plan agent <input.mdx>
-big-plan agent next <input.mdx> [--wait] [--agent <token>]
-big-plan agent note <input.mdx> "<progress>" --agent <token>
-big-plan agent respond <input.mdx> <response.json> --agent <token>
+big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
+big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
+big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]
 big-plan update [--check]
 ```
 
@@ -44,9 +44,9 @@ npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
 npx big-plan service status
 npx big-plan agent <input.mdx>
-npx big-plan agent next <input.mdx> [--wait] [--agent <token>]
-npx big-plan agent note <input.mdx> "<progress>" --agent <token>
-npx big-plan agent respond <input.mdx> <response.json> --agent <token>
+npx big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
+npx big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
+npx big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]
 npx big-plan update --check
 ```
 
@@ -197,7 +197,7 @@ new address.
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
 a model provider itself. The launched coding-agent session uses:
 
-- `agent next <input.mdx> --wait [--agent <token>]` to receive the oldest pending feedback,
+- `agent next <input.mdx> --wait [--agent <token>] [--connection <token>]` to receive the oldest pending feedback,
   thread reply, or plan-wide chat question, its prior conversation, a validated
   response template, the private candidate to edit, and the exact publish command;
 - `agent note <input.mdx> "<progress>" --agent <token>` to keep the reviewer
@@ -207,8 +207,19 @@ a model provider itself. The launched coding-agent session uses:
   candidate has rendered and passed lint.
 
 `agent next` mints the `--agent` token when it hands out a request, and returns
-it as `agent_token` together with ready-to-run `note_command` and
-`respond_command` strings.
+it as `agent_token` together with ready-to-run `note_command`,
+`respond_command`, and `next_command` strings.
+It also mints the `--connection` token at the agent's first command and returns
+it as `connection_token`, carried by every command string it returns.
+The two say different things: the agent token names one claim and ends with it,
+while the connection token names the agent session running the loop and lasts as
+long as that session does.
+Running the returned commands unchanged hands both back, which is what lets the
+reviewer's **Agent Status** name one connected agent across a whole conversation
+instead of a new one at every command - and what lets a decision the reviewer
+takes between two of the agent's commands still reach it.
+An agent that brings no connection token is a new connection and is given a new
+one, so a second agent never inherits a decision taken about the first.
 It also returns `candidate_plan`: this claim's own copy of the plan, and the
 only repository file the agent edits.
 The agent writes its response JSON to the returned `response_file`, then runs
@@ -236,6 +247,7 @@ A claim also ends when the reviewer takes the message back: once an agent has re
 Taking a message back discards the stage its claim was drafting, and a returning agent's `agent respond` is refused rather than published, so pick up current work with `agent next`.
 
 The reviewer can also take an agent off a review from **Agent Status**, and every `agent` command answers that at its next run.
+The disconnect is addressed to the connection the reviewer was looking at, by its connection token and by any pickup token it held, so it reaches that agent whether it is mid-answer or between commands, and reaches nobody else.
 `agent next` reports it as an ordinary end - `ended` and `disconnected` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
 `agent note` and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
 The answer the disconnected session was drafting is dropped; the reviewer's message goes back in the queue for whichever agent connects next.

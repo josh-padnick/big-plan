@@ -2090,6 +2090,7 @@ describe("agent work loop lifecycle", () => {
         kind: "next",
         planPath,
         shouldWait: true,
+        executablePath,
       });
       const writerId = await vi.waitFor(
         async () => {
@@ -2184,6 +2185,118 @@ describe("agent work loop lifecycle", () => {
         name: "AgentWorkLoopRejected",
         code: "agent-disconnected",
       });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // BIG-190: the reviewer takes this decision between two of the agent's
+  // commands, which is where an identity minted per invocation used to lose it.
+  it("should answer a disconnect written between the agent's commands", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-off-between-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nDisconnect me between two commands.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "eeeeeeeeeeeeeeee",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Answer this, then wait for my next message.",
+      });
+      await writeAgentRequest({ store: review.store, request });
+      const first = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const connectionToken = first.connection_token;
+      if (typeof connectionToken !== "string") {
+        throw new Error("agent next returned no connection token");
+      }
+      expect(first.next_command).toContain("--connection");
+      expect(first.next_command).toContain(connectionToken);
+      // The presence record names the connection rather than the process that
+      // last wrote to it, so the route has a name to address in the one state a
+      // between-commands disconnect is taken in: nothing claimed, nothing live.
+      await expect(
+        reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({ writerId: connectionToken });
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: { writerId: connectionToken, requestedAtMs: Date.now() },
+      });
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          connectionToken,
+        }),
+      ).resolves.toMatchObject({
+        pending: false,
+        ended: true,
+        disconnected: true,
+      });
+      await expect(
+        reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({
+        connected: false,
+        endedAtMs: expect.any(Number),
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // The other half of the same rule: stable for one agent, never shared. A
+  // directive that outlived its agent must not become a standing order.
+  it("should give an agent arriving without a connection token its own", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-off-next-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nThe next agent is a new one.\n");
+    const review = await startReviewRuntime({ planPath });
+    try {
+      const first = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const connectionToken = first.connection_token;
+      if (typeof connectionToken !== "string") {
+        throw new Error("agent next returned no connection token");
+      }
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: { writerId: connectionToken, requestedAtMs: Date.now() },
+      });
+      const second = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      expect(second.connection_token).toEqual(expect.any(String));
+      expect(second.connection_token).not.toBe(connectionToken);
+      expect(second.disconnected).toBeUndefined();
+      expect(second.ended).toBeUndefined();
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

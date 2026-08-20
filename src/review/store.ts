@@ -2572,16 +2572,6 @@ export const writeAgentHeartbeatEnded = async ({
   });
 
 /**
- * Records the reviewer's decision to disconnect the agent they were looking at.
- *
- * The directive is addressed to that agent and to nobody else, and is never
- * cleared: an agent that attaches afterwards writes a different writer id and
- * claims under a different token, so the rule that matches them simply stops
- * matching. What the record buys by staying is the connection log's ability to
- * say who ended the session, long after the agent that answered it has gone
- * (BIG-190).
- */
-/**
  * How many disconnected agents the record remembers.
  *
  * One entry per agent the reviewer has taken off this review, and a review that
@@ -2592,6 +2582,16 @@ export const writeAgentHeartbeatEnded = async ({
  */
 const REMEMBERED_DISCONNECTS = 16;
 
+/**
+ * Records the reviewer's decision to disconnect the agent they were looking at.
+ *
+ * The directive is addressed to that agent and to nobody else, and is never
+ * cleared: an agent that attaches afterwards brings no connection token of its
+ * own, so it mints a different one and claims under a different token, and the
+ * rule that matches them simply stops matching. What the record buys by staying is the connection log's ability to
+ * say who ended the session, long after the agent that answered it has gone
+ * (BIG-190).
+ */
 export const writeAgentDisconnectRequest = async ({
   store,
   directive,

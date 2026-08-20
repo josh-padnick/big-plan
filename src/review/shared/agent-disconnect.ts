@@ -34,8 +34,14 @@ export const AGENT_DISCONNECTED_HELP: ReadonlyArray<string> = [
 /** One reviewer-issued disconnect, as the review store records it. */
 export type AgentDisconnectDirective = {
   /**
-   * The connection loop the reviewer disconnected, as the presence record named
+   * The agent session the reviewer disconnected, as the presence record named
    * it. It is what `agent next` matches itself against.
+   *
+   * It identifies a connection rather than one CLI invocation, because the
+   * reviewer's decision is most often taken between two of the agent's
+   * commands: `agent next` mints this at the session's first command and hands
+   * it back on every command after it, so the name the reviewer disconnected is
+   * still the agent's own name when it next asks for work (BIG-190).
    */
   readonly writerId?: string;
   /**
