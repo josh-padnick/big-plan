@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { Root } from "hast";
+import type { Element, Root } from "hast";
 import { compileMarkdown } from "./compile-markdown.js";
 import { rehypeBlockIdentity, type BlockDescriptor } from "./block-identity.js";
 import { serializeHtml } from "../serialize-html.js";
+import { DIFF_BASELINE_SIDE, DIFF_SIDE_ATTRIBUTE } from "./side-isolation.js";
 
 const compile = (markdown: string) => {
   const { root, blocks } = compileMarkdown({ markdown });
@@ -720,5 +721,177 @@ describe("block identity component models", () => {
     expect(root?.component).toBe("QuickSummary");
     expect(facet?.component).toBeUndefined();
     expect(facet?.model).toBeUndefined();
+  });
+});
+
+const commentableTarget = ({
+  kind,
+  label,
+}: {
+  readonly kind: string;
+  readonly label: string;
+}): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    "data-commentable-kind": kind,
+    "data-commentable-label": label,
+  },
+  children: [{ type: "text", value: label }],
+});
+
+const customComponent = (children: ReadonlyArray<Element>): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: { "data-component": "Custom" },
+  children: [...children],
+});
+
+const stamp = (tree: Root): ReadonlyArray<string> => {
+  const blocks: Array<BlockDescriptor> = [];
+  rehypeBlockIdentity({ blocks })(tree);
+  return blocks.map((block) => block.id);
+};
+
+describe("block identity baseline-side skip", () => {
+  it("should mint the same ids when a baseline-side subtree with declared targets is present", () => {
+    const withoutBaseline: Root = {
+      type: "root",
+      children: [
+        customComponent([
+          commentableTarget({ kind: "table-row", label: "First" }),
+          commentableTarget({ kind: "table-row", label: "Second" }),
+        ]),
+        customComponent([
+          commentableTarget({ kind: "table-row", label: "Third" }),
+        ]),
+        {
+          type: "element",
+          tagName: "p",
+          properties: {},
+          children: [{ type: "text", value: "After." }],
+        },
+      ],
+    };
+    const withBaseline = structuredClone(withoutBaseline);
+    const first = withBaseline.children[0];
+    if (first === undefined || first.type !== "element") {
+      throw new Error("expected a component root");
+    }
+    first.children.unshift({
+      type: "element",
+      tagName: "div",
+      properties: { [DIFF_SIDE_ATTRIBUTE]: DIFF_BASELINE_SIDE },
+      children: [
+        commentableTarget({ kind: "table-row", label: "Was first" }),
+        commentableTarget({ kind: "table-row", label: "Was second" }),
+        commentableTarget({ kind: "table-row", label: "Was third" }),
+      ],
+    });
+
+    expect(stamp(withBaseline)).toEqual(stamp(withoutBaseline));
+  });
+
+  it("should keep baseline text out of proposed descriptors and slide text", () => {
+    const proposed = customComponent([
+      commentableTarget({ kind: "table-row", label: "Now" }),
+      {
+        type: "element",
+        tagName: "div",
+        properties: { [DIFF_SIDE_ATTRIBUTE]: DIFF_BASELINE_SIDE },
+        children: [{ type: "text", value: "Was" }],
+      },
+    ]);
+    const tree: Root = {
+      type: "root",
+      children: [
+        {
+          type: "element",
+          tagName: "section",
+          properties: { "data-slide": "" },
+          children: [
+            {
+              type: "element",
+              tagName: "h2",
+              properties: { id: "design" },
+              children: [{ type: "text", value: "Design" }],
+            },
+            proposed,
+          ],
+        },
+      ],
+    };
+    const blocks: Array<BlockDescriptor> = [];
+    rehypeBlockIdentity({ blocks })(tree);
+    const component = blocks.find((block) => block.kind === "custom");
+    const heading = blocks.find(
+      (block) => block.id === "section/design/heading-1",
+    );
+    expect(component?.text).toBe("Now");
+    expect(heading?.slideText).toContain("Now");
+    expect(heading?.slideText).not.toContain("Was");
+  });
+
+  it("should keep proposed-side slide headings when a baseline subtree contains a slide", () => {
+    const subSlide = ({ title }: { readonly title: string }): Element => ({
+      type: "element",
+      tagName: "section",
+      properties: { "data-slide": "", "data-subslide": "" },
+      children: [
+        {
+          type: "element",
+          tagName: "h3",
+          properties: { id: title.toLowerCase().replaceAll(" ", "-") },
+          children: [{ type: "text", value: title }],
+        },
+        {
+          type: "element",
+          tagName: "p",
+          properties: {},
+          children: [{ type: "text", value: "Body." }],
+        },
+      ],
+    });
+    const groupedSlide = (children: ReadonlyArray<Element>): Element => ({
+      type: "element",
+      tagName: "section",
+      properties: { "data-slide": "" },
+      children: [
+        {
+          type: "element",
+          tagName: "h2",
+          properties: { id: "design" },
+          children: [{ type: "text", value: "Design" }],
+        },
+        ...children,
+      ],
+    });
+    const withoutBaseline: Root = {
+      type: "root",
+      children: [groupedSlide([subSlide({ title: "Pipeline" })])],
+    };
+    const withBaseline = structuredClone(withoutBaseline);
+    const slide = withBaseline.children[0];
+    if (slide === undefined || slide.type !== "element") {
+      throw new Error("expected a slide");
+    }
+    slide.children.splice(1, 0, {
+      type: "element",
+      tagName: "div",
+      properties: { [DIFF_SIDE_ATTRIBUTE]: DIFF_BASELINE_SIDE },
+      children: [subSlide({ title: "Ghost pipeline" })],
+    });
+
+    const withoutBlocks: Array<BlockDescriptor> = [];
+    const withBlocks: Array<BlockDescriptor> = [];
+    rehypeBlockIdentity({ blocks: withoutBlocks })(withoutBaseline);
+    rehypeBlockIdentity({ blocks: withBlocks })(withBaseline);
+    expect(withBlocks.map((block) => block.id)).toEqual(
+      withoutBlocks.map((block) => block.id),
+    );
+    expect(
+      withBlocks.find((block) => block.id === "section/design/heading-1")
+        ?.slideSubHeadings,
+    ).toEqual(["Pipeline"]);
   });
 });
