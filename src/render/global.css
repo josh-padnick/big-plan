@@ -173,29 +173,34 @@ document painted in another and never restate a colour to preview it.
   --note-800: #2c2d59;
   --note-900: #2a2f4e;
 
-  /* The chrome neutrals, and a deliberate exception to the warm ramp above.
+  /* The chrome shades, and a deliberate exception to the warm ramp above.
      A chrome band has to read as a band rather than as more paper, and at that
      lightness the warm steps sit too close to what they separate from. The
      captain asked for a true neutral here; it is scoped to the chrome roles
-     and never becomes a utility. The two light steps are the two bands: the
-     lighter one carries a column header inside the reading column and doubles
-     as the light lift a chrome control takes under the pointer, the deeper one
-     carries the toolbar above it. The deep step beside it is that same lift in
-     dark, where a lift is lighter than its band rather than darker. The four
-     remaining steps are the toolbar's control edges, at rest and one step
-     firmer for hover and the open state, in both modes; each clears the 3:1
-     non-text contrast floor against the band and against the lift, which is
-     what makes a control on the band read as a control. A warm edge on a
-     neutral band reads as a stain rather than as a border, so a chrome band's
-     controls take chrome edges. */
+     and never becomes a utility. A warm edge on a neutral band reads as a
+     stain rather than as a border, so a chrome band's controls take chrome
+     edges.
+
+     The light half is a ramp and reads like one, lightest number first: the
+     lift a control takes under the pointer, the band itself, the control edge
+     at rest, and that edge one step firmer for hover and the open view. The
+     dark half is the same four shades in the same order, but a lift in dark is
+     LIGHTER than its band rather than darker, so its ladder climbs where a
+     numeric ramp descends. Naming those four for what they are keeps the
+     numeric ramp a lightness position everywhere it appears; scripts/design-
+     system/palettes.mjs enforces both ladders.
+
+     Both halves' edges clear the 3:1 WCAG 1.4.11 non-text floor against the
+     band and against the lift, at the lightest value that still clears it, so
+     a control on the band reads as a control without giving up the hairline. */
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
-  --neutral-300: #7e7e7e;
-  --neutral-400: #6d6d6d;
-  --neutral-600: #949494;
-  --neutral-700: #7a7a7a;
-  --neutral-750: #424242;
-  --neutral-800: #2b2b2b;
+  --neutral-300: #828282;
+  --neutral-400: #787878;
+  --chrome-dark-band: #2b2b2b;
+  --chrome-dark-lift: #424242;
+  --chrome-dark-edge: #767676;
+  --chrome-dark-edge-strong: #8f8f8f;
 
   /* The one role a palette carries with its ramps; THE PALETTES says why. */
   --ink-c: light-dark(var(--grey-925), var(--grey-150));
@@ -254,20 +259,23 @@ its light counterpart so the three-deep ladder keeps the same separation.
      a band the plan sits below. A translucent bar would take its colour from
      whatever scrolled under it, which is the distinction this role exists to
      make, so the toolbar is opaque. */
-  --toolbar-bg: light-dark(var(--neutral-150), var(--neutral-800));
+  --toolbar-bg: light-dark(var(--neutral-150), var(--chrome-dark-band));
   /* The edge of a control sitting on that band, and the one step firmer it
      takes on hover and while its view is open. Separate from --edge-c because
      the band is neutral: the reading surface's warm hairline would read as a
      stain against it. */
-  --toolbar-edge-c: light-dark(var(--neutral-300), var(--neutral-700));
-  --toolbar-edge-strong-c: light-dark(var(--neutral-400), var(--neutral-600));
+  --toolbar-edge-c: light-dark(var(--neutral-300), var(--chrome-dark-edge));
+  --toolbar-edge-strong-c: light-dark(
+    var(--neutral-400),
+    var(--chrome-dark-edge-strong)
+  );
   /* The ground a control on that band takes under the pointer and while its
      view is open. Separate from --raised-c and --surface-c because those are
      reading-surface steps measured from the page: on a dark page they sit
      below the chrome band, so a control borrowing one would paint a warm
      recess where the band wants a lift. This one is measured from the band, so
      it lifts in both halves of every palette. */
-  --toolbar-surface-c: light-dark(var(--neutral-100), var(--neutral-750));
+  --toolbar-surface-c: light-dark(var(--neutral-100), var(--chrome-dark-lift));
   /* Captain-approved local colour: the thread band stays distinct from both
      the raised comment body and the page in dark mode. */
   --comment-header-c: light-dark(var(--grey-125), #1c1a14);
@@ -343,7 +351,7 @@ its light counterpart so the three-deep ladder keeps the same separation.
   --annotation-ink: light-dark(var(--note-900), var(--note-100));
   --diff-content-bg: light-dark(var(--grey-0), var(--grey-950));
   --diff-hunk-bg: light-dark(var(--grey-75), var(--grey-925));
-  --table-head-bg: light-dark(var(--neutral-100), var(--neutral-800));
+  --table-head-bg: light-dark(var(--neutral-100), var(--chrome-dark-band));
   --diff-hunk-c: light-dark(var(--grey-600), var(--grey-400));
   --diff-header-bg: var(--header-bg);
   /*
@@ -502,12 +510,12 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #efe6de;
   --neutral-150: #e9e0d8;
-  --neutral-300: #7f7974;
-  --neutral-400: #6e6864;
-  --neutral-600: #958cbf;
-  --neutral-700: #7c749f;
-  --neutral-750: #423e57;
-  --neutral-800: #2b2740;
+  --neutral-300: #837d78;
+  --neutral-400: #78726e;
+  --chrome-dark-band: #2b2740;
+  --chrome-dark-lift: #423e57;
+  --chrome-dark-edge: #78709a;
+  --chrome-dark-edge-strong: #9188b9;
 
   --ink-c: light-dark(#403a5e, var(--grey-150));
 
@@ -578,12 +586,12 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e3e7ee;
   --neutral-150: #dde1e8;
-  --neutral-300: #777a7e;
-  --neutral-400: #67696d;
-  --neutral-600: #a1adc8;
-  --neutral-700: #8791a9;
-  --neutral-750: #4f5564;
-  --neutral-800: #39404f;
+  --neutral-300: #7b7e82;
+  --neutral-400: #707377;
+  --chrome-dark-band: #39404f;
+  --chrome-dark-lift: #4f5564;
+  --chrome-dark-edge: #838da4;
+  --chrome-dark-edge-strong: #9ca8c3;
 
   --ink-c: light-dark(#2e3440, var(--grey-150));
 
@@ -654,12 +662,12 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e2e5ec;
   --neutral-150: #dcdfe6;
-  --neutral-300: #76787d;
-  --neutral-400: #66686c;
-  --neutral-600: #9193b8;
-  --neutral-700: #797a9a;
-  --neutral-750: #424255;
-  --neutral-800: #2b2c3f;
+  --neutral-300: #7a7c81;
+  --neutral-400: #707277;
+  --chrome-dark-band: #2b2c3f;
+  --chrome-dark-lift: #424255;
+  --chrome-dark-edge: #757695;
+  --chrome-dark-edge-strong: #8d8eb3;
 
   --ink-c: light-dark(#4c4f69, var(--grey-150));
 
@@ -731,12 +739,12 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e2ded0;
   --neutral-150: #dcd8ca;
-  --neutral-300: #787465;
-  --neutral-400: #676356;
-  --neutral-600: #888888;
-  --neutral-700: #6f6f6f;
-  --neutral-750: #383838;
-  --neutral-800: #1f1f1f;
+  --neutral-300: #7c7868;
+  --neutral-400: #716d5f;
+  --chrome-dark-band: #1f1f1f;
+  --chrome-dark-lift: #383838;
+  --chrome-dark-edge: #6c6c6c;
+  --chrome-dark-edge-strong: #848484;
 
   --ink-c: light-dark(#0b0b09, var(--grey-150));
 

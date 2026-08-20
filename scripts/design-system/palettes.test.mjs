@@ -121,7 +121,7 @@ test("rejects a palette that omits a ramp step the roles reach", async () => {
 `,
   });
   assert.deepEqual(result.failures, [
-    'global.css: palette "sample" is missing ramp steps the roles reach: --grey-950',
+    'global.css: palette "sample" is missing shades the roles reach: --grey-950',
   ]);
 });
 
@@ -152,46 +152,67 @@ test("rejects a palette pairing below WCAG AA", async () => {
 const CHROME_BASE_CSS = `${BASE_CSS}:root {
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
-  --neutral-300: #7e7e7e;
-  --neutral-400: #6d6d6d;
-  --neutral-600: #949494;
-  --neutral-700: #7a7a7a;
-  --neutral-750: #424242;
-  --neutral-800: #2b2b2b;
-  --toolbar-bg: light-dark(var(--neutral-150), var(--neutral-800));
-  --toolbar-edge-c: light-dark(var(--neutral-300), var(--neutral-700));
-  --toolbar-edge-strong-c: light-dark(var(--neutral-400), var(--neutral-600));
-  --toolbar-surface-c: light-dark(var(--neutral-100), var(--neutral-750));
+  --neutral-300: #828282;
+  --neutral-400: #787878;
+  --chrome-dark-band: #2b2b2b;
+  --chrome-dark-lift: #424242;
+  --chrome-dark-edge: #767676;
+  --chrome-dark-edge-strong: #8f8f8f;
+  --toolbar-bg: light-dark(var(--neutral-150), var(--chrome-dark-band));
+  --toolbar-edge-c: light-dark(var(--neutral-300), var(--chrome-dark-edge));
+  --toolbar-edge-strong-c: light-dark(
+    var(--neutral-400),
+    var(--chrome-dark-edge-strong)
+  );
+  --toolbar-surface-c: light-dark(var(--neutral-100), var(--chrome-dark-lift));
 }
 `;
 
-/** The chrome steps a palette declares, as global.css lays them out. */
-const chromePalette = ({ n300, n400, n600, n700, n750 }) =>
+/** The chrome shades a palette declares, as global.css lays them out. */
+const chromePalette = ({
+  n100 = "#e2ded0",
+  n150 = "#dcd8ca",
+  n300,
+  n400,
+  band = "#1f1f1f",
+  lift,
+  edge,
+  edgeStrong,
+}) =>
   `[data-palette="sample"] {
   --grey-50: #fdfdfd;
   --grey-925: #202020;
   --grey-150: #eeeeee;
   --grey-950: #121212;
-  --neutral-100: #e2ded0;
-  --neutral-150: #dcd8ca;
+  --neutral-100: ${n100};
+  --neutral-150: ${n150};
   --neutral-300: ${n300};
   --neutral-400: ${n400};
-  --neutral-600: ${n600};
-  --neutral-700: ${n700};
-  --neutral-750: ${n750};
-  --neutral-800: #1f1f1f;
+  --chrome-dark-band: ${band};
+  --chrome-dark-lift: ${lift};
+  --chrome-dark-edge: ${edge};
+  --chrome-dark-edge-strong: ${edgeStrong};
 }
 `;
+
+/** The shipped brutalist chrome shades, which clear every floor and ladder. */
+const SOUND_CHROME = {
+  n300: "#7c7868",
+  n400: "#716d5f",
+  lift: "#383838",
+  edge: "#6c6c6c",
+  edgeStrong: "#848484",
+};
 
 test("rejects a control edge that dissolves into the band it sits on", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
     paletteCss: chromePalette({
+      ...SOUND_CHROME,
       n300: "#b8b5a7",
       n400: "#9d9a8d",
-      n600: "#515151",
-      n700: "#3a3a3a",
-      n750: "#383838",
+      edge: "#3a3a3a",
+      edgeStrong: "#515151",
     }),
   });
   const nonText = result.failures.filter((failure) =>
@@ -216,24 +237,110 @@ test("rejects a control edge that dissolves into the band it sits on", async () 
     true,
     nonText.join("\n"),
   );
+  assert.equal(
+    nonText.some((failure) =>
+      failure.includes("--toolbar-edge-c (#b8b5a7) on --toolbar-bg (#dcd8ca)"),
+    ),
+    true,
+    nonText.join("\n"),
+  );
 });
 
 test("accepts a control edge that clears the non-text floor on band and lift", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
-    paletteCss: chromePalette({
-      n300: "#787465",
-      n400: "#676356",
-      n600: "#888888",
-      n700: "#6f6f6f",
-      n750: "#383838",
-    }),
+    paletteCss: chromePalette(SOUND_CHROME),
   });
   assert.deepEqual(
     result.failures.filter((failure) =>
       failure.includes("WCAG 1.4.11 non-text floor"),
     ),
     [],
+    result.failures.join("\n"),
+  );
+});
+
+test("rejects a chrome ramp whose higher number is the lighter shade", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({
+      ...SOUND_CHROME,
+      n300: "#6c6c6c",
+      n400: "#949494",
+    }),
+  });
+  assert.equal(
+    result.failures.some(
+      (failure) =>
+        failure.includes("--neutral-300") &&
+        failure.includes("--neutral-400") &&
+        failure.includes("a higher ramp number must never be lighter"),
+    ),
+    true,
+    result.failures.join("\n"),
+  );
+});
+
+test("accepts a chrome ramp that descends with its numbers", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette(SOUND_CHROME),
+  });
+  assert.deepEqual(
+    result.failures.filter((failure) =>
+      failure.includes("a higher ramp number must never be lighter"),
+    ),
+    [],
+    result.failures.join("\n"),
+  );
+});
+
+test("rejects a dark chrome lift that sinks below its own band", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({
+      ...SOUND_CHROME,
+      band: "#1f1f1f",
+      lift: "#1a1a1a",
+    }),
+  });
+  assert.equal(
+    result.failures.some(
+      (failure) =>
+        failure.includes("--chrome-dark-lift") &&
+        failure.includes("--chrome-dark-band") &&
+        failure.includes("the dark chrome ladder climbs"),
+    ),
+    true,
+    result.failures.join("\n"),
+  );
+});
+
+test("rejects a palette that omits a named chrome shade the roles reach", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: `[data-palette="sample"] {
+  --grey-50: #fdfdfd;
+  --grey-925: #202020;
+  --grey-150: #eeeeee;
+  --grey-950: #121212;
+  --neutral-100: #e2ded0;
+  --neutral-150: #dcd8ca;
+  --neutral-300: #7c7868;
+  --neutral-400: #716d5f;
+  --chrome-dark-band: #1f1f1f;
+  --chrome-dark-edge: #6c6c6c;
+  --chrome-dark-edge-strong: #848484;
+}
+`,
+  });
+  assert.equal(
+    result.failures.some(
+      (failure) =>
+        failure.includes("is missing shades the roles reach") &&
+        failure.includes("--chrome-dark-lift"),
+    ),
+    true,
     result.failures.join("\n"),
   );
 });
@@ -251,7 +358,7 @@ test("rejects a palette that restates a role instead of a shade", async () => {
 `,
   });
   assert.deepEqual(result.failures.slice(0, 1), [
-    'global.css: palette "sample" declares --bg; a palette may declare ramp steps, syntax tokens, comment-surface tokens, the closed radius, weight, tracking, and elevation scales, and --ink-c',
+    'global.css: palette "sample" declares --bg; a palette may declare ramp steps, chrome shades, syntax tokens, comment-surface tokens, the closed radius, weight, tracking, and elevation scales, and --ink-c',
   ]);
 });
 

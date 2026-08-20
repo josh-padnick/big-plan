@@ -139,6 +139,9 @@ A palette is eight ramps: `grey`, `neutral`, `primary`, `success`, `warning`, `d
 The product's own ramps were built in HSL from each middle shade outward.
 Its greys are warm through their whole range, which is what makes the page read as paper.
 
+A ramp number is a lightness position: a higher number is never lighter.
+The chrome band's dark half cannot say that - its band is the darkest shade it owns and its control edge the lightest - so those four shades are named for what they are rather than numbered, and `scripts/design-system/palettes.mjs` enforces both orders.
+
 Markup never names a ramp step.
 Markup names a **role**.
 
@@ -150,6 +153,7 @@ Markup names a **role**.
 | `well`                | A recessed area inside a card: a code body, a diff body          |
 | `header`              | A chrome band inside a card                                      |
 | `toolbar`             | The page's own chrome band, above the document                   |
+| `toolbar-surface`     | The ground a control on that band takes on hover and while open  |
 | `ink`                 | Primary text, the thing being read                               |
 | `muted`               | Secondary text, supporting the primary                           |
 | `subtle`              | Tertiary text, a label the reader consults rather than reads     |
@@ -174,9 +178,11 @@ Rules:
 4. **Colour is never the only signal.**
    Anywhere colour carries meaning - a diff side, a status, a recommendation - an icon, a word, or a weight carries it too.
    A reader who cannot see the difference still gets the plan.
-5. **Every pairing meets WCAG AA.**
+5. **Every pairing meets WCAG AA, and every control boundary meets WCAG 1.4.11.**
+   Text on its ground clears 4.5:1; the edge that tells a reader where a control is, and the firmer edge that says it is under the pointer or open, clear 3:1 against every ground they appear on.
    Every colour theme in both light and dark appearances, every change.
    When white on a colour fails, flip to dark text on a light tint of that colour.
+   Pick the lightest edge that still clears the floor: a boundary is a hairline that happens to be legible, not a rule drawn for its own sake.
 6. **Accent is scarce.**
    One accent per surface.
    If two things are both the most important, neither is.
