@@ -92,7 +92,7 @@ const MOBILE_TOC_PART_HEADER_CLASSES =
 // The sidebar's own eyebrow, sitting over the section list.
 // approved-metric: the Contents eyebrow tracking
 const TOC_EYEBROW_CLASSES =
-  "mb-3 flex items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-[0.08em]";
+  "mb-3 flex shrink-0 items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-[0.08em]";
 
 // Allocates the shell-owned overview anchor alongside document-owned ids.
 const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
@@ -440,9 +440,9 @@ const renderDesktopToc = ({
     groupedLinkClasses: TOC_GROUPED_LINK_CLASSES,
     partHeaderClasses: TOC_PART_HEADER_CLASSES,
   });
-  return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
+  return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:flex wide:max-h-[calc(100dvh-5.75rem-3rem)] wide:self-start wide:flex-col" data-desktop-toc aria-label="Contents">
 <p class="${TOC_EYEBROW_CLASSES}" data-toc-header><a class="rounded-sm text-subtle hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
-<ol>
+<ol class="min-h-0 overflow-y-auto overscroll-contain pr-1" data-desktop-toc-list>
 ${items}
 </ol>
 </nav>`;

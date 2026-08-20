@@ -323,6 +323,25 @@ const wireScrollSpy = () => {
     }
     return true;
   };
+  let revealedHeading = null;
+  const revealCurrentDesktopLink = (heading) => {
+    if (heading === null || heading === revealedHeading) return;
+    revealedHeading = heading;
+    const sectionLinks = targets.get(heading) || [];
+    const link = sectionLinks.find(
+      (candidate) => candidate.closest("[data-desktop-toc]") !== null,
+    );
+    const list = link?.closest("[data-desktop-toc-list]");
+    if (!(link instanceof HTMLElement) || !(list instanceof HTMLElement))
+      return;
+    const linkRect = link.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    if (linkRect.top < listRect.top) {
+      list.scrollTop -= listRect.top - linkRect.top;
+    } else if (linkRect.bottom > listRect.bottom) {
+      list.scrollTop += linkRect.bottom - listRect.bottom;
+    }
+  };
   const apply = () => {
     const readingLine = window.innerHeight * 0.25;
     let current = null;
@@ -340,6 +359,7 @@ const wireScrollSpy = () => {
       if (current === null) link.setAttribute("aria-current", "true");
       else link.removeAttribute("aria-current");
     }
+    revealCurrentDesktopLink(current);
   };
   applyScrollSpy = apply;
   window.__bigPlanRefreshScrollSpy = apply;
