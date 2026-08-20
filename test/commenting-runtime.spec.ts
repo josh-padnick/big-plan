@@ -3013,7 +3013,6 @@ test("should keep every sidebar comment card inside the sidebar", async ({
   const batch = sidebar.locator(
     `section[data-review-batch="${request.requestId}"]`,
   );
-  const list = batch.locator("ol");
   const cards = batch.locator("[data-review-comment-id]");
   await expect(cards).toHaveCount(2);
 
@@ -3025,16 +3024,27 @@ test("should keep every sidebar comment card inside the sidebar", async ({
   await expect(batch.getByText(quotedCall)).toBeVisible();
 
   const sidebarBox = await boxOf(sidebar);
-  const listBox = await boxOf(list);
   for (let index = 0; index < (await cards.count()); index += 1) {
     const cardBox = await boxOf(cards.nth(index));
-    // A card is exactly as wide as the list holding it, and the list is inside
-    // the sidebar; neither is true when the track is floored at min-content.
-    expect(Math.round(cardBox.width)).toBe(Math.round(listBox.width));
+    // Measured against the sidebar, not against the list: the cards are tied
+    // to the list's own track, so a card is the width of the list even when
+    // the track has blown past the panel. Only the panel's edge is the edge
+    // the reader sees.
     expect(Math.round(cardBox.x + cardBox.width)).toBeLessThanOrEqual(
       Math.round(sidebarBox.x + sidebarBox.width),
     );
   }
+  // ...and the pasted call stays inside the card that holds it. This is the
+  // half a geometry check against the panel cannot see: a bare `pre` keeps
+  // `white-space: pre`, so the line runs past the card's edge and the card's
+  // hidden overflow cuts it mid-word rather than wrapping it.
+  const quotedBox = await boxOf(batch.locator("pre code"));
+  const quotedCardBox = await boxOf(
+    batch.locator("[data-review-comment-id]").filter({ hasText: "claimNext" }),
+  );
+  expect(Math.round(quotedBox.x + quotedBox.width)).toBeLessThanOrEqual(
+    Math.round(quotedCardBox.x + quotedCardBox.width),
+  );
 });
 
 // The same containment, on the staged path: a comment is drawn by a different
@@ -3076,19 +3086,16 @@ test("should keep a staged comment's code block inside its sidebar card", async 
   const quoted = card.locator("pre code");
   await expect(quoted).toHaveText(quotedCall);
 
-  const list = sidebar
-    .locator("ol")
-    .filter({ has: page.locator('[data-review-surface="rail"]') });
   const sidebarBox = await boxOf(sidebar);
-  const listBox = await boxOf(list);
   const cardBox = await boxOf(card);
   const quotedBox = await boxOf(quoted);
 
-  // The card fits the list that holds it, the list fits the sidebar, and the
-  // quoted call fits the card. The last one is what a bare `pre` breaks: it
-  // keeps `white-space: pre`, so the line runs past the card's edge and the
-  // card's hidden overflow cuts it mid-word instead of wrapping it.
-  expect(Math.round(cardBox.width)).toBe(Math.round(listBox.width));
+  // The card fits the sidebar, and the quoted call fits the card. Comparing
+  // the card to the list holding it would prove nothing: the card is tied to
+  // the list's track, so the two agree even when the track has blown past the
+  // panel. The second assertion is what a bare `pre` breaks: it keeps
+  // `white-space: pre`, so the line runs past the card's edge and the card's
+  // hidden overflow cuts it mid-word instead of wrapping it.
   expect(Math.round(cardBox.x + cardBox.width)).toBeLessThanOrEqual(
     Math.round(sidebarBox.x + sidebarBox.width),
   );

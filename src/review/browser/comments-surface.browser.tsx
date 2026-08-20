@@ -54,9 +54,12 @@ export const batchSectionTone = ({
  * and every card in the list, expanded or collapsed, was clipped by the
  * panel's hidden horizontal overflow (BIG-185). `minmax(0, 1fr)` lets the
  * track shrink to the panel, so a card's width is the sidebar's to decide.
+ * That one declaration is the whole guarantee: zeroing the items' own
+ * automatic minimum says the same thing a second time, and a second spelling
+ * of one rule is a place for the two to disagree later.
  */
 const THREAD_LIST_CLASSES =
-  "grid grid-cols-[minmax(0,1fr)] list-none gap-2 p-0 [&>li]:min-w-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none";
+  "grid grid-cols-[minmax(0,1fr)] list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none";
 
 type LifecycleSectionProps = {
   readonly label: string;
