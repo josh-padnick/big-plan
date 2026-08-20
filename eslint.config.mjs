@@ -102,10 +102,14 @@ const PLAN_IDENTITY_SELECTOR = {
 // this rule. An accidental exclusion on a silent-failure guard reads exactly
 // like a hole, so this one is stated rather than left to be rediscovered.
 
-// One class value: the run that starts at a `"` or at the handover's start
-// and ends at the next `"`. Every assertion below is measured from that
-// start, so nothing outside the value can answer for what is inside it.
-const VALUE_START = '(?:^|")';
+// One class value: the run that ends at the next `"` and starts either where
+// the handed-over string starts or at a `class=`/`className=` attribute
+// inside it. Every assertion below is measured from that start, so nothing
+// outside the value can answer for what is inside it. A bare `"` opens
+// nothing, because in a server-rendered template the text a reader sees sits
+// behind the same closing quote as the attribute before it - and a sentence
+// mentioning a grid is prose, not a container missing a track.
+const VALUE_START = '(?:^|class(?:Name)?=")';
 
 // The gap from that start to a token boundary inside the same value.
 const TOKEN_GAP = '(?:[^"]*\\s)?';
@@ -133,27 +137,44 @@ const GRID_TRACK_PATTERN = `/(?:${RETARGETED_GRID}|${OWN_GRID})/`;
 // either losing `className="grid"` or carrying a list of bare utilities that
 // goes stale.
 //
-// Each handover point is read one level deep rather than as a whole subtree.
-// A helper's block body holds its error messages and labels too, so reading
-// every string beneath it would put the prose back in scope; reading the
-// string it hands over does not.
-const classStringsIn = (host) =>
-  `${host} :matches(Literal[value=${GRID_TRACK_PATTERN}], TemplateElement[value.raw=${GRID_TRACK_PATTERN}])`;
+// Each handover point is read through the expressions a class string is
+// composed from rather than as a whole subtree. A class list is split across
+// a template's quasis, a conditional's arms, an array's items, or an object's
+// values, so those are walked; anything else ends the walk. A call argument
+// is the boundary that matters: `panel({ description: "..." })` sitting in a
+// returned template is copy, and a subtree read would hand that sentence to a
+// predicate that answers about column tracks.
+const CLASS_COMPOSITION =
+  ":matches(TemplateLiteral, BinaryExpression, ConditionalExpression, ObjectExpression, Property, ArrayExpression, TSAsExpression, JSXExpressionContainer)";
 
-const CLASS_STRING_EXPRESSIONS =
-  "TemplateLiteral, BinaryExpression, ConditionalExpression, ObjectExpression, ArrayExpression, TSAsExpression";
+const CLASS_STRINGS = `:matches(Literal[value=${GRID_TRACK_PATTERN}], TemplateElement[value.raw=${GRID_TRACK_PATTERN}])`;
 
-const classStringsHandedOverBy = (host) => [
-  `${host} > Literal[value=${GRID_TRACK_PATTERN}]`,
-  classStringsIn(`${host} > :matches(${CLASS_STRING_EXPRESSIONS})`),
-];
+const COMPOSITION_DEPTH = 3;
+
+// `namesItsString` says whether the host names the bare string it holds a
+// class list. `className` and a declared constant do; a helper's `return`
+// does not, because a lone returned string is as likely a sentence as a class
+// list and this fence has no way to tell them apart. Markup a helper returns
+// is still read in full: the `class=` inside it is the marker the bare string
+// lacks.
+const classStringsUnder = (host, { namesItsString }) => {
+  const chains = [];
+  let path = host;
+  for (let depth = 0; depth <= COMPOSITION_DEPTH; depth += 1) {
+    if (depth > 0 || namesItsString) chains.push(`${path} > ${CLASS_STRINGS}`);
+    path = `${path} > ${CLASS_COMPOSITION}`;
+  }
+  return chains;
+};
 
 const GRID_TRACK_SELECTOR = {
   selector: [
-    classStringsIn('JSXAttribute[name.name="className"]'),
-    ...classStringsHandedOverBy("VariableDeclarator"),
-    ...classStringsHandedOverBy("ReturnStatement"),
-    ...classStringsHandedOverBy("ArrowFunctionExpression"),
+    ...classStringsUnder('JSXAttribute[name.name="className"]', {
+      namesItsString: true,
+    }),
+    ...classStringsUnder("VariableDeclarator", { namesItsString: true }),
+    ...classStringsUnder("ReturnStatement", { namesItsString: false }),
+    ...classStringsUnder("ArrowFunctionExpression", { namesItsString: false }),
   ].join(", "),
   message:
     "A grid container must declare its column track (grid-cols-[minmax(0,1fr)] on a one-column surface); an implicit track is floored at the widest item's min-content width and overflows its panel.",

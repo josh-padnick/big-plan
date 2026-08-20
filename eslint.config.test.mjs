@@ -155,6 +155,66 @@ test("should not let a track in a neighbouring attribute answer for a class valu
   assert.equal(messages.length, 1);
 });
 
+test("should not report a returned sentence that mentions a grid", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => {\n  return "Choose how the diagram grid renders.";\n};\n',
+    }),
+  );
+  assert.equal(messages.length, 0);
+});
+
+test("should not report a sentence a helper hands over as its whole body", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const label = (): string => "Choose how the diagram grid renders.";\n',
+    }),
+  );
+  assert.equal(messages.length, 0);
+});
+
+test("should not report copy passed to a call inside a returned template", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string =>\n  `<div>${panel({ description: "Choose how the diagram grid renders." })}</div>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 0);
+});
+
+test("should not report the text a template renders beside a class attribute", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => `<p class="mt-4">The diagram grid renders here.</p>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 0);
+});
+
+test("should still report a class attribute on the element that renders prose", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => `<p class="mt-4 grid gap-2">The diagram grid renders here.</p>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 1);
+});
+
+test("should still report a class fragment an interpolated conditional hands over", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/review/browser/scratch.tsx",
+      code: 'export const View = ({ wide }: { wide: boolean }) => (\n  <div className={`mt-2 ${wide ? "grid gap-2" : "flex"}`} />\n);\n',
+    }),
+  );
+  assert.equal(messages.length, 1);
+});
+
 test("should not report an implicit track in a plan-component view", async () => {
   const messages = gridTrackMessages(
     await lint({
