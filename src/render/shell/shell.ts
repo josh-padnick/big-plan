@@ -320,7 +320,9 @@ const renderApprovalMessageControls = (): string =>
 // The dialog is a settings surface rather than one long page: a sidebar of
 // settings on the left, the chosen one on the right. Every setting is a peer
 // there, so none competes with another for the reviewer's attention and the
-// next one costs one more sidebar item.
+// next one costs one more sidebar item. The pane that stacks those pages is a
+// one-column grid whose track is named so a long control cannot floor an
+// implicit column past the sheet (BIG-185).
 //
 // Beside the page the sidebar is a column and grows downward. Above it, on a
 // phone, it wraps onto a second row rather than scrolling sideways: a settings
@@ -352,7 +354,7 @@ ${renderPreferencesSection({ section: "appearance", title: "Appearance", icon: S
 ${renderPreferencesSection({ section: "palette", title: "Color theme", icon: PALETTE_ICON, selected: false })}
 ${renderPreferencesSection({ section: "approval-message", title: "Approval message", icon: MESSAGE_SQUARE_ICON, selected: false })}
 </div>
-<div class="mt-4 grid min-w-0 wide:mt-0">
+<div class="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] wide:mt-0">
 ${renderPreferencesPanel({
   section: "appearance",
   title: "Appearance",

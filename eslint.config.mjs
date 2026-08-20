@@ -12,9 +12,10 @@ import tseslint from "typescript-eslint";
 import eslintConfigPrettier from "eslint-config-prettier";
 
 // The two bespoke syntax fences below are declared as data because the review
-// island is in scope for both. Flat config replaces a rule's options rather
-// than merging them, so declaring `no-restricted-syntax` twice over the same
-// file silently drops one fence - the exact quiet failure both exist to stop.
+// island and the shell are both in scope for both. Flat config replaces a
+// rule's options rather than merging them, so declaring `no-restricted-syntax`
+// twice over the same file silently drops one fence - the exact quiet failure
+// both exist to stop.
 
 // live-target.browser.ts is the one owner of identity lookups against plan
 // DOM. A hand-written selector for a block id or a flow anchor skips its
@@ -31,21 +32,39 @@ const PLAN_IDENTITY_SELECTOR = {
     "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
 };
 
-// Anything laid out as a grid in the sidebar must say what its column is. A
-// grid item keeps `min-width: auto`, so an implicit track is floored at the
-// widest item's min-content width and the whole container grows past the
+// Anything laid out as a grid in a bounded column must say what its column
+// is. A grid item keeps `min-width: auto`, so an implicit track is floored at
+// the widest item's min-content width and the whole container grows past the
 // panel - which a scrolling panel then hides rather than reports. That is how
 // one pasted code line clipped every card in the feedback sidebar (BIG-185).
-// Naming the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and
-// it is fenced because the failure is silent: the markup is valid, the cascade
-// is clean, and only a reader at a narrow width ever sees it. Nothing at
-// runtime fails when the declaration goes missing, so this fence is the whole
-// guard rather than a second one.
+// Naming the track (`grid-cols-[minmax(0,1fr)]` on a one-column surface) is
+// the one-word answer, and it is fenced because the failure is silent: the
+// markup is valid, the cascade is clean, and only a reader at a narrow width
+// ever sees it. Nothing at runtime fails when the declaration goes missing,
+// so this fence is the whole guard rather than a second one.
+//
+// The fence covers two regimes that share that failure shape. The review
+// sidebar is a fixed-width column whose containers are one column by
+// construction, which is what makes `minmax(0, 1fr)` always the right answer
+// there. The shell is the reading chrome: its one-column grids want the same
+// declaration, and its multi-column layouts already name a track (`[12rem_1fr]`
+// beside the settings list, `[auto_minmax(0,1fr)_auto]` in the branding bar).
+// The fence requires a declared track, not that one-column recipe, so a named
+// multi-column track is compliant.
+//
+// Plan-component views stay out. An earlier sweep that reached them put
+// `minmax(0, 1fr)` on `.decision-rows`, which outranked
+// `decision-card.css`'s `repeat(auto-fit, ...)` and collapsed the option
+// cards into a stack. That is a different regime: the track lives in CSS, not
+// in the class string, and a utility here would be the defect the fence exists
+// to prevent. The glob therefore stops at the review island and the shell.
 //
 // The fence reads every grid container, not only the lists: the panels the
 // same fix had to touch are `grid ... content-start` divs with no `list-none`
 // in them, so a fence that asked for a list would have watched the narrower
-// half of the defect it was written for.
+// half of the defect it was written for. Server-rendered class strings in
+// `.ts` are read alongside the React views, because the rule is about the
+// layout a string asks for rather than about which renderer emits it.
 //
 // What the predicate is deliberate about.
 //
@@ -63,8 +82,17 @@ const PLAN_IDENTITY_SELECTOR = {
 // `grid-cols-`; a track declared only at a breakpoint leaves the narrow
 // regime this fence exists for undeclared.
 //
-// Tokens are split on any whitespace with `[\s\S]` rather than `.`, so a
-// class list a formatter wrapped across lines is still read.
+// Tokens are split on any whitespace, so a class list a formatter wrapped
+// across lines is still read. A `"` is a token boundary too, and it is the
+// one that makes the fence answer per element rather than per handover. A
+// server-rendered template hands over many elements at once, so a predicate
+// that asked whether the whole string mentions a track would let one
+// element's declared track answer for a sibling's implicit one - a green
+// report for the exact state the fence exists to refuse. Every check is
+// therefore scoped to a single quoted run: the fence anchors at each `class`
+// value's opening quote and asks for the answering `grid-cols-` inside that
+// value alone. The same boundary is why a `grid` written first or last in a
+// class attribute is read at all; whitespace alone never touches it.
 //
 // `inline-grid` is deliberately outside the fence. An inline-grid box is
 // shrink-to-fit, so it is not the shape this rule describes, and its remedy
@@ -74,15 +102,29 @@ const PLAN_IDENTITY_SELECTOR = {
 // this rule. An accidental exclusion on a silent-failure guard reads exactly
 // like a hole, so this one is stated rather than left to be rediscovered.
 
+// One class value: the run that ends at the next `"` and starts either where
+// the handed-over string starts or at a `class=`/`className=` attribute
+// inside it. Every assertion below is measured from that start, so nothing
+// outside the value can answer for what is inside it. A bare `"` opens
+// nothing, because in a server-rendered template the text a reader sees sits
+// behind the same closing quote as the attribute before it - and a sentence
+// mentioning a grid is prose, not a container missing a track.
+const VALUE_START = '(?:^|class(?:Name)?=")';
+
+// The gap from that start to a token boundary inside the same value.
+const TOKEN_GAP = '(?:[^"]*\\s)?';
+
+// A token ends at whitespace, at the value's closing quote, or at the end of
+// the handover.
+const TOKEN_END = '(?=\\s|"|$)';
+
 // A `grid` whose variant retargets another element, answered only by a track
-// scoped the same way.
-const RETARGETED_GRID =
-  "^(?=[\\s\\S]*(?:^|\\s)(\\S*&\\S*:)grid(?=\\s|$))(?![\\s\\S]*(?:^|\\s)\\1grid-cols-)";
+// scoped the same way in the same class value.
+const RETARGETED_GRID = `${VALUE_START}(?=${TOKEN_GAP}([^\\s"]*&[^\\s"]*:)grid${TOKEN_END})(?!${TOKEN_GAP}\\1grid-cols-)`;
 
 // A `grid` on the element itself, answered by that element's own track under
-// the same prefix or by an unprefixed one.
-const OWN_GRID =
-  "^(?=[\\s\\S]*(?:^|\\s)((?:[^\\s&]*:)|)grid(?=\\s|$))(?![\\s\\S]*(?:^|\\s)\\2grid-cols-)(?![\\s\\S]*(?:^|\\s)grid-cols-)";
+// the same prefix or by an unprefixed one, again in the same class value.
+const OWN_GRID = `${VALUE_START}(?=${TOKEN_GAP}((?:[^\\s&"]*:)|)grid${TOKEN_END})(?!${TOKEN_GAP}\\2grid-cols-)(?!${TOKEN_GAP}grid-cols-)`;
 
 const GRID_TRACK_PATTERN = `/(?:${RETARGETED_GRID}|${OWN_GRID})/`;
 
@@ -95,30 +137,47 @@ const GRID_TRACK_PATTERN = `/(?:${RETARGETED_GRID}|${OWN_GRID})/`;
 // either losing `className="grid"` or carrying a list of bare utilities that
 // goes stale.
 //
-// Each handover point is read one level deep rather than as a whole subtree.
-// A helper's block body holds its error messages and labels too, so reading
-// every string beneath it would put the prose back in scope; reading the
-// string it hands over does not.
-const classStringsIn = (host) =>
-  `${host} :matches(Literal[value=${GRID_TRACK_PATTERN}], TemplateElement[value.raw=${GRID_TRACK_PATTERN}])`;
+// Each handover point is read through the expressions a class string is
+// composed from rather than as a whole subtree. A class list is split across
+// a template's quasis, a conditional's arms, an array's items, or an object's
+// values, so those are walked; anything else ends the walk. A call argument
+// is the boundary that matters: `panel({ description: "..." })` sitting in a
+// returned template is copy, and a subtree read would hand that sentence to a
+// predicate that answers about column tracks.
+const CLASS_COMPOSITION =
+  ":matches(TemplateLiteral, BinaryExpression, ConditionalExpression, ObjectExpression, Property, ArrayExpression, TSAsExpression, JSXExpressionContainer)";
 
-const CLASS_STRING_EXPRESSIONS =
-  "TemplateLiteral, BinaryExpression, ConditionalExpression, ObjectExpression, ArrayExpression, TSAsExpression";
+const CLASS_STRINGS = `:matches(Literal[value=${GRID_TRACK_PATTERN}], TemplateElement[value.raw=${GRID_TRACK_PATTERN}])`;
 
-const classStringsHandedOverBy = (host) => [
-  `${host} > Literal[value=${GRID_TRACK_PATTERN}]`,
-  classStringsIn(`${host} > :matches(${CLASS_STRING_EXPRESSIONS})`),
-];
+const COMPOSITION_DEPTH = 3;
+
+// `namesItsString` says whether the host names the bare string it holds a
+// class list. `className` and a declared constant do; a helper's `return`
+// does not, because a lone returned string is as likely a sentence as a class
+// list and this fence has no way to tell them apart. Markup a helper returns
+// is still read in full: the `class=` inside it is the marker the bare string
+// lacks.
+const classStringsUnder = (host, { namesItsString }) => {
+  const chains = [];
+  let path = host;
+  for (let depth = 0; depth <= COMPOSITION_DEPTH; depth += 1) {
+    if (depth > 0 || namesItsString) chains.push(`${path} > ${CLASS_STRINGS}`);
+    path = `${path} > ${CLASS_COMPOSITION}`;
+  }
+  return chains;
+};
 
 const GRID_TRACK_SELECTOR = {
   selector: [
-    classStringsIn('JSXAttribute[name.name="className"]'),
-    ...classStringsHandedOverBy("VariableDeclarator"),
-    ...classStringsHandedOverBy("ReturnStatement"),
-    ...classStringsHandedOverBy("ArrowFunctionExpression"),
+    ...classStringsUnder('JSXAttribute[name.name="className"]', {
+      namesItsString: true,
+    }),
+    ...classStringsUnder("VariableDeclarator", { namesItsString: true }),
+    ...classStringsUnder("ReturnStatement", { namesItsString: false }),
+    ...classStringsUnder("ArrowFunctionExpression", { namesItsString: false }),
   ].join(", "),
   message:
-    "A grid container in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
+    "A grid container must declare its column track (grid-cols-[minmax(0,1fr)] on a one-column surface); an implicit track is floored at the widest item's min-content width and overflows its panel.",
 };
 
 export default tseslint.config(
@@ -559,10 +618,27 @@ export default tseslint.config(
     rules: { "no-restricted-imports": "off" },
   },
   {
-    // The review island is the one scope both fences cover, so both ride in a
-    // single `no-restricted-syntax` declaration.
-    files: ["src/review/browser/**/*.ts", "src/review/browser/**/*.tsx"],
-    ignores: ["src/review/browser/live-target.browser.ts"],
+    // The review island and the shell are the two scopes both fences cover, so
+    // both ride in a single `no-restricted-syntax` declaration. The identity
+    // resolver is exempt because it is the one owner of the selectors the
+    // identity fence forbids; it has no class strings, so the grid fence's
+    // ride-along exemption is unreachable rather than a hole in a layout it
+    // could author. Embedded shell scripts are exempt from the grid fence
+    // only (identity stays on them below): they are JavaScript source in a
+    // template, and the grid predicate would read the whole body as one
+    // class-string handover and report `grid` in comments and identifiers.
+    // Plan-component views stay outside this glob: see the grid-fence comment
+    // above.
+    files: [
+      "src/review/browser/**/*.ts",
+      "src/review/browser/**/*.tsx",
+      "src/render/shell/**/*.ts",
+      "src/render/shell/**/*.tsx",
+    ],
+    ignores: [
+      "src/review/browser/live-target.browser.ts",
+      "src/render/shell/*-script.ts",
+    ],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -572,15 +648,10 @@ export default tseslint.config(
     },
   },
   {
-    // The shell takes the identity fence alone. The grid fence's ratified
-    // scope is the review sidebar - a fixed-width column whose containers are
-    // one column by construction, which is what makes `minmax(0, 1fr)` always
-    // the right answer there. The shell is the reading chrome and does not
-    // share that premise: its settings dialog sets its section list beside its
-    // panel on a `[12rem_1fr]` track at wide widths. Reaching the shell would
-    // therefore be its own decision about a different regime rather than a
-    // consequence of the sidebar's, so the fence stops at the sidebar.
-    files: ["src/render/shell/**/*.ts"],
+    // Embedded viewer scripts still take the identity fence. A plan-identity
+    // lookup in a shell script is the case that fence exists to force a
+    // deliberate answer for; they are out of the grid fence only.
+    files: ["src/render/shell/*-script.ts"],
     rules: {
       "no-restricted-syntax": ["error", PLAN_IDENTITY_SELECTOR],
     },
