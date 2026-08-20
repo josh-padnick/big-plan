@@ -748,6 +748,510 @@ test("should show a sub-slide ordinal once in its comment toolbar", async ({
   await expect(target).toHaveText("2.1.1 · The worker");
 });
 
+/*
+BIG-188. A thread's placement was derived from the anchor's rect without ever
+checking that the anchor had been laid out. An anchor inside a collapsed slide
+still answers getBoundingClientRect() with an all-zero rect, so the thread was
+positioned against the document origin and clamped into the page's left margin
+- the opposite side of the screen from the sidebar and the content it belongs
+to. Toggling the sidebar is what re-measured, so the same thread was correct
+before the toggle and wrong after it.
+
+The assertion is therefore which side the thread is on, not which direction it
+lies from its anchor: the earlier overlap check passed while the card sat in
+the left margin, because a card at x=24 is still left of the slide's right
+edge. Both sidebar states and both anchor states are pinned, because the bug
+needed one of each to appear.
+*/
+test("should keep a comment thread on the right whether the sidebar is open or closed", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const subSlide = page.locator('[data-collapsible="subslide"]').first();
+  await subSlide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer
+    .getByLabel("Add a comment")
+    .fill("This thread belongs on the right.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const threadHost = page.locator("[data-review-thread-side]");
+  await expect(threadHost).toHaveCount(1);
+  const feedbackControl = page.getByRole("button", { name: /Feedback/u });
+  const sidebar = page.getByRole("complementary", { name: "Feedback" });
+
+  const placement = async () =>
+    threadHost.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        hidden: node.hidden,
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        viewportWidth: document.documentElement.clientWidth,
+      };
+    });
+  /*
+  The whole condition is polled, not a proxy for it. A host is appended before
+  the frame that positions it and before a sidebar transition settles, so a
+  single read can catch it at x=0 or at the position it is leaving. Reporting
+  the side as a word keeps a real wrong-side placement failing with the
+  coordinate that proves it rather than with a timeout.
+  */
+  const side = async () => {
+    const { hidden, left, right, viewportWidth } = await placement();
+    if (hidden) return "hidden";
+    if (right > viewportWidth) return `past the page edge at ${right}`;
+    return left > viewportWidth / 2 ? "right" : `left, at ${left}`;
+  };
+  const expectOnTheRight = async () => {
+    await expect.poll(side).toBe("right");
+  };
+
+  await expectOnTheRight();
+  await feedbackControl.click();
+  await expect(sidebar).toBeVisible();
+  await expectOnTheRight();
+  await expect
+    .poll(async () => {
+      const sidebarLeft = await sidebar.evaluate(
+        (node) => node.getBoundingClientRect().left,
+      );
+      return (await placement()).right <= sidebarLeft;
+    })
+    .toBe(true);
+  await feedbackControl.click();
+  await expect(sidebar).not.toBeVisible();
+  await expectOnTheRight();
+
+  // Collapsing every section removes the anchor from layout, which is the
+  // state that produced the reported screenshot once the sidebar was toggled.
+  await page.getByRole("button", { name: "Collapse all sections" }).click();
+  const collapsedRow = subSlide.locator(
+    'xpath=ancestor::*[contains(concat(" ", @class, " "), " plan-part-group ")][1]',
+  );
+  await expect(collapsedRow).toBeVisible();
+  await expectOnTheRight();
+  await feedbackControl.click();
+  await expect(sidebar).toBeVisible();
+  await expectOnTheRight();
+  await feedbackControl.click();
+  await expect(sidebar).not.toBeVisible();
+  await expectOnTheRight();
+
+  // A thread whose anchor is collapsed away belongs beside the row that now
+  // stands in for it, so the reviewer can still see what it is attached to.
+  await expect
+    .poll(async () => {
+      const band = await collapsedRow.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          top: rect.top + window.scrollY,
+          bottom: rect.bottom + window.scrollY,
+        };
+      });
+      const threadTop = await threadHost.evaluate(
+        (node) => node.getBoundingClientRect().top + window.scrollY,
+      );
+      return threadTop >= band.top && threadTop <= band.bottom;
+    })
+    .toBe(true);
+});
+
+/*
+BIG-188, the frame before the first placement. A thread host is appended to the
+document body and positioned in the next animation frame, and an absolutely
+positioned host without coordinates does not wait out of sight in between: it
+takes its static position, the page's left edge below the end of the article,
+which is the left margin every other journey here exists to keep threads out
+of. A reader sees that as a card flashing into the left margin, and anything
+measuring the thread in that window reads the flash as a placement.
+
+The observer answers with the host's state at the microtask after it entered
+the document, which is before the frame that positions it and before any paint
+that could show it, so this pins the one state a reader could otherwise catch.
+*/
+test("should never show a comment thread before it has a place on the page", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  type ThreadArrival = {
+    readonly hidden: boolean;
+    readonly top: string;
+    readonly left: string;
+  };
+  await page.evaluate(() => {
+    Object.assign(window, { __bigPlanThreadArrivals: [] });
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (!node.matches("[data-review-thread-side]")) continue;
+          (
+            window as unknown as {
+              __bigPlanThreadArrivals: Array<{
+                hidden: boolean;
+                top: string;
+                left: string;
+              }>;
+            }
+          ).__bigPlanThreadArrivals.push({
+            hidden: node.hidden,
+            top: node.style.top,
+            left: node.style.left,
+          });
+        }
+      }
+    }).observe(document.body, { childList: true });
+  });
+
+  const subSlide = page.locator('[data-collapsible="subslide"]').first();
+  await subSlide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer
+    .getByLabel("Add a comment")
+    .fill("This thread belongs nowhere until it has a place.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+  await expect(page.locator("[data-review-thread-side]")).toHaveCount(1);
+
+  const arrivals = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __bigPlanThreadArrivals: Array<ThreadArrival>;
+        }
+      ).__bigPlanThreadArrivals,
+  );
+  expect(arrivals.length).toBeGreaterThan(0);
+  expect(
+    arrivals.filter((arrival) => !arrival.hidden && arrival.top === ""),
+  ).toEqual([]);
+});
+
+/*
+BIG-188, the vertical half of the same mistake. A thread remembers how far its
+target sat below the card when the comment was made, so a lens re-rendering the
+block in place cannot drag the thread off the words it points at. Collapsing
+that one slide keeps the card on screen while hiding the target inside it, so
+the remembered distance measures a gap nothing occupies any more; applying it
+anyway drew the thread far below the collapsed card, beside unrelated content.
+Collapsing a single slide is the case worth pinning: collapsing every section
+hides the card too, which takes the already-covered rendered-ancestor path.
+*/
+test("should keep a comment thread level with a card it collapsed after the comment", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  // The deepest block inside its card, so a remembered distance that survives
+  // the collapse is unmistakable rather than a rounding difference.
+  const deepest = await page.evaluate(() => {
+    const blocks = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "[data-slide] [data-block-kind='paragraph'], [data-slide] [data-block-kind='list-item']",
+      ),
+    );
+    let best: { blockId: string; collapseId: string; offset: number } | null =
+      null;
+    for (const block of blocks) {
+      const card = block.closest<HTMLElement>("[data-slide]");
+      const blockId = block.dataset.blockId;
+      const collapseId = card?.dataset.collapseId;
+      if (card === null || blockId === undefined || collapseId === undefined) {
+        continue;
+      }
+      const offset =
+        block.getBoundingClientRect().top - card.getBoundingClientRect().top;
+      if (best === null || offset > best.offset) {
+        best = { blockId, collapseId, offset };
+      }
+    }
+    if (best === null) {
+      throw new Error("A card must hold an identified block to comment on");
+    }
+    return best;
+  });
+  const remembered = deepest.offset;
+
+  const block = page.locator(`[data-block-id="${deepest.blockId}"]`);
+  const card = page.locator(
+    `[data-slide][data-collapse-id="${deepest.collapseId}"]`,
+  );
+  await block.scrollIntoViewIfNeeded();
+  const quoted = await block.evaluate((element) => {
+    const text = document
+      .createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      .nextNode();
+    if (!(text instanceof Text)) return "";
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, Math.min(18, text.data.length));
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return selection?.toString() ?? "";
+  });
+  expect(quoted.trim()).not.toBe("");
+
+  await page.getByRole("button", { name: "Comment on selected text" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer
+    .getByLabel("Add a comment")
+    .fill("This thread belongs beside its card.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const threadHost = page.locator("[data-review-thread-side]");
+  await expect(threadHost).toHaveCount(1);
+  /*
+  A host is appended before the frame that positions it, and it stays hidden
+  until that frame arrives. Reading a distance from an unplaced host would not
+  be reading a placement at all, so every measurement below answers with the
+  distance or with the fact that there is none yet.
+  */
+  const pageTop = (locator: typeof threadHost) =>
+    locator.evaluate((node) =>
+      node.hidden ? null : node.getBoundingClientRect().top + window.scrollY,
+    );
+  const cardBand = () =>
+    card.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        top: rect.top + window.scrollY,
+        bottom: rect.bottom + window.scrollY,
+      };
+    });
+
+  // While the target is on screen the remembered distance is what keeps the
+  // thread beside the words it was written about.
+  const drop = async () => {
+    const threadTop = await pageTop(threadHost);
+    return threadTop === null ? null : threadTop - (await cardBand()).top;
+  };
+  await expect
+    .poll(async () => {
+      const dropped = await drop();
+      if (dropped === null) return "not placed yet";
+      return dropped > remembered - 1
+        ? "beside its block"
+        : `${Math.round(remembered - dropped)} above its block`;
+    })
+    .toBe("beside its block");
+  const droppedWhileOpen = await drop();
+  if (droppedWhileOpen === null) {
+    throw new Error("A placed thread must answer with the distance it holds");
+  }
+
+  await card
+    .locator(":scope > [data-collapse-header] button[data-collapse-toggle]")
+    .click();
+  await expect(card).toHaveAttribute("data-collapsed", "");
+  await expect(block).toBeHidden();
+
+  // The collapsed card is shorter than the drop the thread was holding, so a
+  // thread that keeps holding it lands outside the band asserted below. That
+  // is what makes the band the assertion this journey needs.
+  const collapsed = await cardBand();
+  expect(droppedWhileOpen).toBeGreaterThan(collapsed.bottom - collapsed.top);
+
+  await expect
+    .poll(async () => {
+      const band = await cardBand();
+      const threadTop = await pageTop(threadHost);
+      if (threadTop === null) return "not placed yet";
+      if (threadTop < band.top)
+        return `above the card by ${band.top - threadTop}`;
+      if (threadTop > band.bottom) {
+        return `below the card by ${threadTop - band.bottom}`;
+      }
+      return "level with the card";
+    })
+    .toBe("level with the card");
+
+  /*
+  Holding the distance while the card is collapsed is half the promise; giving
+  it back is the other half. Toggling the sidebar re-runs the positioning
+  effect, which is the same re-run an agent reply or a snapshot reconcile
+  causes, and the distance cannot be measured again while the target is hidden.
+  If the re-run discards it, expanding the card returns the thread to the card's
+  top instead of to the words it points at.
+  */
+  const feedbackControl = page.getByRole("button", { name: /Feedback/u });
+  const sidebar = page.getByRole("complementary", { name: "Feedback" });
+  await feedbackControl.click();
+  await expect(sidebar).toBeVisible();
+  await feedbackControl.click();
+  await expect(sidebar).not.toBeVisible();
+
+  await card
+    .locator(":scope > [data-collapse-header] button[data-collapse-toggle]")
+    .click();
+  await expect(card).not.toHaveAttribute("data-collapsed", "");
+  await expect(block).toBeVisible();
+
+  await expect
+    .poll(async () => {
+      const restored = await drop();
+      if (restored === null) return "not placed yet";
+      if (Math.abs(restored - droppedWhileOpen) <= 1) {
+        return "back beside its block";
+      }
+      return `${Math.round(droppedWhileOpen - restored)} above its block`;
+    })
+    .toBe("back beside its block");
+});
+
+/*
+BIG-188, the case a mount-time measurement cannot answer. Collapse state is
+persisted, so a document can open with the commented card already collapsed:
+the target is never laid out while the threads are mounted, and there is no
+distance to remember. Expanding the card later must still put the thread beside
+the words it quotes, which it can only do if the distance is recorded by the
+positioning pass that first sees the target rather than once when the thread is
+mounted. A static document has nothing else that would re-run that mount, so
+getting it wrong strands the thread at the card's top for the rest of the
+session.
+*/
+test("should place a comment thread beside its block after opening with the card collapsed", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  // The deepest block inside its card, so a distance the reload must recover
+  // is unmistakable rather than a rounding difference.
+  const deepest = await page.evaluate(() => {
+    const blocks = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "[data-slide] [data-block-kind='paragraph'], [data-slide] [data-block-kind='list-item']",
+      ),
+    );
+    let best: { blockId: string; collapseId: string; offset: number } | null =
+      null;
+    for (const block of blocks) {
+      const card = block.closest<HTMLElement>("[data-slide]");
+      const blockId = block.dataset.blockId;
+      const collapseId = card?.dataset.collapseId;
+      if (card === null || blockId === undefined || collapseId === undefined) {
+        continue;
+      }
+      const offset =
+        block.getBoundingClientRect().top - card.getBoundingClientRect().top;
+      if (best === null || offset > best.offset) {
+        best = { blockId, collapseId, offset };
+      }
+    }
+    if (best === null) {
+      throw new Error("A card must hold an identified block to comment on");
+    }
+    return best;
+  });
+
+  const block = page.locator(`[data-block-id="${deepest.blockId}"]`);
+  const card = page.locator(
+    `[data-slide][data-collapse-id="${deepest.collapseId}"]`,
+  );
+  await block.scrollIntoViewIfNeeded();
+  const quoted = await block.evaluate((element) => {
+    const text = document
+      .createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      .nextNode();
+    if (!(text instanceof Text)) return "";
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, Math.min(18, text.data.length));
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return selection?.toString() ?? "";
+  });
+  expect(quoted.trim()).not.toBe("");
+
+  await page.getByRole("button", { name: "Comment on selected text" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer
+    .getByLabel("Add a comment")
+    .fill("This thread belongs beside its block after a reload.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const threadHost = page.locator("[data-review-thread-side]");
+  await expect(threadHost).toHaveCount(1);
+  // A host is appended before the frame that positions it, and it stays hidden
+  // until that frame arrives, so an unplaced thread answers with no distance
+  // rather than with the one its static position would imply.
+  const drop = async () => {
+    const cardTop = await card.evaluate(
+      (node) => node.getBoundingClientRect().top + window.scrollY,
+    );
+    const threadTop = await threadHost.evaluate((node) =>
+      node.hidden ? null : node.getBoundingClientRect().top + window.scrollY,
+    );
+    return threadTop === null ? null : threadTop - cardTop;
+  };
+  await expect
+    .poll(async () => {
+      const dropped = await drop();
+      if (dropped === null) return "not placed yet";
+      return dropped > deepest.offset - 1
+        ? "beside its block"
+        : `${Math.round(deepest.offset - dropped)} above its block`;
+    })
+    .toBe("beside its block");
+  const droppedWhileOpen = await drop();
+  if (droppedWhileOpen === null) {
+    throw new Error("A placed thread must answer with the distance it holds");
+  }
+
+  const toggle = card.locator(
+    ":scope > [data-collapse-header] button[data-collapse-toggle]",
+  );
+  await toggle.click();
+  await expect(card).toHaveAttribute("data-collapsed", "");
+
+  // The comment and the collapse both persist, so the reloaded document mounts
+  // this thread with nothing measurable to anchor it to.
+  await page.reload();
+  await expect(card).toHaveAttribute("data-collapsed", "");
+  await expect(threadHost).toHaveCount(1);
+  await expect(block).toBeHidden();
+
+  await toggle.click();
+  await expect(card).not.toHaveAttribute("data-collapsed", "");
+  await expect(block).toBeVisible();
+
+  await expect
+    .poll(async () => {
+      const restored = await drop();
+      if (restored === null) return "not placed yet";
+      if (Math.abs(restored - droppedWhileOpen) <= 1) {
+        return "beside its block";
+      }
+      return `${Math.round(droppedWhileOpen - restored)} above its block`;
+    })
+    .toBe("beside its block");
+});
+
 test("should minimize an expanded long comment from the feedback toolbar", async ({
   page,
   deckViewerUrl,

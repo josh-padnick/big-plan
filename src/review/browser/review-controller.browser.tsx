@@ -62,7 +62,8 @@ import {
 } from "../shared/reviewer-markdown.js";
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
-import { stackThreadPositions } from "../shared/thread-layout.js";
+import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
+import { isRendered, measureThreadAnchor } from "./thread-anchor.browser.js";
 import {
   clearThreadOpenOverlay,
   isThreadOpen,
@@ -1939,11 +1940,27 @@ const threadAnchorElement = (comment: ReviewComment): HTMLElement | null => {
   const nominated = document.querySelector<HTMLElement>(
     `[data-review-thread-anchor="${CSS.escape(comment.id)}"]`,
   );
-  if (nominated !== null && nominated.getClientRects().length > 0) {
+  if (nominated !== null && isRendered(nominated)) {
     return nominated;
   }
   return targetElement(comment.target);
 };
+
+// A thread hangs off the card its target sits in, not off the target itself,
+// so one comment on a paragraph and another on the slide around it line up in
+// the same column.
+const threadAnchorContainer = (target: HTMLElement): HTMLElement =>
+  target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
+  target.parentElement ??
+  target;
+
+// Whether the spot the thread remembers is still occupied. A lens hides the
+// block it replays but renders its copy in the same spot, so the remembered
+// distance still describes where that content sits. A collapse leaves nothing
+// behind at all: the card shrinks to its header, and the distance then names a
+// gap below the card rather than a place inside it.
+const targetHoldsItsPlace = (target: HTMLElement): boolean =>
+  isRendered(target) || displayedStandIn(target) !== null;
 
 const useThreadHosts = (
   comments: ReadonlyArray<ReviewComment>,
@@ -1953,6 +1970,11 @@ const useThreadHosts = (
     new Map(),
   );
   const isWide = useWide();
+  // Outlives the effect on purpose. The effect re-runs whenever the comment
+  // list gets a fresh identity, which routine agent polling causes, and a
+  // distance measured before a collapse must not be thrown away by a re-run
+  // that happens while the target is hidden and cannot be measured again.
+  const targetOffsetsRef = useRef(new Map<string, number>());
 
   useEffect(() => {
     if (!isWide) {
@@ -1960,39 +1982,35 @@ const useThreadHosts = (
       return;
     }
     const mounted = new Map<string, HTMLDivElement>();
-    const targetOffsets = new Map<string, number>();
-    const anchorPositions = new Map<
-      string,
-      { readonly left: number; readonly right: number; readonly top: number }
-    >();
+    const targetOffsets = targetOffsetsRef.current;
+    const live = new Set(comments.map((comment) => comment.id));
+    for (const id of targetOffsets.keys()) {
+      if (!live.has(id)) targetOffsets.delete(id);
+    }
     for (const comment of comments) {
       const anchor = threadAnchorElement(comment);
       if (anchor === null) continue;
-      const container =
-        anchor.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
-        anchor.parentElement ??
-        anchor;
-      targetOffsets.set(
-        comment.id,
-        anchor.getBoundingClientRect().top -
-          container.getBoundingClientRect().top,
-      );
-      const containerRect = container.getBoundingClientRect();
-      anchorPositions.set(comment.id, {
-        left: containerRect.left + window.scrollX,
-        right: containerRect.right + window.scrollX,
-        top: containerRect.top + window.scrollY,
-      });
       const host = document.createElement("div");
       host.dataset.reviewThreadFor = comment.id;
       host.dataset.reviewThreadSide = "";
+      // A thread has no place on the page until a positioning pass measures
+      // one, and an absolutely positioned host without coordinates does not
+      // wait quietly for that pass: it takes its static position, which is the
+      // page's left edge below the end of the article - the one place a thread
+      // must never appear. The hosts are appended here and positioned in the
+      // next frame, so hidden until placed is what keeps that gap invisible.
+      // The positioning pass reveals a host in the same task that gives it
+      // coordinates, so a placed thread is never seen anywhere else.
+      host.hidden = true;
       document.body.append(host);
       mounted.set(comment.id, host);
     }
     const position = () => {
       const viewportWidth = document.documentElement.clientWidth;
       const edge = 24;
-      const feedbackRailWidth = isOpen ? Math.min(22 * 16, viewportWidth) : 0;
+      const feedbackSidebarWidth = isOpen
+        ? Math.min(22 * 16, viewportWidth)
+        : 0;
       const threadTopInset = 12;
       const threadWidth = 17 * 16;
       const diffThreadGap = 12;
@@ -2009,46 +2027,83 @@ const useThreadHosts = (
       }> = [];
       const anchorRects = new Map<
         string,
-        { readonly left: number; readonly right: number; readonly top: number }
+        { readonly right: number; readonly top: number }
       >();
       const rightThreadOffsets = new Map<string, number>();
       for (const comment of comments) {
         const host = mounted.get(comment.id);
         const target = threadAnchorElement(comment);
         if (host === undefined || target === null) continue;
-        const anchor =
-          target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
-          target.parentElement ??
-          target;
-        const liveAnchorRect = anchor.getBoundingClientRect();
-        const cachedAnchor = anchorPositions.get(comment.id);
-        const anchorIsHidden = anchor.getClientRects().length === 0;
-        const anchorRect =
-          anchorIsHidden && cachedAnchor !== undefined
-            ? {
-                left: cachedAnchor.left - window.scrollX,
-                right: cachedAnchor.right - window.scrollX,
-                top: cachedAnchor.top - window.scrollY,
-              }
-            : liveAnchorRect;
-        if (!anchorIsHidden) {
-          anchorPositions.set(comment.id, {
-            left: liveAnchorRect.left + window.scrollX,
-            right: liveAnchorRect.right + window.scrollX,
-            top: liveAnchorRect.top + window.scrollY,
-          });
+        const container = threadAnchorContainer(target);
+        const anchor = measureThreadAnchor(container, {
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+        });
+        if ("missing" in anchor) {
+          // Nothing on the page to sit beside. Drawing the card anyway would
+          // mean inventing coordinates, and the invented ones land in the left
+          // margin, which is the one place a thread must never appear.
+          host.hidden = true;
+          continue;
         }
+        host.hidden = false;
+        /*
+        Where the target sits inside its card, recorded on every pass that can
+        see both boxes rather than once when the thread is mounted. A target
+        can be hidden at mount - a card the reader left collapsed, say - and
+        first become measurable during an ordinary positioning pass, and a
+        distance recorded only at mount would leave that thread stuck level
+        with the card top for as long as the document stays open.
+
+        The distance is deliberately remembered rather than re-measured
+        whenever the thread moves. A lens re-renders the block in place, and
+        re-measuring against the copy would move the thread off the words it is
+        attached to; holding the distance is what keeps it still. That is why
+        the recording is gated on the target itself being laid out, which a
+        lens-replaced or collapsed target is not. The anchor rect is the
+        opposite case and is never remembered: it describes the whole page's
+        layout, which a collapse or a reflow invalidates.
+
+        Recording from a target that is not on screen would store the
+        difference between two all-zero rects, which reads back as a real
+        measurement of zero, so a hidden target leaves the last real
+        measurement standing rather than replacing it.
+
+        For the same reason the distance is not applied once nothing occupies
+        the place it measures. A collapse hides the body but keeps the card, so
+        the card still measures while the distance inside it names a gap that
+        has closed, and adding it would draw the thread below the collapsed
+        card beside unrelated content. Level with the card is the whole answer
+        until the target is back, and the distance is still here to put the
+        thread beside it again.
+        */
+        if (anchor.element === container && isRendered(target)) {
+          targetOffsets.set(
+            comment.id,
+            target.getBoundingClientRect().top -
+              container.getBoundingClientRect().top,
+          );
+        }
+        const anchorRect = anchor.measured;
         const cardHeight = Math.max(
           1,
           host.firstElementChild?.getBoundingClientRect().height ?? 1,
         );
-        const isSlideAnchor = anchor.matches(
+        const isSlideAnchor = anchor.element.matches(
           "[data-slide], [data-quick-summary]",
         );
+        // The offset places the thread level with the target inside the card,
+        // so it only applies when the card itself is what got measured and the
+        // target still holds its place inside it. A collapsed anchor is
+        // represented by an ancestor row instead, and that row's top is the
+        // whole answer.
+        const targetOffset =
+          anchor.element === container && targetHoldsItsPlace(target)
+            ? (targetOffsets.get(comment.id) ?? 0)
+            : 0;
         const desiredTop =
           anchorRect.top +
-          (targetOffsets.get(comment.id) ?? 0) +
-          window.scrollY +
+          targetOffset +
           (isSlideAnchor ? slideCommentControlClearance : threadTopInset);
         positionItems.push({
           id: comment.id,
@@ -2069,21 +2124,15 @@ const useThreadHosts = (
         const anchorRect = anchorRects.get(id);
         if (host === undefined || anchorRect === undefined) continue;
         host.style.top = `${top}px`;
-        const minimumLeft = edge + window.scrollX;
-        const maximumLeft =
-          window.scrollX +
-          viewportWidth -
-          feedbackRailWidth -
-          threadWidth -
-          edge;
-        const right =
-          anchorRect.right +
-          window.scrollX +
-          (rightThreadOffsets.get(id) ?? diffThreadGap);
-        host.style.left = `${Math.max(
-          minimumLeft,
-          Math.min(right, maximumLeft),
-        )}px`;
+        host.style.left = `${threadLeft({
+          anchorRight: anchorRect.right,
+          anchorOffset: rightThreadOffsets.get(id) ?? diffThreadGap,
+          threadWidth,
+          viewportWidth,
+          sidebarWidth: feedbackSidebarWidth,
+          scrollX: window.scrollX,
+          pageMargin: edge,
+        })}px`;
       }
     };
     const frame = requestAnimationFrame(position);
@@ -2093,10 +2142,7 @@ const useThreadHosts = (
       const target = targetElement(comment.target);
       if (target !== null) {
         observer.observe(target);
-        const anchor =
-          target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
-          target.parentElement;
-        if (anchor !== null) observer.observe(anchor);
+        observer.observe(threadAnchorContainer(target));
       }
     }
     window.addEventListener("resize", position, { passive: true });

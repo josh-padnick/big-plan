@@ -90,8 +90,8 @@ When a revision arrives, it may swap in the newly server-rendered article throug
 The plan remains fully readable when scripts are disabled, and Big Plan ships no separate script-free HTML variant.
 Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
-Two runtime contracts hold that browser layer together, and both exist because
-breaking them fails silently rather than loudly.
+Three runtime contracts hold that browser layer together, and each exists
+because breaking it fails silently rather than loudly.
 The review island may replace plan DOM in exactly one place, which announces the
 swap as `bigplan:article-replaced`; every shell script and every island effect
 that holds a node re-resolves on that event, because a replaced article detaches
@@ -101,6 +101,15 @@ which scopes lookups to the live article, excludes copies rendered inside a diff
 lens, and answers with an element or a reason it is missing; a lint rule keeps it
 the only such place, because a raw selector silently returns a plausible wrong
 node instead of failing.
+Identity is deliberately not geometry: that resolver rightly answers with
+elements the browser never laid out, such as a block inside a collapsed slide,
+so a floating comment thread takes its rect from exactly one module,
+`src/review/browser/thread-anchor.browser.ts`, which climbs to the nearest
+laid-out ancestor and answers with a rect it measured or the reason it has none.
+Measuring anywhere else fails silently in the same shape, because an unlaid-out
+element still answers `getBoundingClientRect()` with an all-zero rect that is
+indistinguishable from a real measurement at the document origin and parks the
+thread in the left margin, the far side of the screen from its content.
 
 One server-side invariant is worth the same treatment, for the same reason.
 The authoritative plan source has exactly one writer, `src/review/staged-plan-mutation.ts`.
