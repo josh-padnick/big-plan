@@ -1741,6 +1741,219 @@ describe("agent work loop lifecycle", () => {
     }
   }, 20_000);
 
+  it("should stop a waiting observer the reviewer disconnects", async () => {
+    /*
+    The reviewer's answer has to outlast the loop it was about. Removing the
+    record alone is undone within 500 ms: the loop refreshes, finds nothing
+    under its id, and registers again as an arrival - so the card the reviewer
+    just dismissed reappears with its question re-raised (BIG-171).
+    */
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nOne review, one primary.\n");
+    const review = await startReviewRuntime({ planPath });
+    let observing: Promise<Record<string, unknown>> | undefined;
+    try {
+      // An agent already speaks for the plan, so the arriving loop observes.
+      await reviewStore.attachAgentToRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "incumbent",
+      });
+      observing = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+      });
+      const observer = await vi.waitFor(
+        async () => {
+          const waiting = pendingPrimacyRequest({
+            agents: await reviewStore.readAgentRoster({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+            nowMs: Date.now(),
+          });
+          if (waiting === undefined) {
+            throw new Error("The arriving agent did not ask to be the primary");
+          }
+          return waiting;
+        },
+        { timeout: 5_000 },
+      );
+
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: observer.writerId,
+      });
+
+      // The loop is told, in a result its harness can branch on, and it ends.
+      await expect(observing).resolves.toMatchObject({
+        pending: false,
+        role: "disconnected",
+      });
+      // And it stays gone rather than re-raising the question it was answered
+      // about.
+      await expect(
+        reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toEqual([expect.objectContaining({ writerId: "incumbent" })]);
+    } finally {
+      await review.close();
+      await observing;
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should not re-seat a waiting primary the reviewer disconnects", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-p-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nThe seat stays empty.\n");
+    const review = await startReviewRuntime({ planPath });
+    let waiting: Promise<Record<string, unknown>> | undefined;
+    try {
+      waiting = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+      });
+      const primary = await vi.waitFor(
+        async () => {
+          const seated = selectPrimaryAgent({
+            agents: await reviewStore.readAgentRoster({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+            nowMs: Date.now(),
+          });
+          if (seated === undefined) throw new Error("No agent registered yet");
+          return seated;
+        },
+        { timeout: 5_000 },
+      );
+
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: primary.writerId,
+      });
+
+      await expect(waiting).resolves.toMatchObject({
+        pending: false,
+        role: "disconnected",
+      });
+      // The empty-seat rule must not hand the plan straight back to the agent
+      // the reviewer just removed from it.
+      await expect(
+        reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      await review.close();
+      await waiting;
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should tell a disconnected agent at its next command", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-n-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await writeAgentRequest({
+        store: review.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId: "abababababababab",
+          sessionId: review.sessionId,
+          planId: review.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-19T12:00:00.000Z",
+          body: "Answer this.",
+        }),
+      });
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const holder = (
+        await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        })
+      )[0];
+      if (holder === undefined || typeof pickup.agent_token !== "string") {
+        throw new Error("The pickup did not register an agent");
+      }
+
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: holder.writerId,
+      });
+
+      // Its record is gone, so nothing else can recognise it; the reviewer's
+      // answer is the true reason, and it is the one a harness can act on.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Still working",
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "primacy-lost",
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should leave no registration behind when a command is refused", async () => {
+    // Registration happens before any of the refusals, and only the returning
+    // paths used to give it back. A record left standing for a process that
+    // has already failed is a card asking the reviewer to promote nobody.
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-ghost-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nNothing to answer.\n");
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken: "aaaaaaaaaaaaaaaa",
+        }),
+      ).rejects.toMatchObject({ name: "AgentWorkLoopRejected" });
+
+      await expect(
+        reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should keep a resuming loop as the primary rather than demoting it", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
     const planPath = join(directory, "plan.mdx");

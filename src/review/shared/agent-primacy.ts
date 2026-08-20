@@ -420,15 +420,24 @@ export const roleForArrivingAgent = ({
  * The request is cleared on both sides: the promoted agent got what it asked
  * for, and the demoted one never asked. A stale flag would keep the toolbar in
  * hazard after the reviewer had already decided.
+ *
+ * The demoted agent's claim is recorded as closed, because the hand-off has
+ * just freed it. Left open, that record went on describing an agent mid turn:
+ * it was the one thing that made an unheard-from record patient for half an
+ * hour, so a dead card sat on the rail offering to be made the primary long
+ * after the process behind it had been refused and exited.
  */
 export const applyPrimacyHandoff = ({
   agents,
   writerId,
+  nowMs,
   inheritedDraftPath,
 }: {
   readonly agents: ReadonlyArray<AttachedAgent>;
   /** The observer the reviewer chose. */
   readonly writerId: string;
+  /** When the reviewer answered, which is when the outgoing claim ends. */
+  readonly nowMs: number;
   /** The outgoing agent's draft, when the reviewer chose to carry it over. */
   readonly inheritedDraftPath?: string;
 }): ReadonlyArray<AttachedAgent> => {
@@ -456,7 +465,13 @@ export const applyPrimacyHandoff = ({
     // anyway: a stale request on a demoted agent would re-raise a question
     // nobody posed.
     const { requestedPrimacyAtMs: _demoted, ...rest } = agent;
-    return { ...rest, role: "observer" };
+    return {
+      ...rest,
+      role: "observer",
+      ...(agent.claimToken === undefined || agent.claimClosedAtMs !== undefined
+        ? {}
+        : { claimClosedAtMs: nowMs }),
+    };
   });
 };
 

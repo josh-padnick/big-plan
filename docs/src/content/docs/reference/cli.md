@@ -332,10 +332,29 @@ With `--wait` the loop stays attached and keeps asking until the reviewer answer
 The reviewer answers from **Agent Status** in the review, where every attached agent has a card: **Make it primary**, **Leave it as observer**, or **Disconnect this agent**.
 Making an observer the primary displaces the incumbent immediately: its open claim is freed, and the reviewer may hand its unpublished draft to the new primary as `previous_agent_draft` - a path to read as reference, never a candidate to publish.
 
-A displaced agent finds out at its next command rather than after paying for a whole turn.
-`agent next`, `agent note`, and `agent respond` all refuse with the error code `PRIMACY_LOST`, naming the agent that holds the plan now.
-Branch on that code: the correct response is to stop the loop, not to retry, because retrying is the churn the code exists to prevent.
-Disconnecting an agent frees the claim it was part way through in the same way, so the turn it had in flight can no longer reach the plan.
+A displaced agent finds out at its next command rather than after paying for a whole turn, and there are two shapes to branch on.
+`agent note` and `agent respond` refuse with the error code `PRIMACY_LOST`, naming the agent that holds the plan now.
+`agent next` is not an error: a displaced loop is an observer again, so it returns the `role: "observer"` result above.
+Branch on both.
+A harness that watches only for `PRIMACY_LOST` reads the observer result as ordinary "no work" and polls on, which is exactly the churn this design removes; the correct response to either is to stop claiming, not to retry.
+
+**Disconnect this agent** ends the loop outright rather than moving its role.
+The reviewer's answer is recorded, so a loop already waiting on `--wait` is told at its very next refresh instead of quietly registering again, and `agent next` returns a final result:
+
+```json
+{
+  "pending": false,
+  "role": "disconnected",
+  "plan": "/path/to/plan.mdx",
+  "review": "http://127.0.0.1:8420/",
+  "reason": "The reviewer disconnected this agent from this review"
+}
+```
+
+That result is terminal even with `--wait`: stop the loop.
+`agent note` and `agent respond` from the same session refuse with `PRIMACY_LOST` and say the reviewer disconnected it.
+The claim it was part way through is freed as well, so the turn it had in flight can no longer reach the plan, and no other agent's claim is touched.
+Connecting again afterwards is a new agent: it attaches as an observer and asks the reviewer, like any other arrival.
 
 A published turn keeps its own seat for as long as the answering agent's return trip takes.
 `agent respond` therefore returns `next`: an `agent next ... --wait --agent <token>` command carrying the token just answered under.
@@ -414,9 +433,10 @@ An empty, non-numeric, negative, nonzero sub-minute, or overflowing `review --id
 `agent` rejects an unknown action or invalid action arguments with
 `INVALID_INPUT` and its complete multi-line usage text.
 
-`agent next`, `agent note`, and `agent respond` raise `PRIMACY_LOST` when the reviewer has made another attached agent the primary for the review, or has disconnected this one.
-The message names the agent that holds the plan now, and the help entries say to stop the loop rather than retry.
+`agent note` and `agent respond` raise `PRIMACY_LOST` when the reviewer has made another attached agent the primary for this review, or has disconnected this one.
+The message names the agent that holds the plan now, or says the reviewer disconnected this one, and the help entries say to stop the loop rather than retry.
 It carries no usage text, because the command was well formed; a harness branches on the code to end a displaced loop cleanly instead of churning.
+`agent next` reports the same two situations as ordinary results rather than errors - `role: "observer"` and `role: "disconnected"` - so a harness must branch on those too.
 
 If the input for `validate`, `render`, `compile`, or `review` cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.

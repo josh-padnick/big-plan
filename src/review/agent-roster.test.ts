@@ -22,6 +22,7 @@ import {
   AGENT_STALL_MS,
 } from "./shared/agent-timing.js";
 import {
+  AgentDisconnectedByReviewer,
   attachAgentToRoster,
   closeAgentClaim,
   declineAgentPrimacy,
@@ -553,5 +554,110 @@ describe("detachExitingAgent", () => {
     expect(
       pendingPrimacyRequest({ agents, nowMs: Date.now() }),
     ).toBeUndefined();
+  });
+});
+
+/*
+What "Disconnect this agent" has to survive: the agent itself.
+
+The record is only half the answer. Every waiting loop refreshes its
+registration twice a second, so a removal on its own is undone before the
+reviewer has let go of the mouse - the card comes back with its question
+re-raised, and no number of clicks can clear it (BIG-171).
+*/
+describe("the reviewer's disconnect", () => {
+  const twoAttached = async () => {
+    const store = await temporaryStore();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 1_000,
+    });
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 1_000,
+    });
+    await detachAgentFromRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 1_500,
+    });
+    return store;
+  };
+
+  it("should refuse the registration it removed rather than let it return", async () => {
+    const store = await twoAttached();
+    await expect(
+      attachAgentToRoster({
+        store,
+        sessionId: SESSION,
+        writerId: "watching",
+        now: 2_000,
+      }),
+    ).rejects.toBeInstanceOf(AgentDisconnectedByReviewer);
+    const agents = await readAgentRoster({ store, sessionId: SESSION });
+    expect(agents.map((agent) => agent.writerId)).toEqual(["answering"]);
+  });
+
+  it("should answer the disconnected agent's other processes by their token", async () => {
+    // `note` and `respond` know their token and not their registration, and so
+    // does the `next` that returns after a published turn.
+    const store = await temporaryStore();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 1_000,
+    });
+    await recordAgentClaimToken({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      claimToken: "held",
+    });
+    await detachAgentFromRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 1_500,
+    });
+    await expect(
+      attachAgentToRoster({
+        store,
+        sessionId: SESSION,
+        writerId: "a-new-process",
+        adoptClaimToken: "held",
+        now: 2_000,
+      }),
+    ).rejects.toBeInstanceOf(AgentDisconnectedByReviewer);
+  });
+
+  it("should still let a genuinely new connection attach", async () => {
+    // The answer was about one running loop, not about the terminal it was
+    // running in: a fresh invocation mints a new id and arrives like anyone.
+    const store = await twoAttached();
+    const { agent } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "reconnected",
+      now: 2_000,
+    });
+    expect(agent.role).toBe("observer");
+    expect(agent.requestedPrimacyAtMs).toBe(2_000);
+  });
+
+  it("should stop refusing once the disconnected loop has had time to end", async () => {
+    const store = await twoAttached();
+    const { agent } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 1_500 + AGENT_STALL_MS + 1,
+    });
+    expect(agent.writerId).toBe("watching");
   });
 });

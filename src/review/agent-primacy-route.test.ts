@@ -342,6 +342,75 @@ describe("the reviewer's primacy answer over the wire", () => {
     );
   });
 
+  it("should leave the new primary's turn alone when a stale card is disconnected", async () => {
+    /*
+    The sequence a plan-wide release could not survive. A holds R1; the
+    reviewer moves primacy to B, which frees R1 and leaves A's card on the rail
+    as an observer; B claims R1 and is mid turn; the reviewer tidies up by
+    disconnecting A. Releasing every open claim here would discard the turn B
+    is part way through, under a progress line about a change the reviewer
+    never made.
+    */
+    const { runtime, token } = await startReview();
+    const requestId = await attachWorkingPrimary({
+      runtime,
+      writerId: "incumbent",
+    });
+    await attach({ runtime, writerId: "arriving" });
+    await answerPrimacy({
+      runtime,
+      token,
+      body: { writerId: "arriving", answer: "primary" },
+    });
+    const successorToken = "1234123412341234";
+    await claimAgentRequest({
+      store: runtime.store,
+      activeSessionId: runtime.sessionId,
+      requestId,
+      claimedBy: successorToken,
+      baselineSnapshot: deriveSnapshotDigest(PLAN),
+      now: new Date().toISOString(),
+    });
+    await recordAgentClaimToken({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "arriving",
+      claimToken: successorToken,
+    });
+
+    const response = await answerPrimacy({
+      runtime,
+      token,
+      body: { writerId: "incumbent", answer: "disconnect" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(claimHolderOf({ runtime, requestId })).resolves.toBe(
+      successorToken,
+    );
+  });
+
+  it("should close the claim a hand-off took from the outgoing primary", async () => {
+    // The record must stop describing an agent mid turn the moment the claim
+    // it names is freed; otherwise the displaced card sits on the rail for
+    // half an hour offering to be made the primary again.
+    const { runtime, token } = await startReview();
+    await attachWorkingPrimary({ runtime, writerId: "incumbent" });
+    await attach({ runtime, writerId: "arriving" });
+
+    await answerPrimacy({
+      runtime,
+      token,
+      body: { writerId: "arriving", answer: "primary" },
+    });
+
+    const displaced = (await rosterOf(runtime)).find(
+      (agent) => agent.writerId === "incumbent",
+    );
+    expect(displaced?.role).toBe("observer");
+    expect(displaced?.claimClosedAtMs).toEqual(expect.any(Number));
+  });
+
   it("should hand the outgoing draft over only when the reviewer asked for it", async () => {
     const { runtime, token } = await startReview();
     await attach({ runtime, writerId: "incumbent" });

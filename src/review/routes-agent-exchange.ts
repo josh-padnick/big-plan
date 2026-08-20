@@ -746,20 +746,20 @@ export const answerAgentPrimacy = async (
     return refusal({ status: 404, reason: "That agent is not attached" });
   }
   /*
-  Whether this answer leaves a turn in flight behind it.
+  The turn this answer leaves in flight, when it leaves one.
 
   Removing the record is not by itself a fence: the commands that finish a turn
   know their token and not their registration, so a disconnected agent whose
   claim was left open still publishes the revision the reviewer had just
   removed it from - and the card promised the opposite. The release below is
-  the same boundary a hand-off uses, and it is taken only when this agent is
-  the one holding the claim, because it frees every open claim on the plan and
-  disconnecting an observer must not fence the primary that is working.
+  the same boundary a hand-off uses, named to this agent's own token so an
+  answer about one agent can never reach into a turn another one is mid way
+  through.
   */
-  const disconnectingAHeldTurn =
-    answer === "disconnect" &&
-    target.claimToken !== undefined &&
-    target.claimClosedAtMs === undefined;
+  const disconnectedTurn =
+    answer === "disconnect" && target.claimClosedAtMs === undefined
+      ? target.claimToken
+      : undefined;
   /*
   The reviewer may hand the outgoing agent's unpublished draft to the new
   primary. It is resolved before anything moves, because the release below is
@@ -782,6 +782,7 @@ export const answerAgentPrimacy = async (
           store,
           sessionId,
           writerId,
+          now: nowMs,
           ...(inheritedDraftPath === undefined ? {} : { inheritedDraftPath }),
         })
       : answer === "observer"
@@ -811,8 +812,16 @@ export const answerAgentPrimacy = async (
     }
     await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
   }
-  if (disconnectingAHeldTurn) {
-    await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
+  if (disconnectedTurn !== undefined) {
+    await releaseClaimsForPrimacyHandoff({
+      store,
+      sessionId,
+      planId,
+      claimedBy: disconnectedTurn,
+      step: "Claim released when you disconnected this agent",
+      detail:
+        "The disconnected agent can no longer publish it; send this message again for the agent that answers you now",
+    });
   }
   await appendProgressBestEffort({
     context,

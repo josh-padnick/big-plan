@@ -276,7 +276,7 @@ describe("applyPrimacyHandoff", () => {
   ];
 
   it("should promote and demote in one step, leaving exactly one primary", () => {
-    const next = applyPrimacyHandoff({ agents, writerId: "new" });
+    const next = applyPrimacyHandoff({ agents, writerId: "new", nowMs: NOW });
     expect(next.filter(({ role }) => role === "primary")).toHaveLength(1);
     expect(selectPrimaryAgent({ agents: next, nowMs: NOW })?.writerId).toBe(
       "new",
@@ -299,7 +299,11 @@ describe("applyPrimacyHandoff", () => {
         requestedPrimacyAtMs: NOW - 50,
       }),
     ];
-    const next = applyPrimacyHandoff({ agents: three, writerId: "new" });
+    const next = applyPrimacyHandoff({
+      agents: three,
+      writerId: "new",
+      nowMs: NOW,
+    });
     expect(pendingPrimacyRequest({ agents: next, nowMs: NOW })?.writerId).toBe(
       "other",
     );
@@ -309,8 +313,32 @@ describe("applyPrimacyHandoff", () => {
   });
 
   it("should clear the request so the toolbar leaves its hazard state", () => {
-    const next = applyPrimacyHandoff({ agents, writerId: "new" });
+    const next = applyPrimacyHandoff({ agents, writerId: "new", nowMs: NOW });
     expect(agentPrimacyHealth({ agents: next, nowMs: NOW })).toBe("settled");
+  });
+
+  it("should close the claim it just took from the outgoing primary", () => {
+    // The hand-off frees that claim, so the record must stop saying the agent
+    // is mid turn. An open claim is the one thing that makes an unheard-from
+    // record patient for half an hour, and the displaced agent can never close
+    // it: its next command is refused before it reaches the close.
+    const working = [
+      agent({ writerId: "old", role: "primary", claimToken: "held" }),
+      agent({ writerId: "new", role: "observer" }),
+    ];
+    const next = applyPrimacyHandoff({
+      agents: working,
+      writerId: "new",
+      nowMs: NOW,
+    });
+    const displaced = next.find(({ writerId }) => writerId === "old");
+    expect(displaced?.claimClosedAtMs).toBe(NOW);
+    expect(
+      agentIsAttached({
+        agent: displaced ?? { signalAtMs: 0 },
+        nowMs: NOW + AGENT_STALL_MS + 1,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -332,6 +360,7 @@ describe("applyPrimacyHandoff when the chosen agent has gone", () => {
       applyPrimacyHandoff({
         agents: [incumbent, other],
         writerId: "departed",
+        nowMs: NOW,
       }),
     ).toEqual([incumbent, other]);
   });

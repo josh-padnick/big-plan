@@ -1515,7 +1515,7 @@ export const reviseQueuedRequest = async ({
 };
 
 /**
- * Frees every open claim on a plan when the reviewer moves primacy.
+ * Frees the open claims on a plan when the reviewer changes who answers.
  *
  * The reviewer answered this question in the plan: a hand-off fences the
  * incumbent at once rather than letting it finish. Without this, primacy would
@@ -1526,23 +1526,42 @@ export const reviseQueuedRequest = async ({
  * The displaced agent is fenced exactly as a takeover fences it: its stage is
  * dropped, so the generation it drafted for can never publish, and its next
  * command answers PRIMACY_LOST rather than silence.
+ *
+ * `claimedBy` narrows that to one agent's own claims, and every caller that
+ * means one agent must pass it. A reviewer's answer about agent A must not be
+ * able to reach into a turn agent B is mid way through: unnarrowed, an answer
+ * about a stale card stripped the working primary's live claim and discarded
+ * its turn under a progress line about a change the reviewer never made.
  */
 export const releaseClaimsForPrimacyHandoff = async ({
   store,
   sessionId,
   planId,
+  claimedBy,
+  step = "Claim released when you changed the primary agent",
+  detail = "The new primary answers this message; the previous agent keeps its draft and can no longer publish it",
   clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly planId: string;
+  /** The one agent whose claims this answer frees, when it is about one. */
+  readonly claimedBy?: string;
+  /** What the reviewer's log calls this release. */
+  readonly step?: string;
+  readonly detail?: string;
   readonly clock?: Clock;
 }): Promise<ReadonlyArray<AgentRequest>> => {
   const nowMs = readClock(clock);
+  const holdsTheClaim = (request: AgentRequest): boolean =>
+    claimedBy === undefined || request.claimedBy === claimedBy;
   const open = (
     await readValidatedAgentRequests({ store, sessionId, planId })
   ).filter(
-    (request) => !requestIsTerminal(request) && request.claimedAt !== undefined,
+    (request) =>
+      !requestIsTerminal(request) &&
+      request.claimedAt !== undefined &&
+      holdsTheClaim(request),
   );
   const released: Array<AgentRequest> = [];
   for (const candidate of open) {
@@ -1555,8 +1574,14 @@ export const releaseClaimsForPrimacyHandoff = async ({
           requestId: candidate.requestId,
         });
         // Re-read under the lock: the holder may have answered in between, and
-        // releasing a terminal request would rewrite settled history.
-        if (requestIsTerminal(current) || current.claimedAt === undefined) {
+        // releasing a terminal request would rewrite settled history. The
+        // holder may also have changed, so the narrowing is re-proved here
+        // rather than trusted from the read above.
+        if (
+          requestIsTerminal(current) ||
+          current.claimedAt === undefined ||
+          !holdsTheClaim(current)
+        ) {
           return undefined;
         }
         const freed = validateAgentRequest(withoutClaim(current));
@@ -1594,10 +1619,9 @@ export const releaseClaimsForPrimacyHandoff = async ({
         requestId: request.requestId,
         atMs: nowMs,
         stepCode: "claim-released",
-        step: "Claim released when you changed the primary agent",
+        step,
         state: "done",
-        detail:
-          "The new primary answers this message; the previous agent keeps its draft and can no longer publish it",
+        detail,
       },
     }).catch(() => undefined);
   }

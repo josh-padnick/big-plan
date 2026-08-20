@@ -2758,6 +2758,92 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
 };
 
 /**
+ * One agent the reviewer disconnected, and the moment they did.
+ *
+ * Removing the record cannot be the whole answer, because the agent it
+ * describes is usually still running: a waiting loop refreshes its
+ * registration twice a second, finds no record under its id, and registers
+ * again as an arrival - so the card the reviewer just dismissed comes back
+ * within half a second, with its question re-raised, and no number of clicks
+ * can clear it (BIG-171). This is the fact that outlives the record: the
+ * reviewer's answer, which the loop reads and stops on.
+ *
+ * It is deliberately about one registration and not about the connector. A
+ * fresh invocation mints a new id and attaches like any other new agent, which
+ * is what keeps "disconnect" an answer about this loop rather than a ban on
+ * the terminal it is running in.
+ */
+export type AgentDisconnect = {
+  readonly writerId: string;
+  /**
+   * The pickup token that registration last claimed with, when it held one.
+   *
+   * `agent note` and `agent respond` are separate processes that know their
+   * token and not their registration, so without it a disconnected agent's
+   * in-flight commands would meet a refusal about claims rather than the
+   * answer the reviewer actually gave.
+   */
+  readonly claimToken?: string;
+  readonly atMs: number;
+};
+
+const asAgentDisconnect = (value: unknown): AgentDisconnect | undefined => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Readonly<Record<string, unknown>>;
+  const writerId = record["writerId"];
+  const atMs = record["atMs"];
+  if (
+    typeof writerId !== "string" ||
+    writerId === "" ||
+    typeof atMs !== "number" ||
+    !Number.isFinite(atMs)
+  ) {
+    return undefined;
+  }
+  const claimToken = record["claimToken"];
+  return {
+    writerId,
+    ...(typeof claimToken === "string" && claimToken !== ""
+      ? { claimToken }
+      : {}),
+    atMs,
+  };
+};
+
+/** Refuses a registration the reviewer has disconnected from this review. */
+export class AgentDisconnectedByReviewer extends Error {
+  readonly writerId: string;
+
+  constructor(writerId: string) {
+    super("The reviewer disconnected this agent from this review");
+    this.name = "AgentDisconnectedByReviewer";
+    this.writerId = writerId;
+  }
+}
+
+const rosterDocument = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<Readonly<Record<string, unknown>> | undefined> => {
+  const value = await readStoreJson(store.agentRosterPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId
+  ) {
+    return undefined;
+  }
+  return value as Readonly<Record<string, unknown>>;
+};
+
+/**
  * Reads the roster of agents attached to this review.
  *
  * A record that does not decode disappears rather than throwing, on the same
@@ -2772,21 +2858,40 @@ export const readAgentRoster = async ({
   readonly store: ReviewStore;
   readonly sessionId: string;
 }): Promise<ReadonlyArray<AttachedAgent>> => {
-  const value = await readStoreJson(store.agentRosterPath);
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    !("sessionId" in value) ||
-    value.sessionId !== sessionId ||
-    !("agents" in value) ||
-    !Array.isArray(value.agents)
-  ) {
-    return [];
-  }
-  return value.agents
+  const document = await rosterDocument({ store, sessionId });
+  const agents = document?.["agents"];
+  if (!Array.isArray(agents)) return [];
+  return agents
     .map(asAttachedAgent)
     .filter((agent): agent is AttachedAgent => agent !== undefined);
+};
+
+/**
+ * Reads the reviewer's still-standing disconnections.
+ *
+ * They expire on the stall window rather than lasting the session, because a
+ * disconnection answers one running loop and that loop is gone within it. Kept
+ * longer, the answer would start refusing agents the reviewer never spoke
+ * about - the same connector, invoked again, reconnecting at their request.
+ */
+export const readAgentDisconnects = async ({
+  store,
+  sessionId,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly now?: number;
+}): Promise<ReadonlyArray<AgentDisconnect>> => {
+  const document = await rosterDocument({ store, sessionId });
+  const disconnected = document?.["disconnected"];
+  if (!Array.isArray(disconnected)) return [];
+  return disconnected
+    .map(asAgentDisconnect)
+    .filter(
+      (entry): entry is AgentDisconnect =>
+        entry !== undefined && now - entry.atMs <= AGENT_STALL_MS,
+    );
 };
 
 /**
@@ -2801,20 +2906,49 @@ const withAgentRoster = async ({
   store,
   sessionId,
   change,
+  disconnect,
+  now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly change: (
     agents: ReadonlyArray<AttachedAgent>,
+    disconnected: ReadonlyArray<AgentDisconnect>,
   ) => ReadonlyArray<AttachedAgent>;
+  /**
+   * A disconnection this change records, read after the change has run.
+   *
+   * The roster and the reviewer's answer about it are one file and one write,
+   * because a record removed without its answer beside it is exactly the state
+   * the answer exists to prevent: the loop it named registers again.
+   */
+  readonly disconnect?: () => AgentDisconnect | undefined;
+  readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withReviewStoreLock({
     lockPath: store.agentRosterLockPath,
     change: async () => {
-      const next = change(await readAgentRoster({ store, sessionId }));
+      // Read before the change, and written back after it: every roster write
+      // carries the reviewer's standing answers forward, and drops the ones
+      // whose window has passed.
+      const standing = await readAgentDisconnects({ store, sessionId, now });
+      const next = change(
+        await readAgentRoster({ store, sessionId }),
+        standing,
+      );
+      const recorded = disconnect?.();
+      const disconnected =
+        recorded === undefined
+          ? standing
+          : [
+              ...standing.filter(
+                (entry) => entry.writerId !== recorded.writerId,
+              ),
+              recorded,
+            ];
       await writeStoreJson({
         path: store.agentRosterPath,
-        value: { sessionId, agents: next },
+        value: { sessionId, agents: next, disconnected },
       });
       return next;
     },
@@ -2883,7 +3017,8 @@ export const attachAgentToRoster = async ({
   const agents = await withAgentRoster({
     store,
     sessionId,
-    change: (existingAgents) => {
+    now,
+    change: (existingAgents, disconnected) => {
       const adopted =
         adoptClaimToken === undefined
           ? undefined
@@ -2893,6 +3028,26 @@ export const attachAgentToRoster = async ({
       // The identity this process answers to: the record it adopted, or the
       // one it proposed when it has no record here yet.
       const identity = adopted?.writerId ?? writerId;
+      /*
+      A registration the reviewer disconnected is refused rather than remade.
+
+      Attaching is otherwise unconditional, and that is what let a running loop
+      undo the reviewer's answer twice a second: its record was gone, so it
+      arrived as a newcomer under the same id and raised its question again.
+      The refusal is what the loop reads to stop, and it is matched by token as
+      well as by id so the separate processes of one turn are answered the same
+      way as the loop that started it.
+      */
+      if (
+        disconnected.some(
+          (entry) =>
+            entry.writerId === identity ||
+            (adoptClaimToken !== undefined &&
+              entry.claimToken === adoptClaimToken),
+        )
+      ) {
+        throw new AgentDisconnectedByReviewer(identity);
+      }
       const live = existingAgents.filter(
         (agent) =>
           agent.writerId === identity ||
@@ -3194,20 +3349,24 @@ export const grantAgentPrimacy = async ({
   sessionId,
   writerId,
   inheritedDraftPath,
+  now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
   /** The outgoing agent's draft, when the reviewer chose to carry it over. */
   readonly inheritedDraftPath?: string;
+  readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withAgentRoster({
     store,
     sessionId,
+    now,
     change: (agents) =>
       applyPrimacyHandoff({
         agents,
         writerId,
+        nowMs: now,
         ...(inheritedDraftPath === undefined ? {} : { inheritedDraftPath }),
       }),
   });
@@ -3231,10 +3390,14 @@ export const declineAgentPrimacy = async ({
 /**
  * Removes one agent from the roster at the reviewer's request.
  *
- * Dropping the record is the whole mechanism: the agent's next command finds no
- * registration and is told it is no longer attached. Big Plan has no way to
- * stop a process on the reviewer's machine, and claiming otherwise on the
- * button would be a promise the product cannot keep.
+ * The removal is recorded as well as performed, and both halves are needed.
+ * Dropping the record alone is undone by the agent itself: a waiting loop
+ * refreshes twice a second, finds nothing under its id, and registers again as
+ * an arrival. The recorded answer is what its next refresh reads instead, so
+ * the loop is told and stops rather than churning. Big Plan still has no way
+ * to stop a process on the reviewer's machine, and the button promises only
+ * what this delivers: the agent is out of the review and finds out at its next
+ * command.
  *
  * A disconnected primary leaves the role empty rather than handing it to an
  * observer. Who answers the reviewer is the reviewer's decision, and inventing
@@ -3244,16 +3407,31 @@ export const detachAgentFromRoster = async ({
   store,
   sessionId,
   writerId,
+  now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
-}): Promise<ReadonlyArray<AttachedAgent>> =>
-  withAgentRoster({
+  readonly now?: number;
+}): Promise<ReadonlyArray<AttachedAgent>> => {
+  let removed: AttachedAgent | undefined;
+  return withAgentRoster({
     store,
     sessionId,
-    change: (agents) => agents.filter((agent) => agent.writerId !== writerId),
+    now,
+    change: (agents) => {
+      removed = agents.find((agent) => agent.writerId === writerId);
+      return agents.filter((agent) => agent.writerId !== writerId);
+    },
+    disconnect: () => ({
+      writerId,
+      ...(removed?.claimToken === undefined
+        ? {}
+        : { claimToken: removed.claimToken }),
+      atMs: now,
+    }),
   });
+};
 
 /** Reads the coding-agent presence signal without turning stale data into work. */
 export const readAgentPresence = async ({
