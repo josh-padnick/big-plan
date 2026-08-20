@@ -287,14 +287,14 @@ export const Badge = ({
 );
 
 /**
- * A tooltip names the control it hangs off, explains a choice the reader is
- * about to make, or tells the keystroke that drives the control; the three
- * want different measures. The shortcut shape is not a caller's choice: it
- * follows from the tooltip having keys, so a caller cannot pair chipped keys
- * with a centred caption measure.
+ * A tooltip names the control it hangs off, tells the keystroke that drives
+ * it, or explains a choice the reader is about to make; the three want
+ * different measures. The shape is not a separate prop, because it follows
+ * from what the caller supplies: keys make a shortcut, sections make an
+ * explanation, a bare label names a control. Nothing can therefore pair
+ * chipped keys or two paragraphs with the centred measure a caption wants.
  */
-type TooltipVariant = "label" | "explanation";
-type TooltipShape = TooltipVariant | "shortcut";
+type TooltipShape = "label" | "shortcut" | "explanation";
 
 type TooltipChildProps = {
   readonly "aria-describedby"?: string;
@@ -305,14 +305,41 @@ type TooltipChildProps = {
   readonly onBlurCapture?: FocusEventHandler<HTMLElement>;
 };
 
-type TooltipProps = {
-  readonly label: string;
-  /**
-   * One entry per keystroke, chipped ahead of the label. Present makes this a
-   * shortcut tooltip; the label then reads as the rest of the sentence the
-   * keys start, as in ⌘ Enter "to submit this comment now".
-   */
-  readonly shortcutKeys?: readonly string[];
+/** One option of a choice: the option's name, and what choosing it costs. */
+type TooltipSection = {
+  readonly term: string;
+  readonly detail: string;
+};
+
+/**
+ * What the tooltip says, in exactly one of three forms. The union is what
+ * keeps the forms from being mixed: a caller cannot ask for chipped keys and
+ * sections at once, so the shape below is always decidable.
+ */
+type TooltipContent =
+  | {
+      readonly label: string;
+      /**
+       * One entry per keystroke, chipped ahead of the label, which then reads
+       * as the rest of the sentence the keys start: ⌘ Enter "to submit this
+       * comment now".
+       */
+      readonly shortcutKeys?: readonly string[];
+      readonly sections?: undefined;
+    }
+  | {
+      /**
+       * One paragraph per option, each led by the option's name in bold. A
+       * choice between two behaviours is two things a reader compares, and a
+       * comparison told as one run of prose has to be taken apart before it
+       * can be made.
+       */
+      readonly sections: readonly TooltipSection[];
+      readonly label?: undefined;
+      readonly shortcutKeys?: undefined;
+    };
+
+type TooltipProps = TooltipContent & {
   readonly children: ReactElement<TooltipChildProps>;
   readonly className?: string;
   readonly tooltipProps?: HTMLAttributes<HTMLSpanElement> &
@@ -320,18 +347,17 @@ type TooltipProps = {
   readonly placement?: "above" | "below";
   readonly asChild?: boolean;
   readonly isInstant?: boolean;
-  readonly variant?: TooltipVariant;
 };
 
 // A tooltip carrying one short label centres in a narrow column, because a
 // centred line reads as a caption on the control it names. A tooltip that
 // explains a trade-off is prose: it needs a wider measure and a left edge to
 // return to, or the reader re-finds the start of every line.
-// Each variant states its widest measure twice on purpose, once as the static
+// Each shape states its widest measure twice on purpose, once as the static
 // Tailwind class the stylesheet can discover and once as the number the
 // positioner clamps against; both are the same rem measure, so they sit
 // together and stay equal.
-const TOOLTIP_VARIANTS: Record<
+const TOOLTIP_SHAPES: Record<
   TooltipShape,
   { readonly className: string; readonly maxWidthRem: number }
 > = {
@@ -353,7 +379,7 @@ const TOOLTIP_VARIANTS: Record<
 /** Reads the shape's authored measure back at the reader's own root size. */
 const tooltipMaxWidth = (shape: TooltipShape) =>
   resolveRemMeasure(
-    TOOLTIP_VARIANTS[shape].maxWidthRem,
+    TOOLTIP_SHAPES[shape].maxWidthRem,
     getComputedStyle(document.documentElement).fontSize,
   );
 
@@ -372,15 +398,20 @@ const ShortcutKey = ({ children }: { readonly children: string }) => (
 export const Tooltip = ({
   label,
   shortcutKeys,
+  sections,
   children,
   className,
   tooltipProps,
   placement = "above",
   asChild = false,
   isInstant = false,
-  variant = "label",
 }: TooltipProps) => {
-  const shape: TooltipShape = shortcutKeys === undefined ? variant : "shortcut";
+  const shape: TooltipShape =
+    sections !== undefined
+      ? "explanation"
+      : shortcutKeys !== undefined
+        ? "shortcut"
+        : "label";
   const tooltipId = useId();
   const anchorRef = useRef<HTMLElement>(null);
   const showTimerRef = useRef<number | null>(null);
@@ -474,7 +505,7 @@ export const Tooltip = ({
           <span
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-auto fixed z-[2147483647] w-max -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-ink px-2 py-1 text-2xs leading-snug whitespace-normal text-paper shadow-floating [overflow-wrap:anywhere] ${TOOLTIP_VARIANTS[shape].className} ${position.placement === "above" ? "-translate-y-full" : ""}`}
+            className={`pointer-events-auto fixed z-[2147483647] w-max -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm border border-tooltip-edge bg-tooltip px-2 py-1 text-2xs leading-[1.35] whitespace-normal text-tooltip-ink shadow-floating [overflow-wrap:anywhere] ${TOOLTIP_SHAPES[shape].className} ${position.placement === "above" ? "-translate-y-full" : ""}`}
             style={{
               top: position.top,
               left: position.left,
@@ -488,7 +519,20 @@ export const Tooltip = ({
             onMouseLeave={scheduleHide}
             {...tooltipProps}
           >
-            {shortcutKeys === undefined ? (
+            {sections !== undefined ? (
+              <dl className="m-0 flex flex-col gap-2">
+                {sections.map(({ term, detail }) => (
+                  // The name and its consequence stay one paragraph rather
+                  // than two stacked lines: the reader is comparing options,
+                  // and a lead-in that shares the line keeps each option to
+                  // one block the eye can weigh against the other.
+                  <div key={term}>
+                    <dt className="m-0 inline font-semibold">{term}:</dt>{" "}
+                    <dd className="m-0 inline">{detail}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : shortcutKeys === undefined ? (
               label
             ) : (
               <span className="inline-flex flex-wrap items-center gap-1">

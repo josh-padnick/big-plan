@@ -2144,17 +2144,25 @@ const useThreadHosts = (
 // quiet mark that answers on demand keeps the choice explained without turning
 // the composer into a second paragraph of instructions, and it stays a mark
 // rather than a control - it opens nothing and changes nothing.
-const SUBMIT_RIGHT_AWAY_HELP =
-  "On, the comment goes to the agent the moment you add it: the fastest answer, but the comments you write next wait until the agent finishes this one. Off, it is staged with the rest, and the agent works through the whole set in one pass when you send them.";
+// One paragraph per setting, each led by that setting's name. The reader is
+// choosing between two behaviours, so the help is shaped as the comparison it
+// is: two blocks to weigh, rather than one run of prose to take apart first.
+const SUBMIT_RIGHT_AWAY_HELP = [
+  {
+    term: "Submit right away",
+    detail:
+      "The comment goes to the agent the moment you add it, so you get an answer straight away. The comments you write next wait until the agent finishes this one.",
+  },
+  {
+    term: "Submit later",
+    detail:
+      "Comments are staged and sent as a batch, so nothing goes out until you send. No answer straight away, but agents work better from a batch than from a stream of interruptions.",
+  },
+] as const;
 
 /** Explains, on hover or keyboard focus, what Submit right away trades away. */
 const SubmitRightAwayHelp = () => (
-  <Tooltip
-    label={SUBMIT_RIGHT_AWAY_HELP}
-    variant="explanation"
-    placement="below"
-    asChild
-  >
+  <Tooltip sections={SUBMIT_RIGHT_AWAY_HELP} placement="below" asChild>
     <button
       type="button"
       className="inline-flex size-5 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 leading-none text-subtle transition-colors hover:text-muted focus-visible:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&>svg]:size-3.5"

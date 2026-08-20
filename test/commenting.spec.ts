@@ -628,7 +628,14 @@ test("should remember the submit-right-away choice across new composers", async 
   await page.keyboard.press("Tab");
   await expect(help).toBeFocused();
   await expect(helpTooltip).toBeVisible();
-  await expect(helpTooltip).toContainText("staged with the rest");
+  // The help is a comparison, so it is asserted as one: both settings named,
+  // each leading its own paragraph. A single prose match would still pass if
+  // the two collapsed back into one block.
+  await expect(helpTooltip.locator("dt")).toHaveText([
+    "Submit right away:",
+    "Submit later:",
+  ]);
+  await expect(helpTooltip).toContainText("staged and sent as a batch");
   await expect(help).toHaveAttribute(
     "aria-describedby",
     (await helpTooltip.getAttribute("id")) ?? "",

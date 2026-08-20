@@ -113,9 +113,12 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
    Each of those shortcuts is named on the control it drives: hover or focus
    the primary action or **Cancel** to see it, including while the primary
    action is disabled.
-   The mark beside **Submit right away** explains the trade-off the same way:
-   sending now is the fastest answer but holds your next comments until the
-   agent finishes, while staging sends the whole set in one pass.
+   The mark beside **Submit right away** explains the trade-off the same way,
+   as one short paragraph per setting.
+   **Submit right away** sends the comment the moment you add it and holds your
+   next comments until the agent finishes it.
+   **Submit later** stages comments and sends them as a batch, which agents
+   work better from than a stream of interruptions.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
    **Chat** tab asks questions about the plan as a whole, **Inputs** lists what
    the review is still waiting for, and **Agent Status** - its own control beside
