@@ -2617,6 +2617,8 @@ const wireDecisions = () => {
     const persistenceStatus = own("[data-decision-persistence-status]");
     const supersededNotice = own("[data-decision-superseded]");
     const lockedNotes = ownAll("[data-decision-locked-note]");
+    const approvedNotes = ownAll("[data-decision-approved-note]");
+    const approvedRevoke = own("[data-decision-approved-revoke]");
     const picked = () => choices.find((choice) => choice.checked) || null;
     const proposes = (choice) =>
       choice instanceof Element &&
@@ -2871,6 +2873,8 @@ const wireDecisions = () => {
     // disposition says the change is accepted.
     const changeIsOpen = () =>
       decision.hasAttribute("data-decision-change-open");
+    const approvedReview = () =>
+      document.documentElement.hasAttribute("data-review-approved");
 
     const showPanel = (index) => {
       for (const panel of panels) {
@@ -2889,7 +2893,7 @@ const wireDecisions = () => {
       }
     };
     const sync = () => {
-      const locked = readOnlyReview();
+      const locked = readOnlyReview() || approvedReview();
       const choice = picked();
       const proposing = proposes(choice);
       const index = choice === null ? null : choice.getAttribute("data-option-index");
@@ -2926,7 +2930,20 @@ const wireDecisions = () => {
       change.disabled = locked;
       for (const candidate of choices) candidate.disabled = locked;
       if (proposalText !== null) proposalText.disabled = locked;
-      for (const note of lockedNotes) note.hidden = !locked;
+      for (const control of ownAll(
+        "[data-decision-weight], [data-decision-score]",
+      )) {
+        if (control instanceof HTMLButtonElement) control.disabled = locked;
+      }
+      for (const note of lockedNotes) note.hidden = !readOnlyReview();
+      for (const note of approvedNotes) {
+        note.hidden = !approvedReview() || readOnlyReview();
+      }
+      if (approvedReview()) {
+        decision.setAttribute("data-decision-approval-locked", "");
+      } else {
+        decision.removeAttribute("data-decision-approval-locked");
+      }
       if (commentActions !== null) commentActions.hidden = decisionMode;
       if (commentSubmit !== null) {
         commentSubmit.hidden = decisionMode;
@@ -3282,11 +3299,21 @@ const wireDecisions = () => {
     const syncAuthority = () => {
       if (!decision.isConnected) {
         document.removeEventListener("bigplan:review-authority", syncAuthority);
+        document.removeEventListener(
+          "bigplan:approval-changed",
+          syncAuthority,
+        );
         return;
       }
       sync();
     };
     document.addEventListener("bigplan:review-authority", syncAuthority);
+    document.addEventListener("bigplan:approval-changed", syncAuthority);
+    if (approvedRevoke !== null) {
+      approvedRevoke.addEventListener("click", () => {
+        document.dispatchEvent(new CustomEvent("bigplan:open-approval-details"));
+      });
+    }
     change.addEventListener("click", () => {
       changingAnswer = true;
       forgetDecisionAnswer();

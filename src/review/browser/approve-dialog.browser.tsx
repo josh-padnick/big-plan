@@ -113,13 +113,13 @@ const readStoredMessage = (): string => {
 const STAMP_FRAME = "inline-flex rounded-md border-2 border-accent p-0.5";
 
 const STAMP_INNER =
-  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5 group-hover:bg-accent-wash group-active:bg-accent-soft";
+  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5 group-hover:bg-accent-wash";
 
 const STAMP_TYPE =
   "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase";
 
 const STAMP_BUTTON_CLASS =
-  "group inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 transition hover:rotate-0 hover:shadow-lifted active:inset-shadow-pressed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0 motion-reduce:transition-none wide:min-h-0";
+  "group inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0 wide:min-h-0";
 
 const ApproveStampMark = ({ label }: { readonly label: string }) => (
   <span className={STAMP_FRAME} aria-hidden="true">
@@ -755,6 +755,14 @@ const ApprovalDetails = ({
               <blockquote className="mx-0 mt-2 mb-0 rounded-md border-l-2 border-edge bg-paper px-3 py-2 text-sm leading-normal text-ink not-italic">
                 {approval.message}
               </blockquote>
+              <button
+                type="button"
+                className="mt-1.5 inline-flex min-h-11 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0 text-xs font-normal text-muted underline underline-offset-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
+                onClick={openApprovalMessageSettings}
+                data-review-approve-edit-message=""
+              >
+                Edit this message
+              </button>
             </div>
           </div>
           {leftoverCopy === undefined ? null : (
@@ -883,11 +891,32 @@ export const ApproveControl = ({
   }, [isApproved]);
 
   useEffect(() => {
+    document.documentElement.toggleAttribute(
+      "data-review-approved",
+      isApproved,
+    );
+    document.dispatchEvent(new CustomEvent("bigplan:approval-changed"));
+    return () => {
+      document.documentElement.removeAttribute("data-review-approved");
+      document.dispatchEvent(new CustomEvent("bigplan:approval-changed"));
+    };
+  }, [isApproved]);
+
+  useEffect(() => {
+    const openDetails = () => {
+      if (isApproved) setDetailsOpen(true);
+    };
     const onReplaced = () => setDetailsOpen(false);
+    document.addEventListener("bigplan:open-approval-details", openDetails);
     document.addEventListener("bigplan:article-replaced", onReplaced);
-    return () =>
+    return () => {
+      document.removeEventListener(
+        "bigplan:open-approval-details",
+        openDetails,
+      );
       document.removeEventListener("bigplan:article-replaced", onReplaced);
-  }, []);
+    };
+  }, [isApproved]);
 
   const closeDialog = () => {
     setDialogOpen(false);

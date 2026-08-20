@@ -63,7 +63,7 @@ describe("approval brand slot", () => {
   it("should keep one hidden slot beside the wordmark on a plan document", () => {
     const html = shellFor("<p>Plan.</p>");
     expect(html).toMatch(
-      /data-logo-dark[\s\S]*?<\/a>\s*<span data-review-approval-brand-slot hidden><\/span>/,
+      /data-logo-dark[\s\S]*?<\/a>\s*<span class="-ml-4 wide:-ml-8" data-review-approval-brand-slot hidden><\/span>/,
     );
     expect(html).not.toContain("data-review-approval-slot");
   });

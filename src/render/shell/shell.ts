@@ -530,12 +530,12 @@ export const renderShell = ({
   // table of contents stays the first thing in the sidebar.
   const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
-<div class="flex min-w-0 items-center gap-1 wide:gap-2">
+<div class="flex min-w-0 items-center gap-0.5">
 <a class="shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="h-auto w-20 wide:w-27" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="h-auto w-20 wide:w-27" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
-${standalone ? "" : "<span data-review-approval-brand-slot hidden></span>"}
+${standalone ? "" : '<span class="-ml-4 wide:-ml-8" data-review-approval-brand-slot hidden></span>'}
 </div>
 ${standalone ? "<p></p>" : `<p class="min-w-0 truncate text-center text-sm text-muted"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 ${renderHeaderActions({ feedback: !standalone })}
