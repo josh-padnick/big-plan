@@ -99,8 +99,11 @@ export const holdsRecordCollection = (node: WireframeNode): boolean =>
  * a detail is there to name it, and the renderer draws no push mark on a row
  * whose record the pane beside it already shows. A collection followed by a
  * lone control draws nothing beside the row, so it stays an ordinary list
- * whose rows genuinely push. One definition, read from both sides, is what
- * keeps the two from disagreeing about which rows those are.
+ * whose rows genuinely push. The detail is the next pane, not the next
+ * sibling: a divider or a badge between the two is spacing, and letting one
+ * end the search would dissolve a workspace the reader plainly sees. One
+ * definition, read from both sides, is what keeps the two from disagreeing
+ * about which rows those are.
  */
 export const masterPaneIn = (
   children: ReadonlyArray<WireframeNode>,
@@ -112,8 +115,9 @@ export const masterPaneIn = (
   }
   const following = siblings.slice(siblings.indexOf(source) + 1);
   const dependent =
-    following.find((child) => child.element !== "Rail") ??
-    following.find((child) => child.element === "Rail");
+    following.find(
+      (child) => ROW_PANES.has(child.element) && child.element !== "Rail",
+    ) ?? following.find((child) => child.element === "Rail");
   return dependent !== undefined &&
     flattenNodes(childNodes(dependent)).length > 0
     ? source

@@ -668,17 +668,19 @@ const checkChoiceNavigation = ({
         if (destination === undefined) {
           continue;
         }
-        const selectedChoices = flattenNodes(destination.children).flatMap(
-          (node) =>
+        const reveals = screenLayers(destination).some((layer) => {
+          const selectedChoices = flattenNodes(layer.nodes).flatMap((node) =>
             node.element === "ChoiceCard" && node.selected ? [node] : [],
-        );
-        const selectedChoice = selectedChoices[0];
-        if (
-          selectedChoices.length !== 1 ||
-          selectedChoice?.title !== choice.title ||
-          selectedChoice?.description !== choice.description ||
-          selectedChoice?.emoji !== choice.emoji
-        ) {
+          );
+          const selectedChoice = selectedChoices[0];
+          return (
+            selectedChoices.length === 1 &&
+            selectedChoice?.title === choice.title &&
+            selectedChoice?.description === choice.description &&
+            selectedChoice?.emoji === choice.emoji
+          );
+        });
+        if (!reveals) {
           diagnostics.add({
             message: `ChoiceCard "${choice.title}" on Screen "${screen.id}" navigates to "${choice.navigateTo}" without selecting that same title, consequence, and card art; every option needs its own truthful visible outcome`,
             position: positionFor(screen),

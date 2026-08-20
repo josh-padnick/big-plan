@@ -152,7 +152,7 @@ Defaults keep panels plain, derive dominant panes, give secondary width to `Rail
 Implementation principles:
 
 - Make selection visibly change the outcome. A selected row, card, or mode and its dependent preview must agree.
-- Give every unselected `ChoiceCard` its own selected-state destination. That screen must select the same title and consequence, so two options can never pretend to differ while routing to one generic outcome.
+- Give every unselected `ChoiceCard` its own selected-state destination. That screen must select the same title, consequence, and card art, so the option a reader tapped looks the same after the tap and two options can never pretend to differ while routing to one generic outcome.
 - Never preselect a consequential `ChoiceCard` on the initial decision screen. Start unselected; a deliberate tap reveals the selected state and only then reveals or enables the continuation area.
 - Make selected touch state unmistakable with several signals together: filled radio, stronger border, changed background, and checkmark or equally explicit mark. Never rely on tint or a thin left line alone.
 - Reveal information progressively. Show choices before their summary; show review before approval; do not expose later-stage detail before the user confirms the current step.

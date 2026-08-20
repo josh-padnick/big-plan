@@ -2498,6 +2498,69 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     );
   });
 
+  it("should read a choice reveal from the destination layer that selects it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [choiceGroup()],
+        }),
+        ...(["purchase", "loan"] as const).map((selected) =>
+          screen({
+            id: `${selected}-selected`,
+            name: `${selected} selected`,
+            attributes: { device: "tablet" },
+            children: [
+              choiceGroup(selected),
+              element({
+                name: "Button",
+                attributes: { label: "Continue", emphasis: "primary" },
+              }),
+              element({
+                name: "Overlay",
+                attributes: { title: "One more thing" },
+                children: [
+                  element({
+                    name: "ChoiceGroup",
+                    children: [
+                      element({
+                        name: "ChoiceCard",
+                        attributes: {
+                          title: "Remind me later",
+                          description: "Ask again next week",
+                          selected: true,
+                        },
+                      }),
+                      element({
+                        name: "ChoiceCard",
+                        attributes: {
+                          title: "Do not ask again",
+                          description: "Keep this setting for good",
+                          navigateTo: `${selected}-selected`,
+                        },
+                      }),
+                    ],
+                  }),
+                  element({
+                    name: "Button",
+                    attributes: { label: "Got it", emphasis: "primary" },
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ),
+      ],
+    });
+    // The overlay draws its own decision, so the page layer is where the
+    // tapped option is revealed; counting both layers together would report a
+    // text mismatch that is not there.
+    expect(diagnostics.map((entry) => entry.message)).not.toContain(
+      'ChoiceCard "Ask about a purchase" on Screen "choose" navigates to "purchase-selected" without selecting that same title, consequence, and card art; every option needs its own truthful visible outcome',
+    );
+  });
+
   it("should judge a choice apart from the overlay drawn over it", () => {
     const { diagnostics } = compile({
       scopedChildren: [
@@ -3250,6 +3313,65 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(
       elementWithClass({
         node: rendered,
+        className: "wireframe-list-disclosure",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should read a detail pane through a loose item between the panes", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "Queue" },
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: {
+                            label: "Checkout freeze",
+                            selected: true,
+                            navigateTo: "ticket",
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({ name: "Divider" }),
+                element({
+                  name: "Panel",
+                  attributes: { title: "Selected ticket" },
+                  children: [
+                    element({ name: "Text", attributes: { text: "Body" } }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Checkout freeze" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // A divider between the collection and its detail is spacing, not the end
+    // of the workspace, so the row still selects in place and draws no mark.
+    expect(
+      elementWithClass({
+        node: render(compiled),
         className: "wireframe-list-disclosure",
       }),
     ).toBeUndefined();

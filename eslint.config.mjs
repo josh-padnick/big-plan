@@ -331,6 +331,7 @@ export default tseslint.config(
           "src/components/_registration/**/*.ts",
           "src/components/*/definition*.ts",
           "src/components/code-diff/test-fixtures.ts",
+          "src/components/wireframe/screen-layers.test.ts",
           "src/render/markdown/component-pipeline/**/*.ts",
         ],
         imports: [
