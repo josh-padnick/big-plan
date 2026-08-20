@@ -158,8 +158,6 @@ const CHROME_BASE_CSS = `${BASE_CSS}:root {
   --neutral-400: #787878;
   --chrome-dark-band: #2b2b2b;
   --chrome-dark-lift: #424242;
-  --chrome-dark-panel-edge: #474747;
-  --chrome-dark-panel-edge-strong: #5f5f5f;
   --chrome-dark-edge: #767676;
   --chrome-dark-edge-strong: #8f8f8f;
   --toolbar-bg: light-dark(var(--neutral-150), var(--chrome-dark-band));
@@ -170,11 +168,11 @@ const CHROME_BASE_CSS = `${BASE_CSS}:root {
   );
   --review-panel-edge-c: light-dark(
     var(--neutral-200),
-    var(--chrome-dark-panel-edge)
+    var(--chrome-dark-edge)
   );
   --review-panel-edge-strong-c: light-dark(
     var(--neutral-250),
-    var(--chrome-dark-panel-edge-strong)
+    var(--chrome-dark-edge-strong)
   );
   --toolbar-surface-c: light-dark(var(--neutral-100), var(--chrome-dark-lift));
 }
@@ -190,8 +188,6 @@ const chromePalette = ({
   n400,
   band = "#1f1f1f",
   lift,
-  panelEdge,
-  panelEdgeStrong,
   edge,
   edgeStrong,
 }) =>
@@ -208,8 +204,6 @@ const chromePalette = ({
   --neutral-400: ${n400};
   --chrome-dark-band: ${band};
   --chrome-dark-lift: ${lift};
-  --chrome-dark-panel-edge: ${panelEdge};
-  --chrome-dark-panel-edge-strong: ${panelEdgeStrong};
   --chrome-dark-edge: ${edge};
   --chrome-dark-edge-strong: ${edgeStrong};
 }
@@ -222,8 +216,6 @@ const SOUND_CHROME = {
   n300: "#7c7868",
   n400: "#716d5f",
   lift: "#383838",
-  panelEdge: "#3a3a3a",
-  panelEdgeStrong: "#515151",
   edge: "#6c6c6c",
   edgeStrong: "#848484",
 };
@@ -268,6 +260,18 @@ test("rejects a general control edge below the non-text floor", async () => {
     true,
     nonText.join("\n"),
   );
+  assert.equal(
+    result.failures.some(
+      (failure) =>
+        failure.startsWith("sample/dark") &&
+        failure.includes(
+          "--review-panel-edge-c (#3a3a3a) on --toolbar-bg (#1f1f1f)",
+        ) &&
+        failure.includes("BIG-214 review-panel edge distinction floor"),
+    ),
+    true,
+    result.failures.join("\n"),
+  );
 });
 
 test("accepts general control edges that clear the non-text floor", async () => {
@@ -291,8 +295,6 @@ test("rejects a BIG-214 review-panel edge that dissolves into its grounds", asyn
       ...SOUND_CHROME,
       n200: "#d5d1c5",
       n250: "#cbc7bb",
-      panelEdge: "#292929",
-      panelEdgeStrong: "#303030",
     }),
   });
   const panelEdges = result.failures.filter((failure) =>
@@ -300,19 +302,12 @@ test("rejects a BIG-214 review-panel edge that dissolves into its grounds", asyn
   );
   assert.deepEqual(
     panelEdges.map((failure) => failure.split(":")[0]),
-    [
-      "sample/light",
-      "sample/light",
-      "sample/light",
-      "sample/dark",
-      "sample/dark",
-      "sample/dark",
-    ],
+    ["sample/light", "sample/light", "sample/light"],
     result.failures.join("\n"),
   );
 });
 
-test("accepts subtle BIG-214 review-panel edges", async () => {
+test("accepts the BIG-214 review-panel split", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
     paletteCss: chromePalette(SOUND_CHROME),

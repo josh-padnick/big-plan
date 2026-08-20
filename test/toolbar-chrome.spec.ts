@@ -13,10 +13,12 @@ import { expect, test, type Page } from "./fixtures";
 
 const NON_TEXT_FLOOR = 3;
 
-// BIG-214 makes only these labeled review-panel controls intentionally subtle.
-// This product floor guards visible separation without treating the border as
-// their only identifying cue or making a WCAG 1.4.11 claim for it.
-const REVIEW_PANEL_EDGE_CONTRAST_FLOOR = 1.4;
+// BIG-214 makes these labeled review-panel controls subtle only in light mode.
+// Dark mode keeps the general 3:1 edge that the captain prefers there.
+const REVIEW_PANEL_EDGE_CONTRAST_FLOORS = {
+  light: 1.4,
+  dark: NON_TEXT_FLOOR,
+} as const;
 const REVIEW_PANEL_LABELS = new Set(["Agent Status", "Feedback"]);
 
 const channel = (value: number): number => {
@@ -162,7 +164,7 @@ test("should give the toolbar its own band and legible control edges in every pa
           edge.label?.startsWith(label),
         );
         const floor = isReviewPanel
-          ? REVIEW_PANEL_EDGE_CONTRAST_FLOOR
+          ? REVIEW_PANEL_EDGE_CONTRAST_FLOORS[mode]
           : NON_TEXT_FLOOR;
         expect(
           contrastRatio(edge.color, chrome.band),
@@ -201,7 +203,7 @@ test("should paint the default light toolbar the requested chrome grey", async (
   }
 });
 
-test("should scope the default subtle edges to Agent Status and Feedback", async ({
+test("should split the default review-panel edges by theme", async ({
   descenderTitleViewerUrl,
   page,
   reviewRuntimeUrl,
@@ -215,8 +217,8 @@ test("should scope the default subtle edges to Agent Status and Feedback", async
   await expect(feedback).toHaveCSS("border-top-color", "rgb(196, 196, 196)");
 
   await applyTheme(page, { mode: "dark", palette: "default" });
-  await expect(agentStatus).toHaveCSS("border-top-color", "rgb(71, 71, 71)");
-  await expect(feedback).toHaveCSS("border-top-color", "rgb(71, 71, 71)");
+  await expect(agentStatus).toHaveCSS("border-top-color", "rgb(118, 118, 118)");
+  await expect(feedback).toHaveCSS("border-top-color", "rgb(118, 118, 118)");
 
   await page.goto(descenderTitleViewerUrl);
   const addComment = page.locator("[data-comment-draft-open]");

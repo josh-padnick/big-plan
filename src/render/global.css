@@ -182,18 +182,18 @@ document painted in another and never restate a colour to preview it.
      edges.
 
      The light half is a ramp and reads like one, lightest number first: the
-     lift a control takes under the pointer, the band itself, the subtle panel
-     edge and its firm step, then the general control edge and its firm step.
-     The dark half is the same ladder, but a lift in dark is LIGHTER than its
-     band rather than darker, so the ladder climbs where a numeric ramp
-     descends. Naming those shades for what they are keeps the numeric ramp a
-     lightness position everywhere it appears; scripts/design-system/
-     palettes.mjs enforces both ladders.
+     lift a control takes under the pointer, the band itself, the subtle light
+     panel edge and its firm step, then the general control edge and its firm
+     step. The dark half uses the general edges for every toolbar control. A
+     lift in dark is LIGHTER than its band rather than darker, so the ladder
+     climbs where a numeric ramp descends. Naming those shades for what they
+     are keeps the numeric ramp a lightness position everywhere it appears;
+     scripts/design-system/palettes.mjs enforces both ladders.
 
      General control edges clear the 3:1 WCAG 1.4.11 non-text floor against
      the band and lift. BIG-214 restores the quieter prior values only for the
-     labeled Agent Status and Feedback controls, which remain identifiable
-     without relying on their boundary. */
+     light appearance of Agent Status and Feedback. The dark appearance keeps
+     the stronger general edges that the captain prefers there. */
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
   --neutral-200: #c4c4c4;
@@ -202,8 +202,6 @@ document painted in another and never restate a colour to preview it.
   --neutral-400: #787878;
   --chrome-dark-band: #2b2b2b;
   --chrome-dark-lift: #424242;
-  --chrome-dark-panel-edge: #474747;
-  --chrome-dark-panel-edge-strong: #5f5f5f;
   --chrome-dark-edge: #767676;
   --chrome-dark-edge-strong: #8f8f8f;
 
@@ -279,11 +277,11 @@ its light counterpart so the three-deep ladder keeps the same separation.
      controls whose shape still depends on the generic role. */
   --review-panel-edge-c: light-dark(
     var(--neutral-200),
-    var(--chrome-dark-panel-edge)
+    var(--chrome-dark-edge)
   );
   --review-panel-edge-strong-c: light-dark(
     var(--neutral-250),
-    var(--chrome-dark-panel-edge-strong)
+    var(--chrome-dark-edge-strong)
   );
   /* The ground a control on that band takes under the pointer and while its
      view is open. Separate from --raised-c and --surface-c because those are
@@ -550,8 +548,6 @@ scripts/design-system/palettes.mjs is what closes that list.
   --neutral-400: #78726e;
   --chrome-dark-band: #2b2740;
   --chrome-dark-lift: #423e57;
-  --chrome-dark-panel-edge: #48435e;
-  --chrome-dark-panel-edge-strong: #605b77;
   --chrome-dark-edge: #78709a;
   --chrome-dark-edge-strong: #9188b9;
 
@@ -630,8 +626,6 @@ scripts/design-system/palettes.mjs is what closes that list.
   --neutral-400: #707377;
   --chrome-dark-band: #39404f;
   --chrome-dark-lift: #4f5564;
-  --chrome-dark-panel-edge: #575e6e;
-  --chrome-dark-panel-edge-strong: #6f7787;
   --chrome-dark-edge: #838da4;
   --chrome-dark-edge-strong: #9ca8c3;
 
@@ -710,8 +704,6 @@ scripts/design-system/palettes.mjs is what closes that list.
   --neutral-400: #707277;
   --chrome-dark-band: #2b2c3f;
   --chrome-dark-lift: #424255;
-  --chrome-dark-panel-edge: #48495d;
-  --chrome-dark-panel-edge-strong: #606076;
   --chrome-dark-edge: #757695;
   --chrome-dark-edge-strong: #8d8eb3;
 
@@ -791,8 +783,6 @@ scripts/design-system/palettes.mjs is what closes that list.
   --neutral-400: #716d5f;
   --chrome-dark-band: #1f1f1f;
   --chrome-dark-lift: #383838;
-  --chrome-dark-panel-edge: #3a3a3a;
-  --chrome-dark-panel-edge-strong: #515151;
   --chrome-dark-edge: #6c6c6c;
   --chrome-dark-edge-strong: #848484;
 

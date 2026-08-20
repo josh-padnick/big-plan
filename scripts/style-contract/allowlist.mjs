@@ -61,11 +61,11 @@ export const STYLESHEET_BUDGETS = {
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,
     // and the general edges its controls take. BIG-214 adds dedicated subtle
-    // Agent Status and Feedback edge roles plus the chrome-neutral steps every
-    // palette declares for them, without weakening the general edge. The
-    // shared tooltip adds four semantic theme tokens and their four utility
+    // Agent Status and Feedback edge roles plus two light chrome-neutral steps
+    // per palette. Dark mode reuses the general edge instead of adding shades.
+    // The shared tooltip adds four semantic theme tokens and their four utility
     // aliases so dialog-owned tooltips can use one light-and-dark treatment.
-    declarations: 561,
+    declarations: 551,
   },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },

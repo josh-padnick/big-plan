@@ -56,8 +56,6 @@ const RAMP_STEP_PATTERN = new RegExp(
 const CHROME_DARK_SHADES = [
   "chrome-dark-band",
   "chrome-dark-lift",
-  "chrome-dark-panel-edge",
-  "chrome-dark-panel-edge-strong",
   "chrome-dark-edge",
   "chrome-dark-edge-strong",
 ];
@@ -108,11 +106,13 @@ const CONTRAST_FLOOR = 4.5;
 // where the control is.
 const NON_TEXT_FLOOR = 3;
 
-// BIG-214 restores the captain's subtle boundaries only on the labeled Agent
-// Status and Feedback controls. This product floor is not a WCAG claim; it
-// keeps those chosen edges from silently dissolving into their band while the
-// chrome ladder guard keeps their order.
-const REVIEW_PANEL_EDGE_CONTRAST_FLOOR = 1.4;
+// BIG-214 restores the captain's subtle light-mode boundaries only on Agent
+// Status and Feedback. That 1.4 floor is a product distinction, not a WCAG
+// claim. Dark mode keeps the general 3:1 edge that the captain prefers.
+const REVIEW_PANEL_EDGE_CONTRAST_FLOORS = {
+  light: 1.4,
+  dark: NON_TEXT_FLOOR,
+};
 
 // Reading surfaces a document can put primary or secondary text on. Tertiary
 // text is deliberately absent from the bands: _internal/DESIGN_PRINCIPLES.md holds that a
@@ -149,12 +149,12 @@ const REVIEW_PANEL_EDGE_PAIRINGS = [
 const EDGE_CONTRAST_GROUPS = [
   {
     pairings: CONTROL_EDGE_PAIRINGS,
-    floor: NON_TEXT_FLOOR,
+    floors: { light: NON_TEXT_FLOOR, dark: NON_TEXT_FLOOR },
     name: "WCAG 1.4.11 non-text floor",
   },
   {
     pairings: REVIEW_PANEL_EDGE_PAIRINGS,
-    floor: REVIEW_PANEL_EDGE_CONTRAST_FLOOR,
+    floors: REVIEW_PANEL_EDGE_CONTRAST_FLOORS,
     name: "BIG-214 review-panel edge distinction floor",
   },
 ];
@@ -539,7 +539,8 @@ export const checkPalettes = async ({
     const overrides = palettes.get(id) ?? new Map();
     const lookup = (name) => overrides.get(name) ?? base.get(name);
     for (const mode of ["light", "dark"]) {
-      for (const { pairings, floor, name } of EDGE_CONTRAST_GROUPS) {
+      for (const { pairings, floors, name } of EDGE_CONTRAST_GROUPS) {
+        const floor = floors[mode];
         for (const { edge, ground } of pairings) {
           if (
             base.get(edge.slice(2)) === undefined ||
@@ -622,7 +623,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { failures, paletteCount } = await checkPalettes();
   if (failures.length > 0) {
     console.error(
-      "palettes: every palette must declare every shade the roles reach, keep its ladders in order, meet WCAG AA on text, meet the WCAG 1.4.11 non-text floor on general control edges, and keep BIG-214 review-panel edges distinct in both halves",
+      "palettes: every palette must declare every shade the roles reach, keep its ladders in order, meet WCAG AA on text, meet the WCAG 1.4.11 non-text floor on general control edges, and keep BIG-214 review-panel edges subtle in light and 3:1 in dark",
     );
     for (const failure of failures) console.error(`  ${failure}`);
     process.exitCode = 1;
