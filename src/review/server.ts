@@ -392,12 +392,12 @@ const refuse = ({
 }): void => sendJson({ response, status, value: { error: reason } });
 
 /**
- * How long a review outlives its last sign of life. Every authenticated
- * request from an open page counts, so this measures genuine abandonment -
- * nobody reading and no agent working - rather than time since the last
- * keystroke. Callers override it with `--idle-timeout`; zero disables it.
+ * How long a review outlives its last sign of life. Zero, the default, means
+ * it does not expire: a review handed to a reader stays up until someone
+ * stops the process. Callers opt into a bound with `--idle-timeout`; any
+ * authenticated request from an open page then counts as activity.
  */
-export const DEFAULT_REVIEW_IDLE_TIMEOUT_MS = 30 * 60 * 1_000;
+export const DEFAULT_REVIEW_IDLE_TIMEOUT_MS = 0;
 
 /**
  * Initializes the durable review state this session has just taken custody of.

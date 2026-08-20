@@ -515,14 +515,17 @@ export const createWriteGate = ({
   };
 };
 
-export const createActivityClock = (idleTimeoutMs: number): ActivityClock => {
-  let lastActivityAt = Date.now();
+export const createActivityClock = (
+  idleTimeoutMs: number,
+  now: () => number = Date.now,
+): ActivityClock => {
+  let lastActivityAt = now();
   return {
     idleTimeoutMs,
     touch: () => {
-      lastActivityAt = Date.now();
+      lastActivityAt = now();
     },
-    idleForMs: () => Date.now() - lastActivityAt,
+    idleForMs: () => now() - lastActivityAt,
     expiresAtMs: () =>
       idleTimeoutMs > 0 ? lastActivityAt + idleTimeoutMs : undefined,
   };

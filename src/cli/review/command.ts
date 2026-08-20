@@ -2,7 +2,8 @@
 // local review runtime and reports where the reviewer opens it. The command
 // keeps running because the runtime is the product - it is the only way submit
 // and progress can work - so it returns the address and then stays listening
-// until the reviewer stops it or the configured idle policy closes it.
+// until the reviewer stops it. `--idle-timeout` can opt into closing an
+// abandoned session; the default is no expiry.
 //
 // Because it is long-lived, this command is also where a session that has
 // stopped behaving is interrogated: `kill -USR2 <pid>` prints what the runtime

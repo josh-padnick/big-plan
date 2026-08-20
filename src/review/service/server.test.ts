@@ -23,6 +23,7 @@ import {
   readServiceRuntimeRecord,
   writeServiceRuntimeRecord,
 } from "./lifecycle.js";
+import { startReviewRuntime } from "../server.js";
 import { rememberPlan } from "./registry.js";
 import { startService } from "./server.js";
 import type { ServiceRuntime } from "./server.js";
@@ -170,6 +171,43 @@ describe("the service listener", () => {
     await expect(
       rawStatus({ path: "/healthz", host: `localhost:${runtime.port}` }),
     ).resolves.toBe(200);
+  });
+
+  it("should keep redirecting a saved link after the former idle window", async () => {
+    // The durable /plan/<id> URL is the contract a shared link must honour.
+    // A default review no longer expires, so this address must still send the
+    // reader to that session after the window that used to close it.
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await rememberPlan({ planId: review.planId, planPath: review.planPath });
+      const oldWindowMs = 200;
+      await new Promise((settle) => setTimeout(settle, oldWindowMs * 4));
+      const response = await get(`/plan/${review.planId}`);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(review.url);
+      await expect(fetch(review.url)).resolves.toMatchObject({ status: 200 });
+    } finally {
+      await review.close();
+    }
+  });
+
+  it("should explain a deliberately stopped default review on the durable link", async () => {
+    // Closing is now the normal way a default review ends. The saved link
+    // must still speak that ending instead of refusing the connection.
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await rememberPlan({ planId: review.planId, planPath: review.planPath });
+      await review.close("The review session was stopped by the reviewer.");
+      const response = await get(`/plan/${review.planId}`);
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain("This plan review has ended.");
+      expect(html).toContain("The review session was stopped by the reviewer.");
+      expect(html).toContain(`big-plan review ${review.planPath}`);
+      await expect(fetch(review.url)).rejects.toThrow();
+    } finally {
+      await review.close().catch(() => undefined);
+    }
   });
 
   it("should redirect a live plan to the session's own address", async () => {

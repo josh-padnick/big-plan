@@ -12,11 +12,13 @@ npx big-plan review plans/checkout-retry.mdx
 
 The command prints a `http://127.0.0.1:<port>/` address and keeps running.
 Open that address, review the plan, and stop the runtime with `Ctrl+C`.
-By default, a review ends normally after 30 minutes with no page open and no
-agent working. An open review page counts as activity on its own, so a session
-never ends while you are still reading it. Set a different duration with
-`--idle-timeout <minutes>`; a nonzero timeout must be at least 1 minute.
-Pass `--idle-timeout 0` to keep the review open until it is stopped explicitly.
+By default the review stays up until you stop it, so a link you were handed
+keeps working if you step away.
+To close an abandoned session, set `--idle-timeout <minutes>`; a nonzero
+timeout must be at least 1 minute.
+An open review page then counts as activity on its own, so a session never ends
+while you are still reading it.
+Pass `--idle-timeout 0` to say the same thing as the default, explicitly.
 A waiting agent receives that normal inactivity reason instead of a failed background command.
 When an already-open page loses contact with its review runtime, it reports that loss rather than claiming the server stopped, because a request that merely timed out can happen while the runtime is still running.
 If the deadline the page last knew has also passed, it reports that observation too.
