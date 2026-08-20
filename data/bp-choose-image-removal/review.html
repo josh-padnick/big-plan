@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BIG-213 Firstmate walkthrough</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --paper: light-dark(#f5f1e8, #181714);
+        --raised: light-dark(#fffdf8, #24221e);
+        --surface: light-dark(#eee8dc, #302d27);
+        --well: light-dark(#e7e0d3, #11100e);
+        --ink: light-dark(#292722, #f1ede4);
+        --muted: light-dark(#666158, #c0b8aa);
+        --subtle: light-dark(#7d766a, #aaa193);
+        --edge: light-dark(#d0c7b8, #4b463e);
+        --edge-strong: light-dark(#8c8376, #8e8576);
+        --accent: light-dark(#206d5e, #75c9b5);
+        --accent-soft: light-dark(#dceee8, #193d35);
+        --accent-ink: light-dark(#ffffff, #10211d);
+        --success: light-dark(#176a45, #7cd2a7);
+        --success-soft: light-dark(#dceddf, #17392b);
+        --warning: light-dark(#73510b, #e5bd65);
+        --warning-soft: light-dark(#f4e8c7, #403217);
+        --shadow: 0 1px 2px rgb(29 25 18 / 12%), 0 10px 30px rgb(29 25 18 / 8%);
+      }
+
+      * { box-sizing: border-box; }
+
+      html { background: var(--paper); }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--paper);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 16px;
+        line-height: 1.65;
+      }
+
+      button, textarea { font: inherit; }
+
+      .chrome {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 48px;
+        padding: 8px clamp(16px, 5vw, 48px);
+        color: #f5f1e8;
+        background: #24221e;
+        border-bottom: 1px solid #4b463e;
+      }
+
+      .chrome strong { font-size: 14px; }
+
+      .chrome span { color: #cfc7b9; font-size: 12px; }
+
+      .theme-button {
+        min-height: 32px;
+        padding: 4px 12px;
+        color: #f5f1e8;
+        background: #302d27;
+        border: 1px solid #8e8576;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      main {
+        width: min(100% - 32px, 1120px);
+        margin: 0 auto;
+        padding: 64px 0 96px;
+      }
+
+      h1, h2, h3 { line-height: 1.25; }
+
+      h1 {
+        max-width: 18ch;
+        margin: 0;
+        font-size: clamp(32px, 6vw, 48px);
+        letter-spacing: -0.03em;
+      }
+
+      h2 { margin: 0 0 24px; font-size: 24px; }
+
+      h3 { margin: 0; font-size: 16px; }
+
+      p { max-width: 68ch; }
+
+      .kicker {
+        margin: 0 0 8px;
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .lead { margin: 16px 0 0; color: var(--muted); font-size: 18px; }
+
+      .verdict {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 24px;
+        align-items: center;
+        margin-top: 32px;
+        padding: 24px;
+        background: var(--accent-soft);
+        border-left: 4px solid var(--accent);
+        border-radius: 12px;
+      }
+
+      .verdict p { margin: 4px 0 0; color: var(--muted); }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--success);
+        font-size: 14px;
+        font-weight: 750;
+        white-space: nowrap;
+      }
+
+      .status::before { content: "✓"; }
+
+      section { margin-top: 64px; }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        min-width: 0;
+        padding: 24px;
+        background: var(--raised);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+      }
+
+      .card p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+
+      .composer {
+        margin-top: 16px;
+        padding: 12px;
+        background: var(--surface);
+        border-radius: 8px;
+      }
+
+      textarea {
+        display: block;
+        width: 100%;
+        min-height: 88px;
+        resize: none;
+        padding: 12px;
+        color: var(--ink);
+        background: var(--raised);
+        border: 1px solid var(--edge-strong);
+        border-radius: 6px;
+      }
+
+      .support {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 4px;
+        color: var(--subtle);
+        font-size: 11px;
+      }
+
+      .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+      .action {
+        padding: 6px 12px;
+        color: var(--accent-ink);
+        background: var(--accent);
+        border: 0;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .tooltip-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        font-size: 12px;
+      }
+
+      .info {
+        display: inline-grid;
+        place-items: center;
+        width: 18px;
+        height: 18px;
+        color: var(--accent);
+        background: transparent;
+        border: 1px solid var(--accent);
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .tooltip {
+        margin-top: 8px;
+        padding: 8px 12px;
+        color: var(--ink);
+        background: var(--raised);
+        border-radius: 6px;
+        box-shadow: var(--shadow);
+        font-size: 12px;
+      }
+
+      .matrix { width: 100%; border-collapse: collapse; }
+
+      .matrix th, .matrix td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--edge);
+      }
+
+      .matrix th { color: var(--subtle); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+      .yes { color: var(--success); font-weight: 750; }
+
+      .no { color: var(--muted); font-weight: 750; }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        align-items: stretch;
+      }
+
+      .step {
+        position: relative;
+        min-width: 0;
+        padding: 16px;
+        background: var(--raised);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .step:not(:last-child)::after {
+        content: "→";
+        position: absolute;
+        top: 50%;
+        right: -8px;
+        z-index: 1;
+        width: 16px;
+        color: var(--accent);
+        text-align: center;
+        transform: translateY(-50%);
+      }
+
+      .step strong { display: block; font-size: 14px; }
+
+      .step span { color: var(--muted); font-size: 12px; }
+
+      .note {
+        margin-top: 24px;
+        padding: 16px;
+        color: var(--warning);
+        background: var(--warning-soft);
+        border-left: 4px solid var(--warning);
+        border-radius: 8px;
+      }
+
+      .note strong { display: block; }
+
+      .note p { margin: 4px 0 0; color: inherit; }
+
+      footer { margin-top: 64px; padding-top: 24px; color: var(--subtle); border-top: 1px solid var(--edge); font-size: 12px; }
+
+      @media (max-width: 800px) {
+        .grid, .flow { grid-template-columns: 1fr; }
+        .step:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -12px; transform: translateX(50%); }
+        .verdict { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="chrome">
+      <div><strong>Big Plan</strong> <span>Firstmate review</span></div>
+      <button class="theme-button" id="theme" type="button">Toggle light/dark</button>
+    </header>
+    <main>
+      <p class="kicker">BIG-213 · Acceptance walkthrough</p>
+      <h1>Images enter through paste and drop</h1>
+      <p class="lead">The shared image picker is gone from comment, chat, and reply composers. The existing upload pipeline remains intact.</p>
+
+      <div class="verdict">
+        <div>
+          <h3>Target behavior is complete</h3>
+          <p>No visible picker, no hidden file input, and no test-only escape hatch remain.</p>
+        </div>
+        <span class="status">Ready for review</span>
+      </div>
+
+      <section aria-labelledby="surfaces">
+        <h2 id="surfaces">All composer surfaces</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Comment</h3>
+            <p>Anchored feedback keeps its compact layout.</p>
+            <div class="composer">
+              <textarea id="comment-example" name="comment-example" aria-label="Comment example" readonly>Clarify this decision.</textarea>
+              <div class="support"><span>Markdown and images supported</span><span>24 / 4,000</span></div>
+              <div class="tooltip-row"><span>Submit right away</span><span class="info" aria-label="About Submit right away">i</span></div>
+              <div class="tooltip" role="tooltip">Send the comment to the agent immediately instead of batching it with other feedback.</div>
+              <div class="actions"><button class="action" type="button">Add Comment</button></div>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>Plan-wide chat</h3>
+            <p>Chat accepts the same remaining capture paths.</p>
+            <div class="composer">
+              <textarea id="chat-example" name="chat-example" aria-label="Chat example" readonly>Ask about the overall plan.</textarea>
+              <div class="support"><span>Markdown and images supported</span><span>27 / 4,000</span></div>
+              <div class="actions"><button class="action" type="button">Send</button></div>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>Reply</h3>
+            <p>Agent-thread replies share the same clean footer.</p>
+            <div class="composer">
+              <textarea id="reply-example" name="reply-example" aria-label="Reply example" readonly>Reply to the agent.</textarea>
+              <div class="support"><span>Markdown and images supported</span><span>19 / 4,000</span></div>
+              <div class="actions"><button class="action" type="button">Reply</button></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section aria-labelledby="contract">
+        <h2 id="contract">Behavior contract</h2>
+        <div class="card">
+          <table class="matrix">
+            <thead><tr><th>Capability</th><th>After BIG-213</th><th>Scope</th></tr></thead>
+            <tbody>
+              <tr><td>Paste an image</td><td class="yes">Retained</td><td>Comment, chat, reply</td></tr>
+              <tr><td>Drag and drop an image</td><td class="yes">Retained</td><td>Comment, chat, reply</td></tr>
+              <tr><td>Choose image button</td><td class="no">Removed</td><td>Every composer</td></tr>
+              <tr><td>Hidden file input</td><td class="no">Removed</td><td>Every composer</td></tr>
+              <tr><td>Limits, storage, thumbnails, dialogs</td><td class="yes">Unchanged</td><td>Shared image pipeline</td></tr>
+              <tr><td>Submit right away explanation</td><td class="yes">Retained</td><td>Comment composer</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="pipeline">
+        <h2 id="pipeline">Remaining end-to-end path</h2>
+        <div class="flow">
+          <div class="step"><strong>1. Capture</strong><span>Paste clipboard bytes or drop a file.</span></div>
+          <div class="step"><strong>2. Validate</strong><span>Apply format, count, and size limits.</span></div>
+          <div class="step"><strong>3. Store</strong><span>Persist by SHA-256 digest.</span></div>
+          <div class="step"><strong>4. Present</strong><span>Insert Markdown and render the thumbnail.</span></div>
+        </div>
+
+        <div class="note">
+          <strong>Standalone files still refuse image attachment.</strong>
+          <p>Typed text remains untouched, and the reviewer is told to start <code>big-plan review</code> before attaching an image.</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="visual">
+        <h2 id="visual">Visual acceptance</h2>
+        <div class="grid">
+          <article class="card"><h3>No orphaned spacing</h3><p>The helper line now follows the textarea directly, using the same tight vertical rhythm in light and dark.</p></article>
+          <article class="card"><h3>No picker affordance</h3><p>There is no button-sized gap or invisible focus target where Choose image used to be.</p></article>
+          <article class="card"><h3>Tooltip coexists</h3><p>The merged BIG-184 Submit right away explanation remains visible and independent of image capture.</p></article>
+        </div>
+      </section>
+
+      <footer>Self-contained Firstmate walkthrough for branch <code>fm/bp-choose-image-removal</code> at target <code>8d50ef83</code>.</footer>
+    </main>
+    <script>
+      const button = document.querySelector("#theme");
+      button.addEventListener("click", () => {
+        const root = document.documentElement;
+        const next = root.style.colorScheme === "dark" ? "light" : "dark";
+        root.style.colorScheme = next;
+      });
+    </script>
+  </body>
+</html>

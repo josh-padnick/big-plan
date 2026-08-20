@@ -88,17 +88,53 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-test("should omit the file picker from image composers", async ({
+test("should omit the file picker from every image composer", async ({
   page,
   reviewRuntimeUrl,
 }) => {
   await page.goto(reviewRuntimeUrl);
-  const { dialog } = await openSlideCommentComposer(page);
+  const { composer, dialog } = await openSlideCommentComposer(page);
+  const expectNoPicker = async (surface: Locator) => {
+    await expect(
+      surface.getByRole("button", { name: "Choose image" }),
+    ).toHaveCount(0);
+    await expect(surface.locator('input[type="file"]')).toHaveCount(0);
+  };
 
-  await expect(
-    dialog.getByRole("button", { name: "Choose image" }),
-  ).toHaveCount(0);
-  await expect(dialog.locator('input[type="file"]')).toHaveCount(0);
+  await expectNoPicker(dialog);
+  await dialog.getByRole("button", { name: "About Submit right away" }).hover();
+  await expect(page.getByRole("tooltip")).toContainText(
+    "Send the comment to the agent immediately",
+  );
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  const commentBody = "Keep image capture on paste and drag-drop only.";
+  await composer.fill(commentBody);
+  await dialog.getByRole("button", { name: "Add Comment" }).click();
+
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await expect(rail.getByLabel("Plan-wide chat")).toBeVisible();
+  await expectNoPicker(rail);
+  await rail.getByRole("tab", { name: "Comments" }).click();
+  const sent = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await sent).ok()).toBe(true);
+  const thread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: commentBody });
+  await thread
+    .getByRole("button", { name: `Expand queued comment: ${commentBody}` })
+    .click();
+  await expect(thread.getByLabel("Reply to the agent")).toBeVisible();
+  await expectNoPicker(thread);
 });
 
 test("should capture images through paste and drag-drop", async ({
@@ -113,6 +149,26 @@ test("should capture images through paste and drag-drop", async ({
   await expect(composer).toHaveValue(
     /review-image:[a-f0-9]{64}[^]*review-image:[a-f0-9]{64}/u,
   );
+});
+
+test("should keep text and refuse image bytes in a standalone file", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  const { composer, dialog } = await openSlideCommentComposer(page);
+  const comment = "Keep this standalone text draft.";
+  await composer.fill(comment);
+
+  await pastePng(composer, "standalone.png");
+
+  await expect(composer).toHaveValue(comment);
+  await expect(
+    dialog.getByText(
+      "This plan is open without a live review session. The image was not attached. Start `big-plan review` to send changes.",
+      { exact: true },
+    ),
+  ).toBeVisible();
 });
 
 test("should refuse a second image capture while one is uploading", async ({
