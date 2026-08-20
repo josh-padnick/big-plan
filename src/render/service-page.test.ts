@@ -20,16 +20,12 @@ const atMs = Date.parse("2026-08-17T14:41:00.000Z");
 const welcome = (): string =>
   renderServiceWelcomePage({ port: 8790, startedAtMs: atMs, now: atMs });
 
-// The page is formatted with whatever locale the machine running it has, so a
+// A page is formatted with whatever locale the machine running it has, so a
 // rule about how a moment reads can only be checked against a locale the test
-// names. `now` decides whether the service started today.
+// names.
 const formatTime = Date.prototype.toLocaleTimeString;
 const formatDate = Date.prototype.toLocaleDateString;
-const welcomeIn = (
-  locale: string,
-  startedAtMs: number,
-  now: number = startedAtMs,
-): string => {
+const inLocale = (locale: string, render: () => string): string => {
   const pinnedTime = vi
     .spyOn(Date.prototype, "toLocaleTimeString")
     .mockImplementation(function (
@@ -49,12 +45,22 @@ const welcomeIn = (
       return formatDate.call(this, locale, options);
     });
   try {
-    return renderServiceWelcomePage({ port: 8790, startedAtMs, now });
+    return render();
   } finally {
     pinnedTime.mockRestore();
     pinnedDate.mockRestore();
   }
 };
+
+// `now` decides whether the service started today.
+const welcomeIn = (
+  locale: string,
+  startedAtMs: number,
+  now: number = startedAtMs,
+): string =>
+  inLocale(locale, () =>
+    renderServiceWelcomePage({ port: 8790, startedAtMs, now }),
+  );
 
 describe("the service's pages", () => {
   it("should render the same toolbar a review document renders", () => {
@@ -267,23 +273,56 @@ describe("the service's pages", () => {
     expect(interrupted).not.toContain("ended normally");
   });
 
-  it("should keep an ending's clock bare however long ago it was", () => {
-    // An ending is read when a saved link is clicked, so it is recent by
-    // construction and the ratified wording carries no date.
-    const lastYear = Date.parse("2025-01-02T02:41:00");
+  it("should name the day an ending fell on", () => {
+    // A review now stays up until someone stops it, so an ending is no longer
+    // recent by construction: a saved link clicked days later would read a
+    // bare clock time as today.
+    const lastWeek = Date.parse("2026-08-12T02:41:00");
     expect(
+      inLocale("en-US", () =>
+        renderPlanEndedPage({
+          planPath: "/work/plan.mdx",
+          reason: "The review session was stopped by the reviewer.",
+          atMs: lastWeek,
+        }),
+      ),
+    ).toContain("The review stopped at Aug 12, 2:41am.");
+    expect(
+      inLocale("en-US", () =>
+        renderPlanInterruptedPage({
+          planPath: "/work/plan.mdx",
+          lastSeenAtMs: lastWeek,
+        }),
+      ),
+    ).toContain("Last seen at Aug 12, 2:41am.");
+  });
+
+  it("should name the day even for an ending that happened today", () => {
+    // The reader cannot tell which day they saved the link on, so the page
+    // never leaves them to infer it.
+    const thisMorning = Date.parse("2026-08-19T09:12:00");
+    expect(
+      inLocale("en-US", () =>
+        renderPlanEndedPage({
+          planPath: "/work/plan.mdx",
+          reason: "The review session was stopped by the reviewer.",
+          atMs: thisMorning,
+        }),
+      ),
+    ).toContain("The review stopped at Aug 19, 9:12am.");
+  });
+
+  it("should still speak plainly about an ending it cannot date", () => {
+    // A session file with no usable moment must not print "Invalid Date".
+    const undated = inLocale("en-US", () =>
       renderPlanEndedPage({
         planPath: "/work/plan.mdx",
         reason: "The review session was stopped by the reviewer.",
-        atMs: lastYear,
+        atMs: Number.NaN,
       }),
-    ).not.toMatch(/stopped at \w+ \d+,/u);
-    expect(
-      renderPlanInterruptedPage({
-        planPath: "/work/plan.mdx",
-        lastSeenAtMs: lastYear,
-      }),
-    ).not.toMatch(/Last seen at \w+ \d+,/u);
+    );
+    expect(undated).toContain("The review stopped at an unknown time.");
+    expect(undated).not.toContain("Invalid Date");
   });
 
   it("should hand over a command that runs for a path with a space in it", () => {

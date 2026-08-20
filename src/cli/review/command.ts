@@ -220,7 +220,7 @@ export const reviewCommand = async (
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
       "Press Ctrl+C to stop the review runtime",
       parsedArguments.idleTimeoutMs === 0
-        ? "Idle timeout is disabled"
+        ? "This review stays up until you stop it; pass --idle-timeout <minutes> to close it after a spell of inactivity"
         : `This review ends after ${reviewIdleDurationLabel(parsedArguments.idleTimeoutMs)} of inactivity, meaning no page open and no agent working; configure with --idle-timeout`,
     ],
   };

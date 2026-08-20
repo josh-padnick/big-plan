@@ -4789,11 +4789,32 @@ describe("review runtime shutdown", () => {
         status: 200,
       });
 
-      // GET / counts as activity, so this wait must not poll the document.
-      // The interval is the shortened window; four ticks is past it.
-      await new Promise((settle) => setTimeout(settle, oldWindowMs * 4));
+      // GET / counts as activity, so the wait must not poll either document.
+      // Reading the session record touches nothing, so it can be watched
+      // until the shortened window has actually closed that runtime.
+      await vi.waitFor(
+        async () => {
+          await expect(
+            reviewSessionIsRunning({
+              store: dying.store,
+              sessionId: dying.sessionId,
+            }),
+          ).resolves.toMatchObject({
+            running: false,
+            stopReason: expect.stringContaining("of inactivity"),
+          });
+        },
+        { timeout: 5_000, interval: 20 },
+      );
+      // The record is written before the listener drains, so the socket is
+      // watched rather than sampled once.
+      await vi.waitFor(
+        async () => {
+          await expect(fetch(dying.url)).rejects.toThrow();
+        },
+        { timeout: 5_000, interval: 20 },
+      );
 
-      await expect(fetch(dying.url)).rejects.toThrow();
       await expect(fetch(surviving.url)).resolves.toMatchObject({
         status: 200,
       });
@@ -4810,7 +4831,7 @@ describe("review runtime shutdown", () => {
       ]);
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it("should force-close a stalled active request after a short grace period", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-stall-"));

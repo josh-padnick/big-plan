@@ -24,6 +24,7 @@ import {
   writeServiceRuntimeRecord,
 } from "./lifecycle.js";
 import { startReviewRuntime } from "../server.js";
+import { reviewSessionIsRunning } from "../session-authority.js";
 import { rememberPlan } from "./registry.js";
 import { startService } from "./server.js";
 import type { ServiceRuntime } from "./server.js";
@@ -175,21 +176,44 @@ describe("the service listener", () => {
 
   it("should keep redirecting a saved link after the former idle window", async () => {
     // The durable /plan/<id> URL is the contract a shared link must honour.
-    // A default review no longer expires, so this address must still send the
-    // reader to that session after the window that used to close it.
+    // A second review under a shortened analogue of the former window is what
+    // marks that window as passed, so this test proves survival without
+    // sleeping through the real one: that runtime dies, and the default
+    // review's saved link still sends the reader to its live session.
+    const boundedPath = join(planDirectory, "bounded.mdx");
+    await writeFile(boundedPath, "# Plan\n");
     const review = await startReviewRuntime({ planPath });
+    const expiring = await startReviewRuntime({
+      planPath: boundedPath,
+      idleTimeoutMs: 200,
+    });
     try {
       await rememberPlan({ planId: review.planId, planPath: review.planPath });
-      const oldWindowMs = 200;
-      await new Promise((settle) => setTimeout(settle, oldWindowMs * 4));
+      // Reading the session record touches no activity clock, so it can be
+      // watched until the shortened window has closed that runtime.
+      await vi.waitFor(
+        async () => {
+          await expect(
+            reviewSessionIsRunning({
+              store: expiring.store,
+              sessionId: expiring.sessionId,
+            }),
+          ).resolves.toMatchObject({ running: false });
+        },
+        { timeout: 5_000, interval: 20 },
+      );
+
       const response = await get(`/plan/${review.planId}`);
       expect(response.status).toBe(302);
       expect(response.headers.get("location")).toBe(review.url);
       await expect(fetch(review.url)).resolves.toMatchObject({ status: 200 });
     } finally {
-      await review.close();
+      await Promise.all([
+        review.close(),
+        expiring.close().catch(() => undefined),
+      ]);
     }
-  });
+  }, 15_000);
 
   it("should explain a deliberately stopped default review on the durable link", async () => {
     // Closing is now the normal way a default review ends. The saved link
