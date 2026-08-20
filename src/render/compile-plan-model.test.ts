@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { compilePlanModel } from "./compile-plan-model.js";
+import { COMPONENT_INSTANCE_ATTRIBUTE } from "./markdown/component-pipeline/component-instance.js";
 import { MarkdownDiagnosticsError, renderDocument } from "./render-document.js";
 
 const PLAN = `# Storage plan
@@ -165,7 +166,7 @@ describe("compilePlanModel", () => {
       "Callout",
     ]);
     expect(published).not.toContain("instanceKey");
-    expect(published).not.toContain("data-component-instance");
+    expect(published).not.toContain(COMPONENT_INSTANCE_ATTRIBUTE);
   });
 
   it("should fall back to the caller's title when the plan has no h1", () => {

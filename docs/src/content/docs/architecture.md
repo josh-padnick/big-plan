@@ -25,17 +25,17 @@ They agree because each starts from the authoritative source file and reuses the
 ```mermaid
 flowchart TB
   A["plan.mdx<br/>authoritative source"]
-  A --> F["compileMarkdownTree()<br/>parse, validate, compile components"]
-  F --> Q{"Command continuation"}
-  Q -- "compilePlanModel()<br/>compileMarkdownModel()" --> G["Collect validated component data"]
-  Q -- "renderDocument()<br/>compileMarkdown()" --> H["Render component presentations"]
-  Q -- "validateDocument()<br/>compileMarkdownWithModels()" --> M["Render presentations<br/>and collect component data"]
+  A --> F["compileMarkdownTree()<br/>parse, validate, compile components,<br/>render presentations, apply document transforms"]
+  F --> Q{"What the command publishes"}
+  Q -- "compilePlanModel()<br/>compileMarkdownModel()" --> G["Publish the collected<br/>component models"]
+  Q -- "renderDocument()<br/>compileMarkdown()" --> H["Package the rendered<br/>document"]
+  Q -- "validateDocument()<br/>compileMarkdownModel()" --> M["Keep the collected models,<br/>discard the document"]
   G --> I["machine-readable JSON"]
   H --> J["self-contained HTML<br/>review document"]
   M --> N["Apply linting rules<br/>no output written"]
 ```
 
-In the source, `compileMarkdownModel()`, `compileMarkdown()`, and `compileMarkdownWithModels()` are thin entry points over `compileMarkdownTree()`.
+In the source, `compileMarkdownModel()` and `compileMarkdown()` are thin entry points over `compileMarkdownTree()`.
 That function coordinates the compilation path described above.
 It is shared code executed separately by each command, not a cached intermediate artifact or a process that emits output files together.
 
@@ -54,15 +54,19 @@ Each type owns its stable id and name together with the matching boundary, autho
 The [`Slide`](/components/slide/) compiler validates an authored marker against that catalog, the deck transform derives structural names from it, lint reads only its objective facts, and guidance generation returns the same records to agents.
 One file per type keeps catalog growth an ordinary reviewed contribution rather than a new architecture decision.
 
-## Each component supports both output modes
+## Each component compiles once and both deliveries render it
 
 The [built-in components](/components/) come from a closed registry.
 When `compileMarkdownTree()` reaches a registered component, its definition validates the authored input and returns two things: plain validated data and a React presentation function closed over that data.
-The component is compiled once during that command invocation; the selected output mode determines what happens next:
+The component is compiled once during that command invocation, and both deliveries then do the same thing with what it returned: they give the validated data to the component's React view, cross one React-to-HAST boundary, replace the authored component node with plain document HAST, and apply the same document-wide transforms.
+Only what each delivery publishes differs:
 
-- In **machine-readable output mode**, used by `big-plan compile`, Big Plan collects the validated data in source order and does not invoke the top-level presentation.
-- In **HTML output mode**, used by `big-plan render` and `big-plan validate`, Big Plan invokes the presentation, crosses one React-to-HAST boundary, and replaces the authored component node with plain document HAST.
-  Validation also collects the component data while rendering, discards the generated document, and applies its registered linting rules to the authored plan.
+- **Machine delivery**, used by `big-plan compile` and `big-plan validate`, publishes the collected component models.
+  It renders for the same reason: each published model carries the block address its rendered root was given, and a block address only exists over a finished deck.
+  Validation keeps that summary, discards the generated document, and applies its registered linting rules to the authored plan.
+- **Human delivery**, used by `big-plan render`, packages the rendered result as the self-contained inert HTML review document.
+
+The two differ in exactly one other respect, and it is a consequence of what they publish rather than a separate decision: under machine delivery a component's model carries its nested components' presentation instead of a deferred placeholder, because no later pass reaches a placeholder that only a model holds.
 
 All three commands therefore agree on component semantics because they call the same compilation function, not because one consumes another command's output.
 No plan-authored code is evaluated or shipped.
@@ -73,15 +77,14 @@ flowchart TB
   S["plan.mdx source"] --> P["Parse allowed Markdown<br/>and component syntax"]
   P --> V["Validate authoring contract"]
   V --> C["Component definition returns<br/>validated data + presentation"]
-  C --> Q{"Output mode for this command"}
-  Q -- "machine-readable: compile" --> J["Collect document metadata<br/>and validated component data"]
+  C --> R["Invoke presentation<br/>and cross once to HAST"]
+  R --> T["Apply document transforms,<br/>assign block addresses"]
+  T --> Q{"What this command publishes"}
+  Q -- "machine: compile" --> J["Document metadata and collected<br/>component models, each with its<br/>block address"]
   J --> O["Serialize JSON"]
-  Q -- "HTML: render" --> R["Invoke presentation<br/>and cross once to HAST"]
-  R --> H["Apply document transforms,<br/>add chrome, serialize HTML"]
+  Q -- "human: render" --> H["Add chrome, serialize HTML"]
   H --> U["Write plan.html"]
-  Q -- "HTML + model collection: validate" --> X["Collect validated data,<br/>invoke presentation, cross to HAST"]
-  X --> Y["Apply document transforms,<br/>add chrome, serialize HTML"]
-  Y --> W["Discard HTML, retain summary,<br/>apply linting rules"]
+  Q -- "machine: validate" --> W["Discard HTML, retain summary,<br/>apply linting rules"]
 ```
 
 An invalid document never renders partially.

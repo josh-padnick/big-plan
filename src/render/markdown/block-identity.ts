@@ -73,6 +73,15 @@ export type BlockDescriptor = {
   // They exist so that a consumer holding a block address can read what the
   // component asserted instead of sniffing the markup the component just
   // produced. Sniffing is what made every new component an edit to this file.
+  //
+  // The model's value depends on which delivery compiled it. Where a component
+  // holds a nested outline-aware component, human delivery leaves that nested
+  // component as a deferred outline placeholder inside the parent's model,
+  // because the document tree holds the copy a later pass completes; machine
+  // delivery holds its completed presentation instead, because no later pass
+  // reaches a placeholder only a model holds. The difference disappears once
+  // completeOutlinePlaceholders also completes the placeholders held by
+  // collected models.
   readonly component?: string;
   readonly model?: unknown;
   // The delivery-local key that joins this block back to its entry in the
