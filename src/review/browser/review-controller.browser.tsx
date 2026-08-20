@@ -1990,36 +1990,6 @@ const useThreadHosts = (
     for (const comment of comments) {
       const anchor = threadAnchorElement(comment);
       if (anchor === null) continue;
-      const container = threadAnchorContainer(anchor);
-      /*
-      Where the target sat inside its card when the reader commented, which is
-      deliberately remembered rather than re-measured on every positioning
-      pass. A lens re-renders the block in place, and re-measuring would move
-      the thread off the words it is attached to; holding the distance is what
-      keeps it still. The anchor rect is the opposite case and is never
-      remembered: it describes the whole page's layout, which a collapse or a
-      reflow invalidates.
-
-      The distance only exists when both boxes were laid out. Recording it from
-      an anchor that is not on screen - one inside a collapsed slide, say -
-      stores the difference between two all-zero rects, which reads back as a
-      real measurement of zero, so a hidden target leaves the last real
-      measurement standing rather than replacing it.
-
-      For the same reason it is not applied once nothing occupies the place it
-      measures. A collapse hides the body but keeps the card, so the card still
-      measures while the distance inside it names a gap that has closed, and
-      adding it would draw the thread below the collapsed card beside unrelated
-      content. Level with the card is the whole answer until the target is back,
-      and the distance is still here to put the thread beside it again.
-      */
-      if (isRendered(anchor) && isRendered(container)) {
-        targetOffsets.set(
-          comment.id,
-          anchor.getBoundingClientRect().top -
-            container.getBoundingClientRect().top,
-        );
-      }
       const host = document.createElement("div");
       host.dataset.reviewThreadFor = comment.id;
       host.dataset.reviewThreadSide = "";
@@ -2048,7 +2018,7 @@ const useThreadHosts = (
       }> = [];
       const anchorRects = new Map<
         string,
-        { readonly left: number; readonly right: number; readonly top: number }
+        { readonly right: number; readonly top: number }
       >();
       const rightThreadOffsets = new Map<string, number>();
       for (const comment of comments) {
@@ -2068,6 +2038,43 @@ const useThreadHosts = (
           continue;
         }
         host.hidden = false;
+        /*
+        Where the target sits inside its card, recorded on every pass that can
+        see both boxes rather than once when the thread is mounted. A target
+        can be hidden at mount - a card the reader left collapsed, say - and
+        first become measurable during an ordinary positioning pass, and a
+        distance recorded only at mount would leave that thread stuck level
+        with the card top for as long as the document stays open.
+
+        The distance is deliberately remembered rather than re-measured
+        whenever the thread moves. A lens re-renders the block in place, and
+        re-measuring against the copy would move the thread off the words it is
+        attached to; holding the distance is what keeps it still. That is why
+        the recording is gated on the target itself being laid out, which a
+        lens-replaced or collapsed target is not. The anchor rect is the
+        opposite case and is never remembered: it describes the whole page's
+        layout, which a collapse or a reflow invalidates.
+
+        Recording from a target that is not on screen would store the
+        difference between two all-zero rects, which reads back as a real
+        measurement of zero, so a hidden target leaves the last real
+        measurement standing rather than replacing it.
+
+        For the same reason the distance is not applied once nothing occupies
+        the place it measures. A collapse hides the body but keeps the card, so
+        the card still measures while the distance inside it names a gap that
+        has closed, and adding it would draw the thread below the collapsed
+        card beside unrelated content. Level with the card is the whole answer
+        until the target is back, and the distance is still here to put the
+        thread beside it again.
+        */
+        if (anchor.element === container && isRendered(target)) {
+          targetOffsets.set(
+            comment.id,
+            target.getBoundingClientRect().top -
+              container.getBoundingClientRect().top,
+          );
+        }
         const anchorRect = anchor.measured;
         const cardHeight = Math.max(
           1,

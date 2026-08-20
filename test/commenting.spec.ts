@@ -1019,6 +1019,126 @@ test("should keep a comment thread level with a card it collapsed after the comm
     .toBe("back beside its block");
 });
 
+/*
+BIG-188, the case a mount-time measurement cannot answer. Collapse state is
+persisted, so a document can open with the commented card already collapsed:
+the target is never laid out while the threads are mounted, and there is no
+distance to remember. Expanding the card later must still put the thread beside
+the words it quotes, which it can only do if the distance is recorded by the
+positioning pass that first sees the target rather than once when the thread is
+mounted. A static document has nothing else that would re-run that mount, so
+getting it wrong strands the thread at the card's top for the rest of the
+session.
+*/
+test("should place a comment thread beside its block after opening with the card collapsed", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  // The deepest block inside its card, so a distance the reload must recover
+  // is unmistakable rather than a rounding difference.
+  const deepest = await page.evaluate(() => {
+    const blocks = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "[data-slide] [data-block-kind='paragraph'], [data-slide] [data-block-kind='list-item']",
+      ),
+    );
+    let best: { blockId: string; collapseId: string; offset: number } | null =
+      null;
+    for (const block of blocks) {
+      const card = block.closest<HTMLElement>("[data-slide]");
+      const blockId = block.dataset.blockId;
+      const collapseId = card?.dataset.collapseId;
+      if (card === null || blockId === undefined || collapseId === undefined) {
+        continue;
+      }
+      const offset =
+        block.getBoundingClientRect().top - card.getBoundingClientRect().top;
+      if (best === null || offset > best.offset) {
+        best = { blockId, collapseId, offset };
+      }
+    }
+    if (best === null) {
+      throw new Error("A card must hold an identified block to comment on");
+    }
+    return best;
+  });
+
+  const block = page.locator(`[data-block-id="${deepest.blockId}"]`);
+  const card = page.locator(
+    `[data-slide][data-collapse-id="${deepest.collapseId}"]`,
+  );
+  await block.scrollIntoViewIfNeeded();
+  const quoted = await block.evaluate((element) => {
+    const text = document
+      .createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      .nextNode();
+    if (!(text instanceof Text)) return "";
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, Math.min(18, text.data.length));
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return selection?.toString() ?? "";
+  });
+  expect(quoted.trim()).not.toBe("");
+
+  await page.getByRole("button", { name: "Comment on selected text" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer
+    .getByLabel("Add a comment")
+    .fill("This thread belongs beside its block after a reload.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const threadHost = page.locator("[data-review-thread-side]");
+  await expect(threadHost).toHaveCount(1);
+  const drop = async () => {
+    const cardTop = await card.evaluate(
+      (node) => node.getBoundingClientRect().top + window.scrollY,
+    );
+    const threadTop = await threadHost.evaluate(
+      (node) => node.getBoundingClientRect().top + window.scrollY,
+    );
+    return threadTop - cardTop;
+  };
+  await expect.poll(drop).toBeGreaterThan(deepest.offset - 1);
+  const droppedWhileOpen = await drop();
+
+  const toggle = card.locator(
+    ":scope > [data-collapse-header] button[data-collapse-toggle]",
+  );
+  await toggle.click();
+  await expect(card).toHaveAttribute("data-collapsed", "");
+
+  // The comment and the collapse both persist, so the reloaded document mounts
+  // this thread with nothing measurable to anchor it to.
+  await page.reload();
+  await expect(card).toHaveAttribute("data-collapsed", "");
+  await expect(threadHost).toHaveCount(1);
+  await expect(block).toBeHidden();
+
+  await toggle.click();
+  await expect(card).not.toHaveAttribute("data-collapsed", "");
+  await expect(block).toBeVisible();
+
+  await expect
+    .poll(async () => {
+      const restored = await drop();
+      if (Math.abs(restored - droppedWhileOpen) <= 1) {
+        return "beside its block";
+      }
+      return `${Math.round(droppedWhileOpen - restored)} above its block`;
+    })
+    .toBe("beside its block");
+});
+
 test("should minimize an expanded long comment from the feedback toolbar", async ({
   page,
   deckViewerUrl,

@@ -29,7 +29,6 @@ export type ThreadAnchorMissReason =
 
 /** An anchor rect in page coordinates, measured from a laid-out element. */
 export type MeasuredThreadAnchor = {
-  readonly left: number;
   readonly right: number;
   readonly top: number;
 };
@@ -74,7 +73,6 @@ export const measureThreadAnchor = (
   return {
     element: rendered,
     measured: {
-      left: rect.left + scrollX,
       right: rect.right + scrollX,
       top: rect.top + scrollY,
     },
