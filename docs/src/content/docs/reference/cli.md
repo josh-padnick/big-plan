@@ -352,15 +352,21 @@ The reviewer's answer is recorded, so a loop already waiting on `--wait` is told
 ```
 
 That result is terminal even with `--wait`: stop the loop.
-`agent note` and `agent respond` from the same session refuse with `PRIMACY_LOST` and say the reviewer disconnected it.
+`agent note` and `agent respond` from the same session refuse with `PRIMACY_LOST` and say the reviewer disconnected it, for as long as the turn they belong to could still be running.
 The claim it was part way through is freed as well, so the turn it had in flight can no longer reach the plan, and no other agent's claim is touched.
 Connecting again afterwards is a new agent: it attaches as an observer and asks the reviewer, like any other arrival.
+Disconnecting the agent that answers the review leaves the review with no primary until the reviewer chooses one; nothing succeeds into a seat they emptied.
 
 A published turn keeps its own seat for as long as the answering agent's return trip takes.
 `agent respond` therefore returns `next`: an `agent next ... --wait --agent <token>` command carrying the token just answered under.
 Run it as given.
 It reclaims the same registration at once, which is what keeps one agent one agent to the reviewer across the several short-lived processes a turn takes.
 A bare `agent next` after publishing mints a new identity instead, so it attaches as an observer of the turn it just finished and waits for the seat rather than picking up straight away.
+It does not put a question to the reviewer while it waits: until the return trip is over, Big Plan cannot tell a second agent from the incumbent coming back, so the question is held and raised only if a second agent is what it turns out to be.
+
+An observer succeeds to the seat by itself in one case only: the primary fell silent, and the seat has stayed empty for longer than a turn's own quiet.
+That is the recovery path for an agent that died mid review, and it is deliberately slow.
+Every other way a seat empties - a turn ending, a poll returning, a reviewer disconnecting the primary - is either momentary or the reviewer's own decision, and neither is a vacancy to be filled.
 
 ### `big-plan service`
 

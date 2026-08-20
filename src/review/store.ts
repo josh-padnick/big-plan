@@ -51,13 +51,17 @@ import {
   decodeAgentModelIdentity,
   type AgentModelIdentity,
 } from "./shared/agent-model.js";
-import { AGENT_STALL_MS } from "./shared/agent-timing.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+} from "./shared/agent-timing.js";
 import {
   agentDisconnectAddresses,
   type AgentDisconnectDirective,
 } from "./shared/agent-disconnect.js";
 import {
   agentIsAttached,
+  agentIsBetweenTurns,
   applyPrimacyDeclined,
   applyPrimacyHandoff,
   roleForArrivingAgent,
@@ -2731,6 +2735,7 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
     return undefined;
   }
   const requestedPrimacyAtMs = record["requestedPrimacyAtMs"];
+  const unsettledArrivalAtMs = record["unsettledArrivalAtMs"];
   const claimToken = record["claimToken"];
   const claimClosedAtMs = record["claimClosedAtMs"];
   const inheritedDraftPath = record["inheritedDraftPath"];
@@ -2743,6 +2748,10 @@ const asAttachedAgent = (value: unknown): AttachedAgent | undefined => {
     ...(typeof requestedPrimacyAtMs === "number" &&
     Number.isFinite(requestedPrimacyAtMs)
       ? { requestedPrimacyAtMs }
+      : {}),
+    ...(typeof unsettledArrivalAtMs === "number" &&
+    Number.isFinite(unsettledArrivalAtMs)
+      ? { unsettledArrivalAtMs }
       : {}),
     ...(typeof claimToken === "string" && claimToken !== ""
       ? { claimToken }
@@ -2867,12 +2876,55 @@ export const readAgentRoster = async ({
 };
 
 /**
+ * True while a disconnection still answers the registration it named.
+ *
+ * The registration is a running loop that re-registers twice a second, so the
+ * stall window is all it takes to outlast one: past it the id belongs to
+ * nobody, and a connector the reviewer invited back mints a new one anyway.
+ */
+export const disconnectBarsWriter = ({
+  entry,
+  writerId,
+  now,
+}: {
+  readonly entry: AgentDisconnect;
+  readonly writerId: string;
+  readonly now: number;
+}): boolean =>
+  entry.writerId === writerId && now - entry.atMs <= AGENT_STALL_MS;
+
+/**
+ * True while a disconnection still answers the turn it interrupted.
+ *
+ * This half is owed the recovery horizon rather than the stall window,
+ * because the processes it answers are the long-lived halves of one turn: an
+ * agent disconnected mid turn goes on working and reaches `agent note` or
+ * `agent respond` minutes later, and a turn routinely outlives 75 seconds -
+ * which is the whole reason that horizon exists. Expiring here left it with a
+ * generic refusal naming an agent that does not exist, instead of the answer
+ * the reviewer actually gave.
+ */
+export const disconnectBarsClaimToken = ({
+  entry,
+  claimToken,
+  now,
+}: {
+  readonly entry: AgentDisconnect;
+  readonly claimToken: string;
+  readonly now: number;
+}): boolean =>
+  entry.claimToken === claimToken &&
+  now - entry.atMs <= AGENT_RECOVERY_HORIZON_MS;
+
+/**
  * Reads the reviewer's still-standing disconnections.
  *
- * They expire on the stall window rather than lasting the session, because a
- * disconnection answers one running loop and that loop is gone within it. Kept
- * longer, the answer would start refusing agents the reviewer never spoke
+ * They expire rather than lasting the session, because a disconnection answers
+ * one running loop and one turn, and both are over within the horizon. Kept
+ * forever, the answer would start refusing agents the reviewer never spoke
  * about - the same connector, invoked again, reconnecting at their request.
+ * Which half of an entry still answers is the two rules above; this is only
+ * how long the entry is kept at all.
  */
 export const readAgentDisconnects = async ({
   store,
@@ -2890,9 +2942,54 @@ export const readAgentDisconnects = async ({
     .map(asAgentDisconnect)
     .filter(
       (entry): entry is AgentDisconnect =>
-        entry !== undefined && now - entry.atMs <= AGENT_STALL_MS,
+        entry !== undefined && now - entry.atMs <= AGENT_RECOVERY_HORIZON_MS,
     );
 };
+
+/**
+ * When the plan last lost the agent that answered it, and to what.
+ *
+ * Succession needs to know more than "there is no primary right now", because
+ * a seat is empty for an instant on every ordinary path: a turn ends, a
+ * polling loop gives its registration back, a reviewer moves primacy. Promoting
+ * on that instant is how a waiting observer took a review that was never
+ * offered to it. This records the moment the seat actually emptied, so an
+ * observer can be asked to prove the emptiness lasted.
+ */
+export type AgentSeat = {
+  readonly emptiedAtMs: number;
+  /**
+   * Whether the reviewer emptied it.
+   *
+   * A seat the reviewer emptied is not a vacancy to be filled; it is their
+   * answer. Nothing succeeds into it automatically, however long it stands -
+   * which is the rule `detachAgentFromRoster` already documents, and which
+   * outranks any automatic succession.
+   */
+  readonly byReviewer: boolean;
+};
+
+const asAgentSeat = (value: unknown): AgentSeat | undefined => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Readonly<Record<string, unknown>>;
+  const emptiedAtMs = record["emptiedAtMs"];
+  if (typeof emptiedAtMs !== "number" || !Number.isFinite(emptiedAtMs)) {
+    return undefined;
+  }
+  return { emptiedAtMs, byReviewer: record["byReviewer"] === true };
+};
+
+/** The standing record of an empty seat, when the plan has one. */
+export const readAgentSeat = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<AgentSeat | undefined> =>
+  asAgentSeat((await rosterDocument({ store, sessionId }))?.["seat"]);
 
 /**
  * Runs one change against the roster under its own lock.
@@ -2914,6 +3011,7 @@ const withAgentRoster = async ({
   readonly change: (
     agents: ReadonlyArray<AttachedAgent>,
     disconnected: ReadonlyArray<AgentDisconnect>,
+    seat: AgentSeat | undefined,
   ) => ReadonlyArray<AttachedAgent>;
   /**
    * A disconnection this change records, read after the change has run.
@@ -2932,9 +3030,11 @@ const withAgentRoster = async ({
       // carries the reviewer's standing answers forward, and drops the ones
       // whose window has passed.
       const standing = await readAgentDisconnects({ store, sessionId, now });
+      const seat = await readAgentSeat({ store, sessionId });
       const next = change(
         await readAgentRoster({ store, sessionId }),
         standing,
+        seat,
       );
       const recorded = disconnect?.();
       const disconnected =
@@ -2946,9 +3046,28 @@ const withAgentRoster = async ({
               ),
               recorded,
             ];
+      /*
+      The seat is settled here because this is the one place it can change.
+
+      A seat that is filled has nothing to record. One that is empty keeps the
+      moment it emptied rather than restamping it on every later write, since
+      what succession needs to know is how long the emptiness has lasted - and
+      it remembers whether the reviewer is the one who emptied it, because that
+      answer is theirs to reverse and nobody else's.
+      */
+      const filled =
+        selectPrimaryAgent({ agents: next, nowMs: now }) !== undefined;
+      const seatNext = filled
+        ? undefined
+        : (seat ?? { emptiedAtMs: now, byReviewer: recorded !== undefined });
       await writeStoreJson({
         path: store.agentRosterPath,
-        value: { sessionId, agents: next, disconnected },
+        value: {
+          sessionId,
+          agents: next,
+          disconnected,
+          ...(seatNext === undefined ? {} : { seat: seatNext }),
+        },
       });
       return next;
     },
@@ -3018,7 +3137,7 @@ export const attachAgentToRoster = async ({
     store,
     sessionId,
     now,
-    change: (existingAgents, disconnected) => {
+    change: (existingAgents, disconnected, seat) => {
       const adopted =
         adoptClaimToken === undefined
           ? undefined
@@ -3041,9 +3160,13 @@ export const attachAgentToRoster = async ({
       if (
         disconnected.some(
           (entry) =>
-            entry.writerId === identity ||
+            disconnectBarsWriter({ entry, writerId: identity, now }) ||
             (adoptClaimToken !== undefined &&
-              entry.claimToken === adoptClaimToken),
+              disconnectBarsClaimToken({
+                entry,
+                claimToken: adoptClaimToken,
+                now,
+              })),
         )
       ) {
         throw new AgentDisconnectedByReviewer(identity);
@@ -3074,29 +3197,32 @@ export const attachAgentToRoster = async ({
           ...withoutFinishedClaim
         } = existing;
         /*
-        An observer with nobody above it stops waiting.
+        An observer whose primary fell silent stops waiting - eventually.
 
         Roles are assigned on arrival, so an observer whose primary has since
-        gone would otherwise stay an observer of an empty seat forever - still
+        died would otherwise stay an observer of an empty seat forever - still
         asking a question about an agent that is no longer there, and taking no
-        work while the reviewer's requests pile up. This takes primacy from
-        nobody: it fires only when the review has no attached primary at all,
-        which is the same rule an arriving agent is already given.
+        work while the reviewer's requests pile up.
 
-        "No attached primary" is a state the seat has to have been in for a
-        while, not for an instant. A primary that publishes stops being
-        attached the moment its claim closes, so without the window that
-        follows it, an observer refreshing twice a second would take the seat
-        between one turn and the next - reversing a reviewer who had just
-        answered "leave it as observer" and locking the answering agent out of
-        its own review.
+        Three things have to be true before it succeeds, and each of them is a
+        way this rule was wrong before. The seat must be empty now. It must
+        have been empty for the stall window, because a seat is empty for an
+        instant on every ordinary path - a turn ending, a polling loop handing
+        its registration back - and promoting on that instant handed the review
+        to an observer the reviewer had explicitly left as one. And the
+        reviewer must not be the one who emptied it: their disconnect is an
+        answer, not a vacancy, and inventing a successor for it would answer a
+        question they were asked and deliberately did not answer.
         */
         const succeedsAnEmptySeat =
           existing.role === "observer" &&
           selectPrimaryAgent({
             agents: live.filter((agent) => agent.writerId !== identity),
             nowMs: now,
-          }) === undefined;
+          }) === undefined &&
+          seat !== undefined &&
+          !seat.byReviewer &&
+          now - seat.emptiedAtMs >= AGENT_STALL_MS;
         const { requestedPrimacyAtMs: _answered, ...withoutRequest } = returned
           ? withoutFinishedClaim
           : existing;
@@ -3117,6 +3243,21 @@ export const attachAgentToRoster = async ({
         );
       }
       const role = roleForArrivingAgent({ agents: live, nowMs: now });
+      /*
+      Whether the roster can yet say this is a second agent.
+
+      Between two turns the incumbent's record says only that a claim closed
+      and nobody has been heard from since, which is equally what the agent
+      coming back looks like a moment before it arrives. Asking the reviewer
+      then puts "a second agent wants to answer you" in front of them for the
+      ordinary single-agent loop, and answering it with Disconnect removes the
+      only agent they have.
+      */
+      const incumbent = selectPrimaryAgent({ agents: live, nowMs: now });
+      const unsettled =
+        role === "observer" &&
+        incumbent !== undefined &&
+        agentIsBetweenTurns(incumbent);
       registered = {
         writerId: identity,
         role,
@@ -3133,8 +3274,16 @@ export const attachAgentToRoster = async ({
         Only a new arrival raises it. A refresh above leaves the field alone,
         so "leave it as observer" stays answered instead of being re-asked
         twice a second by the same loop.
+
+        An arrival the roster cannot place holds the question instead of
+        dropping it: `requestAgentPrimacy` raises it as soon as the roster can
+        say who the incumbent is.
         */
-        ...(role === "observer" ? { requestedPrimacyAtMs: now } : {}),
+        ...(role !== "observer"
+          ? {}
+          : unsettled
+            ? { unsettledArrivalAtMs: now }
+            : { requestedPrimacyAtMs: now }),
         ...(model === undefined ? {} : { model }),
       };
       return [...live, registered];
@@ -3173,6 +3322,7 @@ export const refreshAgentByClaimToken = async ({
   withAgentRoster({
     store,
     sessionId,
+    now,
     change: (agents) =>
       agents.map((agent) =>
         agent.claimToken === claimToken
@@ -3207,14 +3357,17 @@ export const detachExitingAgent = async ({
   store,
   sessionId,
   writerId,
+  now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
+  readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withAgentRoster({
     store,
     sessionId,
+    now,
     change: (agents) =>
       agents.filter((agent) => {
         if (agent.writerId !== writerId) return true;
@@ -3240,15 +3393,18 @@ export const recordAgentClaimToken = async ({
   sessionId,
   writerId,
   claimToken,
+  now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
   readonly claimToken: string;
+  readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withAgentRoster({
     store,
     sessionId,
+    now,
     change: (agents) =>
       agents.map((agent) => {
         if (agent.writerId !== writerId) return agent;
@@ -3281,6 +3437,7 @@ export const closeAgentClaim = async ({
   withAgentRoster({
     store,
     sessionId,
+    now,
     change: (agents) =>
       agents.map((agent) =>
         agent.claimToken === claimToken
@@ -3301,14 +3458,17 @@ export const clearInheritedDraft = async ({
   store,
   sessionId,
   writerId,
+  now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
+  readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withAgentRoster({
     store,
     sessionId,
+    now,
     change: (agents) =>
       agents.map((agent) => {
         if (agent.writerId !== writerId) return agent;
@@ -3317,7 +3477,24 @@ export const clearInheritedDraft = async ({
       }),
   });
 
-/** Records that one attached agent has asked to become the primary. */
+/**
+ * Raises the question an arriving observer held back.
+ *
+ * An agent that arrives while the incumbent is between turns cannot yet be
+ * called a second agent, so it attaches without asking (see
+ * `attachAgentToRoster`). This is where that held question is raised once the
+ * roster can say: the incumbent came back and is plainly still here, or it
+ * never did and the seat is standing empty. Either way the newcomer is now a
+ * fact the reviewer should be told about.
+ *
+ * Still ambiguous, and nothing happens. The caller asks again on its next
+ * pass, which costs one write per half second for at most the length of a
+ * return trip.
+ *
+ * A question the reviewer has already answered is never re-raised: their
+ * answer strips the deferral along with the request, so there is nothing left
+ * here to act on.
+ */
 export const requestAgentPrimacy = async ({
   store,
   sessionId,
@@ -3332,15 +3509,36 @@ export const requestAgentPrimacy = async ({
   withAgentRoster({
     store,
     sessionId,
-    change: (agents) =>
-      agents.map((agent) =>
-        agent.writerId === writerId && agent.role === "observer"
-          ? {
-              ...agent,
-              requestedPrimacyAtMs: agent.requestedPrimacyAtMs ?? now,
-            }
-          : agent,
-      ),
+    now,
+    change: (agents) => {
+      const incumbent = selectPrimaryAgent({ agents, nowMs: now });
+      if (incumbent !== undefined && agentIsBetweenTurns(incumbent)) {
+        return agents;
+      }
+      return agents.map((agent) => {
+        /*
+        Only a held question is raised here.
+
+        The field has one owner - arrival - and this is arrival finishing what
+        it started, not a second way to ask. An observer carrying no deferral
+        has either asked already or been answered, and re-raising the second
+        would put a question back in front of the reviewer that they have
+        settled.
+        */
+        if (
+          agent.writerId !== writerId ||
+          agent.role !== "observer" ||
+          agent.unsettledArrivalAtMs === undefined
+        ) {
+          return agent;
+        }
+        const { unsettledArrivalAtMs: _settled, ...rest } = agent;
+        return {
+          ...rest,
+          requestedPrimacyAtMs: agent.requestedPrimacyAtMs ?? now,
+        };
+      });
+    },
   });
 
 /** Applies the reviewer's answer: make this observer the primary. */
@@ -3376,14 +3574,17 @@ export const declineAgentPrimacy = async ({
   store,
   sessionId,
   writerId,
+  now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
+  readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withAgentRoster({
     store,
     sessionId,
+    now,
     change: (agents) => applyPrimacyDeclined({ agents, writerId }),
   });
 

@@ -28,7 +28,10 @@ import {
   declineAgentPrimacy,
   detachAgentFromRoster,
   detachExitingAgent,
+  disconnectBarsClaimToken,
+  disconnectBarsWriter,
   grantAgentPrimacy,
+  readAgentDisconnects,
   prepareStore,
   readAgentRoster,
   recordAgentClaimToken,
@@ -441,6 +444,7 @@ describe("the seat between turns", () => {
       sessionId: SESSION,
       writerId: "answering",
       claimToken: "held",
+      now: 1_000,
     });
     await attachAgentToRoster({
       store,
@@ -453,6 +457,7 @@ describe("the seat between turns", () => {
       store,
       sessionId: SESSION,
       writerId: "watching",
+      now: 1_000,
     });
     // The turn is published.
     await closeAgentClaim({
@@ -502,7 +507,21 @@ describe("the seat between turns", () => {
 
   it("should let an observer take a seat that stayed empty past the window", async () => {
     const store = await answeredTurn();
-    const nowMs = 2_000 + AGENT_STALL_MS + 1;
+    // The refresh that finds the answering agent finally gone. The seat is
+    // empty from here, and that is all this refresh establishes: an emptiness
+    // nobody has watched yet is indistinguishable from the instant between two
+    // turns, which is what a promotion here would be taking.
+    const noticedMs = 2_000 + AGENT_STALL_MS + 1;
+    const noticed = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: noticedMs,
+    });
+    expect(noticed.agent.role).toBe("observer");
+
+    // And the refresh a full window later, with the seat still empty.
+    const nowMs = noticedMs + AGENT_STALL_MS;
     const { agent, agents } = await attachAgentToRoster({
       store,
       sessionId: SESSION,
@@ -512,6 +531,226 @@ describe("the seat between turns", () => {
     expect(agent.role).toBe("primary");
     expect(agents.map((entry) => entry.writerId)).toEqual(["watching"]);
     expect(selectPrimaryAgent({ agents, nowMs })?.writerId).toBe("watching");
+  });
+
+  it("should not promote across the instant a polling primary is between polls", async () => {
+    // A harness that polls without --wait gives its registration back on every
+    // return, so the seat is empty for an instant many times an hour. An
+    // observer refreshing in that gap used to take the review, and the real
+    // primary's next poll found itself an observer.
+    const store = await temporaryStore();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "polling",
+      now: 1_000,
+    });
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 1_000,
+    });
+    await detachExitingAgent({
+      store,
+      sessionId: SESSION,
+      writerId: "polling",
+      now: 1_100,
+    });
+
+    const { agent } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 1_200,
+    });
+
+    expect(agent.role).toBe("observer");
+  });
+});
+
+/*
+Who the reviewer is asked about, and when.
+
+A card that says "a second agent wants to answer you" has to be about a second
+agent. Between two turns the roster cannot yet tell the incumbent coming back
+from a newcomer, and asking during that window put the ordinary single-agent
+loop in front of the reviewer as a stranger (BIG-171).
+*/
+describe("the question an arrival raises", () => {
+  const betweenTurns = async () => {
+    const store = await temporaryStore();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 1_000,
+    });
+    await recordAgentClaimToken({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      claimToken: "held",
+      now: 1_000,
+    });
+    await closeAgentClaim({
+      store,
+      sessionId: SESSION,
+      claimToken: "held",
+      now: 2_000,
+    });
+    return store;
+  };
+
+  it("should hold the question while the incumbent may be coming back", async () => {
+    const store = await betweenTurns();
+    const { agent, agents } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: 2_100,
+    });
+    expect(agent.role).toBe("observer");
+    expect(agent.requestedPrimacyAtMs).toBeUndefined();
+    expect(pendingPrimacyRequest({ agents, nowMs: 2_100 })).toBeUndefined();
+  });
+
+  it("should raise it once the incumbent has come back", async () => {
+    const store = await betweenTurns();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: 2_100,
+    });
+    // The incumbent's own return trip, under the token respond handed it.
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "a-new-process",
+      adoptClaimToken: "held",
+      now: 2_200,
+    });
+
+    const agents = await requestAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: 2_300,
+    });
+
+    expect(pendingPrimacyRequest({ agents, nowMs: 2_300 })?.writerId).toBe(
+      "arriving",
+    );
+  });
+
+  it("should keep holding it while the answer is still unknown", async () => {
+    const store = await betweenTurns();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: 2_100,
+    });
+
+    const agents = await requestAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: 2_200,
+    });
+
+    expect(pendingPrimacyRequest({ agents, nowMs: 2_200 })).toBeUndefined();
+  });
+
+  it("should never re-raise a question the reviewer has answered", async () => {
+    const store = await temporaryStore();
+    await attachAgentToRoster({ store, sessionId: SESSION, writerId: "first" });
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+    });
+    await declineAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+    });
+
+    const agents = await requestAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "second",
+    });
+
+    expect(
+      pendingPrimacyRequest({ agents, nowMs: Date.now() }),
+    ).toBeUndefined();
+  });
+});
+
+/*
+A seat the reviewer emptied is their answer, not a vacancy.
+
+`detachAgentFromRoster` has always documented this - "a disconnected primary
+leaves the role empty rather than handing it to an observer" - and succession
+has to obey it, however long the seat stands.
+*/
+describe("a seat the reviewer emptied", () => {
+  const disconnectedPrimary = async () => {
+    const store = await temporaryStore();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 1_000,
+    });
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 1_000,
+    });
+    await detachAgentFromRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 2_000,
+    });
+    return store;
+  };
+
+  it("should never hand it to a waiting observer", async () => {
+    const store = await disconnectedPrimary();
+    // The observer's next refresh, and one long after the window has passed.
+    for (const now of [2_500, 2_000 + AGENT_STALL_MS * 4]) {
+      const { agent } = await attachAgentToRoster({
+        store,
+        sessionId: SESSION,
+        writerId: "watching",
+        now,
+      });
+      expect(agent.role).toBe("observer");
+    }
+    const agents = await readAgentRoster({ store, sessionId: SESSION });
+    expect(
+      selectPrimaryAgent({ agents, nowMs: 2_000 + AGENT_STALL_MS * 4 }),
+    ).toBeUndefined();
+  });
+
+  it("should keep the reviewer's own answer available to them", async () => {
+    // Nothing succeeds automatically, but the reviewer can still fill the seat
+    // themselves - and once they have, the seat is no longer theirs to hold.
+    const store = await disconnectedPrimary();
+    const agents = await grantAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 2_500,
+    });
+    expect(selectPrimaryAgent({ agents, nowMs: 2_500 })?.writerId).toBe(
+      "watching",
+    );
   });
 });
 
@@ -648,6 +887,61 @@ describe("the reviewer's disconnect", () => {
     });
     expect(agent.role).toBe("observer");
     expect(agent.requestedPrimacyAtMs).toBe(2_000);
+  });
+
+  it("should answer a turn that outlives the loop it belonged to", async () => {
+    /*
+    The two halves of a disconnection are owed different windows. The
+    registration is a loop that re-registers twice a second, so the stall
+    window outlasts it; the token belongs to a turn, and a turn routinely runs
+    for minutes - which is why `agent note` and `agent respond` still meet the
+    reviewer's answer rather than a message about an agent that does not exist.
+    */
+    const store = await temporaryStore();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 1_000,
+    });
+    await recordAgentClaimToken({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      claimToken: "held",
+      now: 1_000,
+    });
+    await detachAgentFromRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 1_500,
+    });
+
+    const threeMinutesOn = 1_500 + AGENT_STALL_MS * 3;
+    const standing = await readAgentDisconnects({
+      store,
+      sessionId: SESSION,
+      now: threeMinutesOn,
+    });
+    expect(
+      standing.some((entry) =>
+        disconnectBarsClaimToken({
+          entry,
+          claimToken: "held",
+          now: threeMinutesOn,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      standing.some((entry) =>
+        disconnectBarsWriter({
+          entry,
+          writerId: "answering",
+          now: threeMinutesOn,
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("should stop refusing once the disconnected loop has had time to end", async () => {

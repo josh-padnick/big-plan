@@ -80,8 +80,37 @@ export type AttachedAgent = {
    * may consult.
    */
   readonly inheritedDraftPath?: string;
+  /**
+   * When this agent arrived into a roster that could not yet say what it is.
+   *
+   * A record whose claim has just closed is either the incumbent between two
+   * turns or an agent that has gone for good, and for the length of its return
+   * trip nobody can tell which. An observer that arrives in that window is
+   * therefore not yet known to be a second agent, so it holds its question
+   * instead of putting "a second agent wants to answer you" in front of the
+   * reviewer for the ordinary single-agent loop coming back (BIG-171).
+   *
+   * It is a deferral and not a refusal: once the roster can say, the question
+   * is raised for real, or the record has become the primary and there is
+   * nothing to ask.
+   */
+  readonly unsettledArrivalAtMs?: number;
   readonly model?: AgentModelIdentity;
 };
+
+/**
+ * True while a record describes an agent between two turns.
+ *
+ * Its claim is closed and nothing has been heard from it since, which is the
+ * one state where the roster genuinely does not know whether this agent is
+ * coming back: the `next` command `respond` handed it reclaims this record
+ * within a moment, and an agent that has stopped never touches it again.
+ */
+export const agentIsBetweenTurns = (
+  agent: Pick<AttachedAgent, "signalAtMs" | "claimClosedAtMs">,
+): boolean =>
+  agent.claimClosedAtMs !== undefined &&
+  agent.signalAtMs <= agent.claimClosedAtMs;
 
 /** The attached agent acting under one pickup token, if it is still attached. */
 export const agentForClaimToken = ({
@@ -206,10 +235,7 @@ export const agentIsAttached = ({
   record at once, and nothing else may take the seat until that chance has
   passed.
   */
-  if (
-    agent.claimClosedAtMs !== undefined &&
-    agent.signalAtMs <= agent.claimClosedAtMs
-  ) {
+  if (agentIsBetweenTurns(agent) && agent.claimClosedAtMs !== undefined) {
     return agentIsLive({
       agent: { signalAtMs: agent.claimClosedAtMs },
       nowMs,
@@ -251,7 +277,10 @@ export const agentIsAttached = ({
  */
 export type RosterAgent = Omit<
   AttachedAgent,
-  "claimToken" | "claimClosedAtMs" | "inheritedDraftPath"
+  | "claimToken"
+  | "claimClosedAtMs"
+  | "inheritedDraftPath"
+  | "unsettledArrivalAtMs"
 > & {
   readonly attached: boolean;
 };
@@ -453,7 +482,11 @@ export const applyPrimacyHandoff = ({
     never given the chance to see.
     */
     if (agent.writerId === writerId) {
-      const { requestedPrimacyAtMs: _granted, ...rest } = agent;
+      const {
+        requestedPrimacyAtMs: _granted,
+        unsettledArrivalAtMs: _settled,
+        ...rest
+      } = agent;
       return {
         ...rest,
         role: "primary",
@@ -464,7 +497,11 @@ export const applyPrimacyHandoff = ({
     // The outgoing primary never asked for anything, but strip the field
     // anyway: a stale request on a demoted agent would re-raise a question
     // nobody posed.
-    const { requestedPrimacyAtMs: _demoted, ...rest } = agent;
+    const {
+      requestedPrimacyAtMs: _demoted,
+      unsettledArrivalAtMs: _decided,
+      ...rest
+    } = agent;
     return {
       ...rest,
       role: "observer",
@@ -490,6 +527,13 @@ export const applyPrimacyDeclined = ({
 }): ReadonlyArray<AttachedAgent> =>
   agents.map((agent) => {
     if (agent.writerId !== writerId) return agent;
-    const { requestedPrimacyAtMs: _declined, ...rest } = agent;
+    // A held question is dropped along with an asked one. The reviewer has
+    // answered about this agent, so raising its deferred question later would
+    // ask them again about something they have already settled.
+    const {
+      requestedPrimacyAtMs: _declined,
+      unsettledArrivalAtMs: _settled,
+      ...rest
+    } = agent;
     return rest;
   });

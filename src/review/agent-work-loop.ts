@@ -39,12 +39,14 @@ import {
   closeAgentClaim,
   deriveReviewPlanId,
   detachExitingAgent,
+  disconnectBarsClaimToken,
   prepareStore,
   randomId,
   readAgentDisconnectRequestFor,
   readAgentDisconnects,
   readAgentRoster,
   recordAgentClaimToken,
+  requestAgentPrimacy,
   readSnapshot,
   refreshAgentByClaimToken,
   reviewStoreFor,
@@ -452,9 +454,10 @@ const assertSessionIsPrimary = async ({
   The reviewer's answer is the true reason, and it is the one a harness can act
   on.
   */
+  const nowMs = Date.now();
   if (
-    (await readAgentDisconnects({ store, sessionId })).some(
-      (entry) => entry.claimToken === claimToken,
+    (await readAgentDisconnects({ store, sessionId, now: nowMs })).some(
+      (entry) => disconnectBarsClaimToken({ entry, claimToken, now: nowMs }),
     )
   ) {
     throw new AgentWorkLoopRejected(
@@ -467,7 +470,7 @@ const assertSessionIsPrimary = async ({
     );
   }
   const agents = await readAgentRoster({ store, sessionId });
-  const primary = selectPrimaryAgent({ agents, nowMs: Date.now() });
+  const primary = selectPrimaryAgent({ agents, nowMs });
   if (primary === undefined) return;
   const acting = agentForClaimToken({ agents, claimToken });
   // A token no registration claims is not evidence of displacement. It is an
@@ -924,6 +927,10 @@ const nextWork = async ({
   let rosterWriterId = writerId;
   let adoptClaimToken = agentToken;
   let registered = false;
+  // Whether this loop's question is waiting on Big Plan rather than on the
+  // reviewer, which is the difference between "they have been asked" and "they
+  // will be" - and the observer result says which.
+  let questionIsHeld = false;
   /*
   What this loop is on the roster, or that the reviewer has ended it.
 
@@ -951,6 +958,28 @@ const nextWork = async ({
     rosterWriterId = registration.agent.writerId;
     adoptClaimToken = undefined;
     registered = true;
+    /*
+    A question this arrival had to hold back is raised as soon as it can be.
+
+    Arriving while the incumbent is between turns proves nothing about who
+    this agent is, so the roster held its question rather than telling the
+    reviewer a second agent had turned up. Asking again here is what turns the
+    deferral into an answer once the incumbent has come back - or has not.
+    */
+    if (registration.agent.unsettledArrivalAtMs === undefined) {
+      questionIsHeld = false;
+    } else {
+      const raised = await requestAgentPrimacy({
+        store: session.store,
+        sessionId: session.sessionId,
+        writerId: rosterWriterId,
+      }).catch(() => undefined);
+      const answered = raised?.find(
+        (agent) => agent.writerId === rosterWriterId,
+      );
+      questionIsHeld =
+        (answered ?? registration.agent).requestedPrimacyAtMs === undefined;
+    }
     return registration.agent.role;
   };
   const observerResult = (): Record<string, unknown> => ({
@@ -961,7 +990,9 @@ const nextWork = async ({
     reason:
       "Another agent is the primary for this review, so this session cannot answer the reviewer yet",
     help: [
-      "The reviewer has been asked whether to make this agent the primary",
+      questionIsHeld
+        ? "The reviewer will be asked once Big Plan can tell this session from the agent already answering them"
+        : "The reviewer has been asked whether to make this agent the primary",
       "Run again with --wait to keep observing until they answer",
       "Reading the plan and the review is allowed; claiming, noting, and responding are not",
     ],

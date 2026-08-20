@@ -280,6 +280,7 @@ Each answer says what it will do before you commit to it: **Make it primary** ha
 Making an observer the primary asks you to confirm, and offers to hand the outgoing agent's unfinished draft to the new one as reference it may read rather than as work that publishes itself; left unticked, that draft stays where it is and never reaches your plan.
 Whichever you choose, the agent you moved away from is told at its next command instead of discovering it when its answer is refused, and anything it had in flight is fenced rather than delivered.
 A disconnected agent stays gone: the decision is recorded, so a connector sitting in its waiting loop is told and stops rather than quietly re-attaching and asking you again.
+Disconnecting the agent that answers you leaves the review without one until you say who takes over: Big Plan does not promote a watching agent into a seat you emptied, because that would answer a question you were asked and chose not to answer.
 Connecting an agent afterwards starts a new one, which arrives as an observer and asks you like any other.
 The roster stays out of the way while one agent is answering you: a single attached agent with nothing to ask shows no cards at all.
 

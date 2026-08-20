@@ -51,6 +51,7 @@ import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
+import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 
 let runtime: ReviewRuntime;
 let pickedUpToken = "";
@@ -1905,6 +1906,76 @@ describe("agent work loop lifecycle", () => {
 
       // Its record is gone, so nothing else can recognise it; the reviewer's
       // answer is the true reason, and it is the one a harness can act on.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Still working",
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "primacy-lost",
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should still name the disconnect once a long turn reaches its answer", async () => {
+    /*
+    The reviewer disconnects an agent that is mid turn, and that agent works on
+    for minutes before it runs anything. A turn routinely outlives the window
+    that answers a waiting loop, so the half of the answer that belongs to the
+    turn is owed the recovery horizon: without it the agent met a refusal about
+    another agent holding its claim - an agent that does not exist - instead of
+    the answer the reviewer gave.
+    */
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-l-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await writeAgentRequest({
+        store: review.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId: "abababababababab",
+          sessionId: review.sessionId,
+          planId: review.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-19T12:00:00.000Z",
+          body: "Answer this.",
+        }),
+      });
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const holder = (
+        await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        })
+      )[0];
+      if (holder === undefined || typeof pickup.agent_token !== "string") {
+        throw new Error("The pickup did not register an agent");
+      }
+
+      // The reviewer disconnected it three minutes ago, which is an ordinary
+      // length for one turn and far past the window a waiting loop needs.
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: holder.writerId,
+        now: Date.now() - AGENT_STALL_MS * 3,
+      });
+
       await expect(
         runAgentWorkLoopAction({
           kind: "note",
