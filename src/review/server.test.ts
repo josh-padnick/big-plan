@@ -4845,6 +4845,59 @@ describe("review runtime shutdown", () => {
     }
   }, 15_000);
 
+  // The idle check runs on a timer, so nothing is waiting on the promise it
+  // returns. A rejection there used to reach the process as an unhandled
+  // rejection, which ends the whole review over one failed tick.
+  it("should report a failing idle check instead of ending the review", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-idle-fail-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 1_000,
+      queuedWorkIdleTimeoutMs: 120_000,
+    });
+    // Queued work keeps the session open, so the timer goes on reaching for
+    // the store instead of stopping the session on its first tick.
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "1d1e1d1e1d1e1d1e",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(PLAN),
+        createdAt: "2026-08-19T12:00:00.000Z",
+        body: "Hold this session open while the store goes away.",
+      }),
+    });
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      // The store goes out from under the live timer, which is what a working
+      // directory cleaned up beneath a running review looks like.
+      await rm(review.store.reviewDirectory, { recursive: true, force: true });
+      await vi.waitFor(
+        () => {
+          expect(
+            stderr.mock.calls.map(([chunk]) => String(chunk)).join(""),
+          ).toContain(
+            `Review idle check failed for session ${review.sessionId}`,
+          );
+        },
+        { timeout: 10_000, interval: 25 },
+      );
+    } finally {
+      stderr.mockRestore();
+      // The store comes back before the close, so the shutdown can finish and
+      // hand the port back rather than failing on the directory this took away.
+      await mkdir(review.store.reviewDirectory, { recursive: true });
+      await review.close().catch(() => undefined);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it("should force-close a stalled active request after a short grace period", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-stall-"));
     const planPath = join(directory, "plan.mdx");
