@@ -58,6 +58,7 @@ import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
 import { heldAgentClaim } from "./shared/agent-claim.js";
 import { settlementRefusal } from "./review-route-settlement.js";
+import { agentIsAttached } from "./shared/agent-primacy.js";
 
 const appendProgressBestEffort = async ({
   context,
@@ -731,19 +732,22 @@ export const answerAgentPrimacy = async (
     });
   }
   const attached = await readAgentRoster({ store, sessionId });
-  if (!attached.some((agent) => agent.writerId === writerId)) {
+  const nowMs = Date.now();
+  // The same test the cards are drawn from. A record the roster has stopped
+  // counting as here describes a process that is gone, and answering a
+  // question about it would install a dead agent as the plan's primary.
+  if (
+    !attached.some(
+      (agent) =>
+        agent.writerId === writerId && agentIsAttached({ agent, nowMs }),
+    )
+  ) {
     return refusal({ status: 404, reason: "That agent is not attached" });
   }
   /*
-  Moving primacy frees the open claim in the same breath, which is the answer
-  the reviewer already gave: a hand-off fences the incumbent at once rather
-  than letting it finish. Released first, so that by the time the roster names
-  a new primary there is no lease left for it to wait behind.
-  */
-  /*
   The reviewer may hand the outgoing agent's unpublished draft to the new
-  primary. It is resolved here, before the release, because the release is what
-  frees the claim that names the stage the draft lives in.
+  primary. It is resolved before anything moves, because the release below is
+  what frees the claim that names the stage the draft lives in.
 
   Carrying it over is deliberately a pointer and not a seed: the new primary
   still starts from the last published revision, and the draft is one more
@@ -756,9 +760,6 @@ export const answerAgentPrimacy = async (
     answer === "primary" && carryWorkInProgress
       ? await outgoingDraftPath({ store, sessionId, planId })
       : undefined;
-  if (answer === "primary") {
-    await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
-  }
   const agents =
     answer === "primary"
       ? await grantAgentPrimacy({
@@ -770,6 +771,30 @@ export const answerAgentPrimacy = async (
       : answer === "observer"
         ? await declineAgentPrimacy({ store, sessionId, writerId })
         : await detachAgentFromRoster({ store, sessionId, writerId });
+  if (answer === "primary") {
+    /*
+    The roster moves first, and the claim is freed after it.
+
+    Both have to happen and they cannot be one write, so the order is chosen by
+    which half-finished state is survivable. Grant first and the new primary may
+    briefly wait behind a lease that is already lapsing - visible, temporary,
+    and it resolves itself. Release first and a failed grant leaves the
+    incumbent still named primary with the claim it is mid turn on silently
+    taken away, so it works on until publication and is refused there with a
+    message about an agent that never took anything.
+
+    A grant that changed nothing is a target that left between the check above
+    and the write. Nothing is released for it: the incumbent keeps the claim it
+    is working on, and the reviewer is told the agent they picked has gone
+    rather than being left with a plan no agent speaks for.
+    */
+    if (
+      agents.find((agent) => agent.writerId === writerId)?.role !== "primary"
+    ) {
+      return refusal({ status: 404, reason: "That agent is not attached" });
+    }
+    await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
+  }
   await appendProgressBestEffort({
     context,
     event: {

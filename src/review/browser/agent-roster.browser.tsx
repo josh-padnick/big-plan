@@ -11,6 +11,7 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import {
+  agentIsAttached,
   agentModelLabel,
   orderAttachedAgents,
   pendingPrimacyRequest,
@@ -261,7 +262,18 @@ export const AgentRoster = ({
 }: AgentRosterProps) => {
   const primary = selectPrimaryAgent({ agents, nowMs });
   const requesting = pendingPrimacyRequest({ agents, nowMs });
-  const ordered = orderAttachedAgents(agents);
+  /*
+  The same membership test every selector beside this one already applies.
+
+  Reaping happens on a roster write, so a review whose agents have all exited
+  is never swept while the reviewer sits reading. Drawing the raw list put
+  cards on screen for processes that were gone - offering "Make it primary" on
+  a dead agent, and answering it - and once the last live primary aged out the
+  dead one's card silently relabelled itself an observer.
+  */
+  const ordered = orderAttachedAgents(agents).filter((agent) =>
+    agentIsAttached({ agent, nowMs }),
+  );
   if (ordered.length < 2 && requesting === undefined) return null;
   return (
     <section className="grid min-w-0 gap-2" data-review-agent-roster="">
