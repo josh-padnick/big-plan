@@ -47,12 +47,12 @@ test("runs without Node TypeScript support or a prior build", () => {
 });
 
 /** Checks a throwaway palette set rather than today's five. */
-const runAgainst = async ({ paletteCss }) => {
+const runAgainst = async ({ paletteCss, baseCss = BASE_CSS }) => {
   const root = await mkdtemp(join(tmpdir(), "big-plan-palettes-"));
   try {
     const globalCss = join(root, "global.css");
     const syntaxCss = join(root, "syntax-highlighting.css");
-    await writeFile(globalCss, `${BASE_CSS}\n${paletteCss}`, "utf8");
+    await writeFile(globalCss, `${baseCss}\n${paletteCss}`, "utf8");
     await writeFile(syntaxCss, SYNTAX_CSS, "utf8");
     return await checkPalettes({
       globalCss,
@@ -142,6 +142,98 @@ test("rejects a palette pairing below WCAG AA", async () => {
         failure.includes("below the 4.5:1 WCAG AA floor"),
     ),
     true,
+    result.failures.join("\n"),
+  );
+});
+
+// The toolbar band and the control chrome that sits on it, wired the way
+// src/render/global.css wires them, so a throwaway palette can move the chrome
+// neutrals and be judged on what a reader would actually see.
+const CHROME_BASE_CSS = `${BASE_CSS}:root {
+  --neutral-100: #eeeeee;
+  --neutral-150: #e8e8e8;
+  --neutral-300: #7e7e7e;
+  --neutral-400: #6d6d6d;
+  --neutral-600: #949494;
+  --neutral-700: #7a7a7a;
+  --neutral-750: #424242;
+  --neutral-800: #2b2b2b;
+  --toolbar-bg: light-dark(var(--neutral-150), var(--neutral-800));
+  --toolbar-edge-c: light-dark(var(--neutral-300), var(--neutral-700));
+  --toolbar-edge-strong-c: light-dark(var(--neutral-400), var(--neutral-600));
+  --toolbar-surface-c: light-dark(var(--neutral-100), var(--neutral-750));
+}
+`;
+
+/** The chrome steps a palette declares, as global.css lays them out. */
+const chromePalette = ({ n300, n400, n600, n700, n750 }) =>
+  `[data-palette="sample"] {
+  --grey-50: #fdfdfd;
+  --grey-925: #202020;
+  --grey-150: #eeeeee;
+  --grey-950: #121212;
+  --neutral-100: #e2ded0;
+  --neutral-150: #dcd8ca;
+  --neutral-300: ${n300};
+  --neutral-400: ${n400};
+  --neutral-600: ${n600};
+  --neutral-700: ${n700};
+  --neutral-750: ${n750};
+  --neutral-800: #1f1f1f;
+}
+`;
+
+test("rejects a control edge that dissolves into the band it sits on", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({
+      n300: "#b8b5a7",
+      n400: "#9d9a8d",
+      n600: "#515151",
+      n700: "#3a3a3a",
+      n750: "#383838",
+    }),
+  });
+  const nonText = result.failures.filter((failure) =>
+    failure.includes("WCAG 1.4.11 non-text floor"),
+  );
+  assert.deepEqual(
+    nonText.map((failure) => failure.split(":")[0]),
+    [
+      "sample/light",
+      "sample/light",
+      "sample/light",
+      "sample/dark",
+      "sample/dark",
+      "sample/dark",
+    ],
+    result.failures.join("\n"),
+  );
+  assert.equal(
+    nonText.some((failure) =>
+      failure.includes("--toolbar-edge-c (#b8b5a7) on --toolbar-bg (#dcd8ca)"),
+    ),
+    true,
+    nonText.join("\n"),
+  );
+});
+
+test("accepts a control edge that clears the non-text floor on band and lift", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({
+      n300: "#787465",
+      n400: "#676356",
+      n600: "#888888",
+      n700: "#6f6f6f",
+      n750: "#383838",
+    }),
+  });
+  assert.deepEqual(
+    result.failures.filter((failure) =>
+      failure.includes("WCAG 1.4.11 non-text floor"),
+    ),
+    [],
     result.failures.join("\n"),
   );
 });

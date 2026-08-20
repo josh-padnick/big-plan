@@ -586,7 +586,10 @@ export const checkDesignSystem = async ({
     lines.forEach((line, index) => {
       const trimmed = line.trim();
       const isComment =
-        trimmed === "" || trimmed.startsWith("//") || trimmed.startsWith("*");
+        trimmed === "" ||
+        trimmed.startsWith("//") ||
+        trimmed.startsWith("/*") ||
+        trimmed.startsWith("*");
       if (!isComment) {
         for (const rule of PAIR_RULES) {
           if (rule.parts.every((part) => part.test(line))) {

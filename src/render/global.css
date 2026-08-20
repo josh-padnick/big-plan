@@ -178,17 +178,23 @@ document painted in another and never restate a colour to preview it.
      lightness the warm steps sit too close to what they separate from. The
      captain asked for a true neutral here; it is scoped to the chrome roles
      and never becomes a utility. The two light steps are the two bands: the
-     lighter one carries a column header inside the reading column, the deeper
-     one carries the toolbar above it. The four deeper steps are the toolbar's
-     control edges, at rest and one step firmer for hover and the open state,
-     in both modes. A warm edge on a neutral band reads as a stain rather than
-     as a border, so a chrome band's controls take chrome edges. */
+     lighter one carries a column header inside the reading column and doubles
+     as the light lift a chrome control takes under the pointer, the deeper one
+     carries the toolbar above it. The deep step beside it is that same lift in
+     dark, where a lift is lighter than its band rather than darker. The four
+     remaining steps are the toolbar's control edges, at rest and one step
+     firmer for hover and the open state, in both modes; each clears the 3:1
+     non-text contrast floor against the band and against the lift, which is
+     what makes a control on the band read as a control. A warm edge on a
+     neutral band reads as a stain rather than as a border, so a chrome band's
+     controls take chrome edges. */
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
-  --neutral-300: #c4c4c4;
-  --neutral-400: #a9a9a9;
-  --neutral-600: #5f5f5f;
-  --neutral-700: #474747;
+  --neutral-300: #7e7e7e;
+  --neutral-400: #6d6d6d;
+  --neutral-600: #949494;
+  --neutral-700: #7a7a7a;
+  --neutral-750: #424242;
   --neutral-800: #2b2b2b;
 
   /* The one role a palette carries with its ramps; THE PALETTES says why. */
@@ -255,6 +261,13 @@ its light counterpart so the three-deep ladder keeps the same separation.
      stain against it. */
   --toolbar-edge-c: light-dark(var(--neutral-300), var(--neutral-700));
   --toolbar-edge-strong-c: light-dark(var(--neutral-400), var(--neutral-600));
+  /* The ground a control on that band takes under the pointer and while its
+     view is open. Separate from --raised-c and --surface-c because those are
+     reading-surface steps measured from the page: on a dark page they sit
+     below the chrome band, so a control borrowing one would paint a warm
+     recess where the band wants a lift. This one is measured from the band, so
+     it lifts in both halves of every palette. */
+  --toolbar-surface-c: light-dark(var(--neutral-100), var(--neutral-750));
   /* Captain-approved local colour: the thread band stays distinct from both
      the raised comment body and the page in dark mode. */
   --comment-header-c: light-dark(var(--grey-125), #1c1a14);
@@ -489,10 +502,11 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #efe6de;
   --neutral-150: #e9e0d8;
-  --neutral-300: #c5bcb5;
-  --neutral-400: #aaa19a;
-  --neutral-600: #605b77;
-  --neutral-700: #48435e;
+  --neutral-300: #7f7974;
+  --neutral-400: #6e6864;
+  --neutral-600: #958cbf;
+  --neutral-700: #7c749f;
+  --neutral-750: #423e57;
   --neutral-800: #2b2740;
 
   --ink-c: light-dark(#403a5e, var(--grey-150));
@@ -564,10 +578,11 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e3e7ee;
   --neutral-150: #dde1e8;
-  --neutral-300: #b9bdc4;
-  --neutral-400: #9ea2a9;
-  --neutral-600: #6f7787;
-  --neutral-700: #575e6e;
+  --neutral-300: #777a7e;
+  --neutral-400: #67696d;
+  --neutral-600: #a1adc8;
+  --neutral-700: #8791a9;
+  --neutral-750: #4f5564;
   --neutral-800: #39404f;
 
   --ink-c: light-dark(#2e3440, var(--grey-150));
@@ -639,10 +654,11 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e2e5ec;
   --neutral-150: #dcdfe6;
-  --neutral-300: #b8bbc2;
-  --neutral-400: #9ea0a7;
-  --neutral-600: #606076;
-  --neutral-700: #48495d;
+  --neutral-300: #76787d;
+  --neutral-400: #66686c;
+  --neutral-600: #9193b8;
+  --neutral-700: #797a9a;
+  --neutral-750: #424255;
   --neutral-800: #2b2c3f;
 
   --ink-c: light-dark(#4c4f69, var(--grey-150));
@@ -715,10 +731,11 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e2ded0;
   --neutral-150: #dcd8ca;
-  --neutral-300: #b8b5a7;
-  --neutral-400: #9d9a8d;
-  --neutral-600: #515151;
-  --neutral-700: #3a3a3a;
+  --neutral-300: #787465;
+  --neutral-400: #676356;
+  --neutral-600: #888888;
+  --neutral-700: #6f6f6f;
+  --neutral-750: #383838;
   --neutral-800: #1f1f1f;
 
   --ink-c: light-dark(#0b0b09, var(--grey-150));
@@ -833,6 +850,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-toolbar: var(--toolbar-bg);
   --color-toolbar-edge: var(--toolbar-edge-c);
   --color-toolbar-edge-strong: var(--toolbar-edge-strong-c);
+  --color-toolbar-surface: var(--toolbar-surface-c);
   --color-comment-body: var(--comment-body-c);
   --color-comment-toolbar: var(--comment-toolbar-c);
   --color-comment-rest: var(--comment-rest-c);

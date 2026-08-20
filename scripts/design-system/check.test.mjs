@@ -78,6 +78,22 @@ test("accepts a comment that names the clipping pair it warns against", async ()
   assert.equal(result.failed, false);
 });
 
+test("accepts a block comment that names the clipping pair it warns against", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      '/** The title uses truncate, so never add leading-none - it slices descenders. */\nexport const V = () => <p className="truncate text-sm" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
+test("accepts a block comment continuation that names the clipping pair", async () => {
+  const result = await runAgainst({
+    "view.tsx":
+      '/**\n * The title uses truncate, so never add leading-none - it slices descenders.\n */\nexport const V = () => <p className="truncate text-sm" />;\n',
+  });
+  assert.equal(result.failed, false);
+});
+
 test("rejects a clipped leading even under an approved-metric marker", async () => {
   const result = await runAgainst({
     "view.tsx":

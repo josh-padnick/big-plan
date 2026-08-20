@@ -1,9 +1,11 @@
 // Enforces the colour-theme contract described in _internal/DESIGN_PRINCIPLES.md: a
 // palette is a set of shade ramps behind one shared role mapping, so every
-// palette must supply every ramp step the roles reach, and every text pairing a
-// document can produce must meet WCAG AA in that palette's light and dark half.
+// palette must supply every ramp step the roles reach, every text pairing a
+// document can produce must meet WCAG AA in that palette's light and dark half,
+// and every control boundary on a chrome band must meet the WCAG 1.4.11
+// non-text floor in both halves too.
 //
-// This check owns the exact required pairings and the exact contrast floor;
+// This check owns the exact required pairings and the exact contrast floors;
 // DESIGN_PRINCIPLES.md owns why colour is expressed as roles over ramps. The
 // palette id list is authored in src/render/preference-options.js and
 // re-exported by src/render/preferences.ts for application consumers. A palette
@@ -67,6 +69,12 @@ const COMMENT_SURFACE_TOKEN_PATTERN = /^comment-[a-z]+-c$/;
 // text allowance never applies: a plan is read at reading size.
 const CONTRAST_FLOOR = 4.5;
 
+// WCAG 1.4.11 for non-text contrast: the boundary that tells a reader where a
+// control is, and the firmer one that says the control is under the pointer or
+// open. A boundary below this floor is a control that dissolves into its band,
+// which is how a palette silently loses a control the other palettes keep.
+const NON_TEXT_FLOOR = 3;
+
 // Reading surfaces a document can put primary or secondary text on. Tertiary
 // text is deliberately absent from the bands: _internal/DESIGN_PRINCIPLES.md holds that a
 // band carries primary or secondary text and never tertiary.
@@ -82,6 +90,18 @@ const BAND_GROUNDS = [
   "--table-head-bg",
 ];
 const CODE_GROUNDS = ["--diff-hunk-bg", "--diff-content-bg"];
+
+// Control boundaries on the toolbar band, and the ground each one is seen
+// against. A control's edge is the only thing separating it from the band it
+// sits on, so it answers to the non-text floor rather than to the text one.
+// The reading surface's own hairlines are deliberately absent: they divide
+// passages of a document rather than bound a control, and 1.4.11 governs
+// controls.
+const CONTROL_EDGE_PAIRINGS = [
+  { edge: "--toolbar-edge-c", ground: "--toolbar-bg" },
+  { edge: "--toolbar-edge-strong-c", ground: "--toolbar-bg" },
+  { edge: "--toolbar-edge-strong-c", ground: "--toolbar-surface-c" },
+];
 
 const SYNTAX_TOKENS = [
   "--syntax-keyword-c",
@@ -348,6 +368,39 @@ export const checkPalettes = async ({
     const overrides = palettes.get(id) ?? new Map();
     const lookup = (name) => overrides.get(name) ?? base.get(name);
     for (const mode of ["light", "dark"]) {
+      for (const { edge, ground } of CONTROL_EDGE_PAIRINGS) {
+        if (
+          base.get(edge.slice(2)) === undefined ||
+          base.get(ground.slice(2)) === undefined
+        ) {
+          continue;
+        }
+        const edgeValue = resolveValue({
+          value: lookup(edge.slice(2)) ?? "",
+          mode,
+          lookup,
+        });
+        const groundValue = resolveValue({
+          value: lookup(ground.slice(2)) ?? "",
+          mode,
+          lookup,
+        });
+        const edgeColor = edgeValue === null ? null : parseColor(edgeValue);
+        const groundColor =
+          groundValue === null ? null : parseColor(groundValue);
+        if (edgeColor === null || groundColor === null) {
+          failures.push(
+            `${id}/${mode}: could not resolve ${edge} on ${ground} to a colour`,
+          );
+          continue;
+        }
+        const ratio = contrastRatio(edgeColor, groundColor);
+        if (ratio < NON_TEXT_FLOOR) {
+          failures.push(
+            `${id}/${mode}: ${edge} (${edgeValue}) on ${ground} (${groundValue}) is ${ratio.toFixed(2)}:1, below the ${NON_TEXT_FLOOR}:1 WCAG 1.4.11 non-text floor`,
+          );
+        }
+      }
       for (const { ink, ground } of requiredPairings()) {
         // A role the stylesheet does not declare is not this check's business:
         // the Tailwind theme owns which roles exist, this check owns how the
@@ -396,7 +449,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { failures, paletteCount } = await checkPalettes();
   if (failures.length > 0) {
     console.error(
-      "palettes: every palette must declare every ramp step the roles reach and meet WCAG AA in both halves",
+      "palettes: every palette must declare every ramp step the roles reach, meet WCAG AA on text, and meet the WCAG 1.4.11 non-text floor on control edges in both halves",
     );
     for (const failure of failures) console.error(`  ${failure}`);
     process.exitCode = 1;
