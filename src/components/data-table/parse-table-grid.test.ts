@@ -162,4 +162,10 @@ describe("parseTableRow", () => {
       }).diagnostics,
     ).toEqual([{ line: 2, message: "Expected exactly one pipe row" }]);
   });
+
+  it("should reject text without a pipe delimiter in a single-column table", () => {
+    expect(
+      parseTableRow({ source: "Total", columnCount: 1 }).diagnostics,
+    ).toEqual([{ line: 1, message: "Expected exactly one pipe row" }]);
+  });
 });

@@ -55,11 +55,7 @@ export const STYLESHEET_BUDGETS = {
     declarations: 58,
   },
   "src/components/code-diff/styles.css": { declarations: 44 },
-  "src/components/data-table/styles.css": {
-    // Bought for the SummaryRow footer's distinct surface, weight, and clean
-    // bottom edge, which separate an aggregate from sortable data records.
-    declarations: 84,
-  },
+  "src/components/data-table/styles.css": { declarations: 81 },
   "src/components/database-table-schema/styles.css": { declarations: 47 },
   "src/components/flow-diagram/styles.css": { declarations: 467 },
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },

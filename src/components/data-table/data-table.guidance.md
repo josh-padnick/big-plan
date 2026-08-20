@@ -11,6 +11,7 @@ A dataset the reviewer queries - sortable columns, an optional filter, selectabl
   Give `SummaryRow` one `table` fence.
   Put one pipe row inside it, with cells that match the table's columns.
   Big Plan pins it below the data and excludes it from sorting, filtering, grouping, and the row count.
+  Its cells follow the visible column order when the reader hides or reorders columns.
   Its authored values always summarize the complete dataset and do not recalculate when the reader filters rows.
   Use at most one; combine related aggregates across its cells.
   Keep a row in the main grid when a reader should sort, filter, or group it like any other record.

@@ -240,6 +240,13 @@ export const parseTableRow = ({
     };
   }
   const line = lines[0];
+  if (line === undefined || splitCells(line.text).length === 1) {
+    return {
+      diagnostics: [
+        { line: line?.line ?? 1, message: "Expected exactly one pipe row" },
+      ],
+    };
+  }
   const cells = rowCells(line?.text ?? "");
   if (cells.length !== columnCount) {
     return {

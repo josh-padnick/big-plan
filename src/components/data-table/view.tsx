@@ -280,9 +280,11 @@ const FilterField = ({ id }: { readonly id: string }) => (
 const RowCells = ({
   row,
   columns,
+  kind,
 }: {
   readonly row: CompiledDataTableRow;
   readonly columns: ReadonlyArray<CompiledDataTableColumn>;
+  readonly kind: "data" | "summary";
 }) => (
   <>
     {row.cells.map((cell, cellIndex) => {
@@ -290,7 +292,11 @@ const RowCells = ({
       return (
         <td
           key={cellIndex}
-          className="data-table-cell data-[table-align=center]:text-center data-[table-align=right]:text-right"
+          className={
+            kind === "summary"
+              ? "data-table-cell border-b-0 bg-surface font-semibold data-[table-align=center]:text-center data-[table-align=right]:text-right"
+              : "data-table-cell data-[table-align=center]:text-center data-[table-align=right]:text-right"
+          }
           data-commentable-kind="table-cell"
           data-commentable-label={`${column?.label ?? `Column ${cellIndex + 1}`}: ${cell.text === "" ? "Empty" : cell.text}`}
           data-table-column={cellIndex}
@@ -374,7 +380,7 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
               }
               data-table-row={rowIndex}
             >
-              <RowCells row={row} columns={model.columns} />
+              <RowCells row={row} columns={model.columns} kind="data" />
             </tr>
           ))}
         </tbody>
@@ -385,7 +391,11 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
               data-commentable-label={`Summary: ${model.summaryRow.cells[0]?.text || "Table summary"}`}
               data-table-summary-row
             >
-              <RowCells row={model.summaryRow} columns={model.columns} />
+              <RowCells
+                row={model.summaryRow}
+                columns={model.columns}
+                kind="summary"
+              />
             </tr>
           </tfoot>
         )}
