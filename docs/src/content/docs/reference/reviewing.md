@@ -110,15 +110,8 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
 2. Write a Markdown comment and choose **Submit Now**. Turn off **Submit right
    away** to stage it with **Add Comment** instead. `Cmd/Ctrl+Enter` performs
    the visible primary action; `Escape` cancels.
-   Each of those shortcuts is named on the control it drives: hover or focus
-   the primary action or **Cancel** to see it, including while the primary
-   action is disabled.
-   The mark beside **Submit right away** explains the trade-off the same way,
-   as one short paragraph per setting.
-   **Submit right away** sends the comment to the agent immediately, and the
-   comments you send next wait until the agent finishes that one.
-   **Submit later** stages the comment and sends it to the agent later as a
-   batch, which agents tend to work better from than a series of requests.
+   Hover or focus the primary action or **Cancel** to see the shortcut for that control, including while the primary action is disabled.
+   Hover or focus the information mark beside **Submit right away** to compare immediate submission with staging comments for a later batch.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
    **Chat** tab asks questions about the plan as a whole, **Inputs** lists what
    the review is still waiting for, and **Agent Status** - its own control beside

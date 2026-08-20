@@ -735,13 +735,11 @@ test("should remember the submit-right-away choice across new composers", async 
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect
-    .poll(helpAppearance)
-    .toEqual({
-      ...desktopHelpAppearance,
-      buttonWidth: 44,
-      buttonHeight: 44,
-    });
+  await expect.poll(helpAppearance).toEqual({
+    ...desktopHelpAppearance,
+    buttonWidth: 44,
+    buttonHeight: 44,
+  });
   await page.setViewportSize({ width: 1600, height: 1000 });
   await expect.poll(helpAppearance).toEqual(desktopHelpAppearance);
 
@@ -770,10 +768,7 @@ test("should dismiss composer tooltips before closing a typed comment", async ({
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(deckViewerUrl);
 
-  await page
-    .getByRole("button", { name: "Comment on slide" })
-    .first()
-    .click();
+  await page.getByRole("button", { name: "Comment on slide" }).first().click();
   const composer = page.getByRole("dialog", { name: /Comment on/ });
   const input = composer.getByLabel("Add a comment");
   const submit = composer.getByRole("button", { name: "Submit Now" });
