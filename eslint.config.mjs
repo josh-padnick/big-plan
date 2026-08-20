@@ -12,9 +12,10 @@ import tseslint from "typescript-eslint";
 import eslintConfigPrettier from "eslint-config-prettier";
 
 // The two bespoke syntax fences below are declared as data because the review
-// island is in scope for both. Flat config replaces a rule's options rather
-// than merging them, so declaring `no-restricted-syntax` twice over the same
-// file silently drops one fence - the exact quiet failure both exist to stop.
+// island and the shell are both in scope for both. Flat config replaces a
+// rule's options rather than merging them, so declaring `no-restricted-syntax`
+// twice over the same file silently drops one fence - the exact quiet failure
+// both exist to stop.
 
 // live-target.browser.ts is the one owner of identity lookups against plan
 // DOM. A hand-written selector for a block id or a flow anchor skips its
@@ -31,21 +32,39 @@ const PLAN_IDENTITY_SELECTOR = {
     "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
 };
 
-// Anything laid out as a grid in the sidebar must say what its column is. A
-// grid item keeps `min-width: auto`, so an implicit track is floored at the
-// widest item's min-content width and the whole container grows past the
+// Anything laid out as a grid in a bounded column must say what its column
+// is. A grid item keeps `min-width: auto`, so an implicit track is floored at
+// the widest item's min-content width and the whole container grows past the
 // panel - which a scrolling panel then hides rather than reports. That is how
 // one pasted code line clipped every card in the feedback sidebar (BIG-185).
-// Naming the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and
-// it is fenced because the failure is silent: the markup is valid, the cascade
-// is clean, and only a reader at a narrow width ever sees it. Nothing at
-// runtime fails when the declaration goes missing, so this fence is the whole
-// guard rather than a second one.
+// Naming the track (`grid-cols-[minmax(0,1fr)]` on a one-column surface) is
+// the one-word answer, and it is fenced because the failure is silent: the
+// markup is valid, the cascade is clean, and only a reader at a narrow width
+// ever sees it. Nothing at runtime fails when the declaration goes missing,
+// so this fence is the whole guard rather than a second one.
+//
+// The fence covers two regimes that share that failure shape. The review
+// sidebar is a fixed-width column whose containers are one column by
+// construction, which is what makes `minmax(0, 1fr)` always the right answer
+// there. The shell is the reading chrome: its one-column grids want the same
+// declaration, and its multi-column layouts already name a track (`[12rem_1fr]`
+// beside the settings list, `[auto_minmax(0,1fr)_auto]` in the branding bar).
+// The fence requires a declared track, not that one-column recipe, so a named
+// multi-column track is compliant.
+//
+// Plan-component views stay out. An earlier sweep that reached them put
+// `minmax(0, 1fr)` on `.decision-rows`, which outranked
+// `decision-card.css`'s `repeat(auto-fit, ...)` and collapsed the option
+// cards into a stack. That is a different regime: the track lives in CSS, not
+// in the class string, and a utility here would be the defect the fence exists
+// to prevent. The glob therefore stops at the review island and the shell.
 //
 // The fence reads every grid container, not only the lists: the panels the
 // same fix had to touch are `grid ... content-start` divs with no `list-none`
 // in them, so a fence that asked for a list would have watched the narrower
-// half of the defect it was written for.
+// half of the defect it was written for. Server-rendered class strings in
+// `.ts` are read alongside the React views, because the rule is about the
+// layout a string asks for rather than about which renderer emits it.
 //
 // What the predicate is deliberate about.
 //
@@ -118,7 +137,7 @@ const GRID_TRACK_SELECTOR = {
     ...classStringsHandedOverBy("ArrowFunctionExpression"),
   ].join(", "),
   message:
-    "A grid container in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
+    "A grid container must declare its column track (grid-cols-[minmax(0,1fr)] on a one-column surface); an implicit track is floored at the widest item's min-content width and overflows its panel.",
 };
 
 export default tseslint.config(
@@ -559,10 +578,26 @@ export default tseslint.config(
     rules: { "no-restricted-imports": "off" },
   },
   {
-    // The review island is the one scope both fences cover, so both ride in a
-    // single `no-restricted-syntax` declaration.
-    files: ["src/review/browser/**/*.ts", "src/review/browser/**/*.tsx"],
-    ignores: ["src/review/browser/live-target.browser.ts"],
+    // The review island and the shell are the two scopes both fences cover, so
+    // both ride in a single `no-restricted-syntax` declaration. The identity
+    // resolver is exempt because it is the one owner of the selectors the
+    // identity fence forbids; it has no class strings, so the grid fence's
+    // ride-along exemption is unreachable rather than a hole in a layout it
+    // could author. Embedded shell scripts are exempt from the grid fence
+    // only (identity stays on them below): they are JavaScript source in a
+    // template, and the grid predicate would read the whole body as one
+    // class-string handover and report `grid` in comments and identifiers.
+    // Plan-component views stay outside this glob: see the grid-fence comment
+    // above.
+    files: [
+      "src/review/browser/**/*.ts",
+      "src/review/browser/**/*.tsx",
+      "src/render/shell/**/*.ts",
+    ],
+    ignores: [
+      "src/review/browser/live-target.browser.ts",
+      "src/render/shell/*-script.ts",
+    ],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -572,15 +607,10 @@ export default tseslint.config(
     },
   },
   {
-    // The shell takes the identity fence alone. The grid fence's ratified
-    // scope is the review sidebar - a fixed-width column whose containers are
-    // one column by construction, which is what makes `minmax(0, 1fr)` always
-    // the right answer there. The shell is the reading chrome and does not
-    // share that premise: its settings dialog sets its section list beside its
-    // panel on a `[12rem_1fr]` track at wide widths. Reaching the shell would
-    // therefore be its own decision about a different regime rather than a
-    // consequence of the sidebar's, so the fence stops at the sidebar.
-    files: ["src/render/shell/**/*.ts"],
+    // Embedded viewer scripts still take the identity fence. A plan-identity
+    // lookup in a shell script is the case that fence exists to force a
+    // deliberate answer for; they are out of the grid fence only.
+    files: ["src/render/shell/*-script.ts"],
     rules: {
       "no-restricted-syntax": ["error", PLAN_IDENTITY_SELECTOR],
     },
