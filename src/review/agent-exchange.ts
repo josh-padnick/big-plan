@@ -11,20 +11,13 @@ import {
   SLIDE_SUB_HEADING_TEXT_LIMIT,
   SLIDE_TEXT_LIMIT,
 } from "./shared/comment.js";
-import {
-  claimIsHeldByAnother,
-  claimIsLive,
-  heldAgentClaim,
-} from "./shared/agent-claim.js";
-import { agentDisconnectAddresses } from "./shared/agent-disconnect.js";
-import type { AgentDisconnectDirective } from "./shared/agent-disconnect.js";
+import { claimIsHeldByAnother, claimIsLive } from "./shared/agent-claim.js";
 import {
   requestIsTerminal,
   type TerminalAgentRequest,
 } from "./shared/agent-request-state.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
-  readAgentDisconnectRequests,
   readAgentRequestValues,
   readAgentResponseValue,
   listAgentResponseRequestIds,
@@ -65,6 +58,16 @@ type AgentRequestBase = TerminalAgentRequest & {
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly claimedBy?: string;
+  /**
+   * The connection that holds this claim, as `agent next` minted it.
+   *
+   * A pickup token names one lease and dies with it, and the reviewer's
+   * disconnect deliberately ends that lease at once so the review frees. What
+   * the claim records here outlives the release, which is what lets a decision
+   * about the agent holding this work still reach that agent - and only that
+   * agent - at its next command (BIG-190).
+   */
+  readonly claimedByConnection?: string;
   readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   /**
@@ -490,6 +493,10 @@ const requestBase = (
     value.claimedBy === undefined
       ? undefined
       : id(value.claimedBy, "claimedBy");
+  const claimedByConnection =
+    value.claimedByConnection === undefined
+      ? undefined
+      : id(value.claimedByConnection, "claimedByConnection");
   const claimedModel =
     value.claimedModel === undefined
       ? undefined
@@ -539,6 +546,11 @@ const requestBase = (
   if (claimedModel !== undefined && baselineSnapshot === undefined) {
     throw new AgentExchangeRejected('"claimedModel" requires a complete claim');
   }
+  if (claimedByConnection !== undefined && baselineSnapshot === undefined) {
+    throw new AgentExchangeRejected(
+      '"claimedByConnection" requires a complete claim',
+    );
+  }
   const requestAttachments = validateRequestAttachments({
     attachmentManifest: value.attachmentManifest,
     attachments: value.attachments,
@@ -562,6 +574,7 @@ const requestBase = (
           claimedBy,
           claimExpiresAtMs,
           claimGeneration,
+          ...(claimedByConnection === undefined ? {} : { claimedByConnection }),
           ...(claimedModel === undefined ? {} : { claimedModel }),
         }),
     ...(answeredAt === undefined ? {} : { answeredAt }),
@@ -1364,48 +1377,4 @@ export const responseTemplateFor = (
       changeTargets: ["replace-with-each-changed-block-id"],
     })),
   };
-};
-
-/**
- * The standing disconnect that explains an agent's departure from this review.
- *
- * A directive is addressed to exactly one agent: to the pickup token it held
- * when the reviewer decided, or to the writer id the review named when it held
- * none. A reader asking why a connection stopped therefore has to offer both
- * handles. Offering only the writer id lost every disconnect that dropped work,
- * and the reviewer's own decision came back reported as silence (BIG-190).
- *
- * The plan's requests are read only when a directive exists that a pickup token
- * could address, so a review nobody has disconnected on pays nothing for this.
- */
-export const readAgentDisconnectExplaining = async ({
-  store,
-  sessionId,
-  planId,
-  writerId,
-}: {
-  readonly store: ReviewStore;
-  readonly sessionId: string;
-  readonly planId: string;
-  readonly writerId?: string;
-}): Promise<AgentDisconnectDirective | undefined> => {
-  const directives = await readAgentDisconnectRequests({ store });
-  if (directives.length === 0) return undefined;
-  const named =
-    writerId === undefined
-      ? undefined
-      : directives.find((directive) =>
-          agentDisconnectAddresses({ directive, writerId }),
-        );
-  if (named !== undefined) return named;
-  if (!directives.some((directive) => directive.claimToken !== undefined)) {
-    return undefined;
-  }
-  const claimToken = heldAgentClaim(
-    await readValidatedAgentRequests({ store, sessionId, planId }),
-  )?.claimedBy;
-  if (claimToken === undefined) return undefined;
-  return directives.find((directive) =>
-    agentDisconnectAddresses({ directive, claimToken }),
-  );
 };

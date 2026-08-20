@@ -56,6 +56,7 @@ import {
   DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
   startReviewRuntime,
 } from "./server.js";
+import { runAgentWorkLoopAction } from "./agent-work-loop.js";
 import type { ReviewRuntime } from "./server.js";
 import {
   reviewSessionIsRunning,
@@ -5685,22 +5686,15 @@ describe("review runtime agent disconnect", () => {
     });
     // One entry per disconnected agent, so the earlier ones can still answer
     // the agents they addressed.
-    await expect(
-      readAgentDisconnectRequests({ store: disconnected.store }),
-    ).resolves.toEqual(
-      expect.arrayContaining([
-        { claimToken: "aaaaaaaaaaaaaaaa", requestedAtMs: expect.any(Number) },
-      ]),
-    );
-    // The claim names the agent, so the writer id is not also written: a
-    // directive carrying both is matched by either, and the review's writer may
-    // be a different agent entirely.
+    // This claim declares no connection of its own, and presence names the very
+    // request it holds - the proof that presence is describing the holder - so
+    // the review's writer id answers for it.
     await expect(
       readAgentDisconnectRequestFor({
         store: disconnected.store,
         writerId: "3333333333333333",
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ requestedAtMs: expect.any(Number) });
     const after = await readAgentExchange({
       store: disconnected.store,
       sessionId: disconnected.sessionId,
@@ -5743,6 +5737,7 @@ describe("review runtime agent disconnect", () => {
       activeSessionId: disconnected.sessionId,
       requestId: pending.requestId,
       claimedBy: "cccccccccccccccc",
+      connectionToken: "cccc0000cccc0000",
       baselineSnapshot: pending.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -5752,7 +5747,7 @@ describe("review runtime agent disconnect", () => {
     await expect(
       readAgentDisconnectRequestFor({
         store: disconnected.store,
-        claimToken: "cccccccccccccccc",
+        writerId: "cccc0000cccc0000",
       }),
     ).resolves.toMatchObject({ requestedAtMs: expect.any(Number) });
     await expect(
@@ -5772,6 +5767,93 @@ describe("review runtime agent disconnect", () => {
       writerId: "8888888888888888",
     });
   });
+
+  it("should state the reported end after disconnecting a working agent", async () => {
+    /*
+    The main path, and the one an address that does not outlive the decision
+    loses. The agent is healthy, signalling, and holding work; disconnecting
+    frees the review by releasing that claim at once, so a directive addressed
+    to the pickup would be unresolvable a millisecond later and the reviewer's
+    own decision would come back to them as silence (BIG-156, BIG-190).
+    */
+    const sent = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", body: "Is this ordering settled?" },
+    });
+    expect(sent.status).toBe(200);
+    const pending = nextPendingAgentRequest(
+      await readAgentExchange({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+        planId: disconnected.planId,
+      }),
+      { claimedBy: "dddddddddddddddd", nowMs: Date.now() },
+    );
+    if (pending === undefined)
+      throw new Error("The chat request was not stored");
+    await claimAgentRequest({
+      store: disconnected.store,
+      activeSessionId: disconnected.sessionId,
+      requestId: pending.requestId,
+      claimedBy: "dddddddddddddddd",
+      connectionToken: "9999999999999999",
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await attachAgent({
+      writerId: "9999999999999999",
+      state: "working",
+      requestId: pending.requestId,
+    });
+    const lastEdge = async () =>
+      (
+        await readAgentConnectionEvents({
+          store: disconnected.store,
+          sessionId: disconnected.sessionId,
+        })
+      ).at(-1);
+    await vi.waitFor(
+      async () => expect(await lastEdge()).toMatchObject({ connected: true }),
+      { timeout: 8_000, interval: 100 },
+    );
+    const response = await ask({ path: "/api/agent-disconnect" });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      releasedRequestIds: [pending.requestId],
+    });
+    // The review is free before the agent has noticed, which is the point.
+    const after = await readAgentExchange({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+      planId: disconnected.planId,
+    });
+    expect(
+      after.requests.find(
+        (candidate) => candidate.requestId === pending.requestId,
+      )?.claimedBy,
+    ).toBeUndefined();
+    // The agent is told at its next command - the one the loop hands itself,
+    // carrying its connection token and no pickup token - and ends its own
+    // session there rather than taking the freed message back.
+    await expect(
+      runAgentWorkLoopAction({
+        kind: "next",
+        planPath: join(disconnectDirectory, "plan.mdx"),
+        shouldWait: false,
+        executablePath: "bin/big-plan.mjs",
+        connectionToken: "9999999999999999",
+      }),
+    ).resolves.toMatchObject({ ended: true, disconnected: true });
+    // The log has to say who ended it, not merely that it ended.
+    await vi.waitFor(
+      async () =>
+        expect(await lastEdge()).toMatchObject({
+          connected: false,
+          reason: AGENT_DISCONNECTED_REASON,
+        }),
+      { timeout: 8_000, interval: 100 },
+    );
+  }, 20_000);
 
   it("should state the reported end after a stalled agent's silence", async () => {
     /*
@@ -5801,6 +5883,7 @@ describe("review runtime agent disconnect", () => {
       activeSessionId: disconnected.sessionId,
       requestId: pending.requestId,
       claimedBy: "bbbbbbbbbbbbbbbb",
+      connectionToken: "7777777777777777",
       baselineSnapshot: pending.premiseSnapshot,
       now: new Date().toISOString(),
     });

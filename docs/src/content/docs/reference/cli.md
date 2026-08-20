@@ -206,6 +206,8 @@ a model provider itself. The launched coding-agent session uses:
   complete answer, and the candidate it was written against, after that
   candidate has rendered and passed lint.
 
+A claim records the connection that took it, so the agent that is working can be named without ever naming one that is only waiting.
+
 `agent next` mints the `--agent` token when it hands out a request, and returns
 it as `agent_token` together with ready-to-run `note_command`,
 `respond_command`, and `next_command` strings.
@@ -247,7 +249,8 @@ A claim also ends when the reviewer takes the message back: once an agent has re
 Taking a message back discards the stage its claim was drafting, and a returning agent's `agent respond` is refused rather than published, so pick up current work with `agent next`.
 
 The reviewer can also take an agent off a review from **Agent Status**, and every `agent` command answers that at its next run.
-The disconnect is addressed to the connection the reviewer was looking at, by its connection token and by any pickup token it held, so it reaches that agent whether it is mid-answer or between commands, and reaches nobody else.
+The disconnect names exactly one agent, by the connection token of the agent holding the plan's live claim, or by the connected agent's own connection token when no claim is live.
+It names a connection rather than a pickup because disconnecting releases that pickup immediately, so it reaches that agent whether it is mid-answer or between commands, and it reaches nobody else - including a second agent waiting beside it.
 `agent next` reports it as an ordinary end - `ended` and `disconnected` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
 `agent note` and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
 The answer the disconnected session was drafting is dropped; the reviewer's message goes back in the queue for whichever agent connects next.

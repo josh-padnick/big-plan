@@ -160,10 +160,10 @@ const fail = (message: string): never => {
  * Acknowledging is what makes the end a reported one: the loop marks its own
  * session ended, exactly as it does when its spawner goes, so the connection log
  * records an observed end rather than the silence that follows one (BIG-156).
- * The end marker is written for the writer the directive named, because the
- * process reading this may be `agent note` or `agent respond`, which are told
- * their pickup token first and their connection token only when the command
- * they were handed carried it.
+ * The end marker is written for the connection the directive named, which is
+ * the same connection whatever command is reading this: every command `agent
+ * next` hands back carries the token, so a mid-turn process answers under the
+ * same name a waiting loop would.
  *
  * The marker's own guard still decides: a newer agent holding the heartbeat
  * refuses it, so a stale acknowledgment cannot end a live session.
@@ -172,8 +172,8 @@ const fail = (message: string): never => {
  * connection check reads to say WHO ended this session, and that check runs
  * after this one: clearing it here left the reviewer a "Session ended" row that
  * no longer knew they had asked for it. It stays addressed to an agent that has
- * gone, which is inert - the next connector writes a different writer id and
- * claims under a different token, so nothing matches it again.
+ * gone, which is inert - the next connector mints a different connection
+ * token, so nothing matches it again.
  *
  * Returns the directive when this session was the one disconnected.
  */
@@ -181,30 +181,22 @@ const acknowledgeDisconnect = async ({
   store,
   sessionId,
   writerId,
-  claimToken,
   requestId,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId?: string;
-  readonly claimToken?: string;
   /** The request this session was holding, when it was holding one. */
   readonly requestId?: string;
 }): Promise<AgentDisconnectDirective | undefined> => {
-  const directive = await readAgentDisconnectRequestFor({
-    store,
-    ...(writerId === undefined ? {} : { writerId }),
-    ...(claimToken === undefined ? {} : { claimToken }),
-  });
+  if (writerId === undefined) return undefined;
+  const directive = await readAgentDisconnectRequestFor({ store, writerId });
   if (directive === undefined) return undefined;
-  const endedWriterId = directive.writerId ?? writerId;
-  if (endedWriterId !== undefined) {
-    await writeAgentHeartbeatEnded({
-      store,
-      sessionId,
-      writerId: endedWriterId,
-    });
-  }
+  await writeAgentHeartbeatEnded({
+    store,
+    sessionId,
+    writerId: directive.writerId,
+  });
   await appendProgressEvent({
     store,
     event: {
@@ -449,7 +441,7 @@ Big Plan permits one live request claim for this plan at a time. If another agen
 For each returned work item:
 1. Read the returned candidate_plan and the request plus its conversation history.
 2. If work.attachments is non-empty, open every attachment with the harness image-viewing capability before deciding how to respond.
-3. As you start work, run the work item's returned note_command exactly as given. It records "${AGENT_NOTE_INITIAL_PROGRESS}" and renews the claim using the agent_token. At each later meaningful step - reading the request, deciding an outcome, editing the plan, validating - run \`agent note <plan> "<one short line>" --agent <agent_token>\` with the returned plan and token. If one step runs longer than a minute, add another note only when you can name concrete new progress. One line per update, present tense, no repeats.
+3. As you start work, run the work item's returned note_command exactly as given. It records "${AGENT_NOTE_INITIAL_PROGRESS}" and renews the claim using the agent_token. At each later meaningful step - reading the request, deciding an outcome, editing the plan, validating - run \`agent note <plan> "<one short line>" --agent <agent_token> --connection <connection_token>\` with the returned plan and both returned tokens. If one step runs longer than a minute, add another note only when you can name concrete new progress. One line per update, present tense, no repeats.
 4. For every anchored comment, announce \`Comment i of N - slide title\` through \`agent note\` when you begin it, then choose exactly one outcome:
    - answered: explain the answer when no plan edit is needed.
    - changed: revise candidate_plan, explain the revision, and list every changed render block id in changeTargets, in presentation order.
@@ -611,19 +603,13 @@ const nextWork = async ({
   });
   const wasDisconnected = async ({
     heldRequestId,
-    pickupToken,
   }: {
     readonly heldRequestId?: string;
-    /** The token this pass claimed under, once it has claimed. */
-    readonly pickupToken?: string;
   } = {}): Promise<boolean> =>
     (await acknowledgeDisconnect({
       store: session.store,
       sessionId: session.sessionId,
       writerId,
-      ...((pickupToken ?? agentToken) === undefined
-        ? {}
-        : { claimToken: pickupToken ?? agentToken }),
       ...(heldRequestId === undefined ? {} : { requestId: heldRequestId }),
     })) !== undefined;
   if (await wasDisconnected()) return disconnectedResult();
@@ -762,6 +748,7 @@ const nextWork = async ({
             activeSessionId: session.sessionId,
             requestId: selectedRequest.requestId,
             claimedBy,
+            connectionToken: writerId,
             ...(model === undefined ? {} : { model }),
             baselineSnapshot: claimedSnapshot,
             now: new Date().toISOString(),
@@ -794,7 +781,7 @@ const nextWork = async ({
       publish it (BIG-190). The claim is handed straight back, because a request left
       under a claim nobody will answer waits out its whole lease.
       */
-      if (await wasDisconnected({ pickupToken: claimedBy })) {
+      if (await wasDisconnected()) {
         await releaseClaimsHeldBy({
           store: session.store,
           sessionId: session.sessionId,
@@ -919,7 +906,7 @@ const nextWork = async ({
       rules: [
         `Run the returned note_command as given when starting; it records "${AGENT_NOTE_INITIAL_PROGRESS}" and renews the claim with the agent_token`,
         "Run the returned next_command for the following request; it carries the connection_token that keeps this one agent session rather than a new one each time",
-        'For later updates, run agent note <plan> "<progress>" --agent <agent_token> with the returned plan and token',
+        'For later updates, run agent note <plan> "<progress>" --agent <agent_token> --connection <connection_token> with the returned plan and both tokens',
         "Run the returned respond_command as given; it carries the agent_token that proves this session holds the request",
         "Only one request on this plan may hold a live claim; another agent waits instead of editing the plan in parallel",
         "Edit candidate_plan and nothing else in the repository; it is this claim's own copy of the plan, and responding publishes it",
@@ -959,7 +946,6 @@ const respond = async ({
       store: session.store,
       sessionId: session.sessionId,
       ...(connectionToken === undefined ? {} : { writerId: connectionToken }),
-      claimToken: agentToken,
     })) !== undefined
   ) {
     failDisconnected();
@@ -1197,7 +1183,6 @@ const note = async ({
       store: session.store,
       sessionId: session.sessionId,
       ...(connectionToken === undefined ? {} : { writerId: connectionToken }),
-      claimToken: agentToken,
     })) !== undefined
   ) {
     failDisconnected();
@@ -1234,6 +1219,7 @@ const note = async ({
           activeSessionId: session.sessionId,
           requestId: request.requestId,
           claimedBy: agentToken,
+          ...(connectionToken === undefined ? {} : { connectionToken }),
           ...(model === undefined ? {} : { model }),
           baselineSnapshot: requestBaselineSnapshot(request),
           now: new Date().toISOString(),

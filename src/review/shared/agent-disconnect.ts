@@ -2,9 +2,9 @@
 // called wherever the end is reported, and the words the agent is told in.
 //
 // The directive is addressed rather than global, because a review outlives the
-// agent attached to it. A disconnect names the connection loop the reviewer was
-// looking at when they asked, so an agent that attaches a moment later is never
-// ended by a decision taken about a different one.
+// agent attached to it. A disconnect names the one connection the reviewer was
+// looking at when they asked, so neither an agent that attaches a moment later
+// nor one merely waiting beside it is ended by a decision taken about another.
 //
 // Nothing here stores state or touches Node or the browser: the route that
 // records the directive, the loop that answers it, and the card that reports it
@@ -34,43 +34,31 @@ export const AGENT_DISCONNECTED_HELP: ReadonlyArray<string> = [
 /** One reviewer-issued disconnect, as the review store records it. */
 export type AgentDisconnectDirective = {
   /**
-   * The agent session the reviewer disconnected, as the presence record named
-   * it. It is what `agent next` matches itself against.
+   * The one agent the reviewer disconnected, named by its connection token.
    *
-   * It identifies a connection rather than one CLI invocation, because the
-   * reviewer's decision is most often taken between two of the agent's
-   * commands: `agent next` mints this at the session's first command and hands
-   * it back on every command after it, so the name the reviewer disconnected is
-   * still the agent's own name when it next asks for work (BIG-190).
+   * A connection is the only identity that survives everything this decision
+   * does. It is stable across the agent's commands, because `agent next` mints
+   * it at the session's first command and hands it back on every command after
+   * it; and it outlives the pickup, because disconnecting releases the claim at
+   * once so the review frees, which would destroy a lease token used as the
+   * address. A claim records the connection holding it, so the agent that is
+   * working can be named without ever naming one merely waiting (BIG-190).
    */
-  readonly writerId?: string;
-  /**
-   * The pickup token that loop held, when it was holding work.
-   *
-   * `agent note` and `agent respond` are separate processes that know their
-   * token and never learn their loop's writer id, so without this a mid-turn
-   * agent could only find out it had been disconnected by asking for work again
-   * - which is exactly the turn the reviewer asked to stop.
-   */
-  readonly claimToken?: string;
+  readonly writerId: string;
   readonly requestedAtMs: number;
 };
 
 /**
  * True when this directive is about this agent.
  *
- * An empty directive addresses nobody. Matching on absence would make one
- * reviewer's disconnect apply to every agent that ever attaches to the review,
- * which is the one failure this addressing exists to remove.
+ * One directive, one addressee. A disconnect that could match on more than one
+ * identity matched agents the reviewer never saw, so there is exactly one name
+ * on the record and exactly one way to answer to it.
  */
 export const agentDisconnectAddresses = ({
   directive,
   writerId,
-  claimToken,
 }: {
   readonly directive: AgentDisconnectDirective;
   readonly writerId?: string;
-  readonly claimToken?: string;
-}): boolean =>
-  (directive.writerId !== undefined && directive.writerId === writerId) ||
-  (directive.claimToken !== undefined && directive.claimToken === claimToken);
+}): boolean => directive.writerId === writerId;

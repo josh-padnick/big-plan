@@ -2587,8 +2587,8 @@ const REMEMBERED_DISCONNECTS = 16;
  *
  * The directive is addressed to that agent and to nobody else, and is never
  * cleared: an agent that attaches afterwards brings no connection token of its
- * own, so it mints a different one and claims under a different token, and the
- * rule that matches them simply stops matching. What the record buys by staying is the connection log's ability to
+ * own, so it mints a different one and the rule that matches them simply stops
+ * matching. What the record buys by staying is the connection log's ability to
  * say who ended the session, long after the agent that answered it has gone
  * (BIG-190).
  */
@@ -2600,11 +2600,9 @@ export const writeAgentDisconnectRequest = async ({
   readonly directive: AgentDisconnectDirective;
 }): Promise<void> => {
   const kept = (await readAgentDisconnectRequests({ store })).filter(
-    (existing) =>
-      // One standing directive per agent. A reviewer disconnecting the same
-      // agent twice is restating the same decision, not making a second one.
-      existing.writerId === undefined ||
-      existing.writerId !== directive.writerId,
+    // One standing directive per agent. A reviewer disconnecting the same
+    // agent twice is restating the same decision, not making a second one.
+    (existing) => existing.writerId !== directive.writerId,
   );
   await writeStoreJson({
     path: store.agentDisconnectPath,
@@ -2627,20 +2625,13 @@ const decodeDisconnectDirective = (
   ) {
     return undefined;
   }
-  const writerId =
-    "writerId" in value && typeof value.writerId === "string"
-      ? value.writerId
-      : undefined;
-  const claimToken =
-    "claimToken" in value && typeof value.claimToken === "string"
-      ? value.claimToken
-      : undefined;
-  if (writerId === undefined && claimToken === undefined) return undefined;
-  return {
-    requestedAtMs: value.requestedAtMs,
-    ...(writerId === undefined ? {} : { writerId }),
-    ...(claimToken === undefined ? {} : { claimToken }),
-  };
+  if (!("writerId" in value) || typeof value.writerId !== "string") {
+    // A directive naming nobody would be a standing order against every agent
+    // that ever attaches, so an unaddressed record is discarded rather than
+    // read as one that matches everyone.
+    return undefined;
+  }
+  return { requestedAtMs: value.requestedAtMs, writerId: value.writerId };
 };
 
 /**
@@ -2677,17 +2668,14 @@ export const readAgentDisconnectRequests = async ({
 export const readAgentDisconnectRequestFor = async ({
   store,
   writerId,
-  claimToken,
 }: {
   readonly store: ReviewStore;
   readonly writerId?: string;
-  readonly claimToken?: string;
 }): Promise<AgentDisconnectDirective | undefined> =>
   (await readAgentDisconnectRequests({ store })).find((directive) =>
     agentDisconnectAddresses({
       directive,
       ...(writerId === undefined ? {} : { writerId }),
-      ...(claimToken === undefined ? {} : { claimToken }),
     }),
   );
 

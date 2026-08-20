@@ -307,14 +307,22 @@ export const summarizeAgentConnection = ({
   let sessionsEnded = 0;
   let resumed = 0;
   let hasConnected = false;
+  let endedThisDeparture = false;
   ordered.forEach((event, index) => {
     // Counted on the edge itself rather than on the transition into it, because
     // an end the reviewer asked for can follow a gap Big Plan had already
     // written down: the agent went quiet, and then the reviewer ended it, and
     // both happened. A quiet period is still only ever a departure from a
     // connection, so nothing counts one twice.
+    //
+    // One departure ends one session, however many times it is explained. A
+    // better account of the same absence - the reviewer's decision arriving
+    // after the loop's own report - replaces the reason on the log's last row
+    // rather than adding a second agent to the tally.
+    if (event.connected) endedThisDeparture = false;
     if (!event.connected && hasConnected && connectionEventEnded(event)) {
-      sessionsEnded += 1;
+      if (!endedThisDeparture) sessionsEnded += 1;
+      endedThisDeparture = true;
     } else if (!event.connected && ordered[index - 1]?.connected) {
       quietPeriods += 1;
     }

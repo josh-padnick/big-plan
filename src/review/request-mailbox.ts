@@ -294,6 +294,7 @@ const withoutClaim = (request: AgentRequest): Record<string, unknown> => {
   delete released.baselineSnapshot;
   delete released.claimedAt;
   delete released.claimedBy;
+  delete released.claimedByConnection;
   delete released.claimedModel;
   delete released.claimExpiresAtMs;
   delete released.claimGeneration;
@@ -591,6 +592,7 @@ export const claimAgentRequest = async ({
   activeSessionId,
   requestId,
   claimedBy,
+  connectionToken,
   model,
   baselineSnapshot,
   now,
@@ -601,6 +603,8 @@ export const claimAgentRequest = async ({
   readonly activeSessionId: string;
   readonly requestId: string;
   readonly claimedBy: string;
+  /** The connection taking this claim, so the claim knows who holds it. */
+  readonly connectionToken?: string;
   readonly model?: AgentModelIdentity;
   readonly baselineSnapshot: string;
   readonly now: string;
@@ -666,6 +670,10 @@ export const claimAgentRequest = async ({
             const renewed = validateAgentRequest({
               ...request,
               claimedModel: model ?? request.claimedModel,
+              // A renewal that declares no connection is the same connection
+              // continuing, exactly as an undeclared model is.
+              claimedByConnection:
+                connectionToken ?? request.claimedByConnection,
               // Renewal is the same claim continuing, so the generation - and
               // with it the agent's stage and its unfinished edits - stays.
               claimGeneration: request.claimGeneration ?? 1,
@@ -716,6 +724,7 @@ export const claimAgentRequest = async ({
             baselineSnapshot,
             claimedAt: now,
             claimedBy,
+            claimedByConnection: connectionToken,
             claimedModel: model,
             claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
             claimGeneration,

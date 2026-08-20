@@ -13,7 +13,6 @@ import {
   AgentExchangeRejected,
   deriveSnapshotDigest,
   messageAgentRequest,
-  readAgentDisconnectExplaining,
   readAgentExchange,
 } from "./agent-exchange.js";
 import {
@@ -32,6 +31,7 @@ import {
   freezeRequestAttachments,
   randomId,
   readAgentConnectionEvents,
+  readAgentDisconnectRequestFor,
   readAgentPresence,
   readProgress,
   writeAgentDisconnectRequest,
@@ -105,10 +105,8 @@ export const readAgentSnapshot = async (
   // Read against this presence record, so a disconnect the reviewer asked for
   // reports itself only while the agent it addressed is still the one the
   // review names. The browser draws the control's pending state from it.
-  const disconnect = await readAgentDisconnectExplaining({
+  const disconnect = await readAgentDisconnectRequestFor({
     store,
-    sessionId,
-    planId,
     ...(presence.writerId === undefined ? {} : { writerId: presence.writerId }),
   });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
@@ -456,27 +454,31 @@ export const disconnectAgent = async (
       }
       const claimToken = claimed?.claimedBy;
       /*
-      One agent, named once.
+      One agent, named once, by a name that outlives this decision.
 
       Presence and the live claim are read from two different agents whenever
       two are attached: a waiting loop writes the heartbeat every half second
       while the agent that is actually working renews only its claim, so the
-      card can describe one agent's work under the other's name. A directive
-      carrying both names is matched by either, and one click ended a bystander
-      the reviewer never saw.
+      card can describe one agent's work under the other's name. Naming both
+      ended a bystander the reviewer never saw.
 
-      So the claim decides when there is one. The claim-derived state is exactly
-      what the card showed and exactly what the dialog's "the answer it has in
-      flight is dropped" warned about, which makes the agent holding it the one
-      agent the reviewer chose. Only with no claim to name does the review's own
-      writer id speak for the connection (BIG-190).
+      So the claim decides who, when there is one - the claim-derived state is
+      exactly what the card showed and exactly what the dialog's "the answer it
+      has in flight is dropped" warned about. But it decides who by the
+      connection the claim records rather than by the pickup token, because the
+      release below destroys that token within milliseconds and an address
+      nobody can resolve afterwards leaves the reviewer's own decision reported
+      as silence. A claim taken without a declared connection is answered from
+      presence only when presence names that very request, which is the proof
+      that presence describes the holder and not a bystander (BIG-190).
       */
       const addressee =
-        claimToken === undefined
-          ? presence.writerId === undefined
-            ? undefined
-            : { writerId: presence.writerId }
-          : { claimToken };
+        claimed === undefined
+          ? presence.writerId
+          : (claimed.claimedByConnection ??
+            (presence.requestId === claimed.requestId
+              ? presence.writerId
+              : undefined));
       if (addressee === undefined) {
         // A directive addressed to nobody would be a standing order against
         // every agent that ever attaches, so it is refused rather than written.
@@ -488,7 +490,7 @@ export const disconnectAgent = async (
       const requestedAtMs = Date.now();
       await writeAgentDisconnectRequest({
         store: claimStore,
-        directive: { requestedAtMs, ...addressee },
+        directive: { requestedAtMs, writerId: addressee },
       });
       return {
         requestedAtMs,
@@ -525,10 +527,10 @@ export const disconnectAgent = async (
   It is written only when the review's presence has already stopped - a stalled
   turn, an agent killed mid-answer, a session restarted underneath a live claim.
   In every one of those the connection the log describes has ended and the
-  reviewer is the only one left who can say why, and nothing renews the plan
-  heartbeat during a turn (BIG-147), so this is the state a disconnect is most
-  often reached for. While presence is still live the log is still describing a
-  connected review, and the ordinary edge reports the end when it arrives.
+  reviewer is the only one left who can say why, and a restarted session no
+  longer names the writer the ordinary edge would look the directive up by.
+  While presence is still live the log is still describing a connected review,
+  and the ordinary edge reports the end when it arrives.
 
   The record supersedes an inferred gap and never replaces it, so the silence
   Big Plan honestly wrote down keeps its row and the end somebody asked for is

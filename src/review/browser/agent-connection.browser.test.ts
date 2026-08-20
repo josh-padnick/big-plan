@@ -216,6 +216,25 @@ describe("summarizeAgentConnection", () => {
     ).toMatchObject({ quietPeriods: 1, sessionsEnded: 1, resumed: 0 });
   });
 
+  it("counts one departure once however often it is re-explained", () => {
+    // The loop reports its own end, then the reviewer disconnects the claim it
+    // left behind, so the log carries two reported ends for one agent leaving.
+    // The tally counts agents, not rows.
+    expect(
+      summarizeAgentConnection({
+        events: [
+          connectedEdge(1),
+          endedEdge(2),
+          {
+            connected: false,
+            at: at(3),
+            reason: AGENT_DISCONNECTED_REASON,
+          },
+        ],
+      }),
+    ).toMatchObject({ quietPeriods: 0, sessionsEnded: 1, resumed: 0 });
+  });
+
   it("counts nothing for a session that has only ever been connected", () => {
     expect(
       summarizeAgentConnection({ events: [connectedEdge(1)] }),

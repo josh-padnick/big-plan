@@ -35,6 +35,7 @@ import {
   claimAgentRequest,
   deleteQueuedRequest,
   commitRequestTerminal,
+  releaseClaimsHeldBy,
   reviseQueuedRequest,
 } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
@@ -2160,16 +2161,13 @@ describe("agent work loop lifecycle", () => {
         activeSessionId: review.sessionId,
         requestId: request.requestId,
         claimedBy: "ffff2222ffff2222",
+        connectionToken: "1111111111111111",
         baselineSnapshot: request.premiseSnapshot,
         now: new Date().toISOString(),
       });
       await reviewStore.writeAgentDisconnectRequest({
         store: review.store,
-        directive: {
-          writerId: "1111111111111111",
-          claimToken: "ffff2222ffff2222",
-          requestedAtMs: Date.now(),
-        },
+        directive: { writerId: "1111111111111111", requestedAtMs: Date.now() },
       });
       // Told at its next command rather than at publication: a harness that
       // learns this from a rejected answer has already paid for a whole turn,
@@ -2180,11 +2178,90 @@ describe("agent work loop lifecycle", () => {
           planPath,
           detail: "Still working",
           agentToken: "ffff2222ffff2222",
+          connectionToken: "1111111111111111",
         }),
       ).rejects.toMatchObject({
         name: "AgentWorkLoopRejected",
         code: "agent-disconnected",
       });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // BIG-190: disconnecting frees the review at once, so the pickup the agent
+  // held is gone by the time it asks for work again. The decision has to reach
+  // it anyway, or the agent it named quietly takes the same message back.
+  it("should refuse to rejoin after the disconnect released its claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-off-back-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nDo not come back for this one.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "eeee1111eeee1111",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Whose turn is this?",
+      });
+      await writeAgentRequest({ store: review.store, request });
+      const first = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const connectionToken = first.connection_token;
+      const agentToken = first.agent_token;
+      if (typeof connectionToken !== "string" || typeof agentToken !== "string")
+        throw new Error("agent next returned no tokens");
+      // What the reviewer's disconnect does, in the order the route does it:
+      // the directive names the connection the claim recorded, and the claim
+      // itself goes back so the review is free for the next agent.
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: { writerId: connectionToken, requestedAtMs: Date.now() },
+      });
+      await releaseClaimsHeldBy({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        claimedBy: agentToken,
+        step: "Claim released when the reviewer disconnected the agent",
+        detail: "The message went back in the queue for the next agent",
+      });
+      // The command the loop hands itself for the next request carries the
+      // connection token and no pickup token, which is the whole path.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          connectionToken,
+        }),
+      ).resolves.toMatchObject({ ended: true, disconnected: true });
+      // The message it was told to drop is still the next agent's to take.
+      const after = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        after.requests.find(
+          (candidate) => candidate.requestId === request.requestId,
+        ),
+      ).toMatchObject({ requestId: request.requestId });
+      expect(
+        after.requests.find(
+          (candidate) => candidate.requestId === request.requestId,
+        )?.claimedBy,
+      ).toBeUndefined();
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

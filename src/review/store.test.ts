@@ -1163,11 +1163,7 @@ describe("review store agent disconnect directives", () => {
     await prepareStore(store);
     await writeAgentDisconnectRequest({
       store,
-      directive: {
-        writerId: "1111111111111111",
-        claimToken: "aaaa0000aaaa0000",
-        requestedAtMs: 10_000,
-      },
+      directive: { writerId: "1111111111111111", requestedAtMs: 10_000 },
     });
     await writeAgentDisconnectRequest({
       store,
@@ -1179,9 +1175,6 @@ describe("review store agent disconnect directives", () => {
     // instead of telling it the reviewer disconnected it.
     await expect(
       readAgentDisconnectRequestFor({ store, writerId: "1111111111111111" }),
-    ).resolves.toMatchObject({ requestedAtMs: 10_000 });
-    await expect(
-      readAgentDisconnectRequestFor({ store, claimToken: "aaaa0000aaaa0000" }),
     ).resolves.toMatchObject({ requestedAtMs: 10_000 });
     await expect(
       readAgentDisconnectRequestFor({ store, writerId: "2222222222222222" }),
@@ -1199,18 +1192,10 @@ describe("review store agent disconnect directives", () => {
     });
     await writeAgentDisconnectRequest({
       store,
-      directive: {
-        writerId: "1111111111111111",
-        claimToken: "aaaa0000aaaa0000",
-        requestedAtMs: 30_000,
-      },
+      directive: { writerId: "1111111111111111", requestedAtMs: 30_000 },
     });
     await expect(readAgentDisconnectRequests({ store })).resolves.toEqual([
-      {
-        writerId: "1111111111111111",
-        claimToken: "aaaa0000aaaa0000",
-        requestedAtMs: 30_000,
-      },
+      { writerId: "1111111111111111", requestedAtMs: 30_000 },
     ]);
   });
 
