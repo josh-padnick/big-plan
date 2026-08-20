@@ -153,7 +153,6 @@ const renderFlowElement = ({
   registry,
   ids,
   delivery,
-  materializeModel,
   insideComponentBody,
   renderArtifacts,
 }: {
@@ -162,9 +161,9 @@ const renderFlowElement = ({
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
-  readonly materializeModel: boolean;
   // Whether this element is being rendered into another component's body
-  // rather than into the document. See the instance key below.
+  // rather than into the document. See the instance key and the materialized
+  // model below.
   readonly insideComponentBody: boolean;
   readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): Element | undefined => {
@@ -184,11 +183,6 @@ const renderFlowElement = ({
     registry,
     ids,
     delivery,
-    // A model carrying authored HAST must retain a nested component's
-    // presentation inside its parent body. Top-level entries stop before
-    // adaptation so an outline-aware component still defers.
-    materializeModels:
-      delivery.kind === "render" && delivery.materializeNestedModels,
     insideComponentBody: true,
     ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
   });
@@ -244,6 +238,13 @@ const renderFlowElement = ({
     }
     return element;
   };
+  // A model carrying authored HAST must retain a nested component's
+  // presentation inside its parent body, which is a property of where this
+  // element is being rendered rather than a second thing to thread.
+  const materializeModel =
+    insideComponentBody &&
+    delivery.kind === "render" &&
+    delivery.materializeNestedModels;
   // An outline-aware component defers its presentation behind a placeholder
   // until the deck transform has computed the document outline. A model being
   // materialized inside a parent's body never reaches the document tree, so
@@ -281,7 +282,6 @@ const renderChildren = ({
   registry,
   ids,
   delivery,
-  materializeModels,
   insideComponentBody = false,
   renderArtifacts,
 }: {
@@ -291,7 +291,6 @@ const renderChildren = ({
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
-  readonly materializeModels: boolean;
   readonly insideComponentBody?: boolean;
   readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): ReadonlyArray<ScopedChild> => {
@@ -320,7 +319,6 @@ const renderChildren = ({
         registry,
         ids,
         delivery,
-        materializeModels,
         insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
@@ -343,7 +341,6 @@ const renderChildren = ({
         registry,
         ids,
         delivery,
-        materializeModels,
         insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
@@ -355,7 +352,6 @@ const renderChildren = ({
         registry,
         ids,
         delivery,
-        materializeModel: materializeModels,
         insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
@@ -428,7 +424,6 @@ export const rehypeRenderComponents =
       diagnostics,
       registry,
       ids: createComponentIdAllocator({ reservedIds }),
-      materializeModels: false,
       ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       delivery: {
         kind: "render",
@@ -457,7 +452,6 @@ export const rehypeValidateComponentSemantics =
       diagnostics,
       registry,
       ids: createComponentIdAllocator({ reservedIds }),
-      materializeModels: false,
       delivery: { kind: "validation" },
     });
     reportSurvivors({ parent: tree, diagnostics });

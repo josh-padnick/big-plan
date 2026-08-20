@@ -144,6 +144,21 @@ export const renderDocument = ({
  * delivery would hand back a model still holding a nested component's deferred
  * outline placeholder, so validation would pass a plan whose published model
  * the compile command would never produce.
+ *
+ * That choice narrows what validation covers, and the cost is worth naming.
+ * Under machine delivery a nested outline-aware component presents eagerly
+ * against the empty outline instead of deferring, so validation no longer
+ * exercises the placeholder-completion path human delivery takes, and a defect
+ * confined to the whole-tree walk in completeOutlinePlaceholders would pass
+ * validation and surface only at render. The cost is accepted because the
+ * returned model is an asserted contract while the generated document is
+ * discarded, which makes publishing a model the compile command would never
+ * produce the worse of the two failures.
+ *
+ * The tradeoff disappears entirely once completeOutlinePlaceholders also
+ * completes the placeholders held by collected models: the two deliveries
+ * would then be identical, the materializeNestedModels flag would go, and
+ * validation would render exactly what render renders.
  */
 export const validateDocument = ({
   markdown,
