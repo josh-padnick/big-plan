@@ -2,12 +2,17 @@
 //
 // One card per attached agent, because the reviewer's question is "who is
 // answering me, and who else is here" and a single card cannot hold two
-// answers. The card that matters most is the one for an agent that has just
-// arrived: it states what happened, offers the three answers, and says what
-// each one will do before the reviewer commits to any of them (BIG-171).
+// answers. One card per agent is also a ceiling: the agent that holds the plan
+// is drawn by the activity card above this section, so this section draws
+// everyone else. Three cards for two agents is what the reviewer saw when both
+// surfaces drew the primary (BIG-171).
+//
+// The card that matters most is the one for an agent that has just arrived: it
+// states what happened, offers the three answers, and says what each one will
+// do before the reviewer commits to any of them.
 
+import type { ReactNode } from "react";
 import { useState } from "react";
-import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import {
@@ -21,7 +26,7 @@ import {
 import { agentClientDisplayName } from "../shared/agent-identity-catalog.js";
 import { compactDurationLabel } from "../shared/time-label.js";
 import { Icon } from "./icon.browser.js";
-import { AlertDialog, Button } from "./ui.browser.js";
+import { AlertDialog, Badge, Button, Tooltip } from "./ui.browser.js";
 
 /** What the reviewer can answer about one agent. */
 export type PrimacyAnswer = "primary" | "observer" | "disconnect";
@@ -30,6 +35,11 @@ export type AgentRosterProps = {
   readonly agents: ReadonlyArray<RosterAgent>;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
+  /**
+   * The agent the activity card above is already drawing, when it is drawing
+   * one. This section leaves that agent out rather than repeating it.
+   */
+  readonly carriedByActivity?: string;
   readonly onAnswer: (input: {
     readonly writerId: string;
     readonly answer: PrimacyAnswer;
@@ -39,20 +49,102 @@ export type AgentRosterProps = {
 };
 
 /**
- * One line of consequence, tied to the control it describes.
+ * Names the role an agent holds, small and in the card's top corner.
  *
- * The reviewer asked for this directly: they should not have to click "Make it
- * primary" to discover what "Make it primary" does. The note sits under its
- * button rather than behind a tooltip so it is readable without a pointer, and
- * so a keyboard reader meets it in the same order.
+ * A badge rather than the section-heading face this used to wear. Set in caps
+ * and letterspaced above the agent's name, "PRIMARY" read as a heading over a
+ * region - as though everything below it were the primary section - which is
+ * exactly the wrong reading in a list where the next card carries a different
+ * role. A badge reads as a property of the thing it sits on, and the tint
+ * separates the two roles for a reader who is scanning rather than reading.
  */
-const ConsequenceNote = ({ text }: { readonly text: string }) => (
-  <p className="m-0 flex gap-1.5 text-2xs text-muted [&>span>svg]:size-3">
-    <span className="mt-px inline-flex shrink-0" aria-hidden="true">
+export const AgentRoleBadge = ({
+  isPrimary,
+}: {
+  readonly isPrimary: boolean;
+}) => (
+  <Badge
+    size="status"
+    tone={isPrimary ? "statusAccent" : "statusNeutral"}
+    data-review-agent-role={isPrimary ? "primary" : "observer"}
+  >
+    {isPrimary ? "Current primary" : "Current observer"}
+  </Badge>
+);
+
+/**
+ * The mark that answers "what does this button do" without spending a line.
+ *
+ * The consequence used to be printed under each control. That was readable,
+ * and three of them stacked turned a card about two agents into a wall of
+ * explanation with the controls lost inside it, so the reviewer asked for the
+ * sentences to go behind marks. It stays a real button so the tooltip opens on
+ * focus as well as on hover, and `Tooltip` names it through `aria-describedby`
+ * - a keyboard reader still meets the sentence, in the same order.
+ */
+const ConsequenceHelp = ({
+  text,
+  outcome,
+}: {
+  readonly text: string;
+  /**
+   * The outcome this mark explains, named for a reader who cannot see which
+   * row it sits in.
+   *
+   * It deliberately does not repeat the button's own label. Three marks called
+   * "About Make it primary", "About Leave as observer" and so on give a screen
+   * reader the same words twice in a row and leave a name that contains a
+   * control's whole label - which is also how the first version of this made
+   * every "Make it primary" query in the suite ambiguous.
+   */
+  readonly outcome: string;
+}) => (
+  <Tooltip label={text} placement="above" asChild>
+    <button
+      type="button"
+      className="inline-flex size-5 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 leading-none text-muted opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&>svg]:size-3.5"
+      aria-label={`What happens when ${outcome}`}
+    >
       <Icon icon={INFO_ICON} />
-    </span>
-    <span className="min-w-0 [overflow-wrap:anywhere]">{text}</span>
-  </p>
+    </button>
+  </Tooltip>
+);
+
+/**
+ * One answer the reviewer can give, with the mark that explains it.
+ *
+ * The controls are a column rather than a row because they are three answers
+ * to one question, and a row of three ranks them by reading order instead of
+ * by weight. The button takes the whole measure so the stack has one edge, and
+ * the marks line up in their own column beside it.
+ */
+const AnswerRow = ({
+  label,
+  variant,
+  help,
+  outcome,
+  onClick,
+}: {
+  readonly label: string;
+  /*
+  The quietest answer is `toned` rather than `outline`, because this card
+  carries its own colour. A grey hairline and grey text on a tinted ground are
+  the one thing the palette forbids, and they looked it: on the warning ground
+  the tertiary read as disabled text rather than as the third answer. `toned`
+  takes both steps from the ground's own ramp through `currentColor`.
+  */
+  readonly variant: "default" | "secondary" | "toned";
+  readonly help: string;
+  /** How the mark beside this control names the outcome it explains. */
+  readonly outcome: string;
+  readonly onClick: () => void;
+}) => (
+  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5">
+    <Button variant={variant} size="sm" className="w-full" onClick={onClick}>
+      {label}
+    </Button>
+    <ConsequenceHelp text={help} outcome={outcome} />
+  </div>
 );
 
 /** The identity line every agent card carries. */
@@ -73,6 +165,27 @@ const AgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
     </p>
   );
 };
+
+/**
+ * The card's top line: who this is, and what it currently is.
+ *
+ * The badge is pinned to the corner and the name takes the rest, so a long
+ * model name wraps under itself rather than pushing the role off the card.
+ */
+const AgentCardHeader = ({
+  agent,
+  badge,
+}: {
+  readonly agent: RosterAgent;
+  readonly badge: ReactNode;
+}) => (
+  <div className="flex min-w-0 items-start gap-2">
+    <div className="min-w-0 flex-1">
+      <AgentIdentity agent={agent} />
+    </div>
+    {badge}
+  </div>
+);
 
 const AttachedSince = ({
   agent,
@@ -130,52 +243,38 @@ const PrimacyRequestCard = ({
         This session is read-only, so it cannot answer for the plan.
       </p>
     ) : (
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
-          <Button
-            variant="default"
-            size="sm"
-            className="w-fit"
-            onClick={() =>
-              onAnswer({ writerId: agent.writerId, answer: "primary" })
-            }
-          >
-            Make it primary
-          </Button>
-          <ConsequenceNote
-            text={
-              primary === undefined
-                ? `${agentModelLabel(agent)} answers your comments from now on.`
-                : `${agentModelLabel(agent)} answers your comments from now on, and ${agentModelLabel(primary)} becomes the observer.`
-            }
-          />
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
-          <Button
-            variant="secondary"
-            size="sm"
-            className="w-fit"
-            onClick={() =>
-              onAnswer({ writerId: agent.writerId, answer: "observer" })
-            }
-          >
-            Leave it as observer
-          </Button>
-          <ConsequenceNote text="It keeps reading this review and cannot answer you." />
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-fit"
-            onClick={() =>
-              onAnswer({ writerId: agent.writerId, answer: "disconnect" })
-            }
-          >
-            Disconnect this agent
-          </Button>
-          <ConsequenceNote text="It is dropped from this review and told at its next command." />
-        </div>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5 pt-0.5">
+        <AnswerRow
+          label="Make it primary"
+          variant="default"
+          outcome="this agent becomes the primary"
+          help={
+            primary === undefined
+              ? `${agentModelLabel(agent)} answers your comments from now on.`
+              : `${agentModelLabel(agent)} answers your comments from now on, and ${agentModelLabel(primary)} becomes the observer.`
+          }
+          onClick={() =>
+            onAnswer({ writerId: agent.writerId, answer: "primary" })
+          }
+        />
+        <AnswerRow
+          label="Leave as observer"
+          variant="secondary"
+          outcome="this agent stays an observer"
+          help="It keeps reading this review and cannot answer you."
+          onClick={() =>
+            onAnswer({ writerId: agent.writerId, answer: "observer" })
+          }
+        />
+        <AnswerRow
+          label="Disconnect this agent"
+          variant="toned"
+          outcome="this agent is disconnected"
+          help="It is dropped from this review and told at its next command."
+          onClick={() =>
+            onAnswer({ writerId: agent.writerId, answer: "disconnect" })
+          }
+        />
       </div>
     )}
   </article>
@@ -199,18 +298,10 @@ const AgentCard = ({
     className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg border border-edge bg-raised p-3"
     data-review-agent-card={isPrimary ? "primary" : "observer"}
   >
-    <p className="m-0 flex items-center gap-1.5 text-2xs font-semibold tracking-caps text-muted uppercase [&>span>svg]:size-3">
-      {isPrimary ? (
-        <span
-          className="inline-flex shrink-0 text-agent-live"
-          aria-hidden="true"
-        >
-          <Icon icon={CHECK_ICON} />
-        </span>
-      ) : null}
-      {isPrimary ? "Primary" : "Observer"}
-    </p>
-    <AgentIdentity agent={agent} />
+    <AgentCardHeader
+      agent={agent}
+      badge={<AgentRoleBadge isPrimary={isPrimary} />}
+    />
     {isPrimary ? (
       <AttachedSince agent={agent} nowMs={nowMs} />
     ) : (
@@ -222,7 +313,7 @@ const AgentCard = ({
       <div className="flex flex-wrap gap-2 pt-0.5">
         {isPrimary ? null : (
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() =>
               onAnswer({ writerId: agent.writerId, answer: "primary" })
@@ -231,8 +322,12 @@ const AgentCard = ({
             Make it primary
           </Button>
         )}
+        {/* Bordered, because on its own it is the only control on the card and
+            a borderless one read as a line of text the reviewer could not tell
+            was clickable. Its rank comes from the ground it does not have, not
+            from the edge it does. */}
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={() =>
             onAnswer({ writerId: agent.writerId, answer: "disconnect" })
@@ -249,6 +344,10 @@ const AgentCard = ({
 export type AgentRosterReading = {
   /** Every attached agent, in the order the rail lists them. */
   readonly attached: ReadonlyArray<RosterAgent>;
+  /** The agents this section draws a card for, in order. */
+  readonly cards: ReadonlyArray<RosterAgent>;
+  /** The agent the activity card is drawing instead, when it is drawing one. */
+  readonly carried: string | undefined;
   readonly primary: RosterAgent | undefined;
   readonly requesting: RosterAgent | undefined;
   /**
@@ -284,22 +383,46 @@ export type AgentRosterReading = {
 export const readAgentRosterFor = ({
   agents,
   nowMs,
+  carriedByActivity,
 }: {
   readonly agents: ReadonlyArray<RosterAgent>;
   readonly nowMs: number;
+  /** The agent the activity card is drawing, when it is drawing one. */
+  readonly carriedByActivity?: string;
 }): AgentRosterReading => {
   const primary = selectPrimaryAgent({ agents, nowMs });
   const requesting = pendingPrimacyRequest({ agents, nowMs });
   const attached = orderAttachedAgents(agents).filter((agent) =>
     agentIsAttached({ agent, nowMs }),
   );
+  /*
+  The activity card carries the primary, and only ever the primary.
+
+  It is checked rather than assumed, because the two surfaces answer from
+  different records: the card draws the review's presence heartbeat and this
+  section draws the roster. When they name the same agent, one card is enough
+  and drawing it twice is the duplication the reviewer objected to. When they
+  do not - for the moment after a hand-off, before the incoming primary's first
+  heartbeat lands - this section draws everybody, which is a card too many for
+  one poll rather than a card that lies for as long as it is on screen.
+  */
+  const carried =
+    carriedByActivity !== undefined && primary?.writerId === carriedByActivity
+      ? carriedByActivity
+      : undefined;
+  const cards = attached.filter(
+    (agent) =>
+      agent.writerId !== carried && agent.writerId !== requesting?.writerId,
+  );
   return {
     attached,
+    cards,
+    carried,
     primary,
     requesting,
     isShown:
       requesting !== undefined ||
-      attached.length > 1 ||
+      cards.length > 0 ||
       (attached.length > 0 && primary === undefined),
   };
 };
@@ -309,14 +432,14 @@ export const AgentRoster = ({
   agents,
   nowMs,
   isReadOnly,
+  carriedByActivity,
   onAnswer,
 }: AgentRosterProps) => {
-  const {
-    attached: ordered,
-    primary,
-    requesting,
-    isShown,
-  } = readAgentRosterFor({ agents, nowMs });
+  const { cards, primary, requesting, isShown } = readAgentRosterFor({
+    agents,
+    nowMs,
+    ...(carriedByActivity === undefined ? {} : { carriedByActivity }),
+  });
   if (!isShown) return null;
   return (
     <section
@@ -332,18 +455,16 @@ export const AgentRoster = ({
           onAnswer={onAnswer}
         />
       )}
-      {ordered
-        .filter((agent) => agent.writerId !== requesting?.writerId)
-        .map((agent) => (
-          <AgentCard
-            key={agent.writerId}
-            agent={agent}
-            isPrimary={agent.writerId === primary?.writerId}
-            nowMs={nowMs}
-            isReadOnly={isReadOnly}
-            onAnswer={onAnswer}
-          />
-        ))}
+      {cards.map((agent) => (
+        <AgentCard
+          key={agent.writerId}
+          agent={agent}
+          isPrimary={agent.writerId === primary?.writerId}
+          nowMs={nowMs}
+          isReadOnly={isReadOnly}
+          onAnswer={onAnswer}
+        />
+      ))}
     </section>
   );
 };
@@ -358,7 +479,11 @@ export const AgentRoster = ({
  * without a pointer.
  *
  * The consequences are the dialog's evidence slot, and the work-in-progress
- * toggle sits with them because it is a fact about what the answer will do.
+ * toggle sits below them in a box of its own. Level with the bullets it read
+ * as a fourth consequence with a stray checkbox in front of it, which is the
+ * one thing it is not: the three above are what this answer does, and this is
+ * the single part of it the reviewer still gets to choose.
+ *
  * It defaults off: a half-formed draft from another model can mislead as
  * easily as it helps, so carrying it over is a choice the reviewer makes, and
  * the copy says it arrives as reference rather than as something that
@@ -392,21 +517,26 @@ export const PrimacyHandoffDialog = ({
       onAction={() => onConfirm({ carryWorkInProgress })}
       onCancel={onCancel}
     >
-      <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
-        What happens
-      </p>
-      <ul className="m-0 grid grid-cols-[minmax(0,1fr)] list-disc gap-1 pl-4 text-xs text-ink marker:text-muted">
-        <li>
-          {agentModelLabel(agent)} answers the open comment and every comment
-          after it.
-        </li>
-        {primary === undefined ? null : (
-          <li>{agentModelLabel(primary)} becomes the observer.</li>
-        )}
-        <li>No submitted comments are lost.</li>
-      </ul>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
+        <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
+          What happens
+        </p>
+        <ul className="m-0 grid grid-cols-[minmax(0,1fr)] list-disc gap-1 pl-4 text-xs text-ink marker:text-muted">
+          <li>
+            {agentModelLabel(agent)} answers the open comment and every comment
+            after it.
+          </li>
+          {primary === undefined ? null : (
+            <li>{agentModelLabel(primary)} becomes the observer.</li>
+          )}
+          <li>No submitted comments are lost.</li>
+        </ul>
+      </div>
       {primary === undefined ? null : (
-        <label className="flex items-start gap-2 text-xs text-ink">
+        /* Its own ground and its own edge, because it is a control rather than
+           another statement of fact, and the reviewer has to be able to see
+           that this one line is the part they decide. */
+        <label className="flex items-start gap-2 rounded-md border border-edge bg-surface p-2 text-xs text-ink">
           <input
             type="checkbox"
             className="mt-0.5"
@@ -417,7 +547,7 @@ export const PrimacyHandoffDialog = ({
           />
           <span className="min-w-0">
             Give {agentModelLabel(agent)} the work in progress
-            <span className="block text-2xs text-muted">
+            <span className="mt-0.5 block text-2xs text-muted">
               It arrives as reference to read, never as something that publishes
               itself. Left off, the draft stays with {agentModelLabel(primary)}{" "}
               and never reaches the plan.

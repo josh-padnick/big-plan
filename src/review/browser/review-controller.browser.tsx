@@ -49,7 +49,6 @@ import {
   deriveAgentHealth,
   deriveCurrentAgentActivity,
   type CurrentAgentActivity,
-  heldWorkQuiet,
   projectAgentConnectionState,
   selectClaimedAgentRequest,
   type AgentStatus,
@@ -806,33 +805,31 @@ const RecoveryConflictDialog = ({
       onAction={() => onKeep("runtime")}
       onDismiss={onDismiss}
     >
-      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3">
-        <div>
-          <p className="m-0 text-2xs font-semibold text-subtle uppercase">
-            Yours
-          </p>
-          <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
-            {conflict.kind === "resolution"
-              ? conflict.localResolved
-                ? "Resolved"
-                : "Unresolved"
-              : (conflict.localBody ?? "Deleted here.")}
-          </p>
-        </div>
-        <div>
-          <p className="m-0 text-2xs font-semibold text-subtle uppercase">
-            {conflict.kind === "sent"
-              ? "Submitted in the review session"
-              : "In the review session"}
-          </p>
-          <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
-            {conflict.kind === "resolution"
-              ? conflict.runtimeResolved
-                ? "Resolved"
-                : "Unresolved"
-              : (conflict.runtimeBody ?? "Deleted there.")}
-          </p>
-        </div>
+      <div>
+        <p className="m-0 text-2xs font-semibold text-subtle uppercase">
+          Yours
+        </p>
+        <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
+          {conflict.kind === "resolution"
+            ? conflict.localResolved
+              ? "Resolved"
+              : "Unresolved"
+            : (conflict.localBody ?? "Deleted here.")}
+        </p>
+      </div>
+      <div>
+        <p className="m-0 text-2xs font-semibold text-subtle uppercase">
+          {conflict.kind === "sent"
+            ? "Submitted in the review session"
+            : "In the review session"}
+        </p>
+        <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
+          {conflict.kind === "resolution"
+            ? conflict.runtimeResolved
+              ? "Resolved"
+              : "Unresolved"
+            : (conflict.runtimeBody ?? "Deleted there.")}
+        </p>
       </div>
     </AlertDialog>
   );
@@ -6572,14 +6569,6 @@ export const ReviewController = () => {
         cancelPendingRequestIds,
       }),
     });
-  // Activity and queue input only. It explains a silence; it is never evidence
-  // that an agent is attached, so it must not reach agentConnected or anything
-  // the connection card reads (BIG-147).
-  const agentHeldWork = heldWorkQuiet({
-    requests: agent.requests,
-    cancelPendingRequestIds,
-    now: agentProjectionNowMs,
-  });
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
     cancelPendingRequestIds,
@@ -7463,7 +7452,6 @@ export const ReviewController = () => {
                 activity: currentAgentActivity,
                 status: agentHealth,
                 presenceState: agentProjection.state,
-                heldWork: agentHeldWork,
                 modelName: displayedAgentIdentity?.name,
                 modelEffort: displayedAgentIdentity?.effort,
                 modelClient: displayedAgentIdentity?.client,
@@ -7472,6 +7460,9 @@ export const ReviewController = () => {
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 runtimeSession,
+                ...(agent.presence.writerId === undefined
+                  ? {}
+                  : { presenceWriterId: agent.presence.writerId }),
                 ...(agent.presence.disconnectRequestedAtMs === undefined
                   ? {}
                   : {

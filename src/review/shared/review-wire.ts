@@ -113,6 +113,16 @@ export type AgentPresence = {
   readonly requestId?: string;
   /** Which model is running the attached connector, claim or no claim. */
   readonly model?: AgentModelIdentity;
+  /**
+   * Which agent on the roster this record is about.
+   *
+   * The store has always written it; the browser was not given it, so the card
+   * drawn from this record could not say which of two attached agents it was
+   * describing - and the roster below it, drawing from a different record, drew
+   * that agent a second time. Carrying it lets the two surfaces agree on who
+   * they are each talking about, or notice that they do not (BIG-171).
+   */
+  readonly writerId?: string;
   readonly updatedAtMs?: number;
   /** When the agent's own loop reported the session ending, if it did. */
   readonly endedAtMs?: number;
@@ -752,6 +762,10 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           const model = decodeAgentModelIdentity(value.presence.model);
           return model === undefined ? {} : { model };
         })(),
+        ...(typeof value.presence.writerId === "string" &&
+        value.presence.writerId !== ""
+          ? { writerId: value.presence.writerId }
+          : {}),
         ...(typeof value.presence.updatedAtMs === "number"
           ? { updatedAtMs: value.presence.updatedAtMs }
           : {}),

@@ -22,9 +22,55 @@ const agent = (overrides: Partial<RosterAgent> = {}): RosterAgent => ({
 
 describe("readAgentRosterFor", () => {
   it("should stay quiet while one agent is answering and asking nothing", () => {
-    expect(readAgentRosterFor({ agents: [agent()], nowMs: NOW }).isShown).toBe(
-      false,
-    );
+    expect(
+      readAgentRosterFor({
+        agents: [agent()],
+        nowMs: NOW,
+        carriedByActivity: "aaaaaaaa",
+      }).isShown,
+    ).toBe(false);
+  });
+
+  it("should draw the primary itself when the status card is not drawing it", () => {
+    /*
+    The status card is the primary's card whenever it has one to draw. When it
+    has not - presence lapsed, or it is naming somebody else for a poll - the
+    reviewer would otherwise be shown a review with an attached agent and no
+    card saying so, which is the failure the hiding rule keeps re-creating.
+    */
+    const reading = readAgentRosterFor({ agents: [agent()], nowMs: NOW });
+    expect(reading.carried).toBeUndefined();
+    expect(reading.cards.map(({ writerId }) => writerId)).toEqual(["aaaaaaaa"]);
+    expect(reading.isShown).toBe(true);
+  });
+
+  it("should draw each agent once when the status card carries the primary", () => {
+    const reading = readAgentRosterFor({
+      agents: [agent(), agent({ writerId: "bbbbbbbb", role: "observer" })],
+      nowMs: NOW,
+      carriedByActivity: "aaaaaaaa",
+    });
+    expect(reading.carried).toBe("aaaaaaaa");
+    expect(reading.cards.map(({ writerId }) => writerId)).toEqual(["bbbbbbbb"]);
+  });
+
+  it("should refuse to carry a writer that is not the primary", () => {
+    /*
+    The two surfaces read different records and can name different agents for
+    a poll after a hand-off. Trusting the claim would blank the incoming
+    primary's card and badge the outgoing one as primary; disbelieving it draws
+    one card too many for one poll instead.
+    */
+    const reading = readAgentRosterFor({
+      agents: [agent(), agent({ writerId: "bbbbbbbb", role: "observer" })],
+      nowMs: NOW,
+      carriedByActivity: "bbbbbbbb",
+    });
+    expect(reading.carried).toBeUndefined();
+    expect(reading.cards.map(({ writerId }) => writerId)).toEqual([
+      "aaaaaaaa",
+      "bbbbbbbb",
+    ]);
   });
 
   it("should appear as soon as there is more than one agent to tell apart", () => {
@@ -66,6 +112,7 @@ describe("readAgentRosterFor", () => {
     const reading = readAgentRosterFor({
       agents: [agent(), agent({ writerId: "gone", attached: false })],
       nowMs: NOW,
+      carriedByActivity: "aaaaaaaa",
     });
     expect(reading.attached.map(({ writerId }) => writerId)).toEqual([
       "aaaaaaaa",

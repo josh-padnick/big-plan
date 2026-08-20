@@ -2,6 +2,7 @@
 // review kernel owns polling and navigation; this module owns only the visual
 // projection and local disclosure/copy interactions.
 
+import type { ReactNode } from "react";
 import { Fragment, useEffect, useState } from "react";
 import type { BrandIcon } from "../../icons/brand-icon.js";
 import { CLAUDE_ICON } from "../../icons/brands/claude.js";
@@ -31,7 +32,6 @@ import type {
   AgentHealth,
   AgentHealthIndicator,
   CurrentAgentActivity,
-  HeldWorkQuiet,
 } from "../shared/agent-status.js";
 import type { BrowserConnectionEvent } from "../shared/review-wire.js";
 import {
@@ -40,6 +40,7 @@ import {
 } from "../shared/time-label.js";
 import { BrandIconView, Icon } from "./icon.browser.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
+import { AgentRoleBadge } from "./agent-roster.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
 import {
   AlertDialog,
@@ -450,6 +451,7 @@ const CurrentActivityCard = ({
   sessionId,
   connection,
   nowMs,
+  isPrimary,
   disconnectRequestedAtMs,
   isDisconnectingAgent,
   onViewRequest,
@@ -464,6 +466,13 @@ const CurrentActivityCard = ({
   readonly sessionId?: string;
   readonly connection: ReturnType<typeof summarizeAgentConnection>;
   readonly nowMs: number;
+  /**
+   * Whether this card is the primary's card, which is the only role it can
+   * hold. It is set only while a second agent is on the rail: with one agent
+   * there is nothing to tell it apart from, and a badge saying so is a word
+   * the reader has to read and cannot use.
+   */
+  readonly isPrimary: boolean;
   /** When the reviewer disconnected this agent, if they already have. */
   readonly disconnectRequestedAtMs?: number;
   /** Whether a disconnect the reviewer confirmed has not been answered yet. */
@@ -494,11 +503,21 @@ const CurrentActivityCard = ({
     "targetLabel" in activity
       ? activity.targetLabel
       : undefined;
-  // What the agent is doing and which thread it is doing it to are two facts,
-  // not one label. Joining them put a thread name in a section-title face and
-  // read as though the status itself were called "start here, disconnected".
+  /*
+  What the agent is doing and which thread it is doing it to are two facts,
+  not one label. Joining them put a thread name in a section-title face and
+  read as though the status itself were called "start here, disconnected".
+
+  Withheld when the title above is already this sentence. The title borrows the
+  shared status label only while that label is still about this agent, so a
+  pending question from a SECOND agent hands the title back to the activity's
+  own headline - and the card then printed "Responding to a comment" twice,
+  once as its heading and once as its body (BIG-171).
+  */
   const workHeadline =
-    activity.state === "working" ? activity.headline : undefined;
+    activity.state === "working" && activity.headline !== title
+      ? activity.headline
+      : undefined;
   // The subject of the work is the thing to click, so it is derived once here
   // rather than assembled in the markup: a thread name when there is one, the
   // work itself when there is not, and nothing needs a separate link.
@@ -575,6 +594,10 @@ const CurrentActivityCard = ({
           <WorkingMark className="size-3" />
         ) : null}
         <strong className="min-w-0 flex-1 text-sm text-ink">{title}</strong>
+        {/* The role sits in the corner opposite the title, which is where the
+            roster cards below carry theirs: one place to look down the rail for
+            who is who, whatever else a card happens to be saying. */}
+        {isPrimary ? <AgentRoleBadge isPrimary /> : null}
       </div>
       {/*
       Identity is shown only where it exists, segment by segment. A session that
@@ -1077,7 +1100,6 @@ export const AgentConnectionPanel = ({
   activity,
   status,
   presenceState,
-  heldWork,
   modelName,
   modelEffort,
   modelClient,
@@ -1087,6 +1109,9 @@ export const AgentConnectionPanel = ({
   recoveryPrompt,
   isReadOnly,
   replacementUrl,
+  roster,
+  isActivityPrimary,
+  hasAttachedAgent,
   disconnectRequestedAtMs,
   isDisconnectingAgent,
   onViewRequest,
@@ -1101,18 +1126,35 @@ export const AgentConnectionPanel = ({
   readonly sessionUrl?: string;
   readonly sessionId?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
-  /**
-   * What held work says about the quiet. It chooses this section's copy and
-   * nothing else: while it explains the quiet the section names the takeover
-   * that connecting a session would cost, and once it has gone stale the copy
-   * becomes the plain recovery instruction. It never decides whether the
-   * section renders, and never decides what the cards above report, which stays
-   * presence alone (BIG-147).
-   */
-  readonly heldWork: HeldWorkQuiet;
   readonly recoveryPrompt: string;
   readonly isReadOnly: boolean;
   readonly replacementUrl: string | null;
+  /**
+   * The cards for the other agents attached to this review, drawn directly
+   * under the status card.
+   *
+   * It arrives as a slot rather than being composed above this panel because
+   * the order is the point: the reviewer asked for the status card at the top
+   * of the rail, and the cards for everyone else belong with it rather than
+   * after the connect instructions and the log. One component owning that
+   * order is what keeps the two from drifting apart.
+   */
+  readonly roster?: ReactNode;
+  /**
+   * Whether the status card is the primary's, with a second agent on the rail.
+   */
+  readonly isActivityPrimary: boolean;
+  /**
+   * Whether any agent is attached to this review.
+   *
+   * What the connect section says is gated on this rather than on held work.
+   * Held work answers a different question - whether a claim is open - and
+   * answered this one wrong in both directions: an agent attached between two
+   * turns got the copy written for a review with nobody on it, and an open
+   * claim inside the recovery horizon with nobody behind it warned the reviewer
+   * about replacing an agent that had already gone (BIG-171).
+   */
+  readonly hasAttachedAgent: boolean;
   /** When the reviewer disconnected the attached agent, if they already have. */
   readonly disconnectRequestedAtMs?: number;
   /** Whether a disconnect the reviewer confirmed has not been answered yet. */
@@ -1164,6 +1206,7 @@ export const AgentConnectionPanel = ({
             sessionId={sessionId}
             connection={connection}
             nowMs={currentNowMs}
+            isPrimary={isActivityPrimary}
             {...(disconnectRequestedAtMs === undefined
               ? {}
               : { disconnectRequestedAtMs })}
@@ -1177,6 +1220,7 @@ export const AgentConnectionPanel = ({
       ) : (
         <AgentPresenceUnavailableCard />
       )}
+      {roster === undefined ? null : <div className="mt-3">{roster}</div>}
       {/* Always present with respect to the AGENT: a section that comes and
           goes as an agent connects and drops teaches the reader it might not be
           there when they need it. Withheld only when the review session itself
@@ -1187,42 +1231,47 @@ export const AgentConnectionPanel = ({
           className="group mt-3 rounded-md border border-edge text-xs text-muted"
           open={recoveryIsOpen}
           onToggle={(event) => setRecoveryIsOpen(event.currentTarget.open)}
-          data-review-agent-recovery={
-            heldWork === "explained" ? "takeover" : "plain"
-          }
+          data-review-agent-recovery={hasAttachedAgent ? "joining" : "plain"}
         >
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
               <Icon icon={CHEVRON_RIGHT_ICON} />
             </span>
-            {heldWork === "explained"
-              ? "Connect a new agent"
+            {hasAttachedAgent
+              ? "Connect another agent"
               : neverConnected
                 ? "Connect your agent"
                 : "Reconnect your agent"}
           </summary>
           <div className="grid grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge px-3 py-3">
-            {heldWork === "explained" ? (
+            {hasAttachedAgent ? (
               /*
-              The consequence is stated as the code behaves, not as it would be
-              kinder to say. A quiet agent keeps its answer - a lapsed lease is
-              not a rejection (BIG-147) - but a DISPLACED one does not: taking
-              the claim rewrites its holder, and the mailbox refuses a response
-              from an agent that no longer holds it. Softening this to "its
-              answer still arrives" would be the product lying about itself in
-              the one place a reader is deciding whether to act.
+              What arriving actually does, which is no longer what this section
+              used to say. It described a takeover - the new agent replaces the
+              old one, and the old one's work is dropped - and every clause of
+              that has been false since an arriving agent started attaching as
+              an observer. It now names the two things the reader is about to
+              meet: an observer, and a question addressed to them (BIG-171).
+
+              "Primary" throughout, never "primacy": the reviewer's word, and
+              the one the cards above already use.
               */
-              <p className="m-0">
-                An agent is already connected to this session and may still be
-                working on it. If you wish, you can replace that agent with a
-                different one. The agent connected now would stop being able to
-                answer, so anything it has in flight is dropped rather than
-                delivered. All comments are safe.
-              </p>
+              <>
+                <p className="m-0">
+                  An agent is already answering this review. A new agent joins
+                  as an observer: it can read the plan and the conversation, and
+                  it cannot answer you until you say so.
+                </p>
+                <p className="m-0">
+                  When it arrives you will be asked who answers you from then
+                  on. Nothing the current agent is working on is dropped unless
+                  you make the new agent the primary.
+                </p>
+              </>
             ) : null}
             <p className="m-0">
-              {heldWork === "explained"
-                ? "To connect a new agent anyway, paste this exact prompt into your coding agent:"
+              {hasAttachedAgent
+                ? "To connect another agent, paste this exact prompt into your coding agent:"
                 : neverConnected
                   ? "To connect this running review, paste this exact prompt into your coding agent:"
                   : "To reconnect this running review, paste this exact prompt into your coding agent:"}
