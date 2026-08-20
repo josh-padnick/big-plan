@@ -1,5 +1,6 @@
 // Owns the post-MDX delivery phase: attribute normalization, scoped child
-// collection, compile-once dispatch, model/HTML delivery, and MDX removal.
+// collection, compile-once dispatch, rendering and model collection, and MDX
+// removal.
 
 import type { Element, Root, RootContent } from "hast";
 import type {
@@ -146,7 +147,8 @@ const collectExistingIds = (
 };
 
 // Reports an unknown name, validates attributes, recursively prepares direct
-// scoped children, compiles once, then chooses model or HTML delivery.
+// scoped children, compiles once, then collects that model and renders it -
+// unless the delivery only validates, which stops at compilation.
 const renderFlowElement = ({
   node,
   diagnostics,

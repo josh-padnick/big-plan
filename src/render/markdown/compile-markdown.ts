@@ -63,7 +63,7 @@ export type CompiledMarkdown = {
   readonly title: string | undefined;
   readonly embeddedStyles: ReadonlyArray<string>;
   // Rendered Part divider anchors in document order, so navigation can link
-  // each act header to its divider; parts carry no anchor in model delivery.
+  // each act header to its divider.
   readonly partIds: ReadonlyArray<string>;
   // Every commentable unit this compile addressed, in document order, so a
   // feedback package can be resolved without re-reading the HTML.
@@ -216,8 +216,9 @@ type PartTracker = {
   count: number;
 };
 
-// Gathers every authored slugged h2 before component model delivery can
-// remove a parent body, preserving nested headings and their source order.
+// Gathers every authored slugged h2 before component delivery replaces an
+// authored body with React-produced HAST, preserving nested headings and
+// their source order.
 const collectSections = (
   node: StructuredParent,
   sections: Array<MetadataSection>,
@@ -256,8 +257,8 @@ type MarkdownMetadata = {
   readonly sections: Array<MetadataSection>;
 };
 
-// Captures authored headings after slugging but before model delivery removes
-// component bodies or HTML delivery replaces them with React-produced HAST.
+// Captures authored headings after slugging but before component delivery
+// replaces authored bodies with React-produced HAST.
 const rehypeCollectMetadata =
   ({ metadata }: { readonly metadata: MarkdownMetadata }) =>
   (tree: Root): void => {

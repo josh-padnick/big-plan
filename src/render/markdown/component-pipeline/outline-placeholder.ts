@@ -1,4 +1,4 @@
-// Owns the outline-placeholder leg of HTML delivery: outline-aware
+// Owns the outline-placeholder leg of delivery: outline-aware
 // components leave attribute-marked placeholders during component delivery,
 // the deck transform reads those attributes to compute the document outline,
 // and this module then replaces every placeholder with its outline-aware
