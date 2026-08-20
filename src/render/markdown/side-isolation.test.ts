@@ -334,8 +334,8 @@ describe("side isolation", () => {
     expect(subtree.properties[DIFF_SIDE_ATTRIBUTE]).toBe(DIFF_BASELINE_SIDE);
     expect(ordinaryIdsOf(subtree)).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/^diff-baseline-[a-z0-9]+-panel$/u),
-        expect.stringMatching(/^diff-baseline-[a-z0-9]+-baseline$/u),
+        expect.stringMatching(/^diff-baseline-.+-panel$/u),
+        expect.stringMatching(/^diff-baseline-.+-baseline$/u),
       ]),
     );
     const labelled: Element = {
@@ -427,6 +427,20 @@ describe("side isolation", () => {
     expect(firstId).not.toBe(secondId);
     expect(htmlForTargets(first)).toEqual([firstId]);
     expect(htmlForTargets(second)).toEqual([secondId]);
+  });
+
+  it("should give distinct ids to keys that sanitize to the same hyphenated form", () => {
+    const copy = (): Element => ({
+      type: "element",
+      tagName: "span",
+      properties: { id: "choice" },
+      children: [],
+    });
+    const slash = copy();
+    const hyphen = copy();
+    isolateBaselineSide({ subtree: slash, key: "was/a" });
+    isolateBaselineSide({ subtree: hyphen, key: "was-a" });
+    expect(ordinaryIdsOf(slash)[0]).not.toBe(ordinaryIdsOf(hyphen)[0]);
   });
 
   it("should mint the same proposed-side block ids as the same document without a baseline side", () => {

@@ -119,18 +119,14 @@ const identityPrefixFor = ({
   readonly identifiers: ReadonlyArray<string>;
   readonly key: string;
 }): string => {
-  const fingerprint = `${key}\0${[...identifiers].sort().join("\0")}`;
+  const encodedKey = Buffer.from(key, "utf8").toString("base64url");
+  const fingerprint = `${encodedKey}\0${[...identifiers].sort().join("\0")}`;
   let hash = 2166136261;
   for (const character of fingerprint) {
     hash ^= character.charCodeAt(0);
     hash = Math.imul(hash, 16777619);
   }
-  return `diff-baseline-${(hash >>> 0).toString(36)}-`;
-};
-
-const sanitizeIsolationKey = (key: string): string => {
-  const safe = key.replace(/[^a-z0-9]+/giu, "-").replace(/^-+|-+$/g, "");
-  return safe.length > 0 ? safe : "side";
+  return `diff-baseline-${encodedKey}-${(hash >>> 0).toString(36)}-`;
 };
 
 const rewriteReferences = ({
@@ -280,6 +276,6 @@ export const isolateBaselineSide = ({
 }): void => {
   subtree.properties[DIFF_SIDE_ATTRIBUTE] = DIFF_BASELINE_SIDE;
   stripReviewIdentity(subtree);
-  namespaceOrdinaryIdentity(subtree, sanitizeIsolationKey(key));
+  namespaceOrdinaryIdentity(subtree, key);
   holdRootAffordancesInert(subtree);
 };
