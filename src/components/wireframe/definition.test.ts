@@ -1829,7 +1829,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics).toEqual([]);
   });
 
-  it("should count a composer send button as the screen's filled action", () => {
+  it("should count a composer send button as the page layer's filled action", () => {
     const { diagnostics } = compile({
       scopedChildren: [
         screen({
@@ -2257,6 +2257,91 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         className: "wireframe-choice-icon",
       }),
     ).toBeUndefined();
+  });
+
+  it("should refuse a choice group that gives only some options card art", () => {
+    const group = (art: ReadonlyArray<boolean>): ScopedChild =>
+      element({
+        name: "ChoiceGroup",
+        children: [
+          element({
+            name: "ChoiceCard",
+            attributes: {
+              ...(art[0] === true ? { emoji: "⚽" } : {}),
+              title: "Ask about a purchase",
+              description: "See how much money I would have left",
+              navigateTo: "purchase-selected",
+            },
+          }),
+          element({
+            name: "ChoiceCard",
+            attributes: {
+              ...(art[1] === true ? { emoji: "💵" } : {}),
+              title: "Ask about my loan",
+              description: "See what I owe and ask a question",
+              navigateTo: "loan-selected",
+            },
+          }),
+        ],
+      });
+    const plan = (art: ReadonlyArray<boolean>) =>
+      compile({
+        scopedChildren: [
+          screen({
+            id: "choose",
+            attributes: { device: "tablet" },
+            children: [group(art)],
+          }),
+          ...(["purchase", "loan"] as const).map((selected, index) =>
+            screen({
+              id: `${selected}-selected`,
+              name: `${selected} selected`,
+              attributes: { device: "tablet" },
+              children: [
+                element({
+                  name: "ChoiceGroup",
+                  children: [
+                    element({
+                      name: "ChoiceCard",
+                      attributes: {
+                        ...(art[0] === true ? { emoji: "⚽" } : {}),
+                        title: "Ask about a purchase",
+                        description: "See how much money I would have left",
+                        ...(index === 0
+                          ? { selected: true }
+                          : { navigateTo: "purchase-selected" }),
+                      },
+                    }),
+                    element({
+                      name: "ChoiceCard",
+                      attributes: {
+                        ...(art[1] === true ? { emoji: "💵" } : {}),
+                        title: "Ask about my loan",
+                        description: "See what I owe and ask a question",
+                        ...(index === 1
+                          ? { selected: true }
+                          : { navigateTo: "loan-selected" }),
+                      },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Continue", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ),
+        ],
+      });
+
+    expect(
+      plan([true, false]).diagnostics.map((entry) => entry.message),
+    ).toContain(
+      'Screen "choose" gives some ChoiceCards card art and not others, starting with "Ask about my loan"; options in one group are read as parallels, so give every option an emoji or give none',
+    );
+    expect(plan([true, true]).diagnostics).toEqual([]);
+    expect(plan([false, false]).diagnostics).toEqual([]);
   });
 
   it("should refuse a glyph-set name written as a choice card icon", () => {

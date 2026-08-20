@@ -586,6 +586,25 @@ const checkChoiceComposition = ({
         position,
       });
     }
+    for (const group of groups) {
+      const cards = group.children.filter(
+        (node) => node.element === "ChoiceCard",
+      );
+      const first = cards[0];
+      const odd =
+        first === undefined
+          ? undefined
+          : cards.find(
+              (card) =>
+                (card.emoji === undefined) !== (first.emoji === undefined),
+            );
+      if (odd !== undefined && odd !== first) {
+        diagnostics.add({
+          message: `Screen "${screen.id}"${layer.where} gives some ChoiceCards card art and not others, starting with "${odd.title}"; options in one group are read as parallels, so give every option an emoji or give none`,
+          position,
+        });
+      }
+    }
     const primaryActions = workActionButtons(layer.nodes).filter(
       (node) => node.element === "Button" && node.emphasis === "primary",
     );
@@ -688,7 +707,7 @@ const checkChoiceNavigation = ({
   }
 };
 
-/** Multiple page-level headers make one screen claim more than one clear job. */
+/** Two page-level headers on one layer claim more than one clear job. */
 const checkOneClearJob = ({
   screen,
   position,

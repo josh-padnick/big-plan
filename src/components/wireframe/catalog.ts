@@ -887,7 +887,7 @@ const CATALOG = {
     acceptsChildren: true,
     allowedChildren: ["ChoiceCard"],
     summary:
-      "Two to five simple alternatives as one dominant touch decision; each option supplies an icon, title, and one-line consequence.",
+      "Two to five simple alternatives as one dominant touch decision; each option supplies a title and a one-line consequence, plus optional card art that every option in the group either carries or leaves off.",
     example:
       '<ChoiceGroup><ChoiceCard emoji="⚽" title="Ask about a purchase" description="See how much money I would have left" /></ChoiceGroup>',
     compile: ({ attributes, children, position, diagnostics }) => {
