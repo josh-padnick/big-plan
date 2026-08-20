@@ -2,7 +2,34 @@
 // rendered document: slide and selection composition, durable staged cards,
 // precision component targets, the Feedback rail, and both appearance themes.
 
-import { expect, test } from "./fixtures";
+import { boxOf, expect, test, type Locator, type Page } from "./fixtures";
+
+/**
+ * Waits for a control to stop moving. The floating composer can still be
+ * settling into its final slot when a test reaches it (see issue #178), and a
+ * pointer landed before it settles is left behind when it moves, closing any
+ * tooltip the hover opened.
+ */
+const settled = async (target: Locator): Promise<void> => {
+  // Both axes: the composer's left edge is derived from its target's right
+  // edge, so a layout that is still settling moves it sideways as well as
+  // down, and a helper that watched only one axis could return mid-slide.
+  let previous: { readonly x: number; readonly y: number } | undefined;
+  await expect
+    .poll(async () => {
+      const { x, y } = await boxOf(target);
+      const stable = previous?.x === x && previous.y === y;
+      previous = { x, y };
+      return stable;
+    })
+    .toBe(true);
+};
+
+/** Moves the real pointer onto a control, disabled ones included. */
+const hoverCentre = async (page: Page, target: Locator): Promise<void> => {
+  const box = await boxOf(target);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+};
 
 test("should keep the desktop toolbar actions compact and distinct", async ({
   page,
@@ -103,16 +130,12 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "12px",
   );
   await expect(input).toHaveCSS("font-size", "12px");
-  await expect(dialog.locator(".review-compose-hint")).toHaveCSS(
-    "font-size",
-    "11px",
-  );
   const cancel = dialog.getByRole("button", { name: "Cancel" });
   const submit = dialog.getByRole("button", { name: "Submit Now" });
   await expect(cancel).toHaveCSS("padding-left", "8px");
   await expect(cancel).toHaveCSS("padding-top", "4px");
   await expect(cancel).toHaveCSS("border-top-width", "1px");
-  await expect(submit).toBeDisabled();
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
   await expect(submit).toHaveCSS("padding-left", "8px");
   await expect(submit).toHaveCSS("font-size", "11px");
   await expect(submit).toHaveCSS("background-color", "rgb(239, 236, 227)");
@@ -145,8 +168,13 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await input.fill(
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
-  await expect(submit).toBeEnabled();
+  await expect(submit).toHaveAttribute("aria-disabled", "false");
   const shortcutTooltip = page.getByRole("tooltip").last();
+  // Park the pointer clear of the composer first. The shortcut hangs off the
+  // action's wrapper, so a pointer that the scrolling above already left
+  // inside it produces no fresh enter, and the hover would assert nothing.
+  await page.mouse.move(0, 0);
+  await settled(submit);
   await expect(shortcutTooltip).not.toBeVisible();
   await submit.hover();
   await expect(shortcutTooltip).toBeVisible();
@@ -588,6 +616,133 @@ test("should remember the submit-right-away choice across new composers", async 
     name: "Submit right away",
   });
   await expect(preference).toHaveAttribute("aria-checked", "true");
+
+  // The trade-off help has to reach a reader who never touches a mouse, so the
+  // mark is asserted from the keyboard rather than from a hover.
+  const help = composer.getByRole("button", {
+    name: "About Submit right away",
+  });
+  const helpAppearance = () =>
+    help.evaluate((button) => {
+      const buttonRect = button.getBoundingClientRect();
+      const iconRect = button.querySelector("svg")?.getBoundingClientRect();
+      const style = getComputedStyle(button);
+      return {
+        buttonWidth: buttonRect.width,
+        buttonHeight: buttonRect.height,
+        iconWidth: iconRect?.width,
+        iconHeight: iconRect?.height,
+        backgroundColor: style.backgroundColor,
+        borderTopWidth: style.borderTopWidth,
+        color: style.color,
+      };
+    });
+  const desktopHelpAppearance = await helpAppearance();
+  expect(desktopHelpAppearance).toEqual({
+    buttonWidth: 20,
+    buttonHeight: 20,
+    iconWidth: 14,
+    iconHeight: 14,
+    backgroundColor: "rgba(0, 0, 0, 0)",
+    borderTopWidth: "0px",
+    color: "rgb(111, 105, 92)",
+  });
+  const helpTooltip = page.getByRole("tooltip", {
+    name: /Send the comment to the agent/,
+  });
+  await expect(helpTooltip).toHaveCount(0);
+  await preference.focus();
+  await page.keyboard.press("Tab");
+  await expect(help).toBeFocused();
+  await expect(helpTooltip).toBeVisible();
+  // The help is a comparison, so it is asserted as one: both settings named,
+  // each leading its own paragraph. A single prose match would still pass if
+  // the two collapsed back into one block.
+  await expect(helpTooltip.locator("dt")).toHaveText([
+    "Submit right away:",
+    "Submit later:",
+  ]);
+  await expect(helpTooltip).toContainText(
+    "send it to the agent later as a batch",
+  );
+  await expect(help).toHaveAttribute(
+    "aria-describedby",
+    (await helpTooltip.getAttribute("id")) ?? "",
+  );
+  await help.blur();
+  await expect(helpTooltip).toHaveCount(0);
+
+  const submit = composer.getByRole("button", { name: "Submit Now" });
+  const cancel = composer.getByRole("button", { name: "Cancel" });
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
+  const shortcut = page.getByRole("tooltip", {
+    name: /to submit this comment now/,
+  });
+  await expect(shortcut).toHaveCount(0);
+  await help.focus();
+  await page.keyboard.press("Tab");
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(submit).toBeFocused();
+  await expect(shortcut).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(composer).toBeVisible();
+  await expect(composer.getByLabel("Add a comment")).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(shortcut).toHaveCount(0);
+  await expect(composer).toBeVisible();
+  await hoverCentre(page, submit);
+  await expect(shortcut).toBeVisible();
+
+  // A keystroke is drawn as a key rather than set in the sentence, so each key
+  // of the chord is its own element the reader can pick out at a glance.
+  const modifierKeys = await page.evaluate(() =>
+    /Mac|iPhone|iPad/u.test(navigator.platform)
+      ? ["\u2318", "Enter"]
+      : ["Ctrl", "Enter"],
+  );
+  await expect(shortcut.locator("kbd")).toHaveText(modifierKeys);
+
+  const escapeHint = page.getByRole("tooltip", {
+    name: /to close without adding/,
+  });
+  await cancel.hover();
+  await expect(escapeHint).toBeVisible();
+  await expect(escapeHint.locator("kbd")).toHaveText(["Esc"]);
+  await expect(shortcut).toHaveCount(0);
+
+  // The composer carries no standing line of helper text; the shortcuts are
+  // told at the controls they drive.
+  await expect(composer).not.toContainText("Escape closes");
+
+  // The tooltip's measure is authored in rem, so a reader browsing at a larger
+  // default gets a wider one. It still has to stay inside the viewport, which
+  // only holds while the clamp is computed from the live root size.
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "20px";
+  });
+  await help.focus();
+  await expect(helpTooltip).toBeVisible();
+  const widened = await helpTooltip.boundingBox();
+  const viewportWidth = page.viewportSize()?.width ?? 0;
+  expect(widened?.x).toBeGreaterThanOrEqual(0);
+  expect((widened?.x ?? 0) + (widened?.width ?? 0)).toBeLessThanOrEqual(
+    viewportWidth,
+  );
+  await help.blur();
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty("font-size");
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(helpAppearance).toEqual({
+    ...desktopHelpAppearance,
+    buttonWidth: 44,
+    buttonHeight: 44,
+  });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await expect.poll(helpAppearance).toEqual(desktopHelpAppearance);
+
   await preference.click();
   await composer.getByRole("button", { name: "Cancel" }).click();
 
@@ -604,6 +759,56 @@ test("should remember the submit-right-away choice across new composers", async 
       .getByRole("dialog", { name: /Comment on/ })
       .getByRole("switch", { name: "Submit right away" }),
   ).toHaveAttribute("aria-checked", "true");
+});
+
+test("should dismiss composer tooltips before closing a typed comment", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+
+  await page.getByRole("button", { name: "Comment on slide" }).first().click();
+  const composer = page.getByRole("dialog", { name: /Comment on/ });
+  const input = composer.getByLabel("Add a comment");
+  const submit = composer.getByRole("button", { name: "Submit Now" });
+  const submitTooltip = page.getByRole("tooltip", {
+    name: /to submit this comment now/,
+  });
+  await expect(submit).toHaveAttribute("aria-disabled", "true");
+  await settled(submit);
+  await hoverCentre(page, submit);
+  await expect(submitTooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(submitTooltip).toHaveCount(0);
+  await expect(composer).toBeVisible();
+
+  await input.fill("Keep this typed comment intact.");
+  const cancel = composer.getByRole("button", { name: "Cancel" });
+  const cancelTooltip = page.getByRole("tooltip", {
+    name: /to close without adding/,
+  });
+  await cancel.hover();
+  await expect(cancelTooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(cancelTooltip).toHaveCount(0);
+  await expect(input).toHaveValue("Keep this typed comment intact.");
+
+  const help = composer.getByRole("button", {
+    name: "About Submit right away",
+  });
+  const helpTooltip = page.getByRole("tooltip", {
+    name: /Send the comment to the agent/,
+  });
+  await help.focus();
+  await expect(helpTooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(helpTooltip).toHaveCount(0);
+  await expect(composer).toBeVisible();
+  await expect(input).toHaveValue("Keep this typed comment intact.");
+
+  await page.keyboard.press("Escape");
+  await expect(composer).toHaveCount(0);
 });
 
 test("should replace an empty composer and protect a non-empty draft", async ({

@@ -23,7 +23,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Toaster as Sonner, toast } from "sonner";
-import { placeTooltip, type TooltipPosition } from "./tooltip-position.js";
+import {
+  placeTooltip,
+  resolveRemMeasure,
+  type TooltipPosition,
+} from "./tooltip-position.js";
 
 export { toast };
 
@@ -282,6 +286,16 @@ export const Badge = ({
   />
 );
 
+/**
+ * A tooltip names the control it hangs off, tells the keystroke that drives
+ * it, or explains a choice the reader is about to make; the three want
+ * different measures. The shape is not a separate prop, because it follows
+ * from what the caller supplies: keys make a shortcut, sections make an
+ * explanation, a bare label names a control. Nothing can therefore pair
+ * chipped keys or two paragraphs with the centred measure a caption wants.
+ */
+type TooltipShape = "label" | "shortcut" | "explanation";
+
 type TooltipChildProps = {
   readonly "aria-describedby"?: string;
   readonly ref?: Ref<HTMLElement>;
@@ -291,8 +305,41 @@ type TooltipChildProps = {
   readonly onBlurCapture?: FocusEventHandler<HTMLElement>;
 };
 
-type TooltipProps = {
-  readonly label: string;
+/** One option of a choice: the option's name, and what choosing it costs. */
+type TooltipSection = {
+  readonly term: string;
+  readonly detail: string;
+};
+
+/**
+ * What the tooltip says, in exactly one of three forms. The union is what
+ * keeps the forms from being mixed: a caller cannot ask for chipped keys and
+ * sections at once, so the shape below is always decidable.
+ */
+type TooltipContent =
+  | {
+      readonly label: string;
+      /**
+       * One entry per keystroke, chipped ahead of the label, which then reads
+       * as the rest of the sentence the keys start: ⌘ Enter "to submit this
+       * comment now".
+       */
+      readonly shortcutKeys?: readonly string[];
+      readonly sections?: undefined;
+    }
+  | {
+      /**
+       * One paragraph per option, each led by the option's name in bold. A
+       * choice between two behaviours is two things a reader compares, and a
+       * comparison told as one run of prose has to be taken apart before it
+       * can be made.
+       */
+      readonly sections: readonly TooltipSection[];
+      readonly label?: undefined;
+      readonly shortcutKeys?: undefined;
+    };
+
+type TooltipProps = TooltipContent & {
   readonly children: ReactElement<TooltipChildProps>;
   readonly className?: string;
   readonly tooltipProps?: HTMLAttributes<HTMLSpanElement> &
@@ -302,9 +349,57 @@ type TooltipProps = {
   readonly isInstant?: boolean;
 };
 
+// A tooltip carrying one short label centres in a narrow column, because a
+// centred line reads as a caption on the control it names. A tooltip that
+// explains a trade-off is prose: it needs a wider measure and a left edge to
+// return to, or the reader re-finds the start of every line.
+// Each shape states its widest measure twice on purpose, once as the static
+// Tailwind class the stylesheet can discover and once as the number the
+// positioner clamps against; both are the same rem measure, so they sit
+// together and stay equal.
+const TOOLTIP_SHAPES: Record<
+  TooltipShape,
+  { readonly className: string; readonly maxWidthRem: number }
+> = {
+  label: {
+    className:
+      "max-w-[min(11rem,calc(100vw_-_2rem))] text-center font-semibold",
+    maxWidthRem: 11,
+  },
+  explanation: {
+    className: "max-w-[min(17rem,calc(100vw_-_2rem))] text-left font-normal",
+    maxWidthRem: 17,
+  },
+  shortcut: {
+    className: "max-w-[min(15rem,calc(100vw_-_2rem))] text-left font-normal",
+    maxWidthRem: 15,
+  },
+};
+
+/** Reads the shape's authored measure back at the reader's own root size. */
+const tooltipMaxWidth = (shape: TooltipShape) =>
+  resolveRemMeasure(
+    TOOLTIP_SHAPES[shape].maxWidthRem,
+    getComputedStyle(document.documentElement).fontSize,
+  );
+
+// A keystroke is a thing the reader presses, so it is drawn as a key rather
+// than set in the sentence: one chip per key, found by the eye before the
+// sentence explaining what it does is read. Its face is the tooltip's own key
+// surface, which holds the ink back to a tint picked per theme; its edge
+// borrows the tooltip's text colour, so the key keeps a drawn border on either
+// surface without a second colour to keep in step.
+const ShortcutKey = ({ children }: { readonly children: string }) => (
+  <kbd className="inline-flex min-w-[1.25em] items-center justify-center rounded-sm border border-[color-mix(in_srgb,currentColor_30%,transparent)] bg-tooltip-key px-1 py-px font-sans font-semibold">
+    {children}
+  </kbd>
+);
+
 /** A portal tooltip with a deliberate default pause before secondary help. */
 export const Tooltip = ({
   label,
+  shortcutKeys,
+  sections,
   children,
   className,
   tooltipProps,
@@ -312,6 +407,12 @@ export const Tooltip = ({
   asChild = false,
   isInstant = false,
 }: TooltipProps) => {
+  const shape: TooltipShape =
+    sections !== undefined
+      ? "explanation"
+      : shortcutKeys !== undefined
+        ? "shortcut"
+        : "label";
   const tooltipId = useId();
   const anchorRef = useRef<HTMLElement>(null);
   const showTimerRef = useRef<number | null>(null);
@@ -346,6 +447,7 @@ export const Tooltip = ({
         anchor: rect,
         viewport: { width: window.innerWidth, height: window.innerHeight },
         preferredPlacement: placement,
+        maxWidth: tooltipMaxWidth(shape),
       }),
     );
   };
@@ -377,15 +479,16 @@ export const Tooltip = ({
     },
     [],
   );
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (position === null) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
+      event.stopPropagation();
       hide();
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [position]);
   useLayoutEffect(() => {
     if (position === null) return;
@@ -404,7 +507,7 @@ export const Tooltip = ({
           <span
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-auto fixed z-[2147483647] w-max max-w-[min(11rem,calc(100vw_-_2rem))] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-ink px-2 py-1 text-center text-2xs leading-snug font-semibold whitespace-normal text-paper shadow-floating [overflow-wrap:anywhere] ${position.placement === "above" ? "-translate-y-full" : ""}`}
+            className={`pointer-events-auto fixed z-[2147483647] w-max -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm border border-tooltip-edge bg-tooltip px-2 py-1 text-2xs leading-[1.35] whitespace-normal text-tooltip-ink shadow-floating [overflow-wrap:anywhere] ${TOOLTIP_SHAPES[shape].className} ${position.placement === "above" ? "-translate-y-full" : ""}`}
             style={{
               top: position.top,
               left: position.left,
@@ -418,7 +521,29 @@ export const Tooltip = ({
             onMouseLeave={scheduleHide}
             {...tooltipProps}
           >
-            {label}
+            {sections !== undefined ? (
+              <dl className="m-0 flex flex-col gap-2">
+                {sections.map(({ term, detail }) => (
+                  // The name and its consequence stay one paragraph rather
+                  // than two stacked lines: the reader is comparing options,
+                  // and a lead-in that shares the line keeps each option to
+                  // one block the eye can weigh against the other.
+                  <div key={term}>
+                    <dt className="m-0 inline font-semibold">{term}:</dt>{" "}
+                    <dd className="m-0 inline">{detail}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : shortcutKeys === undefined ? (
+              label
+            ) : (
+              <span className="inline-flex flex-wrap items-center gap-1">
+                {shortcutKeys.map((key) => (
+                  <ShortcutKey key={key}>{key}</ShortcutKey>
+                ))}
+                <span>{label}</span>
+              </span>
+            )}
           </span>,
           document.body,
         );

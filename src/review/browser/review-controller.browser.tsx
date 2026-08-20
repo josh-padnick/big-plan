@@ -29,6 +29,7 @@ import { createPortal } from "react-dom";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
+import { INFO_ICON } from "../../icons/lucide/info.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { MESSAGES_SQUARE_ICON } from "../../icons/lucide/messages-square.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
@@ -424,10 +425,17 @@ const TOOLBAR_CONTROL_CLASS =
 const FEEDBACK_TAB_CLASS =
   "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>span]:min-w-5 [&>span]:justify-center [&>span]:bg-[var(--annotation-bg)] [&>span]:text-2xs [&>span]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
-const MODIFIER_SHORTCUT = /Mac|iPhone|iPad/u.test(navigator.platform)
-  ? "⌘+Enter"
-  : "Ctrl+Enter";
 const APPLE_PLATFORM = /Mac|iPhone|iPad/u.test(navigator.platform);
+const MODIFIER_SHORTCUT = APPLE_PLATFORM ? "⌘+Enter" : "Ctrl+Enter";
+// The composer's whole keyboard vocabulary, told at the controls it drives
+// rather than in a standing line of helper text. Each chord travels as its
+// keystrokes rather than as one joined string, because the composer's tooltips
+// draw a keystroke as a key the reader presses rather than as prose. Every
+// other surface still reads the joined form; chipping those is BIG-203.
+const MODIFIER_SHORTCUT_KEYS = APPLE_PLATFORM
+  ? (["⌘", "Enter"] as const)
+  : (["Ctrl", "Enter"] as const);
+const ESCAPE_SHORTCUT_KEYS = ["Esc"] as const;
 const NEW_COMMENT_SHORTCUT = APPLE_PLATFORM ? "⌃+⌘+C" : "Ctrl+Alt+C";
 const isNewCommentShortcut = (event: globalThis.KeyboardEvent): boolean =>
   event.key.toLocaleLowerCase() === "c" &&
@@ -2131,6 +2139,40 @@ const useThreadHosts = (
   return hosts;
 };
 
+// The trade-off behind Submit right away is real but not urgent: a reviewer
+// who already knows it should not have to read it again on every comment. A
+// quiet mark that answers on demand keeps the choice explained without turning
+// the composer into a second paragraph of instructions, and it stays a mark
+// rather than a control - it opens nothing and changes nothing.
+// One paragraph per setting, each led by that setting's name. The reader is
+// choosing between two behaviours, so the help is shaped as the comparison it
+// is: two blocks to weigh, rather than one run of prose to take apart first.
+const SUBMIT_RIGHT_AWAY_HELP = [
+  {
+    term: "Submit right away",
+    detail:
+      "Send the comment to the agent immediately. The comments you send next wait until the agent finishes this one.",
+  },
+  {
+    term: "Submit later",
+    detail:
+      "Stage this comment and send it to the agent later as a batch. Agents tend work best with a batch rather than a series of requests.",
+  },
+] as const;
+
+/** Explains, on hover or keyboard focus, what Submit right away trades away. */
+const SubmitRightAwayHelp = () => (
+  <Tooltip sections={SUBMIT_RIGHT_AWAY_HELP} placement="below" asChild>
+    <button
+      type="button"
+      className="inline-flex size-5 min-h-11 min-w-11 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 leading-none text-subtle transition-colors hover:text-muted focus-visible:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent wide:min-h-0 wide:min-w-0 [&>svg]:size-3.5"
+      aria-label="About Submit right away"
+    >
+      <Icon icon={INFO_ICON} />
+    </button>
+  </Tooltip>
+);
+
 const CommentComposer = ({
   compose,
   body,
@@ -2205,10 +2247,9 @@ const CommentComposer = ({
       cancelAnimationFrame(frame);
     };
   }, [compose.left, compose.top, inline]);
-  const save = () =>
-    body.trim() !== "" &&
-    (!submitRightAway || canSubmitRightAway) &&
-    onSave(body.trim(), submitRightAway);
+  const canSave =
+    body.trim() !== "" && (!submitRightAway || canSubmitRightAway);
+  const save = () => canSave && onSave(body.trim(), submitRightAway);
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -2269,33 +2310,57 @@ const CommentComposer = ({
             of this highlight as a quote, and the whole highlight as the target.
           </p>
         ) : null}
-        <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
-          Escape closes · {MODIFIER_SHORTCUT} adds
-        </p>
         <div className="mt-2 block">
-          <button
-            type="button"
-            className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            role="switch"
-            aria-checked={submitRightAway}
-            onClick={() => onSubmitRightAwayChange(!submitRightAway)}
-          >
-            <span
-              className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
-              aria-hidden="true"
-            />
-            Submit right away
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              role="switch"
+              aria-checked={submitRightAway}
+              onClick={() => onSubmitRightAwayChange(!submitRightAway)}
+            >
+              <span
+                className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
+                aria-hidden="true"
+              />
+              Submit right away
+            </button>
+            <SubmitRightAwayHelp />
+          </div>
+          {/*
+            Each action carries its own shortcut instead of a standing line of
+            helper text under the field: the same two facts, told where the
+            reader is already looking at the control they apply to.
+
+            Neither tooltip hangs off the button directly. An unavailable
+            button ignores pointer events, so a tooltip anchored to it goes
+            quiet exactly when a reader is most likely to ask why the button
+            will not respond; anchoring to the wrapper keeps the answer
+            available while the button itself remains in the keyboard order.
+          */}
           <div className="mt-2 flex items-center justify-end gap-1">
-            <Button variant="outline" size="compact" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Tooltip label={MODIFIER_SHORTCUT} placement="below" asChild>
+            <Tooltip
+              label="to close without adding"
+              shortcutKeys={ESCAPE_SHORTCUT_KEYS}
+              placement="below"
+            >
+              <Button variant="outline" size="compact" onClick={onCancel}>
+                Cancel
+              </Button>
+            </Tooltip>
+            <Tooltip
+              label={
+                submitRightAway
+                  ? "to submit this comment now"
+                  : "to add this comment"
+              }
+              shortcutKeys={MODIFIER_SHORTCUT_KEYS}
+              placement="below"
+            >
               <Button
                 size="micro"
-                disabled={
-                  body.trim() === "" || (submitRightAway && !canSubmitRightAway)
-                }
+                className="aria-disabled:pointer-events-none aria-disabled:border-edge aria-disabled:bg-surface aria-disabled:text-subtle aria-disabled:opacity-100 aria-disabled:shadow-none"
+                aria-disabled={!canSave}
                 onClick={save}
               >
                 {submitRightAway ? "Submit Now" : "Add Comment"}

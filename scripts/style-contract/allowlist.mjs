@@ -61,8 +61,10 @@ export const STYLESHEET_BUDGETS = {
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it
     // takes under the pointer, and the two edges its controls take, plus the
-    // chrome-neutral ramp steps every palette has to declare for them.
-    declarations: 529,
+    // chrome-neutral ramp steps every palette has to declare for them. The
+    // shared tooltip adds four semantic theme tokens and their four utility
+    // aliases so dialog-owned tooltips can use one light-and-dark treatment.
+    declarations: 537,
   },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },

@@ -2,8 +2,27 @@
 
 const TOOLTIP_GAP = 8;
 const VIEWPORT_INSET = 8;
-const TOOLTIP_MAX_WIDTH = 11 * 16;
 const TOOLTIP_MIN_READABLE_HEIGHT = 2 * 16;
+const FALLBACK_ROOT_FONT_SIZE = 16;
+
+/**
+ * Resolves a rem measure against the root font size the reader is actually
+ * browsing at. A tooltip's widest measure is authored in rem, so a reader whose
+ * browser default is larger gets a wider tooltip than a hardcoded 16 predicts,
+ * and a clamp computed from that stale number would let the far edge leave the
+ * viewport. An unreadable root size falls back rather than producing NaN, which
+ * would place the tooltip nowhere at all.
+ */
+export const resolveRemMeasure = (
+  rem: number,
+  rootFontSize: string | undefined,
+): number => {
+  const parsed = Number.parseFloat(rootFontSize ?? "");
+  return (
+    rem *
+    (Number.isFinite(parsed) && parsed > 0 ? parsed : FALLBACK_ROOT_FONT_SIZE)
+  );
+};
 
 export type TooltipPosition = {
   readonly top: number;
@@ -17,6 +36,7 @@ export const placeTooltip = ({
   anchor,
   viewport,
   preferredPlacement,
+  maxWidth,
 }: {
   readonly anchor: {
     readonly top: number;
@@ -29,6 +49,7 @@ export const placeTooltip = ({
     readonly height: number;
   };
   readonly preferredPlacement?: "above" | "below";
+  readonly maxWidth: number;
 }): TooltipPosition => {
   const roomAbove = Math.max(0, anchor.top - TOOLTIP_GAP - VIEWPORT_INSET);
   const roomBelow = Math.max(
@@ -44,8 +65,11 @@ export const placeTooltip = ({
       ? roomierPlacement
       : preferredPlacement;
   const center = anchor.left + (anchor.right - anchor.left) / 2;
+  // The caller owns the tooltip's widest measure, because the clamp has to
+  // match the width the tooltip actually renders at: a narrow clamp against a
+  // wide tooltip lets its far edge run off the viewport with nothing to say so.
   const horizontalEdge = Math.min(
-    TOOLTIP_MAX_WIDTH / 2 + VIEWPORT_INSET,
+    maxWidth / 2 + VIEWPORT_INSET,
     viewport.width / 2,
   );
   return {
