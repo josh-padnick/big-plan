@@ -135,7 +135,7 @@ Rules:
 
 ## Colour
 
-A palette is eight ramps: `grey`, `neutral`, `primary`, `success`, `warning`, `danger`, `info`, and `note`.
+A palette is eight ramps - `grey`, `neutral`, `primary`, `success`, `warning`, `danger`, `info`, and `note` - plus the named chrome shades the dark half of the chrome band needs.
 The product's own ramps were built in HSL from each middle shade outward.
 Its greys are warm through their whole range, which is what makes the page read as paper.
 
@@ -216,7 +216,7 @@ Rules:
 5. **A theme may restate a closed scale.**
    Some characters are a shape as much as a colour: Brutalist squares cards and controls, drops the soft light source for a hard offset slab, and sets one step heavier; pill-shaped badges stay round.
    A theme may therefore also restate the closed radius, weight, tracking, and elevation scales, because those are scales this document already owns and a check can already close.
-   A palette block may therefore declare ramp steps, syntax tokens, comment-surface tokens, the closed radius, weight, tracking, and elevation scales, and `--ink-c`, and nothing else.
+   A palette block may therefore declare ramp steps, chrome shades, syntax tokens, comment-surface tokens, the closed radius, weight, tracking, and elevation scales, and `--ink-c`, and nothing else.
    It may not restate another role beyond the three exceptions in rule 1, because that is how a theme stops sharing the vocabulary every other theme is read in.
 
 ## Elevation
