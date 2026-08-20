@@ -56,10 +56,7 @@ import {
 import { selectAgentModelIdentity } from "../shared/agent-model.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
-import {
-  parseReviewerMarkdown,
-  type ReviewerMarkdownNode,
-} from "../shared/reviewer-markdown.js";
+import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
@@ -122,8 +119,6 @@ import {
 } from "./comments-surface.browser.js";
 import {
   AgentChangeDigest,
-  CodeBlock,
-  InlineCode,
   MessageTurn,
   ReviewerMessagePreview,
   RequestStatusStrip,
@@ -131,8 +126,8 @@ import {
   type MessageSurface,
 } from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
+import { renderReviewerNode } from "./message-markdown-view.browser.js";
 import { ComposeImages } from "./compose-images.browser.js";
-import { ReviewImage } from "./review-image.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
 import {
   deriveReviewCommentSubmitAvailability,
@@ -1501,42 +1496,6 @@ const replacePlanArticle = (nextDocument: Document): void => {
   }
   currentArticle.replaceWith(document.importNode(nextArticle, true));
   document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
-};
-
-const renderReviewerNode = (
-  node: ReviewerMarkdownNode,
-  key: string,
-): ReactNode => {
-  if (node.type === "text") return node.value;
-  if (node.type === "inlineCode")
-    return <InlineCode key={key} value={node.value} />;
-  if (node.type === "code")
-    return <CodeBlock key={key} value={node.value} language={node.language} />;
-  if (node.type === "image") {
-    return <ReviewImage key={key} id={node.id} alt={node.alt} />;
-  }
-  const children = node.children.map((child, index) =>
-    renderReviewerNode(child, `${key}-${index}`),
-  );
-  if (node.type === "paragraph") return <p key={key}>{children}</p>;
-  if (node.type === "strong") return <strong key={key}>{children}</strong>;
-  if (node.type === "emphasis") return <em key={key}>{children}</em>;
-  if (node.type === "blockquote")
-    return <blockquote key={key}>{children}</blockquote>;
-  if (node.type === "listItem") return <li key={key}>{children}</li>;
-  if (node.type === "list") {
-    return node.ordered ? (
-      <ol key={key}>{children}</ol>
-    ) : (
-      <ul key={key}>{children}</ul>
-    );
-  }
-  if (node.type !== "link") return null;
-  return (
-    <a key={key} href={node.url} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  );
 };
 
 const MarkdownBody = ({
