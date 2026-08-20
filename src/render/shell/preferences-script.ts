@@ -106,11 +106,15 @@ export const PREFERENCES_SCRIPT = `<script>
   // The field has to show what an approval would carry at every moment it is
   // visible, so both boundaries where the reviewer can leave it disagreeing
   // with the record - opening the sheet and leaving the field - read the record
-  // back. Where storage refused to answer, the text on screen is the only copy
-  // of the note the product still has, so it is kept rather than replaced.
+  // back. Where storage refused to answer, written text on screen is the only
+  // copy of the note the product still has, so it is kept rather than replaced;
+  // a blank field has no such copy to keep, and an emptied note is the default
+  // whatever storage will or will not say about it.
   const normalizeMessageField = () => {
     const message = storedMessage();
     if (message !== null) messageInput.value = message;
+    else if (messageInput.value.trim() === "")
+      messageInput.value = defaultMessage;
   };
 
   // The default is what absence already means, so storing it would only make a

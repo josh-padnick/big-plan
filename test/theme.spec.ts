@@ -1046,6 +1046,17 @@ test("should keep a note the browser refused to store rather than replacing it",
   await settings.click();
   await openSection(page, "Approval message");
   await expect(message).toHaveValue(written);
+
+  // A field the reviewer emptied has no note to preserve, so a storage that
+  // will not answer must not leave them looking at an empty box while an
+  // approval would carry the standard wording.
+  await message.fill("");
+  await message.blur();
+  await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
+  await page.keyboard.press("Escape");
+  await settings.click();
+  await openSection(page, "Approval message");
+  await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
 });
 
 test("should open settings on the page an approve dialog asks for", async ({
