@@ -622,6 +622,31 @@ test("should remember the submit-right-away choice across new composers", async 
   const help = composer.getByRole("button", {
     name: "About Submit right away",
   });
+  const helpAppearance = () =>
+    help.evaluate((button) => {
+      const buttonRect = button.getBoundingClientRect();
+      const iconRect = button.querySelector("svg")?.getBoundingClientRect();
+      const style = getComputedStyle(button);
+      return {
+        buttonWidth: buttonRect.width,
+        buttonHeight: buttonRect.height,
+        iconWidth: iconRect?.width,
+        iconHeight: iconRect?.height,
+        backgroundColor: style.backgroundColor,
+        borderTopWidth: style.borderTopWidth,
+        color: style.color,
+      };
+    });
+  const desktopHelpAppearance = await helpAppearance();
+  expect(desktopHelpAppearance).toEqual({
+    buttonWidth: 20,
+    buttonHeight: 20,
+    iconWidth: 14,
+    iconHeight: 14,
+    backgroundColor: "rgba(0, 0, 0, 0)",
+    borderTopWidth: "0px",
+    color: "rgb(111, 105, 92)",
+  });
   const helpTooltip = page.getByRole("tooltip", {
     name: /Send the comment to the agent/,
   });
@@ -703,6 +728,17 @@ test("should remember the submit-right-away choice across new composers", async 
   await page.evaluate(() => {
     document.documentElement.style.removeProperty("font-size");
   });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(helpAppearance)
+    .toEqual({
+      ...desktopHelpAppearance,
+      buttonWidth: 44,
+      buttonHeight: 44,
+    });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await expect.poll(helpAppearance).toEqual(desktopHelpAppearance);
 
   await preference.click();
   await composer.getByRole("button", { name: "Cancel" }).click();

@@ -2165,7 +2165,7 @@ const SubmitRightAwayHelp = () => (
   <Tooltip sections={SUBMIT_RIGHT_AWAY_HELP} placement="below" asChild>
     <button
       type="button"
-      className="inline-flex size-5 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 leading-none text-subtle transition-colors hover:text-muted focus-visible:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&>svg]:size-3.5"
+      className="inline-flex size-5 min-h-11 min-w-11 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 leading-none text-subtle transition-colors hover:text-muted focus-visible:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent wide:min-h-0 wide:min-w-0 [&>svg]:size-3.5"
       aria-label="About Submit right away"
     >
       <Icon icon={INFO_ICON} />
