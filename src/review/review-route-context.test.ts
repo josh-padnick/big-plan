@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createActivityClock,
   createDecisionAnswers,
   createReaderProgress,
   createWriteGate,
@@ -253,5 +254,29 @@ describe("createWriteGate", () => {
     release();
     await running;
     expect(gate.stalledForMs()).toBeUndefined();
+  });
+});
+
+const FORMER_IDLE_WINDOW_MS = 30 * 60 * 1_000;
+
+describe("createActivityClock", () => {
+  it("should treat the former 30-minute window as expired when a timeout is set", () => {
+    let nowMs = 1_000;
+    const clock = createActivityClock(FORMER_IDLE_WINDOW_MS, () => nowMs);
+
+    nowMs += FORMER_IDLE_WINDOW_MS;
+
+    expect(clock.idleForMs()).toBe(FORMER_IDLE_WINDOW_MS);
+    expect(clock.expiresAtMs()).toBe(1_000 + FORMER_IDLE_WINDOW_MS);
+  });
+
+  it("should not expire after the former 30-minute window when idle timeout is disabled", () => {
+    let nowMs = 1_000;
+    const clock = createActivityClock(0, () => nowMs);
+
+    nowMs += FORMER_IDLE_WINDOW_MS + 1;
+
+    expect(clock.idleForMs()).toBe(FORMER_IDLE_WINDOW_MS + 1);
+    expect(clock.expiresAtMs()).toBeUndefined();
   });
 });

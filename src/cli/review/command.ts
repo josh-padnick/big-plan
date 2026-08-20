@@ -2,7 +2,8 @@
 // local review runtime and reports where the reviewer opens it. The command
 // keeps running because the runtime is the product - it is the only way submit
 // and progress can work - so it returns the address and then stays listening
-// until the reviewer stops it or the configured idle policy closes it.
+// until the reviewer stops it. `--idle-timeout` can opt into closing an
+// abandoned session; the default is no expiry.
 //
 // Because it is long-lived, this command is also where a session that has
 // stopped behaving is interrogated: `kill -USR2 <pid>` prints what the runtime
@@ -219,7 +220,7 @@ export const reviewCommand = async (
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
       "Press Ctrl+C to stop the review runtime",
       parsedArguments.idleTimeoutMs === 0
-        ? "Idle timeout is disabled"
+        ? "This review stays up until you stop it; pass --idle-timeout <minutes> to close it after a spell of inactivity"
         : `This review ends after ${reviewIdleDurationLabel(parsedArguments.idleTimeoutMs)} of inactivity, meaning no page open and no agent working; configure with --idle-timeout`,
     ],
   };

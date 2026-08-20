@@ -4721,40 +4721,117 @@ describe("review runtime shutdown", () => {
     );
   });
 
-  it("should publish its lifetime and deadline on the session route", async () => {
-    const before = (await (await call({ path: "/api/session" })).json()) as {
+  it("should publish no deadline by default", async () => {
+    const payload = (await (await call({ path: "/api/session" })).json()) as {
       readonly idleTimeoutMs?: unknown;
       readonly expiresAtMs?: unknown;
     };
-    expect(before.idleTimeoutMs).toBe(DEFAULT_REVIEW_IDLE_TIMEOUT_MS);
-    expect(before.expiresAtMs).toBeGreaterThan(Date.now());
-    await new Promise((settle) => setTimeout(settle, 5));
-    const after = (await (await call({ path: "/api/session" })).json()) as {
-      readonly expiresAtMs?: unknown;
-    };
-    expect(after.expiresAtMs).toBeGreaterThan(Number(before.expiresAtMs));
+    expect(DEFAULT_REVIEW_IDLE_TIMEOUT_MS).toBe(0);
+    expect(payload.idleTimeoutMs).toBe(0);
+    expect(payload).not.toHaveProperty("expiresAtMs");
   });
 
-  it("should publish no deadline when the idle timeout is disabled", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-forever-"));
+  it("should publish a deadline that advances when a timeout is configured", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-server-deadline-"),
+    );
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
-    const endless = await startReviewRuntime({ planPath, idleTimeoutMs: 0 });
-    const endlessToken = await readSessionToken(endless);
+    const timed = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 30 * 60 * 1_000,
+    });
+    const timedToken = await readSessionToken(timed);
+    const sessionOf = async (): Promise<{
+      readonly idleTimeoutMs?: unknown;
+      readonly expiresAtMs?: unknown;
+    }> =>
+      (await (
+        await fetch(`${timed.url}api/session`, {
+          headers: { "x-big-plan-review-token": timedToken },
+        })
+      ).json()) as {
+        readonly idleTimeoutMs?: unknown;
+        readonly expiresAtMs?: unknown;
+      };
     try {
-      const response = await fetch(`${endless.url}api/session`, {
-        headers: { "x-big-plan-review-token": endlessToken },
-      });
-      const payload = (await response.json()) as Readonly<
-        Record<string, unknown>
-      >;
-      expect(payload.idleTimeoutMs).toBe(0);
-      expect(payload).not.toHaveProperty("expiresAtMs");
+      const before = await sessionOf();
+      expect(before.idleTimeoutMs).toBe(30 * 60 * 1_000);
+      expect(before.expiresAtMs).toBeGreaterThan(Date.now());
+      await new Promise((settle) => setTimeout(settle, 5));
+      const after = await sessionOf();
+      expect(after.expiresAtMs).toBeGreaterThan(Number(before.expiresAtMs));
     } finally {
-      await endless.close();
+      await timed.close();
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("should keep a default review serving after the idle window that used to close it", async () => {
+    // The former default was 30 minutes. This uses a shortened analogue so the
+    // test does not sleep for that lifetime: a runtime under that policy dies,
+    // and a default runtime (no expiry) still answers after the same window.
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-idle-survive-"));
+    const dyingPath = join(directory, "dying.mdx");
+    const survivingPath = join(directory, "surviving.mdx");
+    await writeFile(dyingPath, PLAN);
+    await writeFile(survivingPath, PLAN);
+    const oldWindowMs = 200;
+    const dying = await startReviewRuntime({
+      planPath: dyingPath,
+      idleTimeoutMs: oldWindowMs,
+    });
+    const surviving = await startReviewRuntime({ planPath: survivingPath });
+    try {
+      expect(DEFAULT_REVIEW_IDLE_TIMEOUT_MS).toBe(0);
+      await expect(fetch(dying.url)).resolves.toMatchObject({ status: 200 });
+      await expect(fetch(surviving.url)).resolves.toMatchObject({
+        status: 200,
+      });
+
+      // GET / counts as activity, so the wait must not poll either document.
+      // Reading the session record touches nothing, so it can be watched
+      // until the shortened window has actually closed that runtime.
+      await vi.waitFor(
+        async () => {
+          await expect(
+            reviewSessionIsRunning({
+              store: dying.store,
+              sessionId: dying.sessionId,
+            }),
+          ).resolves.toMatchObject({
+            running: false,
+            stopReason: expect.stringContaining("of inactivity"),
+          });
+        },
+        { timeout: 5_000, interval: 20 },
+      );
+      // The record is written before the listener drains, so the socket is
+      // watched rather than sampled once.
+      await vi.waitFor(
+        async () => {
+          await expect(fetch(dying.url)).rejects.toThrow();
+        },
+        { timeout: 5_000, interval: 20 },
+      );
+
+      await expect(fetch(surviving.url)).resolves.toMatchObject({
+        status: 200,
+      });
+      await expect(
+        reviewSessionIsRunning({
+          store: surviving.store,
+          sessionId: surviving.sessionId,
+        }),
+      ).resolves.toMatchObject({ running: true });
+    } finally {
+      await Promise.all([
+        dying.close().catch(() => undefined),
+        surviving.close(),
+      ]);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 15_000);
 
   it("should force-close a stalled active request after a short grace period", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-stall-"));

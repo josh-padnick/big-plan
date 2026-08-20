@@ -138,8 +138,6 @@ const servicePage = ({
 };
 
 // A clock time is what a person recognises in "the review stopped at 2:41 AM".
-// The date is left off because an ending is recent by construction: this is
-// read when a saved link is clicked after the session behind it stopped.
 const clockTime = (atMs: number): string => {
   if (!Number.isFinite(atMs)) return "an unknown time";
   const spoken = new Date(atMs).toLocaleTimeString(undefined, {
@@ -154,8 +152,19 @@ const clockTime = (atMs: number): string => {
   );
 };
 
-// How long this process has been up, which is the one clock in the product
-// that is not recent by construction: the service has no idle timeout, so it
+// The same clock carrying the day it fell on, for a moment the reader has no
+// reason to assume is today. Local time throughout, the same frame the clock
+// itself is written in, so the date turns over when the reader's day does.
+const datedClockTime = (atMs: number): string => {
+  if (!Number.isFinite(atMs)) return clockTime(atMs);
+  const day = new Date(atMs).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${day}, ${clockTime(atMs)}`;
+};
+
+// How long this process has been up: the service has no idle timeout, so it
 // may have started days ago and a bare time would read as today. The date
 // appears only when that would be wrong, so a service started today says
 // exactly what it has always said.
@@ -173,14 +182,7 @@ const startedTime = ({
     started.getFullYear() === today.getFullYear() &&
     started.getMonth() === today.getMonth() &&
     started.getDate() === today.getDate();
-  if (startedToday) return clockTime(atMs);
-  // Local time throughout, the same frame the clock itself is written in, so
-  // the date turns over when the reader's day does.
-  const day = started.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-  return `${day}, ${clockTime(atMs)}`;
+  return startedToday ? clockTime(atMs) : datedClockTime(atMs);
 };
 
 const commandBlock = ({ command }: { readonly command: string }): string => {
@@ -217,7 +219,13 @@ const endingPage = ({
 ${restartBlock({ planPath })}`,
   });
 
-/** The page a saved link reaches once its review session has ended. */
+/**
+ * The page a saved link reaches once its review session has ended.
+ *
+ * The ending carries its date as well as its clock time. A review stays up
+ * until someone stops it, so it may have run for days, and a bare time on a
+ * link saved last week would read as today.
+ */
 export const renderPlanEndedPage = ({
   planPath,
   reason,
@@ -229,7 +237,7 @@ export const renderPlanEndedPage = ({
 }): string =>
   endingPage({
     planPath,
-    lede: `The review stopped at ${clockTime(atMs)}. ${reason}`,
+    lede: `The review stopped at ${datedClockTime(atMs)}. ${reason}`,
   });
 
 /**
@@ -248,7 +256,7 @@ export const renderPlanInterruptedPage = ({
 }): string =>
   endingPage({
     planPath,
-    lede: `The review stopped unexpectedly. Last seen at ${clockTime(lastSeenAtMs)}.`,
+    lede: `The review stopped unexpectedly. Last seen at ${datedClockTime(lastSeenAtMs)}.`,
   });
 
 /** The page for a plan the service knows about but has never seen reviewed. */

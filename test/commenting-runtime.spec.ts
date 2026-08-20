@@ -2517,6 +2517,10 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
       response,
       json: {
         ...value,
+        // Deadline recovery only exists when a timeout is configured. The
+        // default is no expiry, so this journey supplies the opt-in bound
+        // the page needs before it will name a passed deadline.
+        idleTimeoutMs: 30 * 60 * 1_000,
         expiresAtMs:
           route.request().headers()["x-big-plan-test-poll-phase"] ===
           "fresh-session"

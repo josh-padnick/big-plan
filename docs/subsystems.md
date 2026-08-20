@@ -69,8 +69,10 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   The reviewer's revert publishes through the same module and the same lock, re-proving the digest it was computed against, so it can never land over a revision an agent committed while the revert was being prepared.
   A claim attempt is transport state here, never Change Engine domain state: the commit hands the Change Engine a committed revision through `src/review/change-set-commit.ts`, and nothing else records one.
 - Idle expiry is one centralized runtime policy, not a pair of aligned boundary defaults: `DEFAULT_REVIEW_IDLE_TIMEOUT_MS` in `src/review/server.ts` owns the default, and `src/cli/review/command.ts` imports it rather than duplicating it.
-  Any authenticated request from an open page counts as activity, so a page being read keeps its own session alive rather than only writes counting.
-  The CLI requires a nonzero `--idle-timeout` to be at least 1 minute, while `--idle-timeout 0` disables expiry entirely; the agent work loop exits when the session heartbeat it follows dies.
+  The default is no expiry: a review stays reachable until the process is deliberately stopped.
+  `--idle-timeout` opts into a bound; a nonzero value must be at least 1 minute, and `--idle-timeout 0` restates the default.
+  Any authenticated request from an open page counts as activity, so a configured bound measures genuine abandonment rather than time since the last keystroke.
+  The agent work loop exits when the session heartbeat it follows dies.
   Symptoms that look unrelated (an agent disconnecting, a preview expiring) can share this one cause.
 - The review-link service under `src/review/service/` is a reader of this subsystem's truth, never a second copy of it.
   Its registry records where a plan lives and nothing about whether a session runs; every live-or-ended answer flows through `session-authority.ts` at request time.
