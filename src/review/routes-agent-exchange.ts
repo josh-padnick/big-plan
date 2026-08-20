@@ -58,7 +58,7 @@ import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
 import { heldAgentClaim } from "./shared/agent-claim.js";
 import { settlementRefusal } from "./review-route-settlement.js";
-import { agentIsAttached } from "./shared/agent-primacy.js";
+import { agentIsAttached, selectPrimaryAgent } from "./shared/agent-primacy.js";
 
 const appendProgressBestEffort = async ({
   context,
@@ -761,6 +761,19 @@ export const answerAgentPrimacy = async (
       ? target.claimToken
       : undefined;
   /*
+  The turn a hand-off displaces, when there is one to displace.
+
+  Named for the same reason the disconnect above is: the release frees the
+  claims it is given, so giving it one agent's own token is what makes it
+  incapable of reaching into a turn another agent is mid way through. A seat
+  with nobody in it displaces nothing, and an incumbent that holds no claim has
+  nothing to free, so both leave the plan's claims alone.
+  */
+  const displacedTurn =
+    answer === "primary"
+      ? selectPrimaryAgent({ agents: attached, nowMs })?.claimToken
+      : undefined;
+  /*
   The reviewer may hand the outgoing agent's unpublished draft to the new
   primary. It is resolved before anything moves, because the release below is
   what frees the claim that names the stage the draft lives in.
@@ -810,7 +823,14 @@ export const answerAgentPrimacy = async (
     ) {
       return refusal({ status: 404, reason: "That agent is not attached" });
     }
-    await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
+    if (displacedTurn !== undefined) {
+      await releaseClaimsForPrimacyHandoff({
+        store,
+        sessionId,
+        planId,
+        claimedBy: displacedTurn,
+      });
+    }
   }
   if (disconnectedTurn !== undefined) {
     await releaseClaimsForPrimacyHandoff({

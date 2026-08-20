@@ -281,8 +281,10 @@ Making an observer the primary asks you to confirm, and offers to hand the outgo
 Whichever you choose, the agent you moved away from is told at its next command instead of discovering it when its answer is refused, and anything it had in flight is fenced rather than delivered.
 A disconnected agent stays gone: the decision is recorded, so a connector sitting in its waiting loop is told and stops rather than quietly re-attaching and asking you again.
 Disconnecting the agent that answers you leaves the review without one until you say who takes over: Big Plan does not promote a watching agent into a seat you emptied, because that would answer a question you were asked and chose not to answer.
-Connecting an agent afterwards starts a new one, which arrives as an observer and asks you like any other.
+You say so in one of two ways, and **Agent Status** keeps showing its cards for as long as nobody is answering you so that both stay available.
+Either pick an agent that is already watching and choose **Make it primary**, or connect a new one - a connector you start after the seat is empty takes it and begins answering, since starting it is you saying who answers.
 The roster stays out of the way while one agent is answering you: a single attached agent with nothing to ask shows no cards at all.
+It comes back the moment nobody is answering you, so the decision is always in reach.
 
 The stalled reading is bounded, because a pickup cannot account for silence indefinitely.
 After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: **Agent Status** gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.

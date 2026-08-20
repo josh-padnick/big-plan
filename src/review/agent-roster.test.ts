@@ -644,6 +644,68 @@ describe("the question an arrival raises", () => {
     );
   });
 
+  it("should ask about nobody when the incumbent never came back", async () => {
+    /*
+    The agent this arrival was held back for is gone: its record aged out and
+    the seat is standing empty. There is no second agent to ask about, so the
+    reviewer is told nothing - the empty seat is answered by succession, not by
+    a card about an agent that no longer exists.
+    */
+    const store = await betweenTurns();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: 2_100,
+    });
+    const goneMs = 2_000 + AGENT_STALL_MS + 1;
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: goneMs,
+    });
+
+    const agents = await requestAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: goneMs,
+    });
+
+    expect(selectPrimaryAgent({ agents, nowMs: goneMs })).toBeUndefined();
+    expect(pendingPrimacyRequest({ agents, nowMs: goneMs })).toBeUndefined();
+  });
+
+  it("should stop holding a question once the seat is this agent's own", async () => {
+    // Succession answers the empty seat, and a promoted record has nothing
+    // left to ask - so nothing keeps asking on its behalf either.
+    const store = await betweenTurns();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: 2_100,
+    });
+    const noticedMs = 2_000 + AGENT_STALL_MS + 1;
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: noticedMs,
+    });
+
+    const { agent } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "arriving",
+      now: noticedMs + AGENT_STALL_MS,
+    });
+
+    expect(agent.role).toBe("primary");
+    expect(agent.unsettledArrivalAtMs).toBeUndefined();
+  });
+
   it("should keep holding it while the answer is still unknown", async () => {
     const store = await betweenTurns();
     await attachAgentToRoster({
@@ -736,6 +798,19 @@ describe("a seat the reviewer emptied", () => {
     expect(
       selectPrimaryAgent({ agents, nowMs: 2_000 + AGENT_STALL_MS * 4 }),
     ).toBeUndefined();
+  });
+
+  it("should still take a brand-new connector as the primary", async () => {
+    // The marker binds the agents already on the roster, not the reviewer's
+    // own next move: starting a connector is them saying who answers.
+    const store = await disconnectedPrimary();
+    const { agent } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "reconnected",
+      now: 2_500,
+    });
+    expect(agent.role).toBe("primary");
   });
 
   it("should keep the reviewer's own answer available to them", async () => {

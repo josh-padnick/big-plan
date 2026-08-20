@@ -927,10 +927,6 @@ const nextWork = async ({
   let rosterWriterId = writerId;
   let adoptClaimToken = agentToken;
   let registered = false;
-  // Whether this loop's question is waiting on Big Plan rather than on the
-  // reviewer, which is the difference between "they have been asked" and "they
-  // will be" - and the observer result says which.
-  let questionIsHeld = false;
   /*
   What this loop is on the roster, or that the reviewer has ended it.
 
@@ -966,22 +962,25 @@ const nextWork = async ({
     reviewer a second agent had turned up. Asking again here is what turns the
     deferral into an answer once the incumbent has come back - or has not.
     */
-    if (registration.agent.unsettledArrivalAtMs === undefined) {
-      questionIsHeld = false;
-    } else {
-      const raised = await requestAgentPrimacy({
+    if (registration.agent.unsettledArrivalAtMs !== undefined) {
+      await requestAgentPrimacy({
         store: session.store,
         sessionId: session.sessionId,
         writerId: rosterWriterId,
       }).catch(() => undefined);
-      const answered = raised?.find(
-        (agent) => agent.writerId === rosterWriterId,
-      );
-      questionIsHeld =
-        (answered ?? registration.agent).requestedPrimacyAtMs === undefined;
     }
     return registration.agent.role;
   };
+  /*
+  What a session that is not the primary is told, and only ever without --wait.
+
+  A waiting loop never reaches here: it stays in the wait below until it has
+  work, the reviewer's answer, or an end. So this result always describes a
+  session that is leaving, and the help says exactly that. Claiming the
+  reviewer has been asked would be describing a question that leaves with it -
+  the registration is given back on the way out - and a session that never
+  raised one, a displaced primary among them, was never asking at all.
+  */
   const observerResult = (): Record<string, unknown> => ({
     pending: false,
     role: "observer",
@@ -990,10 +989,8 @@ const nextWork = async ({
     reason:
       "Another agent is the primary for this review, so this session cannot answer the reviewer yet",
     help: [
-      questionIsHeld
-        ? "The reviewer will be asked once Big Plan can tell this session from the agent already answering them"
-        : "The reviewer has been asked whether to make this agent the primary",
-      "Run again with --wait to keep observing until they answer",
+      "This session is exiting, so the reviewer is not left with a question about it",
+      "Run again with --wait to stay attached, ask the reviewer, and continue if they make this agent the primary",
       "Reading the plan and the review is allowed; claiming, noting, and responding are not",
     ],
   });

@@ -354,8 +354,9 @@ The reviewer's answer is recorded, so a loop already waiting on `--wait` is told
 That result is terminal even with `--wait`: stop the loop.
 `agent note` and `agent respond` from the same session refuse with `PRIMACY_LOST` and say the reviewer disconnected it, for as long as the turn they belong to could still be running.
 The claim it was part way through is freed as well, so the turn it had in flight can no longer reach the plan, and no other agent's claim is touched.
-Connecting again afterwards is a new agent: it attaches as an observer and asks the reviewer, like any other arrival.
-Disconnecting the agent that answers the review leaves the review with no primary until the reviewer chooses one; nothing succeeds into a seat they emptied.
+Disconnecting the agent that answers the review leaves the review with no primary until the reviewer fills the seat, and they have two ways to do it.
+No agent already attached succeeds into a seat the reviewer emptied, so an observer waits there until they pick it from **Agent Status**.
+A connector started afterwards is a different matter: it arrives to an empty seat and becomes the primary under the ordinary arrival rule, without being asked, because running the connect prompt is the reviewer saying who answers.
 
 A published turn keeps its own seat for as long as the answering agent's return trip takes.
 `agent respond` therefore returns `next`: an `agent next ... --wait --agent <token>` command carrying the token just answered under.

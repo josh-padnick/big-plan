@@ -245,36 +245,79 @@ const AgentCard = ({
   </article>
 );
 
+/** What the rail has to draw about the agents attached to this review. */
+export type AgentRosterReading = {
+  /** Every attached agent, in the order the rail lists them. */
+  readonly attached: ReadonlyArray<RosterAgent>;
+  readonly primary: RosterAgent | undefined;
+  readonly requesting: RosterAgent | undefined;
+  /**
+   * Whether the reviewer is shown anything at all.
+   *
+   * Nothing, when one agent is attached and answering and nothing is being
+   * asked: that is the quiet steady state, where the activity card already
+   * says who is connected and a second card repeating it is the noise this
+   * surface exists to avoid.
+   *
+   * The plan having nobody to answer it is the case that must never be quiet.
+   * The reviewer's own decisions can leave it that way - disconnecting the
+   * primary leaves the seat empty on purpose, and nothing succeeds into a seat
+   * they emptied - so the cards that let them appoint somebody have to be on
+   * screen for exactly as long as there is nobody. Hidden, a review with one
+   * watching agent and no primary was a dead end: their comments queued, the
+   * agent read them and could not answer, and the only way out was connecting
+   * a new one.
+   */
+  readonly isShown: boolean;
+};
+
 /**
- * The rail's agent roster.
+ * Reads the roster the way the rail draws it.
  *
- * Renders nothing at all when one agent is attached and nothing is being asked.
- * That is the quiet steady state the reviewer asked for: the existing activity
- * card already says who is connected and what they are doing, so a second card
- * repeating it would be the noise this surface exists to avoid. The roster
- * appears exactly when there is more than one agent to tell apart.
+ * Membership is applied here, and applied once. Reaping happens on a roster
+ * write, so a review whose agents have all exited is never swept while the
+ * reviewer sits reading; drawing the raw list put cards on screen for
+ * processes that were gone - offering "Make it primary" on a dead agent, and
+ * answering it - and once the last live primary aged out the dead one's card
+ * silently relabelled itself an observer.
  */
+export const readAgentRosterFor = ({
+  agents,
+  nowMs,
+}: {
+  readonly agents: ReadonlyArray<RosterAgent>;
+  readonly nowMs: number;
+}): AgentRosterReading => {
+  const primary = selectPrimaryAgent({ agents, nowMs });
+  const requesting = pendingPrimacyRequest({ agents, nowMs });
+  const attached = orderAttachedAgents(agents).filter((agent) =>
+    agentIsAttached({ agent, nowMs }),
+  );
+  return {
+    attached,
+    primary,
+    requesting,
+    isShown:
+      requesting !== undefined ||
+      attached.length > 1 ||
+      (attached.length > 0 && primary === undefined),
+  };
+};
+
+/** The rail's agent roster. */
 export const AgentRoster = ({
   agents,
   nowMs,
   isReadOnly,
   onAnswer,
 }: AgentRosterProps) => {
-  const primary = selectPrimaryAgent({ agents, nowMs });
-  const requesting = pendingPrimacyRequest({ agents, nowMs });
-  /*
-  The same membership test every selector beside this one already applies.
-
-  Reaping happens on a roster write, so a review whose agents have all exited
-  is never swept while the reviewer sits reading. Drawing the raw list put
-  cards on screen for processes that were gone - offering "Make it primary" on
-  a dead agent, and answering it - and once the last live primary aged out the
-  dead one's card silently relabelled itself an observer.
-  */
-  const ordered = orderAttachedAgents(agents).filter((agent) =>
-    agentIsAttached({ agent, nowMs }),
-  );
-  if (ordered.length < 2 && requesting === undefined) return null;
+  const {
+    attached: ordered,
+    primary,
+    requesting,
+    isShown,
+  } = readAgentRosterFor({ agents, nowMs });
+  if (!isShown) return null;
   return (
     <section className="grid min-w-0 gap-2" data-review-agent-roster="">
       {requesting === undefined ? null : (

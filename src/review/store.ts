@@ -3223,9 +3223,11 @@ export const attachAgentToRoster = async ({
           seat !== undefined &&
           !seat.byReviewer &&
           now - seat.emptiedAtMs >= AGENT_STALL_MS;
-        const { requestedPrimacyAtMs: _answered, ...withoutRequest } = returned
-          ? withoutFinishedClaim
-          : existing;
+        const {
+          requestedPrimacyAtMs: _answered,
+          unsettledArrivalAtMs: _settled,
+          ...withoutRequest
+        } = returned ? withoutFinishedClaim : existing;
         registered = {
           ...(succeedsAnEmptySeat
             ? { ...withoutRequest, role: "primary" }
@@ -3482,14 +3484,16 @@ export const clearInheritedDraft = async ({
  *
  * An agent that arrives while the incumbent is between turns cannot yet be
  * called a second agent, so it attaches without asking (see
- * `attachAgentToRoster`). This is where that held question is raised once the
- * roster can say: the incumbent came back and is plainly still here, or it
- * never did and the seat is standing empty. Either way the newcomer is now a
- * fact the reviewer should be told about.
+ * `attachAgentToRoster`). This is where that held question is raised, and it is
+ * raised on one condition: a primary is still attached and is plainly not
+ * between turns, so this newcomer really is a second agent.
  *
- * Still ambiguous, and nothing happens. The caller asks again on its next
- * pass, which costs one write per half second for at most the length of a
- * return trip.
+ * An empty seat raises nothing. There is no second agent to ask about - the
+ * one this session arrived beside has gone - and a card reading "a second
+ * agent wants to answer you" would be about nobody. An empty seat is answered
+ * by succession when silence emptied it, and by the reviewer when they did;
+ * the question stays held either way, so it is still there to raise if a
+ * primary does turn up.
  *
  * A question the reviewer has already answered is never re-raised: their
  * answer strips the deferral along with the request, so there is nothing left
@@ -3512,7 +3516,7 @@ export const requestAgentPrimacy = async ({
     now,
     change: (agents) => {
       const incumbent = selectPrimaryAgent({ agents, nowMs: now });
-      if (incumbent !== undefined && agentIsBetweenTurns(incumbent)) {
+      if (incumbent === undefined || agentIsBetweenTurns(incumbent)) {
         return agents;
       }
       return agents.map((agent) => {
