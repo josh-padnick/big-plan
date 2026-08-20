@@ -175,11 +175,15 @@ const conversationPartsFor = (
 const WireframeElement = ({
   node,
   isMasterPane = false,
+  selectsInPlace = false,
 }: {
   readonly node: WireframeNode;
   // Set only by the Row that owns this pane, because whether a panel is the
   // collection is a fact about its siblings, not about the panel alone.
   readonly isMasterPane?: boolean;
+  // Set only inside that collection pane, where picking a record fills the
+  // detail beside it rather than leaving the screen.
+  readonly selectsInPlace?: boolean;
 }): JSX.Element => {
   switch (node.element) {
     case "Stack":
@@ -240,7 +244,10 @@ const WireframeElement = ({
               : { "data-wireframe-conversation": "" })}
           >
             {conversation === undefined ? (
-              <WireframeElements nodes={node.children} />
+              <WireframeElements
+                nodes={node.children}
+                selectsInPlace={isMasterPane}
+              />
             ) : (
               <>
                 <div className="wireframe-thread flex flex-col gap-3">
@@ -532,7 +539,10 @@ const WireframeElement = ({
     case "List":
       return (
         <ul className="wireframe-list flex flex-col">
-          <WireframeElements nodes={node.children} />
+          <WireframeElements
+            nodes={node.children}
+            selectsInPlace={selectsInPlace}
+          />
         </ul>
       );
     case "ChoiceGroup":
@@ -593,9 +603,12 @@ const WireframeElement = ({
       // A row that pushes to another screen says so with the mark a product
       // puts there. navigateTo is the author declaring the push, so the mark
       // reports intent already written rather than inventing an affordance:
-      // a row without one never gets it.
+      // a row without one never gets it. Inside the collection pane of a
+      // master/detail workspace navigateTo means select in place - the detail
+      // for that record is already drawn beside the row - so a push mark there
+      // would contradict the pane next to it.
       const disclosure =
-        node.navigateTo === undefined ? null : (
+        node.navigateTo === undefined || selectsInPlace ? null : (
           <span className="wireframe-list-disclosure">
             <Glyph name="chevron" />
           </span>
@@ -866,9 +879,11 @@ const Field = ({
 const WireframeElements = ({
   nodes,
   masterIndex = -1,
+  selectsInPlace = false,
 }: {
   readonly nodes: ReadonlyArray<WireframeNode>;
   readonly masterIndex?: number;
+  readonly selectsInPlace?: boolean;
 }) => (
   <>
     {nodes.map((node, index) => (
@@ -876,6 +891,7 @@ const WireframeElements = ({
         key={index}
         node={node}
         isMasterPane={index === masterIndex}
+        selectsInPlace={selectsInPlace}
       />
     ))}
   </>

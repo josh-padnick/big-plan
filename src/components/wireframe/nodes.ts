@@ -60,11 +60,15 @@ export const COLLECTIONS: ReadonlySet<WireframeNode["element"]> = new Set([
  *
  * A Group holds only loose items - compilation refuses one holding a pane or a
  * collection - so this no longer uncovers a hidden pane. What it uncovers is
- * the loose items themselves, and two rules still need to see them. A Group of
- * buttons beside a record collection is not the detail pane that would demand
- * exactly one selected record, and a Group holding a ChoiceGroup beside
- * another control is still a decision sharing its row. Reading such a Group as
- * one opaque child answers both questions wrongly.
+ * the loose items themselves. checkSelection reads through it because a Group
+ * of buttons beside a record collection is not the detail pane that would
+ * demand exactly one selected record, and checkChoiceComposition because a
+ * Group holding a ChoiceGroup beside another control is still a decision
+ * sharing its row; reading such a Group as one opaque child answers both
+ * questions wrongly. checkGroupedPanes reads through it to reach the forbidden
+ * member itself, which is what makes the refusal hold through nested Groups.
+ * Every other rule filters on elements a Group cannot hold, so it reads its
+ * siblings directly.
  */
 export const paneSiblings = (
   nodes: ReadonlyArray<WireframeNode>,

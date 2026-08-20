@@ -194,7 +194,7 @@ Implementation principles:
 - Make one screen speak to one audience. When the actor changes, change the mode and heading before addressing the next person.
 - Name what the current branch is about: a purchase, a loan question, or something confusing—not a generic summary or a request that does not exist yet.
 - Make reassurance name the actual risk and what remains unchanged: `Unlocking does not approve or buy anything`; `This was practice—no money moved`.
-- Keep saved views and filters semantically separate. Views are reusable queues such as `All`, `Mine`, and `Unassigned`; filters are temporary constraints such as `Waiting ×`, `SLA risk ×`, and `+ Add filter`.
+- Keep saved views and filters semantically separate, and let the drawing show which is which. Views are reusable queues such as `All`, `Mine`, and `Unassigned`, sitting together as the options of one `SegmentedControl`; filters are temporary constraints such as `Waiting`, `SLA risk`, and `Add filter`, standing apart as separate chips in their own row.
 - Prefer time-to-act over arithmetic: `First response due in 4m`, `Breached by 6m`, or `Waiting 2h`, never a reviewer-calculated elapsed/target pair. Never rely on color alone.
 - Let the anchor carry comment context. Use the slide or screen title for the thread title and keep the highlighted source visible; do not repeat a paragraph excerpt or internal block path in the card.
 - Separate person from organization, or present a combined identity that names both. A side effect such as email consent names the person, destination, and triggering event.

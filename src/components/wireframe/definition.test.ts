@@ -2886,6 +2886,72 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ).toBe("chevron");
   });
 
+  it("should draw no chevron on a master row whose detail is already beside it", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "Open" },
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: {
+                            label: "Checkout freeze",
+                            meta: "Northwind",
+                            selected: true,
+                            navigateTo: "ticket",
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Panel",
+                  attributes: { title: "Checkout freeze" },
+                  children: [
+                    element({
+                      name: "Text",
+                      attributes: { text: "Raised two hours ago" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Checkout freeze" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // The row is the collection of a master/detail workspace, so navigateTo
+    // selects in place; the detail pane beside it already shows that record.
+    const rendered = render(compiled);
+    expect(
+      elementWithClass({ node: rendered, className: "wireframe-list-item" }),
+    ).toBeDefined();
+    expect(
+      elementWithClass({
+        node: rendered,
+        className: "wireframe-list-disclosure",
+      }),
+    ).toBeUndefined();
+  });
+
   it("should draw no chevron on a list row that names no screen", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

@@ -476,11 +476,10 @@ const checkEqualThirds = ({
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
       if (node.element === "Row") {
-        const siblings = paneSiblings(node.children);
-        const flexible = siblings.filter((child) =>
+        const flexible = node.children.filter((child) =>
           FLEXIBLE_PANES.has(child.element),
         );
-        const hasRail = siblings.some((child) => child.element === "Rail");
+        const hasRail = node.children.some((child) => child.element === "Rail");
         if (flexible.length >= 3 && !hasRail) {
           diagnostics.add({
             message: `Desktop Screen "${screen.id}" draws ${flexible.length} flexible panes in one Row; keep the primary surface dominant and wrap secondary content in Rail`,
@@ -505,8 +504,7 @@ const checkOutlinedSiblingBudget = ({
   readonly diagnostics: DiagnosticCollector;
 }): void => {
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
-    const siblings = paneSiblings(nodes);
-    const outlined = siblings.filter(
+    const outlined = nodes.filter(
       (node) => node.element === "Panel" && node.surface === "outlined",
     );
     if (outlined.length >= 4) {
@@ -515,7 +513,7 @@ const checkOutlinedSiblingBudget = ({
         position,
       });
     }
-    siblings.forEach((node) => visit(childNodes(node)));
+    nodes.forEach((node) => visit(childNodes(node)));
   };
   visit(screen.children);
 };
