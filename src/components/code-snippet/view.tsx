@@ -26,7 +26,7 @@ const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
         Code snippet
       </span>
     ) : (
-      <FileIdentity filePath={filePath} />
+      <FileIdentity filePath={filePath} size="compact" />
     )}
     <span className="code-snippet-controls flex shrink-0 items-center gap-1">
       <span className="figure-action-group inline-flex items-center gap-1">

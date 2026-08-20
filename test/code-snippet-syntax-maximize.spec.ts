@@ -5,6 +5,40 @@
 
 import { expect, test } from "./fixtures";
 
+test("should keep the titled header compact and aligned in both themes", async ({
+  page,
+  codeSnippetSyntaxMaximizeViewerUrl,
+}) => {
+  await page.goto(codeSnippetSyntaxMaximizeViewerUrl);
+
+  const frame = page.locator("[data-code-snippet]").first();
+  const fileIdentity = frame.locator(".file-identity");
+  const fileName = fileIdentity.locator(".file-identity-name");
+  const copy = frame.getByRole("button", { name: "Copy code" });
+  const maximize = frame.getByRole("button", { name: "Maximize code" });
+
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset["theme"] = value;
+    }, theme);
+
+    await expect(fileIdentity).toHaveCSS("font-size", "12px");
+    await expect(fileName).toHaveCSS("font-weight", "600");
+
+    const centers = await Promise.all(
+      [fileIdentity, copy, maximize].map((locator) =>
+        locator.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return bounds.top + bounds.height / 2;
+        }),
+      ),
+    );
+    expect(Math.max(...centers) - Math.min(...centers)).toBeLessThanOrEqual(
+      0.5,
+    );
+  }
+});
+
 test("should reveal line numbers only while maximized and keep them highlighted", async ({
   page,
   codeSnippetSyntaxMaximizeViewerUrl,

@@ -5,7 +5,13 @@ import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 
 // The explicit label keeps the accessible name the exact file path,
 // independent of the styled dir/name split below.
-export const FileIdentity = ({ filePath }: { readonly filePath: string }) => {
+export const FileIdentity = ({
+  filePath,
+  size = "default",
+}: {
+  readonly filePath: string;
+  readonly size?: "default" | "compact";
+}) => {
   const lastSlashIndex = filePath.lastIndexOf("/");
   const fileDir =
     lastSlashIndex === -1 ? "" : filePath.slice(0, lastSlashIndex + 1);
@@ -13,7 +19,7 @@ export const FileIdentity = ({ filePath }: { readonly filePath: string }) => {
     lastSlashIndex === -1 ? filePath : filePath.slice(lastSlashIndex + 1);
   return (
     <span
-      className="file-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted"
+      className={`file-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted ${size === "compact" ? "text-xs" : ""}`}
       aria-label={filePath}
     >
       {lucideIconToReact({ icon: FILE_ICON, hidden: false })}
