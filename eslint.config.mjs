@@ -62,20 +62,33 @@ const GRID_TRACK_PATTERN =
 // Where a class string can live. Reading every string literal instead would
 // report a Tailwind column-track error on prose - an error message or a label
 // that happens to contain the word - so the fence looks only at `className`
-// values and at the shapes a class constant is declared in. The alternative,
+// values and at the places a class string is handed over: declared as a
+// constant, returned from a helper, or listed in an array. The alternative,
 // asking whether a string looks like a class list, cannot be written without
 // either losing `className="grid"` or carrying a list of bare utilities that
 // goes stale.
+//
+// Each handover point is read one level deep rather than as a whole subtree.
+// A helper's block body holds its error messages and labels too, so reading
+// every string beneath it would put the prose back in scope; reading the
+// string it hands over does not.
 const classStringsIn = (host) =>
   `${host} :matches(Literal[value=${GRID_TRACK_PATTERN}], TemplateElement[value.raw=${GRID_TRACK_PATTERN}])`;
+
+const CLASS_STRING_EXPRESSIONS =
+  "TemplateLiteral, BinaryExpression, ConditionalExpression, ObjectExpression, ArrayExpression, TSAsExpression";
+
+const classStringsHandedOverBy = (host) => [
+  `${host} > Literal[value=${GRID_TRACK_PATTERN}]`,
+  classStringsIn(`${host} > :matches(${CLASS_STRING_EXPRESSIONS})`),
+];
 
 const GRID_TRACK_SELECTOR = {
   selector: [
     classStringsIn('JSXAttribute[name.name="className"]'),
-    `VariableDeclarator > Literal[value=${GRID_TRACK_PATTERN}]`,
-    classStringsIn(
-      "VariableDeclarator > :matches(TemplateLiteral, BinaryExpression, ConditionalExpression, ObjectExpression, TSAsExpression)",
-    ),
+    ...classStringsHandedOverBy("VariableDeclarator"),
+    ...classStringsHandedOverBy("ReturnStatement"),
+    ...classStringsHandedOverBy("ArrowFunctionExpression"),
   ].join(", "),
   message:
     "A grid container in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
