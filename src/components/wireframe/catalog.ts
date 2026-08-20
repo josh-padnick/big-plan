@@ -13,6 +13,7 @@ import {
 } from "../_authoring/contract.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import type { WireframeTableCell } from "./model.js";
+import { workActionButtons } from "./nodes.js";
 import {
   WIREFRAME_ALIGNMENTS,
   WIREFRAME_EMPHASES,
@@ -132,13 +133,13 @@ const ICON_SCHEMA = {
 } satisfies ComponentAttributeSchema;
 
 // An overlay's exit is often a Button inside a Row of actions rather than a
-// direct child, so the search reaches the whole surface.
-const holdsButton = (nodes: ReadonlyArray<WireframeNode>): boolean =>
-  nodes.some(
-    (node) =>
-      node.element === "Button" ||
-      ("children" in node && holdsButton(node.children)),
-  );
+// direct child, so the search reaches the whole surface. It counts only the
+// buttons that act: a segmented control's options and a bottom bar's
+// destinations are drawn as buttons but only change what the surface shows,
+// so reading one as the way out leaves the reader in exactly the trap this
+// check exists to refuse.
+const holdsExit = (nodes: ReadonlyArray<WireframeNode>): boolean =>
+  workActionButtons(nodes).length > 0;
 
 const OVERLAY_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
@@ -567,10 +568,10 @@ const CATALOG = {
       // Every opened surface owes the reader a way out, and an overlay is the
       // surface where forgetting it traps them: the page underneath is covered,
       // so a drawing with no control on top is a screen nobody can leave.
-      if (!holdsButton(children)) {
+      if (!holdsExit(children)) {
         diagnostics.add({
           message:
-            "Overlay needs at least one Button so the surface it opens has a visible way out",
+            "Overlay needs at least one Button that acts so the surface it opens has a visible way out; SegmentedControl and BottomBar options switch mode rather than leave",
           position,
         });
       }

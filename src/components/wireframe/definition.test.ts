@@ -2572,6 +2572,76 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       'Button "Copy command" is iconOnly with no icon, so it would draw nothing; give it icon="..." or remove iconOnly',
     ]);
   });
+  it("should lay out panes wrapped in a Group as the row's own panes", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Panel",
+                      attributes: { title: "Queue" },
+                      children: [
+                        element({
+                          name: "List",
+                          children: [
+                            element({
+                              name: "ListItem",
+                              attributes: {
+                                label: "Billing refund",
+                                selected: true,
+                              },
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    element({
+                      name: "Panel",
+                      attributes: { title: "Billing refund" },
+                      children: [
+                        element({
+                          name: "Text",
+                          attributes: { text: "Raised two hours ago" },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // The compiler read this Row as a collection beside its detail, so the
+    // drawing has to lay out the same two panes: each one a direct item of the
+    // row, with the collection marked as the pane that stays narrow.
+    const row = elementWithClass({
+      node: render(compiled),
+      className: "wireframe-row",
+    });
+    expect(row?.properties["data-wireframe-workspace"]).toBe("");
+    const panes = (row?.children ?? []).filter(
+      (child): child is Element => child.type === "element",
+    );
+    expect(
+      panes.map((pane) => {
+        const classes = pane.properties["className"];
+        return Array.isArray(classes) && classes.includes("wireframe-panel");
+      }),
+    ).toEqual([true, true]);
+    expect(panes[0]?.properties["data-wireframe-master"]).toBe("");
+    expect(panes[1]?.properties["data-wireframe-master"]).toBeUndefined();
+  });
+
   it("should draw an overlay over the page with alert semantics", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
@@ -2622,9 +2692,45 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       ],
     });
     expect(diagnostics.map((entry) => entry.message)).toEqual([
-      "Overlay needs at least one Button so the surface it opens has a visible way out",
+      "Overlay needs at least one Button that acts so the surface it opens has a visible way out; SegmentedControl and BottomBar options switch mode rather than leave",
       'Screen "home" is an Overlay with no page under it; draw the screen it interrupts so a reviewer can see what the interruption covers',
     ]);
+  });
+
+  it("should report an overlay whose only buttons switch mode", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Text", attributes: { text: "The page" } }),
+            element({
+              name: "Overlay",
+              attributes: { title: "Filters" },
+              children: [
+                element({
+                  name: "SegmentedControl",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: { label: "All", emphasis: "primary" },
+                    }),
+                    element({ name: "Button", attributes: { label: "Mine" } }),
+                  ],
+                }),
+                element({
+                  name: "Text",
+                  attributes: { text: "Narrow the queue" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toContain(
+      "Overlay needs at least one Button that acts so the surface it opens has a visible way out; SegmentedControl and BottomBar options switch mode rather than leave",
+    );
   });
 
   it("should report a second overlay because one screen shows one moment", () => {
@@ -2717,7 +2823,21 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       ],
     });
     expect(diagnostics).toEqual([]);
-    expect(html(render(compiled))).toContain("wireframe-group");
+    // A Group carrying no pane still travels as one item, so the row settles
+    // exactly two ends and never reads as a workspace.
+    const row = elementWithClass({
+      node: render(compiled),
+      className: "wireframe-row",
+    });
+    expect(row?.properties["data-wireframe-workspace"]).toBeUndefined();
+    expect(
+      (row?.children ?? []).filter(
+        (child) =>
+          child.type === "element" &&
+          Array.isArray(child.properties["className"]) &&
+          child.properties["className"].includes("wireframe-group"),
+      ),
+    ).toHaveLength(2);
   });
 
   it("should draw a top bar's Group ahead of its title and loose controls after", () => {

@@ -15,6 +15,12 @@ import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import { wireframeElementFor } from "./catalog.js";
 import type { WireframeElementDefinition } from "./catalog.js";
 import {
+  FLEXIBLE_PANES,
+  flattenNodes,
+  paneSiblings,
+  workActionButtons,
+} from "./nodes.js";
+import {
   WIREFRAME_DEVICES,
   WIREFRAME_PATTERNS,
   type CompiledWireframe,
@@ -193,14 +199,6 @@ const compileNodes = ({
     return [node];
   });
 
-/** Every node in one screen, in authored order, at any depth. */
-const flatten = (
-  nodes: ReadonlyArray<WireframeNode>,
-): ReadonlyArray<WireframeNode> =>
-  nodes.flatMap((node) =>
-    "children" in node ? [node, ...flatten(node.children)] : [node],
-  );
-
 // A pattern is a convenience expansion into the same open vocabulary authors
 // can write by hand. It never introduces a closed region model.
 const patternedRow = ({
@@ -346,47 +344,12 @@ const containsElement = ({
   node.element === element ||
   childNodes(node).some((child) => containsElement({ node: child, element }));
 
-/**
- * The panes a set of siblings really lays out, with every Group opened.
- *
- * A Group is a run of items that travel together as one item of a Row, not a
- * pane of its own, so the panes it holds still take their share of the row.
- * Reading a Group as one child would let three thirds or four outlined cards
- * hide behind a wrapper and reach the reviewer as the arrangement these rules
- * exist to refuse.
- */
-const paneSiblings = (
-  nodes: ReadonlyArray<WireframeNode>,
-): ReadonlyArray<WireframeNode> =>
-  nodes.flatMap((node) =>
-    node.element === "Group" ? paneSiblings(node.children) : [node],
-  );
-
 const containsRecordCollection = (node: WireframeNode): boolean =>
   node.element === "Panel" &&
   node.children.some(
     (candidate) =>
       candidate.element === "List" || candidate.element === "Table",
   );
-
-/** Returns authored buttons that perform work, excluding navigation and mode state. */
-const workActionButtons = (
-  nodes: ReadonlyArray<WireframeNode>,
-): ReadonlyArray<WireframeNode> => {
-  const all = flatten(nodes);
-  const stateButtons = new Set(
-    all
-      .filter(
-        (node) =>
-          node.element === "BottomBar" || node.element === "SegmentedControl",
-      )
-      .flatMap((node) => flatten(node.children))
-      .filter((node) => node.element === "Button"),
-  );
-  return all.filter(
-    (node) => node.element === "Button" && !stateButtons.has(node),
-  );
-};
 
 /** A detail pane that shows content must name the selected record beside it. */
 const checkSelection = ({
@@ -412,9 +375,9 @@ const checkSelection = ({
         if (
           source !== undefined &&
           dependent !== undefined &&
-          flatten(childNodes(dependent)).length > 0
+          flattenNodes(childNodes(dependent)).length > 0
         ) {
-          const sourceNodes = flatten([source]);
+          const sourceNodes = flattenNodes([source]);
           const hasRecords = sourceNodes.some(
             (candidate) =>
               candidate.element === "List" || candidate.element === "Table",
@@ -441,13 +404,6 @@ const checkSelection = ({
   };
   visit(screen.children);
 };
-
-const FLEXIBLE_PANES: ReadonlySet<WireframeNode["element"]> = new Set([
-  "Panel",
-  "Stack",
-  "Center",
-  "Row",
-]);
 
 /** Three flexible desktop panes create equal thirds; a Rail owns secondary width. */
 const checkEqualThirds = ({
@@ -525,7 +481,7 @@ const checkChoiceComposition = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const all = flatten(screen.children);
+  const all = flattenNodes(screen.children);
   const groups = all.filter((node) => node.element === "ChoiceGroup");
   if (groups.length === 0) {
     return;
@@ -603,7 +559,7 @@ const checkChoiceNavigation = ({
     fallbackPosition;
 
   for (const screen of screens) {
-    const groups = flatten(screen.children).filter(
+    const groups = flattenNodes(screen.children).filter(
       (node) => node.element === "ChoiceGroup",
     );
     for (const group of groups) {
@@ -622,8 +578,9 @@ const checkChoiceNavigation = ({
         if (destination === undefined) {
           continue;
         }
-        const selectedChoices = flatten(destination.children).flatMap((node) =>
-          node.element === "ChoiceCard" && node.selected ? [node] : [],
+        const selectedChoices = flattenNodes(destination.children).flatMap(
+          (node) =>
+            node.element === "ChoiceCard" && node.selected ? [node] : [],
         );
         const selectedChoice = selectedChoices[0];
         if (
@@ -651,7 +608,7 @@ const checkOneClearJob = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const pageHeaders = flatten(screen.children).filter(
+  const pageHeaders = flattenNodes(screen.children).filter(
     (node) => node.element === "PageHeader",
   );
   if (pageHeaders.length > 1) {
@@ -672,7 +629,7 @@ const checkStepperState = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const steppers = flatten(screen.children).filter(
+  const steppers = flattenNodes(screen.children).filter(
     (node) => node.element === "Stepper",
   );
   for (const stepper of steppers) {
@@ -756,7 +713,7 @@ const checkPhoneShell = ({
   if (screen.device !== "phone") {
     return;
   }
-  const forbidden = flatten(screen.children).filter(
+  const forbidden = flattenNodes(screen.children).filter(
     (node) => node.element === "AppShell" || node.element === "Sidebar",
   );
   if (forbidden.length > 0) {
@@ -1055,7 +1012,7 @@ export const compileWireframe = ({
   const selectedInitialChoices =
     initialScreen === undefined
       ? []
-      : flatten(initialScreen.children).filter(
+      : flattenNodes(initialScreen.children).filter(
           (node) => node.element === "ChoiceCard" && node.selected,
         );
   if (selectedInitialChoices.length > 0) {

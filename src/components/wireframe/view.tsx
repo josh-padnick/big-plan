@@ -15,6 +15,7 @@ import type {
   WireframeStatus,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
+import { ROW_PANES } from "./nodes.js";
 import {
   WIREFRAME_PLACEHOLDER_GLYPH,
   wireframeGlyphFor,
@@ -144,6 +145,30 @@ const isWorkspaceRow = (children: ReadonlyArray<WireframeNode>): boolean =>
   children.some((child) => child.element === "Rail") ||
   masterIndexIn(children) >= 0;
 
+// Whether a node puts a pane into the row it stands in, reading through the
+// Groups a pane may be wrapped in.
+const holdsPane = (node: WireframeNode): boolean =>
+  node.element === "Group"
+    ? node.children.some(holdsPane)
+    : ROW_PANES.has(node.element);
+
+// The items a Row really lays out, with every pane-bearing Group opened.
+//
+// Compilation counts a Group's panes as the Row's own, and so does the column
+// budget: a Group is a run of items that travel together as one item, not a
+// pane of its own. Drawing it as one hugging item instead would lay out a row
+// the compiler already read - and validated - as something else, and nothing
+// would report the difference. A Group carrying no pane still travels as one
+// item, which is what settles the two ends of a toolbar.
+const rowItems = (
+  children: ReadonlyArray<WireframeNode>,
+): ReadonlyArray<WireframeNode> =>
+  children.flatMap((child) =>
+    child.element === "Group" && holdsPane(child)
+      ? rowItems(child.children)
+      : [child],
+  );
+
 // A conversation has two independently behaving regions behind the ordinary
 // Panel interface: the thread scrolls, while the mode and composer stay
 // anchored. Authors only arrange the familiar message and control primitives.
@@ -190,20 +215,17 @@ const WireframeElement = ({
           <WireframeElements nodes={node.children} />
         </div>
       );
-    case "Row":
+    case "Row": {
+      const items = rowItems(node.children);
       return (
         <div
           className={`wireframe-row flex flex-wrap ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]} ${JUSTIFY_CLASSES[node.justify]}`}
-          {...(isWorkspaceRow(node.children)
-            ? { "data-wireframe-workspace": "" }
-            : {})}
+          {...(isWorkspaceRow(items) ? { "data-wireframe-workspace": "" } : {})}
         >
-          <WireframeElements
-            nodes={node.children}
-            masterIndex={masterIndexIn(node.children)}
-          />
+          <WireframeElements nodes={items} masterIndex={masterIndexIn(items)} />
         </div>
       );
+    }
     case "Group":
       return (
         <div
