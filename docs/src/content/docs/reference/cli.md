@@ -263,9 +263,10 @@ Taking a message back discards the stage its claim was drafting, and a returning
 The reviewer can also take an agent off a review from **Agent Status**, and every `agent` command answers that at its next run.
 The disconnect names exactly one agent, by the connection token of the agent holding the plan's live claim, or by the connected agent's own connection token when no claim is live.
 It names a connection rather than a pickup because disconnecting releases that pickup immediately, so it reaches that agent whether it is mid-answer or between commands, and it reaches nobody else - including a second agent waiting beside it.
-`agent next` reports it as an ordinary end - `ended` and `disconnected` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
+`agent next` reports it as an ordinary end - `ended`, `disconnected`, and `role: "disconnected"` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
 `agent push`, `agent note`, and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
-The answer the disconnected session was drafting is dropped, its private stage is removed, and its open message can be picked up by whichever agent connects next.
+The answer the disconnected session was drafting is dropped, its private stage is removed, and the reviewer's message goes back in the queue for whichever agent connects next.
+The agent also leaves the roster of attached agents, so the seat it held is empty and the next connector takes it instead of attaching as an observer of an agent that has gone.
 
 `agent respond` publishes under one plan-mutation lock: it re-proves the claim, requires the plan to still carry the revision the candidate started from, and swaps the candidate in with one atomic rename.
 A response that finds the plan changed underneath it is refused with the `SOURCE_MOVED` code rather than applied, so the agent takes the work again from the current plan.
@@ -344,13 +345,17 @@ The reviewer's answer is recorded, so a loop already waiting on `--wait` is told
 ```json
 {
   "pending": false,
+  "ended": true,
+  "disconnected": true,
   "role": "disconnected",
   "plan": "/path/to/plan.mdx",
   "review": "http://127.0.0.1:8420/",
-  "reason": "The reviewer disconnected this agent from this review"
+  "reason": "The reviewer disconnected this agent from the review, so this session no longer speaks for the plan"
 }
 ```
 
+That is the same result **Disconnect agent** on the agent status card returns, because it is the same fact: the reviewer took this agent off the review.
+It states that fact twice on purpose - as the end (`ended` and `disconnected`) and as the role it is no longer in (`role`) - so a harness branches on whichever one it already reads, rather than on which control the reviewer pressed.
 That result is terminal even with `--wait`: stop the loop.
 `agent note` and `agent respond` from the same session refuse with `PRIMACY_LOST` and say the reviewer disconnected it, for as long as the turn they belong to could still be running.
 The claim it was part way through is freed as well, so the turn it had in flight can no longer reach the plan, and no other agent's claim is touched.

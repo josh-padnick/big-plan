@@ -884,12 +884,23 @@ const nextWork = async ({
   taking work, and the only honest moment to notice is before it does either.
   Being disconnected is not a failure, so it returns the way a stopped review
   session does - with the reason, and nothing for a harness to retry.
+
+  One answer, whichever control the reviewer used. Agent Status disconnects the
+  agent it is describing and the roster card disconnects the agent named on it,
+  but a loop that had to tell those two apart would have to branch on which
+  button a human pressed. So the result states the same fact in both
+  vocabularies at once - the end (BIG-190) and the role it is no longer in
+  (BIG-171) - and a harness reads whichever one it already reads. It is
+  terminal even with --wait: waiting is for an answer that has not come yet,
+  and this is the answer.
   */
   const disconnectedResult = (): Record<string, unknown> => ({
     pending: false,
     ended: true,
     disconnected: true,
+    role: "disconnected",
     plan: session.planPath,
+    review: session.url,
     reason: AGENT_DISCONNECTED_MESSAGE,
     help: [...AGENT_DISCONNECTED_HELP],
   });
@@ -994,29 +1005,9 @@ const nextWork = async ({
       "Reading the plan and the review is allowed; claiming, noting, and responding are not",
     ],
   });
-  /*
-  The end of this loop, decided by the reviewer rather than by the work.
-
-  Terminal on purpose, and terminal even with --wait: waiting is for an answer
-  that has not come yet, and this is the answer. A loop that kept waiting here
-  would re-register under the same id every half second and put the card the
-  reviewer had just dismissed straight back on their rail (BIG-171).
-  */
-  const rosterDisconnectedResult = (): Record<string, unknown> => ({
-    pending: false,
-    role: "disconnected",
-    plan: session.planPath,
-    review: session.url,
-    reason: "The reviewer disconnected this agent from this review",
-    help: [
-      "Stop this loop; it is no longer attached to this review and cannot claim, note, or respond",
-      "The reviewer decides which agents are attached, from Agent Status in the review",
-      "A new connection is a new agent: it attaches as an observer and asks the reviewer again",
-    ],
-  });
   try {
     let role = await refreshRoster();
-    if (role === "disconnected") return rosterDisconnectedResult();
+    if (role === "disconnected") return disconnectedResult();
     // The record this loop registered under is its own only when no token found
     // an older one, which is exactly what "this agent has been here before" means.
     const recognisedByToken = rosterWriterId !== writerId;
@@ -1078,7 +1069,7 @@ const nextWork = async ({
         }
         await wait(500);
         role = await refreshRoster();
-        if (role === "disconnected") return rosterDisconnectedResult();
+        if (role === "disconnected") return disconnectedResult();
         snapshot = await readAgentExchange({
           store: session.store,
           sessionId: session.sessionId,

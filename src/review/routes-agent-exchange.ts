@@ -58,7 +58,11 @@ import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
 import { heldAgentClaim } from "./shared/agent-claim.js";
 import { settlementRefusal } from "./review-route-settlement.js";
-import { agentIsAttached, selectPrimaryAgent } from "./shared/agent-primacy.js";
+import {
+  agentForClaimToken,
+  agentIsAttached,
+  selectPrimaryAgent,
+} from "./shared/agent-primacy.js";
 
 const appendProgressBestEffort = async ({
   context,
@@ -420,6 +424,8 @@ type DisconnectDecision =
        * the caller that no ordinary edge will ever report this departure.
        */
       readonly presenceNamedAddressee: boolean;
+      /** The connection the directive names, so the roster can drop it too. */
+      readonly addressee: string;
       readonly claimToken?: string;
       readonly requestId?: string;
     };
@@ -518,6 +524,7 @@ export const disconnectAgent = async (
         requestedAtMs,
         presenceWasConnected: presence.connected,
         presenceNamedAddressee: presence.writerId === addressee,
+        addressee,
         ...(claimToken === undefined ? {} : { claimToken }),
         ...(claimed === undefined ? {} : { requestId: claimed.requestId }),
       };
@@ -528,6 +535,28 @@ export const disconnectAgent = async (
   }
   const { requestedAtMs } = decision;
   const claimToken = "claimToken" in decision ? decision.claimToken : undefined;
+  /*
+  The roster is the other record of who is attached, and it has to agree.
+
+  The directive alone only tells the agent to stop; its registration stays, and
+  a registration is what the seat is. Left standing, the review still looks
+  taken, so the next connector attaches as an observer of an agent that has
+  gone and waits for a reviewer decision about nobody (BIG-171). The record is
+  found by the claim it holds when it holds one, because that is the one handle
+  that survives a loop adopting an older registration; otherwise the connection
+  the directive names is the registration's own id.
+  */
+  const attached = await readAgentRoster({ store, sessionId }).catch(() => []);
+  const detached =
+    (claimToken === undefined
+      ? undefined
+      : agentForClaimToken({ agents: attached, claimToken })?.writerId) ??
+    attached.find((agent) => agent.writerId === decision.addressee)?.writerId;
+  if (detached !== undefined) {
+    await detachAgentFromRoster({ store, sessionId, writerId: detached }).catch(
+      () => undefined,
+    );
+  }
   // Released outside the claim gate, in the order `claimAgentRequest`
   // established: that call takes this gate and then each request lock, so
   // taking a request lock while still holding the gate would invert it.
