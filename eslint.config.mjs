@@ -82,8 +82,17 @@ const PLAN_IDENTITY_SELECTOR = {
 // `grid-cols-`; a track declared only at a breakpoint leaves the narrow
 // regime this fence exists for undeclared.
 //
-// Tokens are split on any whitespace with `[\s\S]` rather than `.`, so a
-// class list a formatter wrapped across lines is still read.
+// Tokens are split on any whitespace, so a class list a formatter wrapped
+// across lines is still read. A `"` is a token boundary too, and it is the
+// one that makes the fence answer per element rather than per handover. A
+// server-rendered template hands over many elements at once, so a predicate
+// that asked whether the whole string mentions a track would let one
+// element's declared track answer for a sibling's implicit one - a green
+// report for the exact state the fence exists to refuse. Every check is
+// therefore scoped to a single quoted run: the fence anchors at each `class`
+// value's opening quote and asks for the answering `grid-cols-` inside that
+// value alone. The same boundary is why a `grid` written first or last in a
+// class attribute is read at all; whitespace alone never touches it.
 //
 // `inline-grid` is deliberately outside the fence. An inline-grid box is
 // shrink-to-fit, so it is not the shape this rule describes, and its remedy
@@ -93,15 +102,25 @@ const PLAN_IDENTITY_SELECTOR = {
 // this rule. An accidental exclusion on a silent-failure guard reads exactly
 // like a hole, so this one is stated rather than left to be rediscovered.
 
+// One class value: the run that starts at a `"` or at the handover's start
+// and ends at the next `"`. Every assertion below is measured from that
+// start, so nothing outside the value can answer for what is inside it.
+const VALUE_START = '(?:^|")';
+
+// The gap from that start to a token boundary inside the same value.
+const TOKEN_GAP = '(?:[^"]*\\s)?';
+
+// A token ends at whitespace, at the value's closing quote, or at the end of
+// the handover.
+const TOKEN_END = '(?=\\s|"|$)';
+
 // A `grid` whose variant retargets another element, answered only by a track
-// scoped the same way.
-const RETARGETED_GRID =
-  "^(?=[\\s\\S]*(?:^|\\s)(\\S*&\\S*:)grid(?=\\s|$))(?![\\s\\S]*(?:^|\\s)\\1grid-cols-)";
+// scoped the same way in the same class value.
+const RETARGETED_GRID = `${VALUE_START}(?=${TOKEN_GAP}([^\\s"]*&[^\\s"]*:)grid${TOKEN_END})(?!${TOKEN_GAP}\\1grid-cols-)`;
 
 // A `grid` on the element itself, answered by that element's own track under
-// the same prefix or by an unprefixed one.
-const OWN_GRID =
-  "^(?=[\\s\\S]*(?:^|\\s)((?:[^\\s&]*:)|)grid(?=\\s|$))(?![\\s\\S]*(?:^|\\s)\\2grid-cols-)(?![\\s\\S]*(?:^|\\s)grid-cols-)";
+// the same prefix or by an unprefixed one, again in the same class value.
+const OWN_GRID = `${VALUE_START}(?=${TOKEN_GAP}((?:[^\\s&"]*:)|)grid${TOKEN_END})(?!${TOKEN_GAP}\\2grid-cols-)(?!${TOKEN_GAP}grid-cols-)`;
 
 const GRID_TRACK_PATTERN = `/(?:${RETARGETED_GRID}|${OWN_GRID})/`;
 
@@ -593,6 +612,7 @@ export default tseslint.config(
       "src/review/browser/**/*.ts",
       "src/review/browser/**/*.tsx",
       "src/render/shell/**/*.ts",
+      "src/render/shell/**/*.tsx",
     ],
     ignores: [
       "src/review/browser/live-target.browser.ts",

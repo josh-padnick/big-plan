@@ -85,6 +85,76 @@ test("should accept a prefixed shell grid that names the matching track", async 
   assert.equal(messages.length, 0);
 });
 
+test("should report an implicit track when a shell view sets className", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.tsx",
+      code: 'export const View = () => <div className="grid gap-2" />;\n',
+    }),
+  );
+  assert.equal(messages.length, 1);
+});
+
+test("should report the implicit sibling when one template also renders a declared track", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => `<div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] gap-4"></div>\\n<div class="mt-4 grid gap-2"></div>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 1);
+});
+
+test("should report the implicit sibling regardless of which one a template renders first", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => `<div class="mt-4 grid gap-2"></div>\\n<div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] gap-4"></div>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 1);
+});
+
+test("should accept a template whose siblings each name their own track", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => `<div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] gap-4"></div>\\n<div class="mt-4 grid grid-cols-[minmax(0,1fr)] gap-2"></div>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 0);
+});
+
+test("should report a shell grid written as the first token of its class value", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => `<div class="grid gap-2"></div>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 1);
+});
+
+test("should report a shell grid written as the last token of its class value", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => `<div class="mt-4 gap-2 grid"></div>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 1);
+});
+
+test("should not let a track in a neighbouring attribute answer for a class value", async () => {
+  const messages = gridTrackMessages(
+    await lint({
+      filePath: "src/render/shell/scratch.ts",
+      code: 'export const render = (): string => `<div data-track="grid-cols-[minmax(0,1fr)]" class="mt-4 grid gap-2"></div>`;\n',
+    }),
+  );
+  assert.equal(messages.length, 1);
+});
+
 test("should not report an implicit track in a plan-component view", async () => {
   const messages = gridTrackMessages(
     await lint({
