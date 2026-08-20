@@ -792,6 +792,46 @@ describe("block identity baseline-side skip", () => {
     expect(stamp(withBaseline)).toEqual(stamp(withoutBaseline));
   });
 
+  it("should keep baseline text out of proposed descriptors and slide text", () => {
+    const proposed = customComponent([
+      commentableTarget({ kind: "table-row", label: "Now" }),
+      {
+        type: "element",
+        tagName: "div",
+        properties: { [DIFF_SIDE_ATTRIBUTE]: DIFF_BASELINE_SIDE },
+        children: [{ type: "text", value: "Was" }],
+      },
+    ]);
+    const tree: Root = {
+      type: "root",
+      children: [
+        {
+          type: "element",
+          tagName: "section",
+          properties: { "data-slide": "" },
+          children: [
+            {
+              type: "element",
+              tagName: "h2",
+              properties: { id: "design" },
+              children: [{ type: "text", value: "Design" }],
+            },
+            proposed,
+          ],
+        },
+      ],
+    };
+    const blocks: Array<BlockDescriptor> = [];
+    rehypeBlockIdentity({ blocks })(tree);
+    const component = blocks.find((block) => block.kind === "custom");
+    const heading = blocks.find(
+      (block) => block.id === "section/design/heading-1",
+    );
+    expect(component?.text).toBe("Now");
+    expect(heading?.slideText).toContain("Now");
+    expect(heading?.slideText).not.toContain("Was");
+  });
+
   it("should keep proposed-side slide headings when a baseline subtree contains a slide", () => {
     const subSlide = ({ title }: { readonly title: string }): Element => ({
       type: "element",

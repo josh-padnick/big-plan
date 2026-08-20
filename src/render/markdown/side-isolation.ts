@@ -166,8 +166,17 @@ const rewriteUrlReferences = ({
   readonly identifiers: ReadonlyMap<string, string>;
 }): string =>
   value.replace(
-    /url\(#([^)]+)\)/gu,
-    (match, identifier: string) => {
+    /url\(\s*(?:(["'])#([^"']+)\1|#([^)]+?))\s*\)/giu,
+    (
+      match,
+      _quote: string | undefined,
+      quotedIdentifier: string | undefined,
+      unquotedIdentifier: string | undefined,
+    ) => {
+      const identifier = quotedIdentifier ?? unquotedIdentifier?.trim();
+      if (identifier === undefined) {
+        return match;
+      }
       const replacement = identifiers.get(identifier);
       if (replacement === undefined) {
         return match;

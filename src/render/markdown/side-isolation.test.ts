@@ -446,7 +446,8 @@ describe("side isolation", () => {
           properties: {
             href: "#1clip",
             fill: "#fff",
-            style: "fill: #fff; clip-path: url(#1clip)",
+            style:
+              'fill: #fff; clip-path: url("#1clip"); filter: url( #section )',
           },
           children: [],
         },
@@ -459,14 +460,14 @@ describe("side isolation", () => {
       ],
     };
     isolateBaselineSide({ subtree, key: "reference-grammar" });
-    const [numericId] = ordinaryIdsOf(subtree);
+    const [numericId, , sectionId] = ordinaryIdsOf(subtree);
     expect(numericId).toBeDefined();
     expect(subtree.children[3]).toMatchObject({
       type: "element",
       properties: {
         href: `#${numericId}`,
         fill: "#fff",
-        style: `fill: #fff; clip-path: url(#${numericId})`,
+        style: `fill: #fff; clip-path: url(#${numericId}); filter: url(#${sectionId})`,
       },
     });
     expect(subtree.children[4]).toMatchObject({

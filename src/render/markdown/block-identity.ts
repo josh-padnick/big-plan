@@ -193,6 +193,9 @@ const TEXT_BOUNDARY_TAGS = new Set([
 // Flattens an element to plain text, keeping a newline at every block-level
 // boundary so downstream consumers can tell adjacent units apart.
 const textOf = (node: Element): string => {
+  if (isBaselineDiffSide(node)) {
+    return "";
+  }
   let text = "";
   const markBoundary = (): void => {
     if (text !== "" && !/\s$/.test(text)) {
@@ -203,6 +206,9 @@ const textOf = (node: Element): string => {
     if (child.type === "text") {
       text += child.value;
     } else if (isElement(child)) {
+      if (isBaselineDiffSide(child)) {
+        continue;
+      }
       // Screen-reader-only prefixes are announcement scaffolding, and markup
       // shipped with the hidden attribute (dormant controls, collapsed menus,
       // a component's hidden machine-readable source) is not presented to the
