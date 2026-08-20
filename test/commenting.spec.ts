@@ -622,7 +622,9 @@ test("should remember the submit-right-away choice across new composers", async 
   const help = composer.getByRole("button", {
     name: "About Submit right away",
   });
-  const helpTooltip = page.getByRole("tooltip", { name: /Send the comment to the agent/ });
+  const helpTooltip = page.getByRole("tooltip", {
+    name: /Send the comment to the agent/,
+  });
   await expect(helpTooltip).toHaveCount(0);
   await preference.focus();
   await page.keyboard.press("Tab");
