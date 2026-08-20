@@ -23,14 +23,31 @@ export const reviewRestartCommand = ({
 }): string =>
   `node ${quoteShellArgument(executablePath)} review ${quoteShellArgument(planPath)}`;
 
+/**
+ * The identity a connection keeps across the commands it runs.
+ *
+ * A pickup token names one claim and dies with it, so it cannot say that the
+ * process asking for work now is the process the reviewer was looking at a
+ * moment ago. This token can: `agent next` mints it once, every command it
+ * returns carries it back, and the presence record names it for as long as the
+ * connection lasts. That is what lets a decision taken about an agent between
+ * two of its commands still reach it (BIG-190).
+ */
+const connectionFlag = (connectionToken: string | undefined): string =>
+  connectionToken === undefined
+    ? ""
+    : ` --connection ${quoteShellArgument(connectionToken)}`;
+
 export const agentNextCommand = ({
   executablePath,
   planPath,
+  connectionToken,
 }: {
   readonly executablePath: string;
   readonly planPath: string;
+  readonly connectionToken?: string;
 }): string =>
-  `node ${quoteShellArgument(executablePath)} agent next ${quoteShellArgument(planPath)} --wait`;
+  `node ${quoteShellArgument(executablePath)} agent next ${quoteShellArgument(planPath)} --wait${connectionFlag(connectionToken)}`;
 
 export const AGENT_NOTE_INITIAL_PROGRESS = "Working on the request";
 
@@ -46,12 +63,14 @@ export const agentNoteCommand = ({
   executablePath,
   planPath,
   agentToken,
+  connectionToken,
 }: {
   readonly executablePath: string;
   readonly planPath: string;
   readonly agentToken: string;
+  readonly connectionToken?: string;
 }): string =>
-  `node ${quoteShellArgument(executablePath)} agent note ${quoteShellArgument(planPath)} ${quoteShellArgument(AGENT_NOTE_INITIAL_PROGRESS)} --agent ${quoteShellArgument(agentToken)}`;
+  `node ${quoteShellArgument(executablePath)} agent note ${quoteShellArgument(planPath)} ${quoteShellArgument(AGENT_NOTE_INITIAL_PROGRESS)} --agent ${quoteShellArgument(agentToken)}${connectionFlag(connectionToken)}`;
 
 /** Publishes the drafted response under the claim taken at pickup. */
 export const agentRespondCommand = ({
@@ -59,13 +78,15 @@ export const agentRespondCommand = ({
   planPath,
   responsePath,
   agentToken,
+  connectionToken,
 }: {
   readonly executablePath: string;
   readonly planPath: string;
   readonly responsePath: string;
   readonly agentToken: string;
+  readonly connectionToken?: string;
 }): string =>
-  `node ${quoteShellArgument(executablePath)} agent respond ${quoteShellArgument(planPath)} ${quoteShellArgument(responsePath)} --agent ${quoteShellArgument(agentToken)}`;
+  `node ${quoteShellArgument(executablePath)} agent respond ${quoteShellArgument(planPath)} ${quoteShellArgument(responsePath)} --agent ${quoteShellArgument(agentToken)}${connectionFlag(connectionToken)}`;
 
 export const agentRecoveryPrompt = ({
   executablePath,

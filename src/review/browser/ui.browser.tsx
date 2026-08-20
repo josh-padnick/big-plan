@@ -65,6 +65,7 @@ type ButtonVariant =
   | "outline"
   | "accentOutline"
   | "ghost"
+  | "toned"
   | "destructive";
 type ButtonSize =
   "default" | "md" | "sm" | "compact" | "micro" | "compactIcon" | "icon";
@@ -80,6 +81,11 @@ const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
     "rounded-sm border border-accent bg-paper font-semibold text-accent shadow-none hover:bg-accent-wash hover:shadow-raised active:inset-shadow-pressed",
   ghost:
     "rounded-md border border-transparent bg-transparent font-normal text-muted hover:bg-surface hover:text-ink active:inset-shadow-pressed",
+  // A control on a card that carries its own colour. Grey text and a grey
+  // hairline on a coloured ground are the one thing the palette forbids, so
+  // every step here is taken from that ground's own ramp through currentColor.
+  toned:
+    "rounded-md border border-current/35 bg-transparent font-medium text-current shadow-none hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)] active:inset-shadow-pressed",
   destructive:
     "rounded-md border border-transparent bg-danger font-semibold text-danger-ink shadow-raised hover:shadow-lifted active:inset-shadow-pressed",
 };

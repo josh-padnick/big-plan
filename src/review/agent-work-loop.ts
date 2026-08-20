@@ -28,6 +28,7 @@ import {
   AgentClaimCanceled,
   appendProgressEvent,
   claimAgentRequest,
+  releaseClaimsHeldBy,
   RetryableAgentClaimRejected,
 } from "./request-mailbox.js";
 import {
@@ -35,6 +36,7 @@ import {
   deriveReviewPlanId,
   prepareStore,
   randomId,
+  readAgentDisconnectRequestFor,
   readSnapshot,
   reviewStoreFor,
   writeAgentPrompt,
@@ -45,6 +47,11 @@ import {
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { SPAWNER_PPID, spawnerIsGone } from "./agent-spawner.js";
+import {
+  AGENT_DISCONNECTED_HELP,
+  AGENT_DISCONNECTED_MESSAGE,
+  type AgentDisconnectDirective,
+} from "./shared/agent-disconnect.js";
 import { diffSnapshots } from "./snapshot-diff.js";
 import {
   liveReviewSessionForPlan,
@@ -91,6 +98,7 @@ export type AgentWorkLoopAction =
       readonly sessionUrl?: string;
       readonly sessionId?: string;
       readonly agentToken?: string;
+      readonly connectionToken?: string;
     }
   | {
       readonly kind: "respond";
@@ -98,12 +106,14 @@ export type AgentWorkLoopAction =
       readonly responsePath: string;
       readonly executablePath: string;
       readonly agentToken: string;
+      readonly connectionToken?: string;
     }
   | {
       readonly kind: "note";
       readonly planPath: string;
       readonly detail: string;
       readonly agentToken: string;
+      readonly connectionToken?: string;
       readonly modelName?: string;
       readonly modelEffort?: string;
       readonly modelClient?: string;
@@ -111,7 +121,18 @@ export type AgentWorkLoopAction =
       readonly sessionId?: string;
     };
 
-export type AgentWorkLoopErrorCode = "invalid-input" | "validation-error";
+export type AgentWorkLoopErrorCode =
+  | "invalid-input"
+  | "validation-error"
+  /**
+   * The reviewer disconnected this agent from the review.
+   *
+   * It earns its own code because a harness has to tell it apart from a bad
+   * flag. Reported as an invalid input it is indistinguishable from a typo, and
+   * the only safe answer to a typo is to try again - which is exactly the churn
+   * a disconnected agent must not do (BIG-190).
+   */
+  | "agent-disconnected";
 
 export class AgentWorkLoopRejected extends Error {
   readonly code: AgentWorkLoopErrorCode;
@@ -131,6 +152,72 @@ export class AgentWorkLoopRejected extends Error {
 
 const fail = (message: string): never => {
   throw new AgentWorkLoopRejected(message);
+};
+
+/**
+ * Answers a disconnect the reviewer addressed to this session, once.
+ *
+ * Acknowledging is what makes the end a reported one: the loop marks its own
+ * session ended, exactly as it does when its spawner goes, so the connection log
+ * records an observed end rather than the silence that follows one (BIG-156).
+ * The end marker is written for the connection the directive named, which is
+ * the same connection whatever command is reading this: every command `agent
+ * next` hands back carries the token, so a mid-turn process answers under the
+ * same name a waiting loop would.
+ *
+ * The marker's own guard still decides: a newer agent holding the heartbeat
+ * refuses it, so a stale acknowledgment cannot end a live session.
+ *
+ * The directive is deliberately left in place. It is what the runtime's
+ * connection check reads to say WHO ended this session, and that check runs
+ * after this one: clearing it here left the reviewer a "Session ended" row that
+ * no longer knew they had asked for it. It stays addressed to an agent that has
+ * gone, which is inert - the next connector mints a different connection
+ * token, so nothing matches it again.
+ *
+ * Returns the directive when this session was the one disconnected.
+ */
+const acknowledgeDisconnect = async ({
+  store,
+  sessionId,
+  writerId,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId?: string;
+  /** The request this session was holding, when it was holding one. */
+  readonly requestId?: string;
+}): Promise<AgentDisconnectDirective | undefined> => {
+  if (writerId === undefined) return undefined;
+  const directive = await readAgentDisconnectRequestFor({ store, writerId });
+  if (directive === undefined) return undefined;
+  await writeAgentHeartbeatEnded({
+    store,
+    sessionId,
+    writerId: directive.writerId,
+  });
+  await appendProgressEvent({
+    store,
+    event: {
+      sessionId,
+      atMs: Date.now(),
+      stepCode: "agent-disconnected",
+      step: "Agent disconnected at the reviewer's request",
+      state: "done",
+      ...(requestId === undefined ? {} : { requestId }),
+    },
+  }).catch(() => undefined);
+  return directive;
+};
+
+/** Refuses a command from a session the reviewer has disconnected. */
+const failDisconnected = (): never => {
+  throw new AgentWorkLoopRejected(
+    AGENT_DISCONNECTED_MESSAGE,
+    "agent-disconnected",
+    [...AGENT_DISCONNECTED_HELP],
+  );
 };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
@@ -354,7 +441,7 @@ Big Plan permits one live request claim for this plan at a time. If another agen
 For each returned work item:
 1. Read the returned candidate_plan and the request plus its conversation history.
 2. If work.attachments is non-empty, open every attachment with the harness image-viewing capability before deciding how to respond.
-3. As you start work, run the work item's returned note_command exactly as given. It records "${AGENT_NOTE_INITIAL_PROGRESS}" and renews the claim using the agent_token. At each later meaningful step - reading the request, deciding an outcome, editing the plan, validating - run \`agent note <plan> "<one short line>" --agent <agent_token>\` with the returned plan and token. If one step runs longer than a minute, add another note only when you can name concrete new progress. One line per update, present tense, no repeats.
+3. As you start work, run the work item's returned note_command exactly as given. It records "${AGENT_NOTE_INITIAL_PROGRESS}" and renews the claim using the agent_token. At each later meaningful step - reading the request, deciding an outcome, editing the plan, validating - run \`agent note <plan> "<one short line>" --agent <agent_token> --connection <connection_token>\` with the returned plan and both returned tokens. If one step runs longer than a minute, add another note only when you can name concrete new progress. One line per update, present tense, no repeats.
 4. For every anchored comment, announce \`Comment i of N - slide title\` through \`agent note\` when you begin it, then choose exactly one outcome:
    - answered: explain the answer when no plan edit is needed.
    - changed: revise candidate_plan, explain the revision, and list every changed render block id in changeTargets, in presentation order.
@@ -364,7 +451,8 @@ For each returned work item:
 5. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
 6. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates your candidate and the complete response, then publishes both as one revision of the plan. Until it succeeds, nothing you wrote has reached the plan; if your claim was taken over while you worked, it refuses and your candidate is discarded rather than published.
 7. Retain the agent_token returned with each work item. If this agent process restarts before responding, use the \`agent next --agent <token>\` resume path to continue that still-open pickup by running ${resumeCommand}.
-8. After responding, repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+8. After responding, run the next_command that ${nextCommand} returned - not the command above - so replies continue in the same agent session. It carries the connection_token this session was given, which is what keeps Agent Status naming one agent rather than a new one at every command; without it a decision the reviewer takes between two of your commands cannot reach you. Stay in this loop until the reviewer says the review is complete, the review server stops, or Big Plan tells you the reviewer disconnected you.
+9. The reviewer can disconnect you from Agent Status in the review. You are told at your next command: \`agent next\` returns \`disconnected\`, and \`agent note\` and \`agent respond\` refuse with AGENT_DISCONNECTED. Stop this loop when that happens and do not reconnect unless the reviewer asks you to; anything you had in flight was already dropped, and their comments are safe.
 
 Reviewer image references included in a changed candidate are materialized into source-owned ./assets files when the response publishes. Never edit rendered HTML. Never edit the plan path directly. Never invent a Changed outcome without changing candidate_plan.`;
   await writeAgentPrompt({ store: session.store, prompt });
@@ -399,6 +487,7 @@ const nextWork = async ({
   sessionUrl,
   sessionId,
   agentToken,
+  connectionToken,
 }: {
   readonly planPath: string;
   readonly shouldWait: boolean;
@@ -409,6 +498,7 @@ const nextWork = async ({
   readonly sessionUrl?: string;
   readonly sessionId?: string;
   readonly agentToken?: string;
+  readonly connectionToken?: string;
 }): Promise<Record<string, unknown>> => {
   const model = decodeAgentModelIdentity({
     ...(modelName === undefined ? {} : { name: modelName }),
@@ -452,9 +542,30 @@ const nextWork = async ({
   // waiting out its own lease.
   const claimedBy = agentToken ?? randomId(8);
   const resumingClaim = agentToken !== undefined;
-  // What this loop's presence is worth is exactly what this loop's life is
-  // worth, so every signal it sends is one it has just re-earned.
-  const writerId = randomId(8);
+  /*
+  The agent session's own identity, minted at its first command and handed back
+  on every command after it.
+
+  Minted per invocation it named a process, not a connection, and the difference
+  is what a reviewer's decision falls into: `agent note` and `agent respond`
+  write no writer id of their own, so the presence record goes on naming the
+  invocation that last claimed for as long as the connection lives. A disconnect
+  taken between two commands is addressed to that name, and a loop that minted a
+  fresh one at its next command would never see it and would keep working - with
+  the reviewer already told it had gone (BIG-190).
+
+  Carrying it back makes the record name the connection instead. It stays
+  per-connection, never per-review: a genuinely new agent brings no token, mints
+  its own, and so can neither inherit a decision taken about the agent it
+  replaced nor be mistaken for it.
+  */
+  const writerId = connectionToken ?? randomId(8);
+  const binPath = resolve(executablePath);
+  const nextCommand = agentNextCommand({
+    executablePath: binPath,
+    planPath: session.planPath,
+    connectionToken: writerId,
+  });
   // Runs on every wait iteration and once directly before claiming, so a loop
   // whose coding agent is gone can neither keep vouching for it nor take work
   // its stdout has no reader for. The marker is what turns 75 seconds of
@@ -473,6 +584,35 @@ const nextWork = async ({
     });
     fail("The process that started this agent loop has exited");
   };
+  /*
+  The reviewer's own answer to "is this agent still wanted".
+
+  It is checked on the same passes as the spawner, and for the same reason: a
+  loop that has been taken off the plan must stop vouching for itself and stop
+  taking work, and the only honest moment to notice is before it does either.
+  Being disconnected is not a failure, so it returns the way a stopped review
+  session does - with the reason, and nothing for a harness to retry.
+  */
+  const disconnectedResult = (): Record<string, unknown> => ({
+    pending: false,
+    ended: true,
+    disconnected: true,
+    plan: session.planPath,
+    reason: AGENT_DISCONNECTED_MESSAGE,
+    help: [...AGENT_DISCONNECTED_HELP],
+  });
+  const wasDisconnected = async ({
+    heldRequestId,
+  }: {
+    readonly heldRequestId?: string;
+  } = {}): Promise<boolean> =>
+    (await acknowledgeDisconnect({
+      store: session.store,
+      sessionId: session.sessionId,
+      writerId,
+      ...(heldRequestId === undefined ? {} : { requestId: heldRequestId }),
+    })) !== undefined;
+  if (await wasDisconnected()) return disconnectedResult();
   let request: AgentRequest | undefined;
   if (agentToken !== undefined) {
     const ownedRequest = resumeRequests?.find(
@@ -498,6 +638,7 @@ const nextWork = async ({
     });
     while (request === undefined && shouldWait) {
       await endWhenSpawnerIsGone();
+      if (await wasDisconnected()) return disconnectedResult();
       await writeAgentHeartbeat({
         store: session.store,
         sessionId: session.sessionId,
@@ -536,6 +677,8 @@ const nextWork = async ({
       return {
         pending: false,
         plan: session.planPath,
+        connection_token: writerId,
+        next_command: nextCommand,
         help: ["Run again with --wait to wait for the reviewer's next message"],
       };
     }
@@ -556,14 +699,16 @@ const nextWork = async ({
       responses: historySnapshot.responses,
     });
     const responseTemplate = responseTemplateFor(request);
-    const binPath = resolve(executablePath);
     const noteCommand = agentNoteCommand({
       executablePath: binPath,
       planPath: session.planPath,
       agentToken: claimedBy,
+      connectionToken: writerId,
     });
     const pickup = pickupProgress(request);
     await endWhenSpawnerIsGone();
+    if (await wasDisconnected({ heldRequestId: request.requestId }))
+      return disconnectedResult();
     // Written before the claim on purpose: preparing a pickup reads the plan,
     // writes a baseline snapshot, and takes locks, and the reviewer should see
     // the agent working through that window rather than idle. The claim can
@@ -603,6 +748,7 @@ const nextWork = async ({
             activeSessionId: session.sessionId,
             requestId: selectedRequest.requestId,
             claimedBy,
+            connectionToken: writerId,
             ...(model === undefined ? {} : { model }),
             baselineSnapshot: claimedSnapshot,
             now: new Date().toISOString(),
@@ -622,6 +768,31 @@ const nextWork = async ({
         );
       }
       request = authority.value;
+      /*
+      Asked again now that this pass owns a claim, and asked under the token
+      that claim carries.
+
+      The check before the claim cannot be the last one. The disconnect route
+      names the pickup token when it can see one, and until the claim lands
+      there is nothing for it to name - so a directive written in that gap
+      carries only this connection's id, and the publish that follows is the
+      one command that need not carry it back. Without this the agent the
+      reviewer just disconnected would be handed the work anyway and would
+      publish it (BIG-190). The claim is handed straight back, because a request left
+      under a claim nobody will answer waits out its whole lease.
+      */
+      if (await wasDisconnected()) {
+        await releaseClaimsHeldBy({
+          store: session.store,
+          sessionId: session.sessionId,
+          planId: session.planId,
+          claimedBy,
+          step: "Claim released when the reviewer disconnected the agent",
+          detail:
+            "The agent was disconnected as it picked this up, so the message went back in the queue for the next agent",
+        }).catch(() => undefined);
+        return disconnectedResult();
+      }
     } catch (error: unknown) {
       await markWorkingOn(undefined);
       if (error instanceof RetryableAgentClaimRejected) {
@@ -700,6 +871,7 @@ const nextWork = async ({
       planPath: session.planPath,
       responsePath: stage.responseDraftPath,
       agentToken: claimedBy,
+      connectionToken: writerId,
     });
     request = validateAgentRequest({
       ...request,
@@ -727,11 +899,14 @@ const nextWork = async ({
       response_template: responseTemplate,
       response_file: stage.responseDraftPath,
       agent_token: claimedBy,
+      connection_token: writerId,
       respond_command: respondCommand,
       note_command: noteCommand,
+      next_command: nextCommand,
       rules: [
         `Run the returned note_command as given when starting; it records "${AGENT_NOTE_INITIAL_PROGRESS}" and renews the claim with the agent_token`,
-        'For later updates, run agent note <plan> "<progress>" --agent <agent_token> with the returned plan and token',
+        "Run the returned next_command for the following request; it carries the connection_token that keeps this one agent session rather than a new one each time",
+        'For later updates, run agent note <plan> "<progress>" --agent <agent_token> --connection <connection_token> with the returned plan and both tokens',
         "Run the returned respond_command as given; it carries the agent_token that proves this session holds the request",
         "Only one request on this plan may hold a live claim; another agent waits instead of editing the plan in parallel",
         "Edit candidate_plan and nothing else in the repository; it is this claim's own copy of the plan, and responding publishes it",
@@ -753,13 +928,28 @@ const respond = async ({
   responsePath,
   executablePath,
   agentToken,
+  connectionToken,
 }: {
   readonly planPath: string;
   readonly responsePath: string;
   readonly executablePath: string;
   readonly agentToken: string;
+  readonly connectionToken?: string;
 }): Promise<Record<string, unknown>> => {
   const session = await readPlanSession(planPath);
+  // Checked before the work rather than at publication. A disconnected agent
+  // that only found out when its answer was refused would have paid for a whole
+  // turn first, and a harness reading that refusal cannot tell it from a race
+  // worth retrying (BIG-190).
+  if (
+    (await acknowledgeDisconnect({
+      store: session.store,
+      sessionId: session.sessionId,
+      ...(connectionToken === undefined ? {} : { writerId: connectionToken }),
+    })) !== undefined
+  ) {
+    failDisconnected();
+  }
   const snapshot = await readAgentExchange({
     store: session.store,
     sessionId: session.sessionId,
@@ -946,6 +1136,7 @@ const respond = async ({
     next: agentNextCommand({
       executablePath: resolve(executablePath),
       planPath: session.planPath,
+      ...(connectionToken === undefined ? {} : { connectionToken }),
     }),
     help: [
       "The live review will replace its waiting chip with this real agent response",
@@ -963,6 +1154,7 @@ const note = async ({
   sessionUrl,
   sessionId,
   agentToken,
+  connectionToken,
 }: {
   readonly planPath: string;
   readonly detail: string;
@@ -972,6 +1164,7 @@ const note = async ({
   readonly sessionUrl?: string;
   readonly sessionId?: string;
   readonly agentToken: string;
+  readonly connectionToken?: string;
 }): Promise<Record<string, unknown>> => {
   const model = decodeAgentModelIdentity({
     ...(modelName === undefined ? {} : { name: modelName }),
@@ -985,6 +1178,15 @@ const note = async ({
     return fail("Progress must be between 1 and 160 characters");
   }
   const session = await readPlanSession(planPath);
+  if (
+    (await acknowledgeDisconnect({
+      store: session.store,
+      sessionId: session.sessionId,
+      ...(connectionToken === undefined ? {} : { writerId: connectionToken }),
+    })) !== undefined
+  ) {
+    failDisconnected();
+  }
   const snapshot = await readAgentExchange({
     store: session.store,
     sessionId: session.sessionId,
@@ -1017,6 +1219,7 @@ const note = async ({
           activeSessionId: session.sessionId,
           requestId: request.requestId,
           claimedBy: agentToken,
+          ...(connectionToken === undefined ? {} : { connectionToken }),
           ...(model === undefined ? {} : { model }),
           baselineSnapshot: requestBaselineSnapshot(request),
           now: new Date().toISOString(),
@@ -1069,6 +1272,9 @@ export const runAgentWorkLoopAction = async (
       ...(action.agentToken === undefined
         ? {}
         : { agentToken: action.agentToken }),
+      ...(action.connectionToken === undefined
+        ? {}
+        : { connectionToken: action.connectionToken }),
       ...(action.modelName === undefined
         ? {}
         : { modelName: action.modelName }),
@@ -1092,12 +1298,18 @@ export const runAgentWorkLoopAction = async (
       responsePath: action.responsePath,
       executablePath: action.executablePath,
       agentToken: action.agentToken,
+      ...(action.connectionToken === undefined
+        ? {}
+        : { connectionToken: action.connectionToken }),
     });
   }
   return note({
     planPath: action.planPath,
     detail: action.detail,
     agentToken: action.agentToken,
+    ...(action.connectionToken === undefined
+      ? {}
+      : { connectionToken: action.connectionToken }),
     ...(action.modelName === undefined ? {} : { modelName: action.modelName }),
     ...(action.modelEffort === undefined
       ? {}

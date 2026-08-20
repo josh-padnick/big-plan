@@ -10,6 +10,7 @@ import {
   summarizeAgentConnection,
 } from "./agent-connection.browser.js";
 import { AGENT_SESSION_ENDED_REASON } from "../shared/agent-status.js";
+import { AGENT_DISCONNECTED_REASON } from "../shared/agent-disconnect.js";
 
 describe("connectionEventEnded", () => {
   it("recognizes the edge the runtime writes for a reported end", () => {
@@ -17,6 +18,17 @@ describe("connectionEventEnded", () => {
       connectionEventEnded({
         connected: false,
         reason: AGENT_SESSION_ENDED_REASON,
+      }),
+    ).toBe(true);
+  });
+
+  it("recognizes a disconnect the reviewer performed as a reported end", () => {
+    // A disconnect Big Plan was asked for is never a gap it inferred, whether
+    // or not the agent lived long enough to report its own end (BIG-190).
+    expect(
+      connectionEventEnded({
+        connected: false,
+        reason: AGENT_DISCONNECTED_REASON,
       }),
     ).toBe(true);
   });
@@ -48,6 +60,25 @@ describe("connectionLogRowReading", () => {
       // The row is already headed "Session ended"; repeating the stored reason
       // under it would say the same thing twice.
       showReason: false,
+    });
+  });
+
+  it("keeps stating who ended the session when the reviewer did", () => {
+    // "Session ended" is true but incomplete here: the fact worth the row is
+    // that the reviewer ended it, and no label carries that.
+    expect(
+      connectionLogRowReading({
+        connected: false,
+        ended: true,
+        reason: AGENT_DISCONNECTED_REASON,
+        nextConnected: undefined,
+        knownSession: true,
+      }),
+    ).toEqual({
+      label: "Session ended",
+      prefix: "Ended ",
+      suffix: " ago",
+      showReason: true,
     });
   });
 
@@ -146,6 +177,62 @@ describe("summarizeAgentConnection", () => {
         ],
       }),
     ).toMatchObject({ quietPeriods: 1, sessionsEnded: 1, resumed: 2 });
+  });
+
+  it("counts a reviewer's disconnect among the ended sessions", () => {
+    expect(
+      summarizeAgentConnection({
+        events: [
+          connectedEdge(1),
+          {
+            connected: false,
+            at: at(2),
+            reason: AGENT_DISCONNECTED_REASON,
+          },
+          connectedEdge(3),
+        ],
+      }),
+    ).toMatchObject({ quietPeriods: 0, sessionsEnded: 1, resumed: 1 });
+  });
+
+  it("counts a disconnect that follows a gap as its own ended session", () => {
+    // The runtime records the reported end after the silence it explains, so
+    // the summary states both facts: the agent went quiet, and then the
+    // reviewer ended it. Reporting only the gap would invert the one
+    // distinction this tally exists to draw (BIG-156, BIG-190).
+    expect(
+      summarizeAgentConnection({
+        events: [
+          { connected: false, at: at(0) },
+          connectedEdge(1),
+          quietEdge(2),
+          {
+            connected: false,
+            at: at(3),
+            reason: AGENT_DISCONNECTED_REASON,
+          },
+        ],
+      }),
+    ).toMatchObject({ quietPeriods: 1, sessionsEnded: 1, resumed: 0 });
+  });
+
+  it("counts one departure once however often it is re-explained", () => {
+    // The loop reports its own end, then the reviewer disconnects the claim it
+    // left behind, so the log carries two reported ends for one agent leaving.
+    // The tally counts agents, not rows.
+    expect(
+      summarizeAgentConnection({
+        events: [
+          connectedEdge(1),
+          endedEdge(2),
+          {
+            connected: false,
+            at: at(3),
+            reason: AGENT_DISCONNECTED_REASON,
+          },
+        ],
+      }),
+    ).toMatchObject({ quietPeriods: 0, sessionsEnded: 1, resumed: 0 });
   });
 
   it("counts nothing for a session that has only ever been connected", () => {

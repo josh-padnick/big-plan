@@ -38,6 +38,12 @@ import {
 } from "./request-mailbox.js";
 import {
   agentMutationJournalPath,
+  readAgentConnectionEvents,
+  readAgentDisconnectRequestFor,
+  readAgentDisconnectRequests,
+  readAgentPresence,
+  writeAgentHeartbeat,
+  writeAgentHeartbeatEnded,
   writeAgentResponseValue,
   writeStoreJson,
   withReviewStoreLock,
@@ -50,6 +56,7 @@ import {
   DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
   startReviewRuntime,
 } from "./server.js";
+import { runAgentWorkLoopAction } from "./agent-work-loop.js";
 import type { ReviewRuntime } from "./server.js";
 import {
   reviewSessionIsRunning,
@@ -57,7 +64,12 @@ import {
 } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
-import { AGENT_RECOVERY_HORIZON_MS } from "./shared/agent-timing.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+} from "./shared/agent-timing.js";
+import { AGENT_NO_SIGNAL_REASON } from "./shared/agent-status.js";
+import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import { REVIEW_POLL_INTERVAL_MS } from "./shared/review-polling.js";
 import {
@@ -4833,6 +4845,59 @@ describe("review runtime shutdown", () => {
     }
   }, 15_000);
 
+  // The idle check runs on a timer, so nothing is waiting on the promise it
+  // returns. A rejection there used to reach the process as an unhandled
+  // rejection, which ends the whole review over one failed tick.
+  it("should report a failing idle check instead of ending the review", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-idle-fail-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 1_000,
+      queuedWorkIdleTimeoutMs: 120_000,
+    });
+    // Queued work keeps the session open, so the timer goes on reaching for
+    // the store instead of stopping the session on its first tick.
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "1d1e1d1e1d1e1d1e",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(PLAN),
+        createdAt: "2026-08-19T12:00:00.000Z",
+        body: "Hold this session open while the store goes away.",
+      }),
+    });
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      // The store goes out from under the live timer, which is what a working
+      // directory cleaned up beneath a running review looks like.
+      await rm(review.store.reviewDirectory, { recursive: true, force: true });
+      await vi.waitFor(
+        () => {
+          expect(
+            stderr.mock.calls.map(([chunk]) => String(chunk)).join(""),
+          ).toContain(
+            `Review idle check failed for session ${review.sessionId}`,
+          );
+        },
+        { timeout: 10_000, interval: 25 },
+      );
+    } finally {
+      stderr.mockRestore();
+      // The store comes back before the close, so the shutdown can finish and
+      // hand the port back rather than failing on the directory this took away.
+      await mkdir(review.store.reviewDirectory, { recursive: true });
+      await review.close().catch(() => undefined);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it("should force-close a stalled active request after a short grace period", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-stall-"));
     const planPath = join(directory, "plan.mdx");
@@ -5442,6 +5507,524 @@ describe("review runtime queued messages", () => {
       body: "Keep this one after all.",
     });
   });
+});
+
+// BIG-190: disconnecting is a message to the agent and a release of the review,
+// and the log has to record it as an end somebody asked for rather than a gap.
+describe("review runtime agent disconnect", () => {
+  let disconnected: ReviewRuntime;
+  let disconnectToken: string;
+  let disconnectDirectory: string;
+
+  beforeAll(async () => {
+    disconnectDirectory = await mkdtemp(join(tmpdir(), "big-plan-disconnect-"));
+    const planPath = join(disconnectDirectory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    disconnected = await startReviewRuntime({ planPath });
+    disconnectToken = await readSessionToken(disconnected);
+  });
+
+  afterAll(async () => {
+    await disconnected.close();
+    await rm(disconnectDirectory, { recursive: true, force: true });
+  });
+
+  const ask = ({
+    path,
+    method = "POST",
+    body,
+  }: {
+    readonly path: string;
+    readonly method?: string;
+    readonly body?: unknown;
+  }) =>
+    fetch(`${disconnected.url.replace(/\/$/, "")}${path}`, {
+      method,
+      headers: {
+        "x-big-plan-review-token": disconnectToken,
+        "sec-fetch-site": "same-origin",
+        origin: disconnected.url.replace(/\/$/, ""),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+
+  /** Holds the gate `claimAgentRequest` takes first, so a claim cannot land. */
+  const holdPlanClaimLock = (runtimeToHold: ReviewRuntime) => {
+    let acquire = (): void => undefined;
+    let free = (): void => undefined;
+    const acquired = new Promise<void>((settle) => {
+      acquire = settle;
+    });
+    const freed = new Promise<void>((settle) => {
+      free = settle;
+    });
+    const held = withReviewStoreLock({
+      lockPath: join(runtimeToHold.store.reviewDirectory, ".agent-claim.lock"),
+      change: async () => {
+        acquire();
+        await freed;
+      },
+      timeoutError: () => new Error("Timed out holding the plan claim lock"),
+    });
+    return {
+      acquired,
+      release: async () => {
+        free();
+        await held;
+      },
+    };
+  };
+
+  const attachAgent = async ({
+    writerId,
+    state = "waiting",
+    requestId,
+  }: {
+    readonly writerId: string;
+    readonly state?: "waiting" | "working";
+    readonly requestId?: string;
+  }) => {
+    await writeAgentHeartbeat({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+      state,
+      writerId,
+      ...(requestId === undefined ? {} : { requestId }),
+    });
+  };
+
+  it("should refuse a disconnect when no agent is connected", async () => {
+    // Nothing to disconnect is not a quiet success: writing a directive
+    // addressed to nobody would leave a standing order against every agent
+    // that attaches afterwards.
+    const response = await ask({ path: "/api/agent-disconnect" });
+    expect(response.status).toBe(409);
+    await expect(
+      readAgentDisconnectRequests({ store: disconnected.store }),
+    ).resolves.toEqual([]);
+  });
+
+  it("should address the disconnect to the agent the review names", async () => {
+    await attachAgent({ writerId: "1111111111111111" });
+    const response = await ask({ path: "/api/agent-disconnect" });
+    expect(response.status).toBe(200);
+    // With no claim to name, the review's own writer id speaks for the
+    // connection - and it speaks alone, so the directive can reach one agent.
+    await expect(
+      readAgentDisconnectRequests({ store: disconnected.store }),
+    ).resolves.toEqual([
+      { writerId: "1111111111111111", requestedAtMs: expect.any(Number) },
+    ]);
+  });
+
+  it("should report the directive only while it is about the attached agent", async () => {
+    // The card draws its pending state from this, so it has to stop reporting
+    // the moment a different agent takes over the presence record.
+    await attachAgent({ writerId: "1111111111111111" });
+    expect((await ask({ path: "/api/agent-disconnect" })).status).toBe(200);
+    const own: unknown = await (
+      await ask({ path: "/api/agent", method: "GET" })
+    ).json();
+    expect(own).toMatchObject({
+      presence: { disconnectRequestedAtMs: expect.any(Number) },
+    });
+    await attachAgent({ writerId: "2222222222222222" });
+    const next: unknown = await (
+      await ask({ path: "/api/agent", method: "GET" })
+    ).json();
+    expect(next).toMatchObject({ presence: { connected: true } });
+    expect(next).not.toMatchObject({
+      presence: { disconnectRequestedAtMs: expect.any(Number) },
+    });
+  });
+
+  it("should decide who to disconnect under the plan's claim gate", async () => {
+    /*
+    The window this closes: the route reads presence and the exchange, sees no
+    claim yet, and writes a directive naming only the loop's writer id - while
+    the loop claims in between. `agent note` and `agent respond` know only their
+    pickup token, so that directive would never reach them and the agent the
+    reviewer just disconnected would keep working (BIG-190).
+
+    Holding the gate the claim path takes proves the route waits for it rather
+    than reading around it.
+    */
+    await attachAgent({ writerId: "5555555555555555" });
+    const gate = holdPlanClaimLock(disconnected);
+    await gate.acquired;
+    let settled = false;
+    const disconnecting = ask({ path: "/api/agent-disconnect" }).then(
+      (response) => {
+        settled = true;
+        return response;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(settled).toBe(false);
+    await gate.release();
+    expect((await disconnecting).status).toBe(200);
+  });
+
+  it("should record the end as one the reviewer asked for", async () => {
+    // The distinction the connection log exists to keep: an end somebody asked
+    // for, named as such, rather than a gap Big Plan inferred from silence
+    // (BIG-156). The reason survives the agent's acknowledgment, because the
+    // runtime's connection check reads it after the agent has already gone.
+    await attachAgent({ writerId: "4444444444444444" });
+    const lastEdge = async () =>
+      (
+        await readAgentConnectionEvents({
+          store: disconnected.store,
+          sessionId: disconnected.sessionId,
+        })
+      ).at(-1);
+    // The runtime writes an edge only when the state changes, so the connection
+    // has to be observed before it can be observed ending.
+    await vi.waitFor(
+      async () => expect(await lastEdge()).toMatchObject({ connected: true }),
+      { timeout: 8_000, interval: 100 },
+    );
+    expect((await ask({ path: "/api/agent-disconnect" })).status).toBe(200);
+    await writeAgentHeartbeatEnded({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+      writerId: "4444444444444444",
+    });
+    await vi.waitFor(
+      async () =>
+        expect(await lastEdge()).toMatchObject({
+          connected: false,
+          reason: AGENT_DISCONNECTED_REASON,
+        }),
+      { timeout: 8_000, interval: 100 },
+    );
+  }, 15_000);
+
+  it("should return the work the disconnected agent held to the queue", async () => {
+    // The reviewer asked the agent to leave, not for their own message to be
+    // thrown away: the claim goes and the request stays.
+    const sent = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", body: "Why this ordering?" },
+    });
+    expect(sent.status).toBe(200);
+    const pending = nextPendingAgentRequest(
+      await readAgentExchange({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+        planId: disconnected.planId,
+      }),
+      { claimedBy: "aaaaaaaaaaaaaaaa", nowMs: Date.now() },
+    );
+    if (pending === undefined)
+      throw new Error("The chat request was not stored");
+    await claimAgentRequest({
+      store: disconnected.store,
+      activeSessionId: disconnected.sessionId,
+      requestId: pending.requestId,
+      claimedBy: "aaaaaaaaaaaaaaaa",
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await attachAgent({
+      writerId: "3333333333333333",
+      state: "working",
+      requestId: pending.requestId,
+    });
+    const response = await ask({ path: "/api/agent-disconnect" });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      releasedRequestIds: [pending.requestId],
+    });
+    // One entry per disconnected agent, so the earlier ones can still answer
+    // the agents they addressed.
+    // This claim declares no connection of its own, and presence names the very
+    // request it holds - the proof that presence is describing the holder - so
+    // the review's writer id answers for it.
+    await expect(
+      readAgentDisconnectRequestFor({
+        store: disconnected.store,
+        writerId: "3333333333333333",
+      }),
+    ).resolves.toMatchObject({ requestedAtMs: expect.any(Number) });
+    const after = await readAgentExchange({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+      planId: disconnected.planId,
+    });
+    const released = after.requests.find(
+      (candidate) => candidate.requestId === pending.requestId,
+    );
+    expect(released).toMatchObject({ requestId: pending.requestId });
+    expect(released?.claimedBy).toBeUndefined();
+    expect(released?.canceledAt).toBeUndefined();
+  });
+
+  it("should disconnect the agent holding work and leave a bystander attached", async () => {
+    /*
+    Two agents attached is a state Big Plan supports: one holds the plan's
+    single claim while another waits for it. The waiting loop is the one
+    writing the heartbeat every half second, so the review's writer id names
+    the bystander while the card describes the working agent's turn. Naming
+    both on one directive ended both, and the reviewer never saw the second
+    (BIG-190).
+    */
+    const sent = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", body: "Who is answering this?" },
+    });
+    expect(sent.status).toBe(200);
+    const pending = nextPendingAgentRequest(
+      await readAgentExchange({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+        planId: disconnected.planId,
+      }),
+      { claimedBy: "cccccccccccccccc", nowMs: Date.now() },
+    );
+    if (pending === undefined)
+      throw new Error("The chat request was not stored");
+    await claimAgentRequest({
+      store: disconnected.store,
+      activeSessionId: disconnected.sessionId,
+      requestId: pending.requestId,
+      claimedBy: "cccccccccccccccc",
+      connectionToken: "cccc0000cccc0000",
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    // The bystander's waiting loop, which is what the presence record names.
+    await attachAgent({ writerId: "8888888888888888" });
+    const edges = async () =>
+      readAgentConnectionEvents({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+      });
+    // The log has to be describing the bystander's live connection before this
+    // disconnect can be seen changing what it says.
+    await vi.waitFor(
+      async () =>
+        expect((await edges()).at(-1)).toMatchObject({ connected: true }),
+      { timeout: 8_000, interval: 100 },
+    );
+    const edgesBefore = await edges();
+    expect((await ask({ path: "/api/agent-disconnect" })).status).toBe(200);
+    await expect(
+      readAgentDisconnectRequestFor({
+        store: disconnected.store,
+        writerId: "cccc0000cccc0000",
+      }),
+    ).resolves.toMatchObject({ requestedAtMs: expect.any(Number) });
+    await expect(
+      readAgentDisconnectRequestFor({
+        store: disconnected.store,
+        writerId: "8888888888888888",
+      }),
+    ).resolves.toBeUndefined();
+    // The bystander is still attached and was told nothing.
+    await expect(
+      readAgentPresence({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+      }),
+    ).resolves.toMatchObject({
+      connected: true,
+      writerId: "8888888888888888",
+    });
+    /*
+    And the reviewer's decision is stated, not inferred.
+
+    The ordinary edge cannot state it here: presence goes on describing the
+    bystander, healthy and connected, long after the addressee has gone, so
+    waiting for that edge reports a disconnect the reviewer asked for as
+    nothing at all. The row is asserted by its reason rather than by being
+    last, because the checker keeps describing the bystander's live connection
+    afterwards (BIG-156, BIG-190). It is asserted over what this disconnect
+    added rather than over the whole log, because earlier ends this session
+    recorded would answer for it and the row would prove nothing.
+    */
+    expect((await edges()).slice(edgesBefore.length)).toContainEqual(
+      expect.objectContaining({
+        connected: false,
+        reason: AGENT_DISCONNECTED_REASON,
+      }),
+    );
+  }, 15_000);
+
+  it("should state the reported end after disconnecting a working agent", async () => {
+    /*
+    The main path, and the one an address that does not outlive the decision
+    loses. The agent is healthy, signalling, and holding work; disconnecting
+    frees the review by releasing that claim at once, so a directive addressed
+    to the pickup would be unresolvable a millisecond later and the reviewer's
+    own decision would come back to them as silence (BIG-156, BIG-190).
+    */
+    const sent = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", body: "Is this ordering settled?" },
+    });
+    expect(sent.status).toBe(200);
+    const pending = nextPendingAgentRequest(
+      await readAgentExchange({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+        planId: disconnected.planId,
+      }),
+      { claimedBy: "dddddddddddddddd", nowMs: Date.now() },
+    );
+    if (pending === undefined)
+      throw new Error("The chat request was not stored");
+    await claimAgentRequest({
+      store: disconnected.store,
+      activeSessionId: disconnected.sessionId,
+      requestId: pending.requestId,
+      claimedBy: "dddddddddddddddd",
+      connectionToken: "9999999999999999",
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await attachAgent({
+      writerId: "9999999999999999",
+      state: "working",
+      requestId: pending.requestId,
+    });
+    const lastEdge = async () =>
+      (
+        await readAgentConnectionEvents({
+          store: disconnected.store,
+          sessionId: disconnected.sessionId,
+        })
+      ).at(-1);
+    await vi.waitFor(
+      async () => expect(await lastEdge()).toMatchObject({ connected: true }),
+      { timeout: 8_000, interval: 100 },
+    );
+    const response = await ask({ path: "/api/agent-disconnect" });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      releasedRequestIds: [pending.requestId],
+    });
+    // The review is free before the agent has noticed, which is the point.
+    const after = await readAgentExchange({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+      planId: disconnected.planId,
+    });
+    expect(
+      after.requests.find(
+        (candidate) => candidate.requestId === pending.requestId,
+      )?.claimedBy,
+    ).toBeUndefined();
+    // The agent is told at its next command - the one the loop hands itself,
+    // carrying its connection token and no pickup token - and ends its own
+    // session there rather than taking the freed message back.
+    await expect(
+      runAgentWorkLoopAction({
+        kind: "next",
+        planPath: join(disconnectDirectory, "plan.mdx"),
+        shouldWait: false,
+        executablePath: "bin/big-plan.mjs",
+        connectionToken: "9999999999999999",
+      }),
+    ).resolves.toMatchObject({ ended: true, disconnected: true });
+    // The log has to say who ended it, not merely that it ended.
+    await vi.waitFor(
+      async () =>
+        expect(await lastEdge()).toMatchObject({
+          connected: false,
+          reason: AGENT_DISCONNECTED_REASON,
+        }),
+      { timeout: 8_000, interval: 100 },
+    );
+  }, 20_000);
+
+  it("should state the reported end after a stalled agent's silence", async () => {
+    /*
+    The state a reviewer is most likely to reach for Disconnect in: the agent
+    holds a message, has narrated nothing for longer than a turn takes, and the
+    log has already written the silence off as a gap. Ending it there has to
+    leave the log saying somebody asked for the end, not repeating the guess it
+    replaced (BIG-156).
+    */
+    const sent = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", body: "Are you still on this?" },
+    });
+    expect(sent.status).toBe(200);
+    const pending = nextPendingAgentRequest(
+      await readAgentExchange({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+        planId: disconnected.planId,
+      }),
+      { claimedBy: "bbbbbbbbbbbbbbbb", nowMs: Date.now() },
+    );
+    if (pending === undefined)
+      throw new Error("The chat request was not stored");
+    await claimAgentRequest({
+      store: disconnected.store,
+      activeSessionId: disconnected.sessionId,
+      requestId: pending.requestId,
+      claimedBy: "bbbbbbbbbbbbbbbb",
+      connectionToken: "7777777777777777",
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    const lastEdge = async () =>
+      (
+        await readAgentConnectionEvents({
+          store: disconnected.store,
+          sessionId: disconnected.sessionId,
+        })
+      ).at(-1);
+    await attachAgent({
+      writerId: "7777777777777777",
+      state: "working",
+      requestId: pending.requestId,
+    });
+    await vi.waitFor(
+      async () => expect(await lastEdge()).toMatchObject({ connected: true }),
+      { timeout: 8_000, interval: 100 },
+    );
+    // Nothing renews the plan heartbeat while a turn runs, so an agent that
+    // stops narrating ages out of presence while still holding the claim.
+    await writeAgentHeartbeat({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+      state: "working",
+      requestId: pending.requestId,
+      writerId: "7777777777777777",
+      now: Date.now() - AGENT_STALL_MS - 5_000,
+    });
+    await vi.waitFor(
+      async () =>
+        expect(await lastEdge()).toMatchObject({
+          connected: false,
+          reason: AGENT_NO_SIGNAL_REASON,
+        }),
+      { timeout: 8_000, interval: 100 },
+    );
+    expect((await ask({ path: "/api/agent-disconnect" })).status).toBe(200);
+    await vi.waitFor(
+      async () =>
+        expect(await lastEdge()).toMatchObject({
+          connected: false,
+          reason: AGENT_DISCONNECTED_REASON,
+        }),
+      { timeout: 8_000, interval: 100 },
+    );
+    // The silence was honest when it was written, so it stays; the reported end
+    // is recorded after it rather than over it.
+    const edges = await readAgentConnectionEvents({
+      store: disconnected.store,
+      sessionId: disconnected.sessionId,
+    });
+    expect(edges.at(-2)).toMatchObject({
+      connected: false,
+      reason: AGENT_NO_SIGNAL_REASON,
+    });
+  }, 20_000);
 });
 
 /**

@@ -4,6 +4,10 @@
 // stores no state and does not depend on the browser or Node.
 
 import { AGENT_RECOVERY_HORIZON_MS, AGENT_STALL_MS } from "./agent-timing.js";
+import {
+  requestIsTerminal,
+  type TerminalAgentRequest,
+} from "./agent-request-state.js";
 
 // A claim lasts exactly as long as the window after which the reviewer is
 // already told the agent has stopped. Taking a claim the reviewer has been
@@ -16,6 +20,27 @@ export type ClaimedRequest = {
   readonly claimedBy?: string;
   readonly claimExpiresAtMs?: number;
 };
+
+/**
+ * The one pickup a review-wide decision can be about.
+ *
+ * Big Plan permits a single live claim per plan, so a request some agent has
+ * picked up and neither answered nor had taken back is the work the reviewer is
+ * looking at. Every surface that has to name that pickup - the control that
+ * disconnects it, and the readers that explain where it went - asks here, so
+ * none of them can disagree about which claim is the live one.
+ *
+ * A lapsed lease still counts, for the reason pickup does: `agent next` hands
+ * the work over and exits, so nothing renews the claim between two notes.
+ */
+export const heldAgentClaim = <
+  Request extends ClaimedRequest & TerminalAgentRequest,
+>(
+  requests: ReadonlyArray<Request>,
+): Request | undefined =>
+  requests.find(
+    (request) => request.claimedBy !== undefined && !requestIsTerminal(request),
+  );
 
 /** The instant a claim taken now would lapse without a renewal. */
 export const claimLeaseExpiryMs = (nowMs: number): number =>

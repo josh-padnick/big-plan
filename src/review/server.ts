@@ -71,6 +71,7 @@ import {
   deriveReviewPlanId,
   prepareStore,
   randomId,
+  readAgentDisconnectRequestFor,
   readAgentPresence,
   readComments,
   readResolvedCommentIds,
@@ -135,6 +136,7 @@ import {
 } from "./routes-assets.js";
 import {
   cancelPendingAgentRequest,
+  disconnectAgent,
   deleteQueuedAgentRequest,
   readAgentSnapshot,
   readProgressEvents,
@@ -244,6 +246,11 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
     method: "POST",
     path: "/api/agent-cancel",
     handler: cancelPendingAgentRequest,
+  },
+  {
+    method: "POST",
+    path: "/api/agent-disconnect",
+    handler: disconnectAgent,
   },
   { method: "GET", path: "/api/progress", handler: readProgressEvents },
   { method: "GET", path: "/api/snapshot-diff", handler: readSnapshotDiff },
@@ -1162,6 +1169,20 @@ export const startReviewRuntime = async ({
         // loop reported its own end, which is the one case where the store
         // holds a fact rather than an inference.
         const presence = await readAgentPresence({ store, sessionId });
+        // A disconnect the reviewer asked for explains this edge better than
+        // either default, and it explains it whether or not the agent lived long
+        // enough to acknowledge. It is read against this presence record, so it
+        // can never explain the departure of an agent it was not about, and it
+        // is read only while presence is down, because that is the only state
+        // whose edge carries a reason.
+        const disconnect = presence.connected
+          ? undefined
+          : await readAgentDisconnectRequestFor({
+              store,
+              ...(presence.writerId === undefined
+                ? {}
+                : { writerId: presence.writerId }),
+            });
         await recordAgentConnectionState({
           store,
           sessionId,
@@ -1169,7 +1190,12 @@ export const startReviewRuntime = async ({
           at: new Date(
             agentConnectionEdgeAtMs({ ...presence, nowMs: Date.now() }),
           ).toISOString(),
-          disconnectReason: agentDisconnectReason(presence),
+          disconnectReason: agentDisconnectReason({
+            ...presence,
+            ...(disconnect === undefined
+              ? {}
+              : { disconnectRequestedAtMs: disconnect.requestedAtMs }),
+          }),
         });
       })
       .catch((error: unknown) => {
@@ -1246,6 +1272,8 @@ export const startReviewRuntime = async ({
   let closed = false;
   let shutdown: Promise<void> | undefined;
   let idleTimer: ReturnType<typeof setInterval> | undefined;
+  let idleCheck = Promise.resolve();
+  let idleFailureReported = false;
   let queuedWorkIdleState:
     | {
         readonly requestKey: string;
@@ -1272,6 +1300,7 @@ export const startReviewRuntime = async ({
     if (idleTimer !== undefined) clearInterval(idleTimer);
     await heartbeatWrite.catch(() => undefined);
     await connectionWrite.catch(() => undefined);
+    await idleCheck.catch(() => undefined);
     await drainAndCloseServer(server);
   };
   // One shutdown, shared by every caller. The idle timer and an external
@@ -1300,56 +1329,86 @@ export const startReviewRuntime = async ({
           if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
             return;
           const reason = `The review session ended normally after ${reviewIdleDurationLabel(idleTimeoutMs)} of inactivity.`;
-          const stopped = await stopReviewSessionIfInactive({
-            store,
-            sessionId,
-            stopReason: reason,
-            inactive: async () => {
-              if (closed || context.activityClock.idleForMs() < idleTimeoutMs) {
-                return false;
-              }
-              const requests = await readValidatedAgentRequests({
+          // One idle check at a time, and close() waits for the one in flight,
+          // the same promise the heartbeat and the connection check already
+          // hand it. An untracked tick can still be reaching for the store's
+          // lock once close() has resolved, and it then writes inside a
+          // directory whose owner was told the runtime had finished with it.
+          // The close itself stays outside this chain: teardown awaits the
+          // chain, so a tick that put its own close in it would deadlock.
+          const check = idleCheck
+            .catch(() => undefined)
+            .then(async () => {
+              if (closed) return { authoritative: false, stopped: false };
+              return await stopReviewSessionIfInactive({
                 store,
                 sessionId,
-                planId,
+                stopReason: reason,
+                inactive: async () => {
+                  if (
+                    closed ||
+                    context.activityClock.idleForMs() < idleTimeoutMs
+                  ) {
+                    return false;
+                  }
+                  const requests = await readValidatedAgentRequests({
+                    store,
+                    sessionId,
+                    planId,
+                  });
+                  const nowMs = Date.now();
+                  if (
+                    requests.some((request) =>
+                      requestBlocksPlanPickup({ request, nowMs }),
+                    )
+                  ) {
+                    queuedWorkIdleState = undefined;
+                    context.activityClock.touch();
+                    return false;
+                  }
+                  const queuedRequestKey = requests
+                    .filter((request) => !requestIsTerminal(request))
+                    .map((request) => request.requestId)
+                    .sort()
+                    .join(":");
+                  if (queuedRequestKey.length === 0) {
+                    queuedWorkIdleState = undefined;
+                    return true;
+                  }
+                  if (queuedWorkIdleState?.requestKey !== queuedRequestKey) {
+                    queuedWorkIdleState = {
+                      requestKey: queuedRequestKey,
+                      expiresAtMs: nowMs + queuedWorkIdleLimitMs,
+                    };
+                    context.activityClock.touch();
+                    return false;
+                  }
+                  if (nowMs < queuedWorkIdleState.expiresAtMs) {
+                    return false;
+                  }
+                  return true;
+                },
               });
-              const nowMs = Date.now();
-              if (
-                requests.some((request) =>
-                  requestBlocksPlanPickup({ request, nowMs }),
-                )
-              ) {
-                queuedWorkIdleState = undefined;
-                context.activityClock.touch();
-                return false;
-              }
-              const queuedRequestKey = requests
-                .filter((request) => !requestIsTerminal(request))
-                .map((request) => request.requestId)
-                .sort()
-                .join(":");
-              if (queuedRequestKey.length === 0) {
-                queuedWorkIdleState = undefined;
-                return true;
-              }
-              if (queuedWorkIdleState?.requestKey !== queuedRequestKey) {
-                queuedWorkIdleState = {
-                  requestKey: queuedRequestKey,
-                  expiresAtMs: nowMs + queuedWorkIdleLimitMs,
-                };
-                context.activityClock.touch();
-                return false;
-              }
-              if (nowMs < queuedWorkIdleState.expiresAtMs) {
-                return false;
-              }
-              return true;
-            },
-          });
+            });
+          idleCheck = check.then(
+            () => undefined,
+            () => undefined,
+          );
+          const stopped = await check;
           if (stopped.stopped) {
             await closeRuntime(reason, true);
           }
-        })();
+        })().catch((error: unknown) => {
+          // A background check that rejects has nobody to hand the failure to,
+          // and an unhandled rejection ends the whole review process. The
+          // reviewer keeps their session and one line saying what stopped
+          // working, reported once so a failing store cannot bury the log.
+          if (idleFailureReported) return;
+          idleFailureReported = true;
+          process.stderr.write(
+            `Review idle check failed for session ${sessionId} (${resolvedPlanPath}): ${String(error)}\n`,
+          );
+        });
       },
       Math.min(1_000, idleTimeoutMs),
     );

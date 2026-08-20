@@ -258,6 +258,19 @@ While a request is picked up that section instead reads **Connect a new agent** 
 The taken-over agent's unfinished edits stay in its own copy and never reach your plan, so the new agent starts from the last published revision.
 Your comments are safe whichever you choose.
 
+The agent status card carries **Disconnect agent** wherever an agent is attached, with a mark beside it that explains on hover or keyboard focus what disconnecting does: the agent is told to end its session so a different agent can attach, work it has in flight is dropped, and your comments stay.
+Confirming is one dialog, and what it says depends on whether the agent is holding work rather than on how well it is doing.
+An agent that holds a turn - answering, gone quiet mid-turn, or reporting an error - is named as holding work on the review, and the dialog states that the answer it has in flight is dropped rather than delivered; an agent holding nothing is disconnected without that sentence.
+Either way your comments and questions stay exactly where they are, and a message the agent was holding goes back into the queue for the next agent instead of being canceled.
+
+The disconnect is a message rather than a kill: Big Plan never reaches into the agent's process.
+The agent is told at its next command - `big-plan agent next`, `agent note`, or `agent respond` - and ends its own session there, which is why the connection log records a **Session ended** row stating that the reviewer disconnected the agent rather than a quiet period it had to infer.
+The row says so whether or not the agent lived long enough to acknowledge, because the decision is recorded against the connection you disconnected rather than against the message it was holding.
+That row is recorded even when the agent had already gone quiet long enough for the log to write the silence off as a gap: the earlier row stays, because it was honest when it was written, and the end you asked for is recorded after it.
+It is recorded when a second agent was waiting beside the one you disconnected too, and that agent stays attached and untouched: the log describes the review's connection rather than each agent separately, so it states the end you asked for and then shows the review continuing under the agent that stayed.
+`agent next` reports the disconnect as an ordinary end; `agent note` and `agent respond` refuse with the `AGENT_DISCONNECTED` code, so a harness stops instead of retrying.
+The review itself is free the moment you confirm, so a second agent can connect without waiting for the first one to notice.
+
 The stalled reading is bounded, because a pickup cannot account for silence indefinitely.
 After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: **Agent Status** gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.
 Past that point, and only while no agent is connected, the pickup also stops holding your comment: the claim is treated as abandoned, and **Delete comment the agent left?** returns with a confirmation that says the agent stopped reporting and its claim expired.

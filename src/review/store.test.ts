@@ -23,14 +23,18 @@ import {
   deriveReviewPlanId,
   prepareStore,
   readAgentConnectionEvents,
+  readAgentDisconnectRequestFor,
+  readAgentDisconnectRequests,
   readAgentPresence,
   readProgress,
   readResolvedCommentIds,
   readSnapshot,
   reviewStoreFor,
+  writeAgentDisconnectRequest,
   writeAgentHeartbeat,
   writeAgentHeartbeatEnded,
   writeResolvedCommentIds,
+  writeStoreJson,
   writeSnapshot,
   writeSessionHeartbeatValue,
   withReviewStoreLock,
@@ -799,6 +803,7 @@ describe("review store agent presence", () => {
       state: "waiting",
       updatedAtMs: 10_500,
       endedAtMs: 10_500,
+      writerId: "1111111111111111",
     });
   });
 
@@ -870,6 +875,7 @@ describe("review store agent presence", () => {
       connected: true,
       state: "waiting",
       updatedAtMs: 12_000,
+      writerId: "2222222222222222",
     });
   });
 
@@ -902,6 +908,7 @@ describe("review store agent presence", () => {
       connected: true,
       state: "waiting",
       updatedAtMs: 20_000,
+      writerId: "2222222222222222",
     });
   });
 
@@ -956,6 +963,7 @@ describe("review store agent presence", () => {
       connected: true,
       state: "waiting",
       updatedAtMs: 20_300,
+      writerId: "2222222222222222",
     });
   });
 
@@ -1078,6 +1086,7 @@ describe("review store agent presence", () => {
       state: "waiting",
       updatedAtMs: 40_200,
       endedAtMs: 40_200,
+      writerId: "1111111111111111",
     });
   });
 
@@ -1142,6 +1151,68 @@ describe("review store agent presence", () => {
         now: 20_500,
       }),
     ).resolves.toBe(false);
+  });
+});
+
+// BIG-190: a review outlives the agents attached to it, so the record of who
+// the reviewer disconnected has to outlive them too.
+describe("review store agent disconnect directives", () => {
+  it("should keep one standing directive per disconnected agent", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentDisconnectRequest({
+      store,
+      directive: { writerId: "1111111111111111", requestedAtMs: 10_000 },
+    });
+    await writeAgentDisconnectRequest({
+      store,
+      directive: { writerId: "2222222222222222", requestedAtMs: 20_000 },
+    });
+    // The second disconnect must not answer for the first. An agent taken off
+    // mid turn may not run another command until after a later one was
+    // recorded, and a single slot would meet it with an ordinary claim failure
+    // instead of telling it the reviewer disconnected it.
+    await expect(
+      readAgentDisconnectRequestFor({ store, writerId: "1111111111111111" }),
+    ).resolves.toMatchObject({ requestedAtMs: 10_000 });
+    await expect(
+      readAgentDisconnectRequestFor({ store, writerId: "2222222222222222" }),
+    ).resolves.toMatchObject({ requestedAtMs: 20_000 });
+  });
+
+  it("should replace a standing directive for the same agent", async () => {
+    // Disconnecting the same agent twice restates one decision; it is not two.
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentDisconnectRequest({
+      store,
+      directive: { writerId: "1111111111111111", requestedAtMs: 10_000 },
+    });
+    await writeAgentDisconnectRequest({
+      store,
+      directive: { writerId: "1111111111111111", requestedAtMs: 30_000 },
+    });
+    await expect(readAgentDisconnectRequests({ store })).resolves.toEqual([
+      { writerId: "1111111111111111", requestedAtMs: 30_000 },
+    ]);
+  });
+
+  it("should address nobody from a record that names nobody", async () => {
+    // A directive matching on absence would be a standing order against every
+    // agent that ever attaches to this review.
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeStoreJson({
+      path: store.agentDisconnectPath,
+      value: { directives: [{ requestedAtMs: 10_000 }] },
+    });
+    await expect(readAgentDisconnectRequests({ store })).resolves.toEqual([]);
+    await expect(
+      readAgentDisconnectRequestFor({ store, writerId: "1111111111111111" }),
+    ).resolves.toBeUndefined();
   });
 });
 

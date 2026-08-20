@@ -55,6 +55,7 @@ import {
   claimIsLive,
   claimLeaseExpiryMs,
 } from "./shared/agent-claim.js";
+import { agentConnectionReasonSupersedes } from "./shared/agent-status.js";
 import type { AgentModelIdentity } from "./shared/agent-model.js";
 import type {
   AgentRequestDeletionResult,
@@ -201,7 +202,13 @@ export const withResolvedCommentLock = async <TResult>({
       new AgentExchangeRejected("The request mailbox is unavailable"),
   });
 
-const withPlanClaimLock = async <TResult>({
+/**
+ * The plan-wide claim gate.
+ *
+ * Exported so the disconnect route can decide, against a plan whose claim state
+ * cannot move underneath it, whether the agent it is disconnecting holds work.
+ */
+export const withPlanClaimLock = async <TResult>({
   store,
   change,
 }: {
@@ -287,6 +294,7 @@ const withoutClaim = (request: AgentRequest): Record<string, unknown> => {
   delete released.baselineSnapshot;
   delete released.claimedAt;
   delete released.claimedBy;
+  delete released.claimedByConnection;
   delete released.claimedModel;
   delete released.claimExpiresAtMs;
   delete released.claimGeneration;
@@ -433,15 +441,26 @@ const dropUnpublishableStages = async ({
   await removeAgentMutationStages({ store, requestId });
 };
 
-/** Narrates a release, so the activity log never drops a claim in silence. */
+/**
+ * Narrates a release, so the activity log never drops a claim in silence.
+ *
+ * The words are the caller's, because a release is only ever half the story:
+ * the same drop reads as an abandoned claim being cleared out of the way in one
+ * case and as the reviewer deliberately taking an agent off the plan in the
+ * other, and a log that gave both the same line would be describing neither.
+ */
 const announceClaimRelease = async ({
   store,
   request,
   atMs,
+  step,
+  detail,
 }: {
   readonly store: ReviewStore;
   readonly request: AgentRequest;
   readonly atMs: number;
+  readonly step: string;
+  readonly detail: string;
 }): Promise<void> => {
   await appendProgressEvent({
     store,
@@ -450,13 +469,18 @@ const announceClaimRelease = async ({
       requestId: request.requestId,
       atMs,
       stepCode: "claim-released",
-      step: "Claim released after the agent stopped reporting",
+      step,
       state: "done",
-      detail:
-        "The reviewer changed this message once the claim on it was abandoned, so the previous agent session can no longer answer it",
+      detail,
     },
   }).catch(() => undefined);
 };
+
+const ABANDONED_CLAIM_RELEASE = {
+  step: "Claim released after the agent stopped reporting",
+  detail:
+    "The reviewer changed this message once the claim on it was abandoned, so the previous agent session can no longer answer it",
+} as const;
 
 export const ensureAgentRequest = async ({
   store,
@@ -568,6 +592,7 @@ export const claimAgentRequest = async ({
   activeSessionId,
   requestId,
   claimedBy,
+  connectionToken,
   model,
   baselineSnapshot,
   now,
@@ -578,6 +603,8 @@ export const claimAgentRequest = async ({
   readonly activeSessionId: string;
   readonly requestId: string;
   readonly claimedBy: string;
+  /** The connection taking this claim, so the claim knows who holds it. */
+  readonly connectionToken?: string;
   readonly model?: AgentModelIdentity;
   readonly baselineSnapshot: string;
   readonly now: string;
@@ -643,6 +670,10 @@ export const claimAgentRequest = async ({
             const renewed = validateAgentRequest({
               ...request,
               claimedModel: model ?? request.claimedModel,
+              // A renewal that declares no connection is the same connection
+              // continuing, exactly as an undeclared model is.
+              claimedByConnection:
+                connectionToken ?? request.claimedByConnection,
               // Renewal is the same claim continuing, so the generation - and
               // with it the agent's stage and its unfinished edits - stays.
               claimGeneration: request.claimGeneration ?? 1,
@@ -693,6 +724,7 @@ export const claimAgentRequest = async ({
             baselineSnapshot,
             claimedAt: now,
             claimedBy,
+            claimedByConnection: connectionToken,
             claimedModel: model,
             claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
             claimGeneration,
@@ -728,6 +760,98 @@ export const claimAgentRequest = async ({
     }).catch(() => undefined);
   }
   return takeover.request;
+};
+
+/**
+ * Returns the work one agent was holding to the queue, without ending it.
+ *
+ * A disconnect drops the answer in flight and keeps the question. The reviewer
+ * asked the agent to leave, not for their own comment to be thrown away, so the
+ * claim goes and the request stays exactly where it was before anyone picked it
+ * up - available to the next agent immediately, rather than after the lease it
+ * would otherwise have to outlive (BIG-190).
+ *
+ * A request whose answer is already publishing keeps its claim. That answer is
+ * one atomic rename from the plan and the commit boundary is what decides it;
+ * pulling the claim out from under it would abandon a revision mid flight to
+ * make a departure look tidier.
+ */
+export const releaseClaimsHeldBy = async ({
+  store,
+  sessionId,
+  planId,
+  claimedBy,
+  step,
+  detail,
+  clock = Date.now,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly claimedBy: string;
+  readonly step: string;
+  readonly detail: string;
+  readonly clock?: Clock;
+}): Promise<ReadonlyArray<string>> => {
+  const nowMs = readClock(clock);
+  const held = (
+    await readValidatedAgentRequests({ store, sessionId, planId })
+  ).filter(
+    (request) =>
+      request.claimedBy === claimedBy &&
+      request.claimedAt !== undefined &&
+      request.answeredAt === undefined &&
+      request.canceledAt === undefined,
+  );
+  const released: Array<string> = [];
+  for (const candidate of held) {
+    const requestId = candidate.requestId;
+    let request: AgentRequest;
+    try {
+      request = await withRequestLock({
+        store,
+        requestId,
+        change: async (lockedStore) => {
+          const current = await readCurrentRequest({
+            store: lockedStore,
+            requestId,
+          });
+          // The candidate list was read without a lock, and `claimAgentRequest`
+          // takes this same request lock to hand a lapsed claim to a new agent.
+          // Without this test, a takeover landing in that gap would have its
+          // claim stripped and its staged edits deleted by a disconnect aimed
+          // at the agent it replaced - work destroyed for an agent that is
+          // still live and was never disconnected.
+          if (current.claimedBy !== claimedBy) {
+            throw new AgentExchangeRejected(
+              "Another agent now holds the claim on this request",
+            );
+          }
+          await assertRequestIsWithdrawable({
+            store: lockedStore,
+            request: current,
+          });
+          const dropped = validateAgentRequest(withoutClaim(current));
+          await writeAgentRequestValue({
+            store: lockedStore,
+            requestId,
+            value: dropped,
+          });
+          await dropUnpublishableStages({ store: lockedStore, requestId });
+          return dropped;
+        },
+      });
+    } catch (error: unknown) {
+      // A request that cannot be withdrawn keeps its claim, and the disconnect
+      // it belongs to still stands. Reporting it as an error would refuse the
+      // reviewer's decision over an answer that is about to land anyway.
+      if (error instanceof AgentExchangeRejected) continue;
+      throw error;
+    }
+    released.push(requestId);
+    await announceClaimRelease({ store, request, atMs: nowMs, step, detail });
+  }
+  return released;
 };
 
 /** Marks one request terminal. A later pickup or response cannot revive it. */
@@ -1088,7 +1212,12 @@ export const reviseQueuedRequest = async ({
   // Announced outside the request lock, in the order `claimAgentRequest`
   // established for the takeover this mirrors.
   if (released) {
-    await announceClaimRelease({ store, request: revised, atMs: nowMs });
+    await announceClaimRelease({
+      store,
+      request: revised,
+      atMs: nowMs,
+      ...ABANDONED_CLAIM_RELEASE,
+    });
   }
   return revised;
 };
@@ -1205,7 +1334,12 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
     },
   });
   if (released) {
-    await announceClaimRelease({ store, request: updated, atMs: nowMs });
+    await announceClaimRelease({
+      store,
+      request: updated,
+      atMs: nowMs,
+      ...ABANDONED_CLAIM_RELEASE,
+    });
   }
   return updated;
 };
@@ -1322,7 +1456,16 @@ export const appendProgressEvent = async ({
   });
 };
 
-/** Appends a connection edge once, even when several checks see it. */
+/**
+ * Appends a connection edge once, even when several checks see it.
+ *
+ * A connection that has already stopped can still be explained better than it
+ * was. An agent that goes quiet is recorded as silence, and the reviewer may
+ * then end that session outright - so the log takes a second edge at the same
+ * state when the new reason supersedes the recorded one, and the end the
+ * reviewer asked for is stated as one rather than left as the gap that preceded
+ * it (BIG-156, BIG-190). Every other repeat still writes nothing.
+ */
 export const recordAgentConnectionState = async ({
   store,
   sessionId,
@@ -1351,15 +1494,26 @@ export const recordAgentConnectionState = async ({
         store,
         sessionId,
       });
-      const previous = events.at(-1)?.connected;
-      if (previous === connected) return false;
+      const last = events.at(-1);
+      const previous = last?.connected;
+      const explainsItBetter =
+        !connected &&
+        agentConnectionReasonSupersedes({
+          ...(last?.reason === undefined ? {} : { recorded: last.reason }),
+          next: disconnectReason,
+        });
+      if (previous === connected && !explainsItBetter) return false;
       await appendAgentConnectionEvent({
         store,
         event: {
           sessionId,
           connected,
           at,
-          ...(previous === true && !connected
+          // A first edge names no reason because nothing stopped before it.
+          // Every later edge that reports a connection ending carries the
+          // account it is being recorded for, including the second one this
+          // rule allows.
+          ...(previous !== undefined && !connected
             ? { reason: disconnectReason }
             : {}),
         },

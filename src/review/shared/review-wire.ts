@@ -109,6 +109,14 @@ export type AgentPresence = {
   readonly updatedAtMs?: number;
   /** When the agent's own loop reported the session ending, if it did. */
   readonly endedAtMs?: number;
+  /**
+   * When the reviewer disconnected this agent, if they did.
+   *
+   * It is carried only while the directive still addresses the agent the
+   * presence record names, so a disconnect answered by one agent never reports
+   * itself against the next one to attach (BIG-190).
+   */
+  readonly disconnectRequestedAtMs?: number;
 };
 
 export type BrowserConnectionEvent = {
@@ -699,6 +707,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : {}),
         ...(typeof value.presence.endedAtMs === "number"
           ? { endedAtMs: value.presence.endedAtMs }
+          : {}),
+        ...(typeof value.presence.disconnectRequestedAtMs === "number"
+          ? { disconnectRequestedAtMs: value.presence.disconnectRequestedAtMs }
           : {}),
       }
     : { connected: false, state: "waiting" as const };

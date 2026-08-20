@@ -53,6 +53,10 @@ import {
 } from "./shared/agent-model.js";
 import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import {
+  agentDisconnectAddresses,
+  type AgentDisconnectDirective,
+} from "./shared/agent-disconnect.js";
+import {
   isProgressState,
   isProgressStepCode,
   type ProgressState,
@@ -120,6 +124,7 @@ export type ReviewStore = {
   readonly sessionLockPath: string;
   readonly heartbeatLockPath: string;
   readonly agentHeartbeatPath: string;
+  readonly agentDisconnectPath: string;
   readonly agentHeartbeatLockPath: string;
 };
 
@@ -519,6 +524,14 @@ export const reviewStoreFor = ({
     agentHeartbeatPath: inside({
       base: agentDirectory,
       leaf: "agent-heartbeat.json",
+    }),
+    // The reviewer's disconnect directive, kept beside the presence record it
+    // addresses rather than inside it. The heartbeat has exactly two writers
+    // and both are agent processes; a reviewer's decision written into it would
+    // be a third, racing the signal it is a decision about.
+    agentDisconnectPath: inside({
+      base: agentDirectory,
+      leaf: "agent-disconnect.json",
     }),
     // Both writers of the agent heartbeat take this one. The observed-end
     // marker is a read-compare-write, so without it a newer loop's first
@@ -2324,6 +2337,15 @@ export type AgentPresence = {
   readonly connected: boolean;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
+  /**
+   * The connection loop the record names, in every state it can be read in.
+   *
+   * It outlives the connection for the same reason the declared identity does:
+   * a disconnect the reviewer addressed to one loop has to stay matched to that
+   * loop after it has gone, or the end it explains would be reported against
+   * whichever agent attached next (BIG-190).
+   */
+  readonly writerId?: string;
   readonly updatedAtMs?: number;
   /**
    * When the loop that wrote this heartbeat observed its own session ending.
@@ -2549,6 +2571,114 @@ export const writeAgentHeartbeatEnded = async ({
     },
   });
 
+/**
+ * How many disconnected agents the record remembers.
+ *
+ * One entry per agent the reviewer has taken off this review, and a review that
+ * has been through sixteen of them has long since stopped being able to hear
+ * from the first. The bound exists because the record is never pruned by time -
+ * it is the log's evidence for who ended a session - and an unbounded list in a
+ * long review is a file that only grows.
+ */
+const REMEMBERED_DISCONNECTS = 16;
+
+/**
+ * Records the reviewer's decision to disconnect the agent they were looking at.
+ *
+ * The directive is addressed to that agent and to nobody else, and is never
+ * cleared: an agent that attaches afterwards brings no connection token of its
+ * own, so it mints a different one and the rule that matches them simply stops
+ * matching. What the record buys by staying is the connection log's ability to
+ * say who ended the session, long after the agent that answered it has gone
+ * (BIG-190).
+ */
+export const writeAgentDisconnectRequest = async ({
+  store,
+  directive,
+}: {
+  readonly store: ReviewStore;
+  readonly directive: AgentDisconnectDirective;
+}): Promise<void> => {
+  const kept = (await readAgentDisconnectRequests({ store })).filter(
+    // One standing directive per agent. A reviewer disconnecting the same
+    // agent twice is restating the same decision, not making a second one.
+    (existing) => existing.writerId !== directive.writerId,
+  );
+  await writeStoreJson({
+    path: store.agentDisconnectPath,
+    value: {
+      directives: [...kept, directive].slice(-REMEMBERED_DISCONNECTS),
+    },
+  });
+};
+
+const decodeDisconnectDirective = (
+  value: unknown,
+): AgentDisconnectDirective | undefined => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("requestedAtMs" in value) ||
+    typeof value.requestedAtMs !== "number" ||
+    !Number.isFinite(value.requestedAtMs)
+  ) {
+    return undefined;
+  }
+  if (!("writerId" in value) || typeof value.writerId !== "string") {
+    // A directive naming nobody would be a standing order against every agent
+    // that ever attaches, so an unaddressed record is discarded rather than
+    // read as one that matches everyone.
+    return undefined;
+  }
+  return { requestedAtMs: value.requestedAtMs, writerId: value.writerId };
+};
+
+/**
+ * Every standing disconnect, oldest first.
+ *
+ * They are kept per agent rather than as one current decision. A reviewer who
+ * disconnects one agent, connects another, and disconnects that one too has
+ * made two decisions, and the first agent may not run another command until
+ * after the second was recorded: a single slot would answer it with an
+ * ordinary claim failure instead of telling it what happened (BIG-190).
+ */
+export const readAgentDisconnectRequests = async ({
+  store,
+}: {
+  readonly store: ReviewStore;
+}): Promise<ReadonlyArray<AgentDisconnectDirective>> => {
+  const value = await readStoreJson(store.agentDisconnectPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("directives" in value) ||
+    !Array.isArray(value.directives)
+  ) {
+    return [];
+  }
+  return value.directives.flatMap((entry) => {
+    const directive = decodeDisconnectDirective(entry);
+    return directive === undefined ? [] : [directive];
+  });
+};
+
+/** The standing disconnect addressed to one agent, if the reviewer issued one. */
+export const readAgentDisconnectRequestFor = async ({
+  store,
+  writerId,
+}: {
+  readonly store: ReviewStore;
+  readonly writerId?: string;
+}): Promise<AgentDisconnectDirective | undefined> =>
+  (await readAgentDisconnectRequests({ store })).find((directive) =>
+    agentDisconnectAddresses({
+      directive,
+      ...(writerId === undefined ? {} : { writerId }),
+    }),
+  );
+
 /** Reads the coding-agent presence signal without turning stale data into work. */
 export const readAgentPresence = async ({
   store,
@@ -2592,7 +2722,14 @@ export const readAgentPresence = async ({
   */
   const model =
     "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
-  const identity = model === undefined ? {} : { model };
+  const writerId =
+    "writerId" in value && typeof value.writerId === "string"
+      ? value.writerId
+      : undefined;
+  const identity = {
+    ...(model === undefined ? {} : { model }),
+    ...(writerId === undefined ? {} : { writerId }),
+  };
   // An end the loop observed needs no aging: the question aging answers has
   // already been answered, by the only process that could answer it.
   if (value.state === "ended") {

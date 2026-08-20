@@ -58,6 +58,16 @@ type AgentRequestBase = TerminalAgentRequest & {
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly claimedBy?: string;
+  /**
+   * The connection that holds this claim, as `agent next` minted it.
+   *
+   * A pickup token names one lease and dies with it, and the reviewer's
+   * disconnect deliberately ends that lease at once so the review frees. What
+   * the claim records here outlives the release, which is what lets a decision
+   * about the agent holding this work still reach that agent - and only that
+   * agent - at its next command (BIG-190).
+   */
+  readonly claimedByConnection?: string;
   readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   /**
@@ -483,6 +493,10 @@ const requestBase = (
     value.claimedBy === undefined
       ? undefined
       : id(value.claimedBy, "claimedBy");
+  const claimedByConnection =
+    value.claimedByConnection === undefined
+      ? undefined
+      : id(value.claimedByConnection, "claimedByConnection");
   const claimedModel =
     value.claimedModel === undefined
       ? undefined
@@ -532,6 +546,11 @@ const requestBase = (
   if (claimedModel !== undefined && baselineSnapshot === undefined) {
     throw new AgentExchangeRejected('"claimedModel" requires a complete claim');
   }
+  if (claimedByConnection !== undefined && baselineSnapshot === undefined) {
+    throw new AgentExchangeRejected(
+      '"claimedByConnection" requires a complete claim',
+    );
+  }
   const requestAttachments = validateRequestAttachments({
     attachmentManifest: value.attachmentManifest,
     attachments: value.attachments,
@@ -555,6 +574,7 @@ const requestBase = (
           claimedBy,
           claimExpiresAtMs,
           claimGeneration,
+          ...(claimedByConnection === undefined ? {} : { claimedByConnection }),
           ...(claimedModel === undefined ? {} : { claimedModel }),
         }),
     ...(answeredAt === undefined ? {} : { answeredAt }),

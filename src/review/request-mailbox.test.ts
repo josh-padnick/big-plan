@@ -25,12 +25,18 @@ import {
   readAgentCommentHistory,
   readAgentExchange,
   readValidatedAgentResponse,
+  validateAgentRequest,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import { AGENT_RECOVERY_HORIZON_MS } from "./shared/agent-timing.js";
+import {
+  AGENT_NO_SIGNAL_REASON,
+  AGENT_SESSION_ENDED_REASON,
+} from "./shared/agent-status.js";
+import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
 import {
   appendProgressEvent,
   assertResolvableComment,
@@ -40,6 +46,7 @@ import {
   commitRequestTerminal,
   ensureAgentRequest,
   recordAgentConnectionState,
+  releaseClaimsHeldBy,
   removeCommentFromQueuedFeedbackRequest,
   ResolvedThreadWorkRejected,
   reviseQueuedRequest,
@@ -52,14 +59,17 @@ import {
   StagedPlanMutationRejected,
 } from "./staged-plan-mutation.js";
 import {
+  agentMutationJournalPath,
   prepareStore,
   readAgentConnectionEvents,
+  readAgentRequestValue,
   readProgress,
   reviewStoreFor,
   withReviewStoreLock,
   writeAgentRequestValue,
   writeAgentResponseValue,
   writeResolvedCommentIds,
+  writeStoreJson,
 } from "./store.js";
 import {
   buildReviewImageReference,
@@ -2160,6 +2170,103 @@ describe("request mailbox", () => {
     ]);
   });
 
+  // BIG-190: the reviewer can end a session Big Plan had already written off as
+  // silence, and the log has to be able to say so after the fact.
+  it("should record a reported end after the silence it explains", async () => {
+    const { store } = await preparedReview();
+    const state = (at: string, disconnectReason: string) =>
+      recordAgentConnectionState({
+        store,
+        sessionId,
+        connected: false,
+        at,
+        disconnectReason,
+      });
+
+    await recordAgentConnectionState({
+      store,
+      sessionId,
+      connected: true,
+      at: "2026-08-10T12:00:00.000Z",
+      disconnectReason: AGENT_NO_SIGNAL_REASON,
+    });
+    await expect(
+      state("2026-08-10T12:00:01.000Z", AGENT_NO_SIGNAL_REASON),
+    ).resolves.toBe(true);
+    // The common case: the check runs several times a second and reads the
+    // same silence every time, which is not news.
+    for (let pass = 0; pass < 6; pass += 1) {
+      await expect(
+        state("2026-08-10T12:00:02.000Z", AGENT_NO_SIGNAL_REASON),
+      ).resolves.toBe(false);
+    }
+    await expect(
+      state("2026-08-10T12:00:03.000Z", AGENT_DISCONNECTED_REASON),
+    ).resolves.toBe(true);
+    // One row per account, and the reported end cannot be talked back into the
+    // inference it replaced.
+    await expect(
+      state("2026-08-10T12:00:04.000Z", AGENT_NO_SIGNAL_REASON),
+    ).resolves.toBe(false);
+    await expect(
+      state("2026-08-10T12:00:05.000Z", AGENT_SESSION_ENDED_REASON),
+    ).resolves.toBe(false);
+    await expect(
+      state("2026-08-10T12:00:06.000Z", AGENT_DISCONNECTED_REASON),
+    ).resolves.toBe(false);
+
+    await expect(
+      readAgentConnectionEvents({ store, sessionId }),
+    ).resolves.toMatchObject([
+      { connected: true },
+      { connected: false, reason: AGENT_NO_SIGNAL_REASON },
+      {
+        connected: false,
+        at: "2026-08-10T12:00:03.000Z",
+        reason: AGENT_DISCONNECTED_REASON,
+      },
+    ]);
+  });
+
+  // The log can open on a review no agent has reached, and a reviewer can still
+  // end a connection it never got to describe - a session restarted underneath
+  // a live claim, say. Silence must not restate that opening; a reported end
+  // must still be recorded after it.
+  it("should let only a reported end follow an unexplained opening edge", async () => {
+    const { store } = await preparedReview();
+    const state = (at: string, disconnectReason: string) =>
+      recordAgentConnectionState({
+        store,
+        sessionId,
+        connected: false,
+        at,
+        disconnectReason,
+      });
+
+    await expect(
+      state("2026-08-10T12:00:00.000Z", AGENT_NO_SIGNAL_REASON),
+    ).resolves.toBe(true);
+    for (let pass = 0; pass < 4; pass += 1) {
+      await expect(
+        state("2026-08-10T12:00:01.000Z", AGENT_NO_SIGNAL_REASON),
+      ).resolves.toBe(false);
+    }
+    await expect(
+      state("2026-08-10T12:00:02.000Z", AGENT_DISCONNECTED_REASON),
+    ).resolves.toBe(true);
+
+    const edges = await readAgentConnectionEvents({ store, sessionId });
+    expect(edges).toMatchObject([
+      { connected: false, at: "2026-08-10T12:00:00.000Z" },
+      {
+        connected: false,
+        at: "2026-08-10T12:00:02.000Z",
+        reason: AGENT_DISCONNECTED_REASON,
+      },
+    ]);
+    expect(edges[0]).not.toHaveProperty("reason");
+  });
+
   it("should refuse a reply that names a resolved thread", async () => {
     const { store } = await preparedReview();
     const commentId = "4444444444444444";
@@ -2231,5 +2338,183 @@ describe("request mailbox", () => {
         request: chatRequest("What is the retry boundary?"),
       }),
     ).resolves.toMatchObject({ kind: "chat" });
+  });
+});
+
+// BIG-190: disconnecting an agent drops the answer it was drafting and keeps the
+// reviewer's message, so the release has to be exactly that and nothing more.
+describe("releasing the claims a disconnected agent held", () => {
+  const CLAIMED_AT = "2026-08-10T12:01:00.000Z";
+  const claimed = async () => {
+    const { planPath, store } = await preparedReview();
+    const request = chatRequest("Why is this ordering right?");
+    await writeAgentRequest({ store, request });
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: CLAIMED_AT,
+      clock: clockAt(CLAIMED_AT),
+    });
+    return { planPath, store, request };
+  };
+
+  it("should return the claimed request to the queue without ending it", async () => {
+    const { store, request } = await claimed();
+    await expect(
+      releaseClaimsHeldBy({
+        store,
+        sessionId,
+        planId,
+        claimedBy: agentA,
+        step: "Claim released when the reviewer disconnected the agent",
+        detail: "The answer in flight was dropped",
+      }),
+    ).resolves.toEqual([request.requestId]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    const released = exchange.requests.find(
+      (candidate) => candidate.requestId === request.requestId,
+    );
+    // The message survives; only the claim on it goes.
+    expect(released).toMatchObject({ body: request.body });
+    expect(released?.claimedBy).toBeUndefined();
+    expect(released?.canceledAt).toBeUndefined();
+    expect(released?.answeredAt).toBeUndefined();
+    // And it is immediately available, rather than after the lease it would
+    // otherwise have to outlive.
+    expect(
+      nextPendingAgentRequest(exchange, {
+        claimedBy: agentB,
+        nowMs: Date.parse("2026-08-10T12:01:05.000Z"),
+      }),
+    ).toMatchObject({ requestId: request.requestId });
+  });
+
+  it("should narrate the release in the reviewer's own terms", async () => {
+    const { store, request } = await claimed();
+    await releaseClaimsHeldBy({
+      store,
+      sessionId,
+      planId,
+      claimedBy: agentA,
+      step: "Claim released when the reviewer disconnected the agent",
+      detail: "The answer in flight was dropped",
+    });
+    await expect(readProgress({ store, sessionId })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: request.requestId,
+          stepCode: "claim-released",
+          step: "Claim released when the reviewer disconnected the agent",
+        }),
+      ]),
+    );
+  });
+
+  it("should leave a request whose answer is already publishing", async () => {
+    // The most expensive regression this function has. That answer is one
+    // atomic rename from the plan and the commit boundary decides it; pulling
+    // the claim out from under it would abandon a revision mid flight, and
+    // `dropUnpublishableStages` would delete the candidate it is publishing.
+    const { store, request } = await claimed();
+    await writeStoreJson({
+      path: agentMutationJournalPath({ store, requestId: request.requestId }),
+      value: {
+        version: 1,
+        requestId: request.requestId,
+        generation: 1,
+        claimedBy: agentA,
+        baseSnapshot: snapshot,
+        resultSnapshot: snapshot,
+        answeredAt: "2026-08-10T12:02:00.000Z",
+      },
+    });
+    await expect(
+      releaseClaimsHeldBy({
+        store,
+        sessionId,
+        planId,
+        claimedBy: agentA,
+        step: "Claim released when the reviewer disconnected the agent",
+        detail: "The answer in flight was dropped",
+      }),
+    ).resolves.toEqual([]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(
+      exchange.requests.find(
+        (candidate) => candidate.requestId === request.requestId,
+      ),
+    ).toMatchObject({ claimedBy: agentA });
+  });
+
+  it("should leave a claim another agent took over in the meantime", async () => {
+    // The candidate list is read without a lock, so a takeover can land between
+    // that read and the release. Stripping it would destroy the staged edits of
+    // an agent that is live and was never disconnected.
+    //
+    // The ordering is forced rather than raced: the release scans, then blocks
+    // on the request lock this test holds, and the takeover is written while it
+    // waits. That is the state a real interleaving produces, made deterministic.
+    const { store, request } = await claimed();
+    const takenOverAt = new Date(
+      Date.parse(CLAIMED_AT) + AGENT_CLAIM_LEASE_MS + 1_000,
+    ).toISOString();
+    const releaseLock = await holdAgentRequestLock({
+      store,
+      requestId: request.requestId,
+    });
+    const releasing = releaseClaimsHeldBy({
+      store,
+      sessionId,
+      planId,
+      claimedBy: agentA,
+      step: "Claim released when the reviewer disconnected the agent",
+      detail: "The answer in flight was dropped",
+      clock: clockAt(takenOverAt),
+    });
+    const stored = await readAgentRequestValue({
+      store,
+      requestId: request.requestId,
+    });
+    await writeAgentRequestValue({
+      store,
+      requestId: request.requestId,
+      value: validateAgentRequest({
+        ...(stored as Record<string, unknown>),
+        claimedBy: agentB,
+        claimedAt: takenOverAt,
+        claimGeneration: 2,
+      }),
+    });
+    await releaseLock();
+    await expect(releasing).resolves.toEqual([]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(
+      exchange.requests.find(
+        (candidate) => candidate.requestId === request.requestId,
+      ),
+    ).toMatchObject({ claimedBy: agentB, claimGeneration: 2 });
+  });
+
+  it("should leave another agent's claim alone", async () => {
+    const { store, request } = await claimed();
+    await expect(
+      releaseClaimsHeldBy({
+        store,
+        sessionId,
+        planId,
+        claimedBy: agentB,
+        step: "Claim released when the reviewer disconnected the agent",
+        detail: "The answer in flight was dropped",
+      }),
+    ).resolves.toEqual([]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(
+      exchange.requests.find(
+        (candidate) => candidate.requestId === request.requestId,
+      ),
+    ).toMatchObject({ claimedBy: agentA });
   });
 });

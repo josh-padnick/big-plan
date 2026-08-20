@@ -35,6 +35,7 @@ import {
   claimAgentRequest,
   deleteQueuedRequest,
   commitRequestTerminal,
+  releaseClaimsHeldBy,
   reviseQueuedRequest,
 } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
@@ -2070,6 +2071,309 @@ describe("agent work loop lifecycle", () => {
           }),
         ]),
       );
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // BIG-190: the reviewer's disconnect is a message, and the loop's answer to it
+  // is the reported end the connection log needs.
+  it("should end a waiting loop the reviewer disconnected and report the end", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-off-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nWait to be disconnected.\n");
+    const review = await startReviewRuntime({ planPath });
+    try {
+      // The waiting loop mints its own writer id, so the directive is written
+      // against whatever the heartbeat names once the loop is provably waiting.
+      const waiting = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+      });
+      const writerId = await vi.waitFor(
+        async () => {
+          const presence = await reviewStore.readAgentPresence({
+            store: review.store,
+            sessionId: review.sessionId,
+          });
+          expect(presence.writerId).toEqual(expect.any(String));
+          return presence.writerId as string;
+        },
+        { timeout: 8_000, interval: 25 },
+      );
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: { writerId, requestedAtMs: Date.now() },
+      });
+      await expect(waiting).resolves.toMatchObject({
+        pending: false,
+        ended: true,
+        disconnected: true,
+      });
+      // The end is the loop's own report, which is what keeps the reviewer's
+      // log stating a fact rather than the silence that follows one (BIG-156).
+      await expect(
+        reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({
+        connected: false,
+        endedAtMs: expect.any(Number),
+      });
+      // The directive stays: the runtime's connection check reads it after this
+      // to say who ended the session, and it is inert against every later agent
+      // because none of them writes this writer id.
+      await expect(
+        reviewStore.readAgentDisconnectRequests({ store: review.store }),
+      ).resolves.toEqual([expect.objectContaining({ writerId })]);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a note from a session the reviewer disconnected", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-off-note-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nStop narrating once you are off.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    // Every write below is inside the try: one of them failing outside it would
+    // leave this runtime holding custody of the plan and its directory on disk,
+    // and the next test in this file to start a runtime would fail for that.
+    try {
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "dddddddddddddddd",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Answer this before you are disconnected.",
+      });
+      await writeAgentRequest({ store: review.store, request });
+      await claimAgentRequest({
+        store: review.store,
+        activeSessionId: review.sessionId,
+        requestId: request.requestId,
+        claimedBy: "ffff2222ffff2222",
+        connectionToken: "1111111111111111",
+        baselineSnapshot: request.premiseSnapshot,
+        now: new Date().toISOString(),
+      });
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: { writerId: "1111111111111111", requestedAtMs: Date.now() },
+      });
+      // Told at its next command rather than at publication: a harness that
+      // learns this from a rejected answer has already paid for a whole turn,
+      // and cannot tell the refusal from a race worth retrying.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Still working",
+          agentToken: "ffff2222ffff2222",
+          connectionToken: "1111111111111111",
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "agent-disconnected",
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // BIG-190: disconnecting frees the review at once, so the pickup the agent
+  // held is gone by the time it asks for work again. The decision has to reach
+  // it anyway, or the agent it named quietly takes the same message back.
+  it("should refuse to rejoin after the disconnect released its claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-off-back-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nDo not come back for this one.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "eeee1111eeee1111",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Whose turn is this?",
+      });
+      await writeAgentRequest({ store: review.store, request });
+      const first = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const connectionToken = first.connection_token;
+      const agentToken = first.agent_token;
+      if (typeof connectionToken !== "string" || typeof agentToken !== "string")
+        throw new Error("agent next returned no tokens");
+      // What the reviewer's disconnect does, in the order the route does it:
+      // the directive names the connection the claim recorded, and the claim
+      // itself goes back so the review is free for the next agent.
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: { writerId: connectionToken, requestedAtMs: Date.now() },
+      });
+      await releaseClaimsHeldBy({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        claimedBy: agentToken,
+        step: "Claim released when the reviewer disconnected the agent",
+        detail: "The message went back in the queue for the next agent",
+      });
+      // The command the loop hands itself for the next request carries the
+      // connection token and no pickup token, which is the whole path.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          connectionToken,
+        }),
+      ).resolves.toMatchObject({ ended: true, disconnected: true });
+      // The message it was told to drop is still the next agent's to take.
+      const after = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        after.requests.find(
+          (candidate) => candidate.requestId === request.requestId,
+        ),
+      ).toMatchObject({ requestId: request.requestId });
+      expect(
+        after.requests.find(
+          (candidate) => candidate.requestId === request.requestId,
+        )?.claimedBy,
+      ).toBeUndefined();
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // BIG-190: the reviewer takes this decision between two of the agent's
+  // commands, which is where an identity minted per invocation used to lose it.
+  it("should answer a disconnect written between the agent's commands", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-off-between-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nDisconnect me between two commands.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "eeeeeeeeeeeeeeee",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Answer this, then wait for my next message.",
+      });
+      await writeAgentRequest({ store: review.store, request });
+      const first = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const connectionToken = first.connection_token;
+      if (typeof connectionToken !== "string") {
+        throw new Error("agent next returned no connection token");
+      }
+      expect(first.next_command).toContain("--connection");
+      expect(first.next_command).toContain(connectionToken);
+      // The presence record names the connection rather than the process that
+      // last wrote to it, so the route has a name to address in the one state a
+      // between-commands disconnect is taken in: nothing claimed, nothing live.
+      await expect(
+        reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({ writerId: connectionToken });
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: { writerId: connectionToken, requestedAtMs: Date.now() },
+      });
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          connectionToken,
+        }),
+      ).resolves.toMatchObject({
+        pending: false,
+        ended: true,
+        disconnected: true,
+      });
+      await expect(
+        reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({
+        connected: false,
+        endedAtMs: expect.any(Number),
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // The other half of the same rule: stable for one agent, never shared. A
+  // directive that outlived its agent must not become a standing order.
+  it("should give an agent arriving without a connection token its own", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-off-next-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nThe next agent is a new one.\n");
+    const review = await startReviewRuntime({ planPath });
+    try {
+      const first = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const connectionToken = first.connection_token;
+      if (typeof connectionToken !== "string") {
+        throw new Error("agent next returned no connection token");
+      }
+      await reviewStore.writeAgentDisconnectRequest({
+        store: review.store,
+        directive: { writerId: connectionToken, requestedAtMs: Date.now() },
+      });
+      const second = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      expect(second.connection_token).toEqual(expect.any(String));
+      expect(second.connection_token).not.toBe(connectionToken);
+      expect(second.disconnected).toBeUndefined();
+      expect(second.ended).toBeUndefined();
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

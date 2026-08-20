@@ -12,14 +12,17 @@ import type { AgentWorkLoopAction } from "../../review/agent-work-loop.js";
 const USAGE = [
   "Usage:",
   "  big-plan agent <input.mdx>",
-  "  big-plan agent next <input.mdx> [--wait] [--agent <token>]",
-  '  big-plan agent note <input.mdx> "<progress>" --agent <token>',
-  "  big-plan agent respond <input.mdx> <response.json> --agent <token>",
+  "  big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]",
+  '  big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]',
+  "  big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]",
   "",
   "The agent token is minted by `next` and returned with the work item.",
   'The returned note_command records "Working on the request" and renews',
   "the claim; run it and respond_command exactly as returned.",
   'Use `agent note <input.mdx> "<progress>" --agent <token>` for later updates.',
+  "The connection token is minted by the first `next`, returned as",
+  "connection_token, and carried by every command `next` returns; pass it back",
+  "so this stays one agent session rather than a new one per command.",
 ].join("\n");
 
 const invalidArguments = (): never => {
@@ -68,28 +71,30 @@ const connectorSessionId = (): string | undefined =>
   connectorValue("BIG_PLAN_AGENT_SESSION");
 
 /**
- * Lifts `--agent <token>` out of the positional arguments.
+ * Lifts one `<flag> <token>` pair out of the positional arguments.
  *
- * The token identifies which agent process holds the claim, so `note` and
- * `respond` cannot be parsed without it and the positional shapes below stay
- * as simple as they were before it existed.
+ * `--agent` names which claim the process holds and `--connection` names the
+ * agent session running it. Both are opaque tokens Big Plan minted and handed
+ * back, so both are lifted the same way and the positional shapes below stay as
+ * simple as they were before either existed.
  */
-const takeAgentToken = (
+const takeTokenFlag = (
   args: ReadonlyArray<string>,
-): { readonly rest: ReadonlyArray<string>; readonly agentToken?: string } => {
+  flagName: string,
+): { readonly rest: ReadonlyArray<string>; readonly token?: string } => {
   const flags = args.flatMap((argument, index) =>
-    argument === "--agent" ? [index] : [],
+    argument === flagName ? [index] : [],
   );
   if (flags.length === 0) return { rest: args };
   if (flags.length !== 1) return invalidArguments();
   const flag = flags[0] ?? -1;
-  const agentToken = args[flag + 1];
-  if (agentToken === undefined || !AGENT_TOKEN.test(agentToken)) {
+  const token = args[flag + 1];
+  if (token === undefined || !AGENT_TOKEN.test(token)) {
     return invalidArguments();
   }
   return {
     rest: [...args.slice(0, flag), ...args.slice(flag + 2)],
-    agentToken,
+    token,
   };
 };
 
@@ -97,10 +102,12 @@ const takeAgentToken = (
 const parseAction = (
   args: ReadonlyArray<string>,
   agentToken: string | undefined,
+  connectionToken: string | undefined,
 ): AgentWorkLoopAction => {
   if (
     args.length === 1 &&
     agentToken === undefined &&
+    connectionToken === undefined &&
     !RESERVED_ACTIONS.has(args[0] ?? "")
   ) {
     return {
@@ -124,6 +131,7 @@ const parseAction = (
       shouldWait: args[2] === "--wait",
       executablePath: executablePath(),
       ...(agentToken === undefined ? {} : { agentToken }),
+      ...(connectionToken === undefined ? {} : { connectionToken }),
       ...(modelName === undefined ? {} : { modelName }),
       ...(modelEffort === undefined ? {} : { modelEffort }),
       ...(modelClient === undefined ? {} : { modelClient }),
@@ -138,6 +146,7 @@ const parseAction = (
       responsePath: args[2] ?? "",
       executablePath: executablePath(),
       agentToken,
+      ...(connectionToken === undefined ? {} : { connectionToken }),
     };
   }
   if (args[0] === "note" && args.length === 3 && agentToken !== undefined) {
@@ -151,6 +160,7 @@ const parseAction = (
       planPath: args[1] ?? "",
       detail: args[2] ?? "",
       agentToken,
+      ...(connectionToken === undefined ? {} : { connectionToken }),
       ...(modelName === undefined ? {} : { modelName }),
       ...(modelEffort === undefined ? {} : { modelEffort }),
       ...(modelClient === undefined ? {} : { modelClient }),
@@ -166,15 +176,39 @@ export const agentCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
   try {
-    const { rest, agentToken } = takeAgentToken(args);
-    return await runAgentWorkLoopAction(parseAction(rest, agentToken));
+    const { rest: withoutConnection, token: connectionToken } = takeTokenFlag(
+      args,
+      "--connection",
+    );
+    const { rest, token: agentToken } = takeTokenFlag(
+      withoutConnection,
+      "--agent",
+    );
+    return await runAgentWorkLoopAction(
+      parseAction(rest, agentToken, connectionToken),
+    );
   } catch (error: unknown) {
     if (error instanceof AxiError) throw error;
     if (!(error instanceof AgentWorkLoopRejected)) throw error;
+    /*
+    Being disconnected is its own code because a harness has to be able to branch
+    on it. Reported as INVALID_INPUT it was indistinguishable from a mistyped
+    flag, so the only safe response was to retry - which is the churn a
+    disconnected loop must not do (BIG-190). The usage block is withheld for it:
+    the command was well formed, and printing usage would suggest otherwise.
+    */
+    const code =
+      error.code === "validation-error"
+        ? "VALIDATION_ERROR"
+        : error.code === "agent-disconnected"
+          ? "AGENT_DISCONNECTED"
+          : "INVALID_INPUT";
     throw new AxiError(
       error.message,
-      error.code === "validation-error" ? "VALIDATION_ERROR" : "INVALID_INPUT",
-      error.details.length === 0 ? [USAGE] : [...error.details],
+      code,
+      error.details.length === 0 && error.code !== "agent-disconnected"
+        ? [USAGE]
+        : [...error.details],
     );
   }
 };
