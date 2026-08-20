@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Element, ElementContent, Root, RootContent } from "hast";
+import { fromHtml } from "hast-util-from-html";
 import { compileMarkdown } from "./compile-markdown.js";
 import { rehypeBlockIdentity, type BlockDescriptor } from "./block-identity.js";
 import {
@@ -472,6 +473,42 @@ describe("side isolation", () => {
       type: "element",
       properties: { href: "https://host.example/#section" },
     });
+  });
+
+  it("should rewrite canonical HAST ARIA and SVG references after parsing", () => {
+    const root = fromHtml(
+      `<svg aria-labelledby="title caption">
+        <title id="title">Title</title>
+        <desc id="caption">Caption</desc>
+        <marker id="arrow"></marker>
+        <clipPath id="1clip"></clipPath>
+        <path marker-end="url(#arrow)"></path>
+        <use xlink:href="#1clip"></use>
+      </svg>`,
+      { fragment: true },
+    );
+    const svg = collect({
+      node: root,
+      match: (candidate) => candidate.tagName === "svg",
+    })[0];
+    if (svg === undefined) {
+      throw new Error("expected reparsed SVG");
+    }
+    isolateBaselineSide({ subtree: svg, key: "canonical-hast" });
+    const [titleId, captionId, arrowId, clipId] = ordinaryIdsOf(svg);
+    expect(svg.properties.ariaLabelledBy).toEqual([titleId, captionId]);
+    expect(
+      collect({
+        node: svg,
+        match: (candidate) => candidate.tagName === "path",
+      })[0],
+    ).toMatchObject({ properties: { markerEnd: `url(#${arrowId})` } });
+    expect(
+      collect({
+        node: svg,
+        match: (candidate) => candidate.tagName === "use",
+      })[0],
+    ).toMatchObject({ properties: { xLinkHref: `#${clipId}` } });
   });
 
   it("should give two identical baseline subtrees different ordinary ids", () => {

@@ -52,6 +52,14 @@ const ROOT_AFFORDANCE_ATTRIBUTES = [
 ] as const;
 
 const ARIA_ID_REFERENCE_PROPERTIES = new Set([
+  "ariaActiveDescendant",
+  "ariaControls",
+  "ariaDescribedBy",
+  "ariaDetails",
+  "ariaErrorMessage",
+  "ariaFlowTo",
+  "ariaLabelledBy",
+  "ariaOwns",
   "aria-activedescendant",
   "aria-controls",
   "aria-describedby",
@@ -76,17 +84,7 @@ const ID_REFERENCE_PROPERTIES = new Set([
 
 const FRAGMENT_REFERENCE_PROPERTIES = new Set([
   "href",
-  "xlinkHref",
-  "xlink:href",
-]);
-
-const URL_REFERENCE_PROPERTIES = new Set([
-  "clipPath",
-  "clip-path",
-  "mask",
-  "fill",
-  "filter",
-  "style",
+  "xLinkHref",
 ]);
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -193,10 +191,7 @@ const rewritePropertyReferences = ({
   if (FRAGMENT_REFERENCE_PROPERTIES.has(property)) {
     return rewriteFragmentReference({ value, identifiers });
   }
-  if (URL_REFERENCE_PROPERTIES.has(property)) {
-    return rewriteUrlReferences({ value, identifiers });
-  }
-  return value;
+  return rewriteUrlReferences({ value, identifiers });
 };
 
 const namespaceOrdinaryIdentity = (
