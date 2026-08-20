@@ -117,6 +117,7 @@ import {
 import type { ReviewSessionDescriptor } from "./session-authority.js";
 import {
   createActivityClock,
+  createApprovals,
   createChangeDispositions,
   createDecisionAnswers,
   createPlanRenderer,
@@ -159,8 +160,13 @@ import {
   disposeOfChanges,
   readChangeDispositionState,
 } from "./routes-dispositions.js";
-import { readReviewInputContract } from "./routes-input-contract.js";
 import { readCommittedChangeSetState } from "./routes-change-sets.js";
+import { readReviewInputContract } from "./routes-input-contract.js";
+import {
+  approvePlan,
+  readApprovalState,
+  revokeApproval,
+} from "./routes-approval.js";
 import { readRuntimeSession } from "./routes-session.js";
 import { drainAndCloseServer } from "./http-shutdown.js";
 
@@ -266,6 +272,9 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
   },
   { method: "GET", path: "/api/progress", handler: readProgressEvents },
   { method: "GET", path: "/api/snapshot-diff", handler: readSnapshotDiff },
+  { method: "GET", path: "/api/approval", handler: readApprovalState },
+  { method: "POST", path: "/api/approve", handler: approvePlan },
+  { method: "POST", path: "/api/revoke-approval", handler: revokeApproval },
   {
     method: "POST",
     path: "/api/review-images",
@@ -916,6 +925,7 @@ export const startReviewRuntime = async ({
       reportDiagnostic,
     }),
     changeDispositions: createChangeDispositions({ store }),
+    approvals: createApprovals({ store, reportDiagnostic }),
     readerProgress: createReaderProgress({
       initialSnapshot,
       observedResponseIds: (await readCommittedRevisions({ store })).map(

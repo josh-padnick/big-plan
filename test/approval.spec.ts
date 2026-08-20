@@ -649,3 +649,90 @@ test("should keep a failed decision save visible after its toast is dismissed", 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("should approve a plan, stamp the page, and keep the record across reload", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-ui-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "Approve this plan?" });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.locator("[data-review-approve-disclosure=approve-decisions]"),
+    ).toBeVisible();
+    await expect(dialog.locator("[data-review-approve-message]")).toContainText(
+      "This plan is approved and we are ready to begin.",
+    );
+    await expect(dialog.locator("[data-review-approve-footnote]")).toBeVisible();
+
+    const approved = page.waitForResponse((response) =>
+      response.url().endsWith("/api/approve"),
+    );
+    await dialog.getByRole("button", { name: "Approve plan" }).click();
+    expect((await approved).ok()).toBe(true);
+
+    await expect(page.getByRole("button", { name: "Approve plan" })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.locator("[data-review-approval-stamp]").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(page.locator("[data-review-approve-status=approved]")).toBeVisible();
+
+    const stored: unknown = JSON.parse(
+      await readFile(runtime.store.approvalPath, "utf8"),
+    );
+    expect(stored).toMatchObject({
+      version: 1,
+      entries: [{ kind: "approval", pinnedSnapshot: deriveSnapshotDigest(PLAN) }],
+    });
+
+    await page.reload();
+    await openWritableReview(page, runtime.url);
+    await expect(
+      page.locator("[data-review-approval-stamp]").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve plan" })).toHaveCount(
+      0,
+    );
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should refuse approve until a critical decision is answered", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-critical-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(
+    planPath,
+    PLAN.replace(
+      '<Decision question="Which release path should we use?">',
+      '<Decision critical question="Which release path should we use?">',
+    ),
+  );
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "Approve this plan?" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("[data-review-approve-critical]")).toBeVisible();
+    await dialog.getByRole("button", { name: "Approve plan" }).click();
+    await expect(dialog.locator("[data-review-approve-block]")).toBeVisible();
+    await expect(dialog).toBeVisible();
+    expect(
+      await readFile(runtime.store.approvalPath, "utf8").catch(() => ""),
+    ).toBe("");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -597,7 +597,17 @@ type AlertDialogProps = {
   readonly children?: ReactNode;
   /** A choice between two equal options is not a destructive one. */
   readonly tone?: "destructive" | "neutral";
+  /** Overrides the action button's variant. Defaults from `tone`. */
+  readonly actionVariant?: ButtonVariant;
+  /** Full-width footnote below the action row, announced with the action. */
+  readonly footnote?: string;
+  readonly width?: "default" | "wide";
+  /** Split puts cancel on the left and the action on the right. */
+  readonly footerAlign?: "end" | "split";
 };
+
+const FOCUSABLE_SELECTOR =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /** Token-themed shadcn AlertDialog primitive for consequential choices. */
 export const AlertDialog = ({
@@ -611,8 +621,15 @@ export const AlertDialog = ({
   onDismiss = onCancel,
   children,
   tone = "destructive",
+  actionVariant,
+  footnote,
+  width = "default",
+  footerAlign = "end",
 }: AlertDialogProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const footnoteId = useId();
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -646,8 +663,9 @@ export const AlertDialog = ({
     }
     if (event.key !== "Tab") return;
     const controls = Array.from(
-      dialogRef.current?.querySelectorAll<HTMLElement>("button") ?? [],
-    );
+      dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ??
+        [],
+    ).filter((element) => !element.hasAttribute("disabled"));
     if (controls.length === 0) return;
     const current = controls.indexOf(document.activeElement as HTMLElement);
     const next =
@@ -662,8 +680,10 @@ export const AlertDialog = ({
     controls[next]?.focus();
   };
 
-  const titleId = "review-alert-dialog-title";
-  const descriptionId = "review-alert-dialog-description";
+  const describedBy =
+    footnote === undefined ? descriptionId : `${descriptionId} ${footnoteId}`;
+  const resolvedActionVariant =
+    actionVariant ?? (tone === "neutral" ? "default" : "destructive");
   return (
     <div
       // --preferences-backdrop-c was never defined, so every alert opened over
@@ -679,12 +699,16 @@ export const AlertDialog = ({
         // Raised, not paper: a floating surface reads as floating through
         // colour first, before its shadow. The danger tone belongs to the
         // destructive action alone, never to the whole dialog.
-        className="w-full max-w-lg rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating"
+        className={joinClasses(
+          "flex max-h-[calc(100dvh-1.5rem)] w-full flex-col rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating",
+          width === "wide" ? "max-w-2xl" : "max-w-lg",
+        )}
         role="alertdialog"
         tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        aria-describedby={describedBy}
+        data-review-alert-width={width}
       >
         <h2 id={titleId} className="text-xl font-semibold">
           {title}
@@ -698,22 +722,40 @@ export const AlertDialog = ({
             flush against the sentence above it and read as that sentence's
             caption rather than as the heading of the list under it. */}
         {children === undefined ? null : (
-          <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3">
+          <div className="mt-4 grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] gap-3 overflow-y-auto overscroll-contain">
             {children}
           </div>
         )}
-        <div className="mt-6 flex justify-end gap-2">
+        <div
+          className={joinClasses(
+            "mt-6 flex gap-2",
+            footerAlign === "split"
+              ? "flex-col-reverse items-stretch wide:flex-row wide:items-center wide:justify-between"
+              : "justify-end",
+            )}
+        >
           <Button variant="outline" size="md" onClick={onCancel}>
             {cancelLabel}
           </Button>
           <Button
-            variant={tone === "neutral" ? "default" : "destructive"}
+            variant={resolvedActionVariant}
             size="md"
             onClick={onAction}
+            aria-describedby={footnote === undefined ? undefined : footnoteId}
+            className={width === "wide" ? "wide:w-auto max-sm:w-full" : undefined}
           >
             {actionLabel}
           </Button>
         </div>
+        {footnote === undefined ? null : (
+          <p
+            id={footnoteId}
+            className="mt-3 text-xs leading-normal text-muted"
+            data-review-approve-footnote=""
+          >
+            {footnote}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -213,6 +213,11 @@ import {
 } from "./review-runtime-client.browser.js";
 import { applyAnswersRecord } from "./answers-record.browser.js";
 import {
+  ApprovalStampPortal,
+  ApproveControl,
+} from "./approve-dialog.browser.js";
+import type { ApprovalSummary } from "../shared/approval.js";
+import {
   AlertDialog,
   Badge,
   Button,
@@ -4193,6 +4198,7 @@ export const ReviewController = () => {
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
   );
+  const [approval, setApproval] = useState<ApprovalSummary | undefined>();
   const runtimeSessionOrder = useMemo(createRuntimeSessionOrder, []);
   const acceptRuntimeSession = useCallback(
     ({ sequence, session }: { sequence: number; session: RuntimeSession }) => {
@@ -4248,6 +4254,9 @@ export const ReviewController = () => {
     }
   }, [archivedChatRequestIds, planId]);
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
+  useEffect(() => {
+    setApproval(runtimeSession?.approval);
+  }, [runtimeSession?.approval]);
   const pollIsOffline = reviewPollIsOffline(pollHealth);
   const serverGone = reviewRuntimeIsDown(pollHealth);
   // Only a runtime that is answering can report this, so it never competes
@@ -7143,7 +7152,7 @@ export const ReviewController = () => {
               <button
                 type="button"
                 id={FEEDBACK_TRIGGER_ID}
-                className={`${TOOLBAR_CONTROL_CLASS} [&>svg]:size-4`}
+                className={`${TOOLBAR_CONTROL_CLASS} [&>svg]:size-4${approval?.status === "approved" ? " text-subtle" : ""}`}
                 aria-expanded={isOpen && sidebarView === "feedback"}
                 aria-controls="big-plan-feedback-sidebar"
                 onClick={toggleFeedbackSidebar}
@@ -7160,9 +7169,32 @@ export const ReviewController = () => {
                   </Badge>
                 ) : null}
               </button>
+              {identity === null ||
+              runtimeSession?.authoritative === false ||
+              serverGone ? null : (
+                <ApproveControl
+                  identity={identity}
+                  approval={approval}
+                  agent={agent}
+                  currentSnapshot={currentSnapshot}
+                  canWrite={true}
+                  onOpenAgent={openAgentSidebar}
+                  onApprovalChange={setApproval}
+                />
+              )}
             </>,
             feedbackHost,
           )}
+      {identity === null ? null : (
+        <ApprovalStampPortal
+          identity={identity}
+          approval={approval}
+          canRevoke={
+            runtimeSession?.authoritative !== false && !serverGone
+          }
+          onApprovalChange={setApproval}
+        />
+      )}
       {isOpen ? (
         <aside
           ref={sidebarRef}

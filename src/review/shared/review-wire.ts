@@ -24,6 +24,8 @@ import {
   type ReviewInputContract,
   type ReviewInputState,
 } from "./input-contract.js";
+import type { ApprovalSummary } from "./approval.js";
+import { APPROVAL_ID } from "./approval.js";
 
 export type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
@@ -68,6 +70,8 @@ export type ReviewState = {
   // applies a response only when this is newer than the last one it applied,
   // so an in-flight read can no longer land on top of a completed write.
   readonly revision: number;
+  /** Present only while an approval is in force. */
+  readonly approval?: ApprovalSummary;
 };
 
 export type AgentOutcome = {
@@ -246,6 +250,8 @@ export type RuntimeSession = {
   readonly idleTimeoutMs?: number;
   /** When it ends unless something touches it. Absent when nothing expires. */
   readonly expiresAtMs?: number;
+  /** Present only while an approval is in force. Polled so staleness is live. */
+  readonly approval?: ApprovalSummary;
 };
 
 export type ReviewSnapshotSource = ReviewSnapshot;
@@ -281,6 +287,7 @@ export type RuntimeSessionSource = {
   readonly writesStalledMs?: number;
   readonly idleTimeoutMs?: number;
   readonly expiresAtMs?: number;
+  readonly approval?: ApprovalSummary;
 };
 
 export const isReviewWireRecord = (
@@ -586,6 +593,7 @@ export const decodeReviewState = (value: unknown): ReviewState => {
   if (!isReviewWireRecord(value) || !Array.isArray(value.answers)) {
     return { answers: [], supersededDecisionIds: [], revision: -1 };
   }
+  const approval = decodeApprovalSummary(value.approval);
   return {
     revision: storedRevision(value.revision),
     supersededDecisionIds: Array.isArray(value.supersededDecisionIds)
@@ -593,6 +601,7 @@ export const decodeReviewState = (value: unknown): ReviewState => {
           (id): id is string => typeof id === "string",
         )
       : [],
+    ...(approval === undefined ? {} : { approval }),
     answers: value.answers.flatMap(
       (answer): ReadonlyArray<StagedDecisionAnswer> =>
         isReviewWireRecord(answer) &&
@@ -616,6 +625,55 @@ export const decodeReviewState = (value: unknown): ReviewState => {
             ]
           : [],
     ),
+  };
+};
+
+/** Encodes the derived approval summary the browser paints from. */
+export const encodeApprovalSummary = (
+  value: ApprovalSummary,
+): ApprovalSummary => value;
+
+/** Decodes an approval summary, dropping a malformed body rather than guessing. */
+export const decodeApprovalSummary = (
+  value: unknown,
+): ApprovalSummary | undefined => {
+  if (!isReviewWireRecord(value)) return undefined;
+  if (
+    typeof value.approvalId !== "string" ||
+    !APPROVAL_ID.test(value.approvalId) ||
+    typeof value.at !== "string" ||
+    Number.isNaN(Date.parse(value.at)) ||
+    typeof value.pinnedSnapshot !== "string" ||
+    !SNAPSHOT_DIGEST.test(value.pinnedSnapshot) ||
+    (value.status !== "approved" && value.status !== "stale") ||
+    typeof value.message !== "string" ||
+    !isReviewWireRecord(value.openItemCounts)
+  ) {
+    return undefined;
+  }
+  const counts = value.openItemCounts;
+  if (
+    typeof counts.changeSetsAccepted !== "number" ||
+    typeof counts.changeSetsTotal !== "number" ||
+    typeof counts.decisionsAnswered !== "number" ||
+    typeof counts.decisionsTotal !== "number" ||
+    typeof counts.requestsCanceled !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    approvalId: value.approvalId,
+    at: value.at,
+    pinnedSnapshot: value.pinnedSnapshot,
+    status: value.status,
+    message: value.message,
+    openItemCounts: {
+      changeSetsAccepted: counts.changeSetsAccepted,
+      changeSetsTotal: counts.changeSetsTotal,
+      decisionsAnswered: counts.decisionsAnswered,
+      decisionsTotal: counts.decisionsTotal,
+      requestsCanceled: counts.requestsCanceled,
+    },
   };
 };
 
@@ -998,6 +1056,7 @@ export const decodeRuntimeSession = ({
   ) {
     return null;
   }
+  const approval = decodeApprovalSummary(value.approval);
   return {
     plan: value.plan,
     // A malformed payload must withhold authority, not grant it: `!== false`
@@ -1025,6 +1084,7 @@ export const decodeRuntimeSession = ({
     ...(isUsableTimeValue(value.expiresAtMs)
       ? { expiresAtMs: value.expiresAtMs }
       : {}),
+    ...(approval === undefined ? {} : { approval }),
   };
 };
 

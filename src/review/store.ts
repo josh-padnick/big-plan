@@ -37,6 +37,7 @@ import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
 import type { StoredChangeDispositions } from "./change-dispositions-store.js";
+import type { ApprovalRecord } from "./shared/approval.js";
 import {
   isReviewImageId,
   isReviewImageWithinLimits,
@@ -128,6 +129,7 @@ export type ReviewStore = {
   readonly draftsPath: string;
   readonly inputsPath: string;
   readonly changeDispositionsPath: string;
+  readonly approvalPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
   readonly agentConnectionDirectory: string;
@@ -513,6 +515,7 @@ export const reviewStoreFor = ({
       base: reviewDirectory,
       leaf: "dispositions.json",
     }),
+    approvalPath: inside({ base: reviewDirectory, leaf: "approval.json" }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
     agentConnectionDirectory: inside({
@@ -1385,6 +1388,45 @@ export const writeChangeDispositions = async ({
     path: store.changeDispositionsPath,
     value: dispositions,
   });
+};
+
+/**
+ * Reads the approval log back through its owned validator. A record this
+ * build cannot read is answered as empty rather than thrown, because an
+ * unreadable log would take down the whole review over a fact the page can
+ * still live without; the caller reports the loss.
+ */
+export const readApprovalRecord = async ({
+  store,
+  validate,
+}: {
+  readonly store: ReviewStore;
+  readonly validate: (value: unknown) => ApprovalRecord;
+}): Promise<{
+  readonly record: ApprovalRecord;
+  readonly unreadable?: string;
+}> => {
+  const stored = await readStoreJson(store.approvalPath);
+  if (stored === undefined) return { record: validate(undefined) };
+  try {
+    return { record: validate(stored) };
+  } catch (error: unknown) {
+    return {
+      record: validate(undefined),
+      unreadable: error instanceof Error ? error.message : String(error),
+    };
+  }
+};
+
+/** Atomically replaces the approval log. */
+export const writeApprovalRecord = async ({
+  store,
+  record,
+}: {
+  readonly store: ReviewStore;
+  readonly record: ApprovalRecord;
+}): Promise<void> => {
+  await writeStoreJson({ path: store.approvalPath, value: record });
 };
 
 const snapshotPath = ({

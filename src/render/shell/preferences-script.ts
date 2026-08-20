@@ -31,6 +31,7 @@ export const PREFERENCES_SCRIPT = `<script>
   );
   const messageInput = document.querySelector("[data-approval-message-input]");
   const messageReset = document.querySelector("[data-approval-message-reset]");
+  const messageError = document.querySelector("[data-approval-message-error]");
   if (
     !(control instanceof HTMLElement) ||
     !(dialog instanceof HTMLElement) ||
@@ -40,6 +41,7 @@ export const PREFERENCES_SCRIPT = `<script>
     !(sectionList instanceof HTMLElement) ||
     !(messageInput instanceof HTMLTextAreaElement) ||
     !(messageReset instanceof HTMLButtonElement) ||
+    !(messageError instanceof HTMLElement) ||
     modes.length === 0 ||
     palettes.length === 0 ||
     sections.length === 0 ||
@@ -56,6 +58,8 @@ export const PREFERENCES_SCRIPT = `<script>
   let isolatedElements = [];
   let open = false;
   let openedByKeyboard = false;
+  let lastWriteFailed = false;
+  let returnFocusElement = null;
 
   // The record is written whole from what the document is showing, so the two
   // fields can never disagree with each other or with the page.
@@ -110,8 +114,24 @@ export const PREFERENCES_SCRIPT = `<script>
   // copy of the note the product still has, so it is kept rather than replaced;
   // a blank field has no such copy to keep, and an emptied note is the default
   // whatever storage will or will not say about it.
+  const showSaveFailure = (failed) => {
+    lastWriteFailed = failed;
+    messageError.hidden = !failed;
+    messageInput.setAttribute(
+      "aria-describedby",
+      failed
+        ? "big-plan-approval-message-hint big-plan-approval-message-error"
+        : "big-plan-approval-message-hint",
+    );
+  };
+
   const normalizeMessageField = () => {
     const message = storedMessage();
+    // A write that failed left the typed note as the only copy the product
+    // still has. Replacing it with what storage resolves to would discard
+    // the reviewer's words; the error next to the field is the honest
+    // account of that disagreement.
+    if (lastWriteFailed && messageInput.value.trim() !== "") return;
     if (message !== null) messageInput.value = message;
     else if (messageInput.value.trim() === "")
       messageInput.value = defaultMessage;
@@ -125,13 +145,16 @@ export const PREFERENCES_SCRIPT = `<script>
       const message = messageInput.value.slice(0, messageLimit);
       if (message.trim() === "" || message === defaultMessage) {
         localStorage.removeItem(messageKey);
-        return;
+      } else {
+        localStorage.setItem(
+          messageKey,
+          JSON.stringify({ version: messageVersion, message }),
+        );
       }
-      localStorage.setItem(
-        messageKey,
-        JSON.stringify({ version: messageVersion, message }),
-      );
-    } catch (_) {}
+      showSaveFailure(false);
+    } catch (_) {
+      showSaveFailure(true);
+    }
   };
 
   const applyMode = (mode) => {
@@ -280,11 +303,17 @@ export const PREFERENCES_SCRIPT = `<script>
       restoreIsolation();
       if (returnFocus) {
         const showRing = openedByKeyboard || closedByKeyboard;
-        openButton.focus({ focusVisible: showRing });
-        if (showRing)
-          openButton.removeAttribute("data-preferences-focus-quiet");
-        else openButton.setAttribute("data-preferences-focus-quiet", "");
+        const target =
+          returnFocusElement instanceof HTMLElement &&
+          returnFocusElement.isConnected
+            ? returnFocusElement
+            : openButton;
+        returnFocusElement = null;
+        target.focus({ focusVisible: showRing });
+        if (showRing) target.removeAttribute("data-preferences-focus-quiet");
+        else target.setAttribute("data-preferences-focus-quiet", "");
       }
+      document.dispatchEvent(new CustomEvent("bigplan:settings-closed"));
     }
   };
 
@@ -310,6 +339,7 @@ export const PREFERENCES_SCRIPT = `<script>
   openButton.addEventListener("click", (event) => {
     event.preventDefault();
     openedByKeyboard = event.detail === 0;
+    returnFocusElement = null;
     setOpen(true);
   });
   closeButton.addEventListener("click", (event) => {
@@ -379,7 +409,10 @@ export const PREFERENCES_SCRIPT = `<script>
     event.preventDefault();
     try {
       localStorage.removeItem(messageKey);
-    } catch (_) {}
+      showSaveFailure(false);
+    } catch (_) {
+      showSaveFailure(true);
+    }
     messageInput.value = defaultMessage;
     messageInput.focus();
   });
@@ -398,6 +431,10 @@ export const PREFERENCES_SCRIPT = `<script>
     );
     if (panel !== undefined) showSection(requested);
     openedByKeyboard = false;
+    returnFocusElement =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     if (!open) setOpen(true);
     if (panel === undefined) return;
     const landing = Array.from(
