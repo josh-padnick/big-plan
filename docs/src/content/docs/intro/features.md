@@ -19,8 +19,9 @@ Everything on this page is shipped and works today.
 ## Navigation
 
 - A table of contents built from the plan's level-two headings.
-- A sticky sidebar on wide screens; a compact sticky `Sections` menu on narrow ones.
+- A viewport-bounded sticky sidebar on wide screens, with a fixed `Contents` header and an independently scrolling section list that reveals the active entry when needed; a compact sticky `Sections` menu on narrow ones.
 - Section links scroll smoothly, unless you've asked your OS for reduced motion.
+- During a wide-screen section-link jump, the sidebar keeps its exact scroll position until the requested section becomes current, then resumes active-entry tracking.
 - Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; TOC jumps expand collapsed ancestors.
 - Collapse choices, CodeDiff and FileTreeDiff views, and database-schema column order and visibility persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
 - A static render's document-level review-comment draft follows that same revision-scoped browser-storage rule; live review persistence is described below.
