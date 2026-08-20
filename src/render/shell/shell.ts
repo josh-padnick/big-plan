@@ -316,7 +316,7 @@ const renderApprovalMessageControls = (): string =>
   `<div class="mt-3 min-w-0 wide:mt-4">
 <label class="mb-1 block text-xs font-medium text-muted" for="big-plan-approval-message">Message</label>
 <textarea class="block min-h-32 w-full resize-y rounded-md border border-edge-strong bg-input px-3 py-2 text-sm leading-normal text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-approval-message" data-approval-message-input maxlength="${APPROVAL_MESSAGE_LIMIT}" aria-describedby="big-plan-approval-message-hint">${escapeHtml(DEFAULT_APPROVAL_MESSAGE)}</textarea>
-<p class="mt-2 text-xs leading-normal text-muted" id="big-plan-approval-message-hint">The approval id, the pinned version, and your recorded answers are always attached; this text is the covering note.</p>
+<p class="mt-2 text-xs leading-normal text-muted" id="big-plan-approval-message-hint">Your recorded answers are always attached. This text is the covering note the agent receives when you approve.</p>
 <p class="mt-2 text-xs leading-normal text-[var(--callout-warning-c)]" id="big-plan-approval-message-error" data-approval-message-error hidden>This note could not be saved. It is still here, but it will be lost if you close this page.</p>
 <div class="mt-3">
 <button class="-ml-2 inline-flex min-h-9 cursor-pointer items-center rounded-md border-0 bg-transparent px-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-approval-message-reset>Reset to default</button>

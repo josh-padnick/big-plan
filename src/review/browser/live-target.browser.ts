@@ -226,6 +226,18 @@ export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
 };
 
 /**
+ * The first decision the reader can be sent to when a control says "those
+ * decisions" without naming one. Same live-article, no-lens-copy rule as a
+ * named lookup, so a jump from the approval stamp cannot land inside a
+ * What-changed copy.
+ */
+export const liveFirstDecision = (): LiveTargetResult => {
+  const article = liveArticle();
+  if (article === null) return { missing: "no-article" };
+  return resolveWithin(article, "[data-decision]");
+};
+
+/**
  * Reads the text a live block presents to the reader, mirroring what
  * compile-time extraction recorded: screen-reader-only scaffolding and markup
  * shipped with the hidden attribute never enter a snapshot's text, and review

@@ -417,9 +417,10 @@ export const PREFERENCES_SCRIPT = `<script>
     messageInput.focus();
   });
 
-  // The review island's "Edit message" opens this sheet on the settings page it
-  // means, so the reviewer lands on the field rather than hunting the sidebar
-  // for it. The island owns the dispatch; the shell owns where it lands.
+  // The review island's "Edit in Settings" control opens this sheet on the
+  // settings page it means, so the reviewer lands on the field rather than
+  // hunting the sidebar for it. The island owns the dispatch; the shell owns
+  // where it lands.
   document.addEventListener("bigplan:open-settings", (event) => {
     const requested =
       event instanceof CustomEvent && typeof event.detail?.category === "string"

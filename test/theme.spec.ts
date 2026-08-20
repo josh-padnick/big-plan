@@ -1103,8 +1103,8 @@ test("should open settings on the page an approve dialog asks for", async ({
   page,
   sampleViewerUrl,
 }) => {
-  // The review island's "Edit message" dispatches this event so the reviewer
-  // lands on the field instead of hunting the sidebar for it.
+  // The review island's "Edit in Settings" control dispatches this event so
+  // the reviewer lands on the field instead of hunting the sidebar for it.
   await page.goto(sampleViewerUrl);
   await page.evaluate(
     (key) => localStorage.removeItem(key),

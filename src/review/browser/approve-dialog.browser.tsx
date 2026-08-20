@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
+import { SETTINGS_ICON } from "../../icons/lucide/settings.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import {
   effectiveApprovalMessage,
@@ -36,7 +37,11 @@ import {
   type ReviewInputContract,
 } from "../shared/input-contract.js";
 import { Icon } from "./icon.browser.js";
-import { displayedStandIn, liveDecisionFigure } from "./live-target.browser.js";
+import {
+  displayedStandIn,
+  liveDecisionFigure,
+  liveFirstDecision,
+} from "./live-target.browser.js";
 import {
   requestJson,
   type RuntimeIdentity,
@@ -47,13 +52,38 @@ import { AlertDialog, Badge, Button } from "./ui.browser.js";
 
 const VIEW_ALL_LIMIT = 3;
 
-const showDecision = (decisionId: string): void => {
-  const decision = liveDecisionFigure(decisionId);
-  if ("missing" in decision) return;
-  (displayedStandIn(decision.found) ?? decision.found).scrollIntoView({
+const showLiveElement = (element: HTMLElement): void => {
+  (displayedStandIn(element) ?? element).scrollIntoView({
     behavior: "smooth",
     block: "center",
   });
+};
+
+const showDecision = (decisionId: string): void => {
+  const decision = liveDecisionFigure(decisionId);
+  if ("missing" in decision) return;
+  showLiveElement(decision.found);
+};
+
+const jumpToPlanDecisions = (decisionIds: ReadonlyArray<string>): void => {
+  for (const id of decisionIds) {
+    const decision = liveDecisionFigure(id);
+    if ("found" in decision) {
+      showLiveElement(decision.found);
+      return;
+    }
+  }
+  const first = liveFirstDecision();
+  if ("missing" in first) return;
+  showLiveElement(first.found);
+};
+
+const openApprovalMessageSettings = (): void => {
+  document.dispatchEvent(
+    new CustomEvent("bigplan:open-settings", {
+      detail: { category: "approval-message" },
+    }),
+  );
 };
 
 const readStoredMessage = (): string => {
@@ -66,27 +96,70 @@ const readStoredMessage = (): string => {
   }
 };
 
-const formatApprovalTime = (at: string): string => {
-  const parsed = Date.parse(at);
-  if (Number.isNaN(parsed)) return "Time unavailable";
-  return new Date(parsed).toLocaleString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    month: "short",
-    day: "numeric",
-  });
+type ApprovalClockParts = {
+  readonly month: string;
+  readonly day: string;
+  readonly time: string;
+  readonly unavailable: boolean;
 };
 
-const formatApprovalClock = (at: string): string => {
+const approvalClockParts = (at: string): ApprovalClockParts => {
   const parsed = Date.parse(at);
-  if (Number.isNaN(parsed)) return "";
-  return new Date(parsed).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  if (Number.isNaN(parsed)) {
+    return {
+      month: "",
+      day: "",
+      time: "Time unavailable",
+      unavailable: true,
+    };
+  }
+  const date = new Date(parsed);
+  return {
+    month: date.toLocaleString(undefined, { month: "short" }),
+    day: date.toLocaleString(undefined, { day: "numeric" }),
+    time: date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+    unavailable: false,
+  };
 };
 
-const shortVersion = (digest: string): string => digest.slice(0, 7);
+type StampSize = "toolbar" | "page";
+
+const STAMP_FRAME: Readonly<Record<StampSize, string>> = {
+  toolbar: "inline-flex rounded-md border-2 border-accent p-0.5",
+  page: "inline-flex -rotate-2 rounded-md border-2 border-accent p-1 motion-reduce:rotate-0",
+};
+
+const STAMP_INNER: Readonly<Record<StampSize, string>> = {
+  toolbar:
+    "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5 group-hover:bg-accent-wash group-active:bg-accent-soft",
+  page: "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-3 py-1",
+};
+
+const STAMP_TYPE: Readonly<Record<StampSize, string>> = {
+  toolbar:
+    "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase",
+  page: "text-sm font-bold tracking-caps whitespace-nowrap text-accent uppercase",
+};
+
+const STAMP_BUTTON_CLASS =
+  "group inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 transition hover:rotate-0 hover:shadow-lifted active:inset-shadow-pressed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0 motion-reduce:transition-none wide:min-h-0";
+
+const ApproveStampMark = ({
+  label,
+  size,
+}: {
+  readonly label: string;
+  readonly size: StampSize;
+}) => (
+  <span className={STAMP_FRAME[size]}>
+    <span className={STAMP_INNER[size]}>
+      <span className={STAMP_TYPE[size]}>{label}</span>
+    </span>
+  </span>
+);
 
 const Disclosure = ({
   id,
@@ -358,8 +431,8 @@ export const ApproveDialog = ({
       title={stale ? "Re-approve this plan?" : "Approve this plan?"}
       description={
         stale
-          ? "Your previous approval covered an earlier version. Approving again pins the plan as it reads now."
-          : "Approval records your answers, pins the plan version, and tells the agent to begin."
+          ? "The plan has changed since you approved it. Approving again sends your approval message to the agent so it can start the work."
+          : "Approving sends your approval message to the agent so it can start the work."
       }
       cancelLabel="Keep reviewing"
       actionLabel={stale ? "Re-approve" : "Approve plan"}
@@ -374,7 +447,7 @@ export const ApproveDialog = ({
       <div className="grid gap-3" data-review-approve-dialog="">
         {stale ? (
           <p className="m-0 text-xs text-muted">
-            {`Since your approval of version ${shortVersion(approval.pinnedSnapshot)}.`}
+            Re-approval covers the plan as it reads now.
           </p>
         ) : null}
         <div className="grid gap-2">
@@ -512,21 +585,18 @@ export const ApproveDialog = ({
             <button
               type="button"
               className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-2 text-xs font-medium text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onClick={() => {
-                document.dispatchEvent(
-                  new CustomEvent("bigplan:open-settings", {
-                    detail: { category: "approval-message" },
-                  }),
-                );
-              }}
+              onClick={openApprovalMessageSettings}
               data-review-approve-edit-message=""
             >
               <span className="inline-flex size-3" aria-hidden="true">
                 <Icon icon={PENCIL_ICON} />
               </span>
-              Edit message
+              Edit in Settings
             </button>
           </div>
+          <p className="mt-2 mb-0 text-xs text-muted">
+            The agent receives this message when you approve.
+          </p>
           <p
             className="mt-2 mb-0 text-sm leading-normal text-ink"
             data-review-approve-message=""
@@ -551,21 +621,59 @@ export const ApproveDialog = ({
   );
 };
 
+const ApprovalClock = ({ at }: { readonly at: string }) => {
+  const parts = approvalClockParts(at);
+  if (parts.unavailable) {
+    return <p className="m-0 text-sm text-muted">{parts.time}</p>;
+  }
+  return (
+    <div className="flex items-end gap-3">
+      <div className="rounded-md border-2 border-accent px-2 py-1 text-center">
+        <p className="m-0 text-2xs font-bold tracking-caps text-accent uppercase">
+          {parts.month}
+        </p>
+        <p className="m-0 text-2xl font-bold tracking-tight text-accent">
+          {parts.day}
+        </p>
+      </div>
+      <div className="min-w-0">
+        <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
+          Stamped at
+        </p>
+        <p className="mt-1 mb-0 text-lg font-semibold text-ink">{parts.time}</p>
+      </div>
+    </div>
+  );
+};
+
 const ApprovalDetails = ({
   open,
   approval,
   canRevoke,
+  unansweredDecisionIds,
   onClose,
   onRevoke,
 }: {
   readonly open: boolean;
   readonly approval: ApprovalSummary;
   readonly canRevoke: boolean;
+  readonly unansweredDecisionIds: ReadonlyArray<string>;
   readonly onClose: () => void;
   readonly onRevoke: () => void;
 }) => {
   const [confirming, setConfirming] = useState(false);
   if (!open) return null;
+  const answered = approval.openItemCounts.decisionsAnswered;
+  const total = approval.openItemCounts.decisionsTotal;
+  const unanswered = total - answered;
+  const decisionCopy =
+    total === 0
+      ? undefined
+      : unanswered === 0
+        ? `All ${total} decisions were answered. Review them in the plan.`
+        : unanswered === total
+          ? `None of the ${total} decisions were answered. Jump to them in the plan.`
+          : `${answered} of ${total} decisions were answered. Jump to the unanswered ones.`;
   return (
     <>
       <div
@@ -574,30 +682,63 @@ const ApprovalDetails = ({
         data-review-approval-details-backdrop=""
       />
       <div
-        className="absolute top-full right-0 z-50 mt-1 w-72 rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating"
+        className="fixed top-24 right-3 left-3 z-50 rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating wide:absolute wide:top-full wide:right-0 wide:left-auto wide:mt-1 wide:w-80"
         role="dialog"
         aria-label="Approval details"
         data-review-approval-details=""
       >
-        <p className="m-0 text-sm font-semibold">Approved</p>
-        <p className="mt-1 mb-0 text-xs text-muted">
-          {formatApprovalTime(approval.at)}
-        </p>
-        <p className="mt-1 mb-0 text-xs text-muted">
-          {`Version ${shortVersion(approval.pinnedSnapshot)}`}
-        </p>
-        <p className="mt-2 mb-0 text-xs leading-normal text-ink">
-          {approval.message}
-        </p>
-        <p className="mt-2 mb-0 text-xs text-muted">
-          {`${approval.openItemCounts.decisionsAnswered} of ${approval.openItemCounts.decisionsTotal} decisions answered`}
-        </p>
+        <ApproveStampMark label="Approved" size="toolbar" />
+        <div className="mt-3">
+          <ApprovalClock at={approval.at} />
+        </div>
+        {approval.status === "stale" ? (
+          <p className="mt-3 mb-0 text-xs text-[var(--callout-warning-c)]">
+            The plan changed after this approval. Re-approve to stamp the plan
+            as it reads now.
+          </p>
+        ) : null}
+        <div className="mt-3 min-w-0 rounded-md border border-edge bg-paper px-2 py-2">
+          <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
+            Sent to your agent
+          </p>
+          <p className="mt-1 mb-0 text-xs leading-normal text-muted">
+            This message was sent to your agent so it can start the work.
+          </p>
+          <p className="mt-2 mb-0 text-sm leading-normal text-ink">
+            {approval.message}
+          </p>
+          <button
+            type="button"
+            className="mt-2 inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-0 text-xs font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={openApprovalMessageSettings}
+            data-review-approve-settings-message=""
+          >
+            <span className="inline-flex size-3" aria-hidden="true">
+              <Icon icon={SETTINGS_ICON} />
+            </span>
+            Change it in Settings
+          </button>
+        </div>
+        {decisionCopy === undefined ? null : (
+          <button
+            type="button"
+            className="mt-3 flex min-h-11 w-full cursor-pointer items-start rounded-md border-0 bg-transparent px-0 py-1 text-left text-xs font-medium leading-normal text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={() => {
+              onClose();
+              jumpToPlanDecisions(unansweredDecisionIds);
+            }}
+            data-review-approve-jump-decisions=""
+          >
+            {decisionCopy}
+          </button>
+        )}
         {canRevoke ? (
           <Button
             className="mt-3 w-full"
             variant="destructive"
             size="compact"
             onClick={() => setConfirming(true)}
+            data-review-approve-revoke=""
           >
             Revoke approval
           </Button>
@@ -636,22 +777,15 @@ export const ApprovalStamp = ({
       data-review-approval-stamp=""
       data-review-approval-status={approval.status}
     >
-      <div className="rounded-md border border-edge bg-surface px-3 py-2 shadow-raised inset-shadow-pressed">
-        <p className="m-0 flex items-center gap-1.5 text-sm font-semibold text-accent">
-          <span className="inline-flex size-4" aria-hidden="true">
-            <Icon icon={CHECK_ICON} />
-          </span>
-          Approved
-        </p>
-        <p className="mt-1 mb-0 text-xs text-muted">
-          {formatApprovalTime(approval.at)}
-        </p>
-        <p className="mt-0.5 mb-0 text-xs text-muted">
-          {`Version ${shortVersion(approval.pinnedSnapshot)}`}
-        </p>
+      <div className="rounded-md border border-edge bg-surface px-3 py-2">
+        <ApproveStampMark label="Approved" size="page" />
+        <div className="mt-3">
+          <ApprovalClock at={approval.at} />
+        </div>
         {stale ? (
           <p className="mt-2 mb-0 text-xs text-[var(--callout-warning-c)]">
-            The plan changed after this approval was pinned.
+            The plan changed after this approval. Re-approve to stamp the plan
+            as it reads now.
           </p>
         ) : null}
         <button
@@ -666,6 +800,7 @@ export const ApprovalStamp = ({
         open={detailsOpen}
         approval={approval}
         canRevoke={canRevoke}
+        unansweredDecisionIds={[]}
         onClose={() => setDetailsOpen(false)}
         onRevoke={() => {
           setDetailsOpen(false);
@@ -806,27 +941,28 @@ export const ApproveControl = ({
     }
   };
 
+  const unansweredDecisionIds = items.decisions.unanswered.map(
+    (decision) => decision.inputId,
+  );
+
   if (approval !== undefined && status === "approved") {
     return (
       <span className="relative">
         <button
           type="button"
-          className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className={STAMP_BUTTON_CLASS}
+          aria-label="Approval details"
+          aria-expanded={detailsOpen}
           onClick={() => setDetailsOpen((current) => !current)}
           data-review-approve-status="approved"
         >
-          <Badge
-            size="status"
-            tone="statusAccent"
-            className="whitespace-nowrap"
-          >
-            {`Approved ${formatApprovalClock(approval.at)}`}
-          </Badge>
+          <ApproveStampMark label="Approved" size="toolbar" />
         </button>
         <ApprovalDetails
           open={detailsOpen}
           approval={approval}
           canRevoke={canWrite}
+          unansweredDecisionIds={unansweredDecisionIds}
           onClose={() => setDetailsOpen(false)}
           onRevoke={() => {
             setDetailsOpen(false);
@@ -844,17 +980,19 @@ export const ApproveControl = ({
           Changed since approval
         </Badge>
       ) : null}
-      <Button
-        variant={
-          status === "stale" ? "secondary" : primary ? "default" : "secondary"
-        }
-        size="sm"
+      <button
+        type="button"
+        className={STAMP_BUTTON_CLASS}
+        aria-label={status === "stale" ? "Re-approve" : "Approve plan"}
         onClick={() => setDialogOpen(true)}
         data-review-approve-trigger=""
         data-review-approve-emphasis={primary ? "primary" : "secondary"}
       >
-        {status === "stale" ? "Re-approve" : "Approve plan"}
-      </Button>
+        <ApproveStampMark
+          label={status === "stale" ? "Re-approve" : "Approve"}
+          size="toolbar"
+        />
+      </button>
       <ApproveDialog
         open={dialogOpen}
         approval={approval}
