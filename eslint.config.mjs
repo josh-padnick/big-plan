@@ -47,17 +47,44 @@ const PLAN_IDENTITY_SELECTOR = {
 // in them, so a fence that asked for a list would have watched the narrower
 // half of the defect it was written for.
 //
-// Three things the predicate is deliberate about. A variant may prefix the
-// `grid` token - `wide:grid` and `[&>li]:grid` are the same container to a
-// reader at a narrow width, so they are the same container here. Only an
-// unprefixed `grid-cols-` answers the question, because a track declared at a
-// breakpoint leaves the narrow regime this fence exists for undeclared; a
-// container that only becomes a grid at a breakpoint may still carry the
-// unprefixed track, which is inert wherever `display` is not grid. And tokens
-// are split on any whitespace with `[\s\S]` rather than `.`, so a class list
-// a formatter wrapped across lines is still read.
-const GRID_TRACK_PATTERN =
-  "/^(?![\\s\\S]*(?:^|\\s)grid-cols-)[\\s\\S]*(?:^|\\s)(?:\\S*:)?grid(?=\\s|$)/";
+// What the predicate is deliberate about.
+//
+// A variant may prefix the `grid` token: `wide:grid` and `[&>li]:grid` are
+// still a container whose column a reader at a narrow width depends on. The
+// track that answers for one is the track scoped the same way, so a prefixed
+// `grid` is answered by a `grid-cols-` carrying that same prefix. A prefix
+// that only changes when a rule applies - a breakpoint, a state - is also
+// answered by an unprefixed track, which is inert wherever `display` is not
+// grid and so costs nothing to carry. A prefix that retargets the rule at
+// another element, which is any arbitrary variant naming `&`, is not: an
+// unprefixed track there lands on the parent rather than on the child the
+// variant selects, so it would read as compliant while leaving the child's
+// track implicit. An unprefixed `grid` still requires an unprefixed
+// `grid-cols-`; a track declared only at a breakpoint leaves the narrow
+// regime this fence exists for undeclared.
+//
+// Tokens are split on any whitespace with `[\s\S]` rather than `.`, so a
+// class list a formatter wrapped across lines is still read.
+//
+// `inline-grid` is deliberately outside the fence. An inline-grid box is
+// shrink-to-fit, so it is not the shape this rule describes, and its remedy
+// would not be either: `minmax(0, 1fr)` gives the container a zero min-content
+// size, which would collapse such a box rather than contain it. The one live
+// `inline-grid` in the sidebar declares its own columns and wants nothing from
+// this rule. An accidental exclusion on a silent-failure guard reads exactly
+// like a hole, so this one is stated rather than left to be rediscovered.
+
+// A `grid` whose variant retargets another element, answered only by a track
+// scoped the same way.
+const RETARGETED_GRID =
+  "^(?=[\\s\\S]*(?:^|\\s)(\\S*&\\S*:)grid(?=\\s|$))(?![\\s\\S]*(?:^|\\s)\\1grid-cols-)";
+
+// A `grid` on the element itself, answered by that element's own track under
+// the same prefix or by an unprefixed one.
+const OWN_GRID =
+  "^(?=[\\s\\S]*(?:^|\\s)((?:[^\\s&]*:)|)grid(?=\\s|$))(?![\\s\\S]*(?:^|\\s)\\2grid-cols-)(?![\\s\\S]*(?:^|\\s)grid-cols-)";
+
+const GRID_TRACK_PATTERN = `/(?:${RETARGETED_GRID}|${OWN_GRID})/`;
 
 // Where a class string can live. Reading every string literal instead would
 // report a Tailwind column-track error on prose - an error message or a label
