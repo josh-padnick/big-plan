@@ -2927,6 +2927,14 @@ export const attachAgentToRoster = async ({
         work while the reviewer's requests pile up. This takes primacy from
         nobody: it fires only when the review has no attached primary at all,
         which is the same rule an arriving agent is already given.
+
+        "No attached primary" is a state the seat has to have been in for a
+        while, not for an instant. A primary that publishes stops being
+        attached the moment its claim closes, so without the window that
+        follows it, an observer refreshing twice a second would take the seat
+        between one turn and the next - reversing a reviewer who had just
+        answered "leave it as observer" and locking the answering agent out of
+        its own review.
         */
         const succeedsAnEmptySeat =
           existing.role === "observer" &&
@@ -3026,12 +3034,19 @@ export const refreshAgentByClaimToken = async ({
  * Removes this process's registration as it exits.
  *
  * A record stands for an agent that is here, and the only thing that keeps one
- * standing after its process is gone is something still in flight: a claim it
- * holds mid turn, or a question about primacy the reviewer has not answered.
- * A record with neither describes nobody, and leaving it behind is what turns
- * a harness that polls for work into a queue of ghosts - each poll attaching,
- * finding nothing, exiting, and blocking the next one from ever being the
- * primary.
+ * standing after its process is gone is a turn still in flight: a claim it
+ * holds and has not closed. A record without one describes nobody, and leaving
+ * it behind is what turns a harness that polls for work into a queue of ghosts
+ * - each poll attaching, finding nothing, exiting, and blocking the next one
+ * from ever being the primary.
+ *
+ * An unanswered question about primacy is deliberately not a reason to stay.
+ * Arriving as an observer raises that question, so an observer that polls
+ * without --wait could never remove itself, and each poll left the reviewer a
+ * card offering to promote a process that had already exited - which demotes
+ * the agent actually working and leaves the plan with a primary nobody is
+ * behind. An observer that comes back raises its question again on arrival, so
+ * the only question the reviewer is shown is one an agent is still waiting on.
  */
 export const detachExitingAgent = async ({
   store,
@@ -3048,9 +3063,9 @@ export const detachExitingAgent = async ({
     change: (agents) =>
       agents.filter((agent) => {
         if (agent.writerId !== writerId) return true;
-        const holdsOpenClaim =
-          agent.claimToken !== undefined && agent.claimClosedAtMs === undefined;
-        return holdsOpenClaim || agent.requestedPrimacyAtMs !== undefined;
+        return (
+          agent.claimToken !== undefined && agent.claimClosedAtMs === undefined
+        );
       }),
   });
 

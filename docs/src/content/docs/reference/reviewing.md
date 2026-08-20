@@ -273,6 +273,14 @@ It is recorded when a second agent was waiting beside the one you disconnected t
 `agent next` reports the disconnect as an ordinary end; `agent push`, `agent note`, and `agent respond` refuse with the `AGENT_DISCONNECTED` code, so a harness stops instead of retrying.
 The review itself is free the moment you confirm, so a second agent can connect without waiting for the first one to notice.
 
+A second agent that connects does not take the review by arriving.
+It attaches as an observer - able to read the plan, the conversation, and the state of your requests, and able to answer nothing - and asks you whether it should be the one answering you.
+**Agent Status** raises a hazard mark while that question is unanswered, and the sidebar leads with a card naming the agent that asked, next to a card for every other attached agent.
+Each answer says what it will do before you commit to it: **Make it primary** hands the review to that agent and makes the current one an observer, **Leave it as observer** keeps the arrangement as it is and stops asking, and **Disconnect this agent** drops it from the review.
+Making an observer the primary asks you to confirm, and offers to hand the outgoing agent's unfinished draft to the new one as reference it may read rather than as work that publishes itself; left unticked, that draft stays where it is and never reaches your plan.
+Whichever you choose, the agent you moved away from is told at its next command instead of discovering it when its answer is refused, and anything it had in flight is fenced rather than delivered.
+The roster stays out of the way while one agent is answering you: a single attached agent with nothing to ask shows no cards at all.
+
 The stalled reading is bounded, because a pickup cannot account for silence indefinitely.
 After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: **Agent Status** gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.
 Past that point, and only while no agent is connected, the pickup also stops holding your comment: the claim is treated as abandoned, and **Delete comment the agent left?** returns with a confirmation that says the agent stopped reporting and its claim expired.

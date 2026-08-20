@@ -23,8 +23,10 @@ import {
 } from "./shared/agent-timing.js";
 import {
   attachAgentToRoster,
+  closeAgentClaim,
   declineAgentPrimacy,
   detachAgentFromRoster,
+  detachExitingAgent,
   grantAgentPrimacy,
   prepareStore,
   readAgentRoster,
@@ -411,5 +413,145 @@ describe("roster liveness", () => {
     // primary.
     expect(agentIsLive({ agent, ...stalled })).toBe(false);
     expect(agentIsAttached({ agent, ...stalled })).toBe(true);
+  });
+});
+
+/*
+The moment a turn ends, which nothing else in this file can reach.
+
+The seat has to stay with the agent that just answered for exactly as long as
+its own return trip takes, and no longer. Held too long, one agent comes back to
+find itself an observer of its own last turn and stops answering; released too
+early, an observer the reviewer explicitly left as an observer promotes itself
+between two turns and the reviewer's answer is reversed without anyone saying so
+(BIG-171).
+*/
+describe("the seat between turns", () => {
+  const answeredTurn = async () => {
+    const store = await temporaryStore();
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      now: 1_000,
+    });
+    await recordAgentClaimToken({
+      store,
+      sessionId: SESSION,
+      writerId: "answering",
+      claimToken: "held",
+    });
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 1_000,
+    });
+    // The reviewer read the question and answered it: leave it as observer.
+    await declineAgentPrimacy({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+    });
+    // The turn is published.
+    await closeAgentClaim({
+      store,
+      sessionId: SESSION,
+      claimToken: "held",
+      now: 2_000,
+    });
+    return store;
+  };
+
+  it("should keep an answered observer where the reviewer put it", async () => {
+    const store = await answeredTurn();
+    // The observer's own refresh, half a second later, which is how often a
+    // waiting loop asks.
+    const { agent, agents } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: 2_500,
+    });
+    expect(agent.role).toBe("observer");
+    expect(selectPrimaryAgent({ agents, nowMs: 2_500 })?.writerId).toBe(
+      "answering",
+    );
+  });
+
+  it("should let the agent that answered reclaim its own record", async () => {
+    const store = await answeredTurn();
+    // The `next` command `respond` returns, run by a fresh process that knows
+    // only the token.
+    const { agent, agents } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "a-new-process",
+      adoptClaimToken: "held",
+      now: 2_500,
+    });
+    expect(agent.writerId).toBe("answering");
+    expect(agent.role).toBe("primary");
+    expect(agent.claimToken).toBeUndefined();
+    expect(agents.map((entry) => entry.writerId)).toEqual([
+      "answering",
+      "watching",
+    ]);
+  });
+
+  it("should let an observer take a seat that stayed empty past the window", async () => {
+    const store = await answeredTurn();
+    const nowMs = 2_000 + AGENT_STALL_MS + 1;
+    const { agent, agents } = await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "watching",
+      now: nowMs,
+    });
+    expect(agent.role).toBe("primary");
+    expect(agents.map((entry) => entry.writerId)).toEqual(["watching"]);
+    expect(selectPrimaryAgent({ agents, nowMs })?.writerId).toBe("watching");
+  });
+});
+
+describe("detachExitingAgent", () => {
+  it("should keep a record whose turn is still in flight", async () => {
+    const store = await temporaryStore();
+    await attachAgentToRoster({ store, sessionId: SESSION, writerId: "first" });
+    await recordAgentClaimToken({
+      store,
+      sessionId: SESSION,
+      writerId: "first",
+      claimToken: "held",
+    });
+    const agents = await detachExitingAgent({
+      store,
+      sessionId: SESSION,
+      writerId: "first",
+    });
+    expect(agents.map((agent) => agent.writerId)).toEqual(["first"]);
+  });
+
+  it("should take an exiting observer's question with it", async () => {
+    // A poll without --wait attaches, is told it is an observer, and exits.
+    // Leaving its question behind offered the reviewer a card that promotes a
+    // process that has already gone - demoting the agent actually working, and
+    // leaving the plan with a primary nobody is behind.
+    const store = await temporaryStore();
+    await attachAgentToRoster({ store, sessionId: SESSION, writerId: "first" });
+    await attachAgentToRoster({
+      store,
+      sessionId: SESSION,
+      writerId: "polling",
+    });
+    const agents = await detachExitingAgent({
+      store,
+      sessionId: SESSION,
+      writerId: "polling",
+    });
+    expect(agents.map((agent) => agent.writerId)).toEqual(["first"]);
+    expect(
+      pendingPrimacyRequest({ agents, nowMs: Date.now() }),
+    ).toBeUndefined();
   });
 });

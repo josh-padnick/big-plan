@@ -682,7 +682,7 @@ Work in the plan's repository. You never edit that plan file: each work item han
 Run this command to receive the next real review request:
 ${nextCommand}
 
-Big Plan permits one live request claim for this plan at a time. If another agent is working, this command waits until that request is answered or canceled, or its lease lapses, instead of starting parallel plan edits.
+Big Plan permits one live request claim for this plan at a time, and one agent answers this review at a time. If another agent is already the primary, this command attaches you as an observer instead of starting parallel plan edits: you may read the plan, the conversation, and the state of the reviewer's requests, and you may not claim, note, or respond. Arriving is itself the request to be the primary, and the reviewer answers it; with --wait you keep observing until they do. If they move primacy away from you, your next command is refused with the error code PRIMACY_LOST - stop this loop rather than retrying.
 
 For each returned work item:
 1. Read the returned candidate_plan and the request plus its conversation history.

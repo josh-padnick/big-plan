@@ -2,7 +2,7 @@
 // and what a reviewer's answer does to the roster.
 
 import { describe, expect, it } from "vitest";
-import { AGENT_RECOVERY_HORIZON_MS } from "./agent-timing.js";
+import { AGENT_RECOVERY_HORIZON_MS, AGENT_STALL_MS } from "./agent-timing.js";
 import {
   agentIsAttached,
   agentIsLive,
@@ -55,6 +55,55 @@ describe("agentIsAttached", () => {
     // one dead record per poll.
     expect(
       agentIsAttached({ agent: { signalAtMs: NOW - 90_000 }, nowMs: NOW }),
+    ).toBe(false);
+  });
+
+  it("should hold the seat for an agent that has just published its turn", () => {
+    // The moment the claim closes, the seat looked empty and a waiting
+    // observer took it - reversing an answer the reviewer had already given,
+    // and locking the answering agent out of its own review (BIG-171). The
+    // window is the outgoing agent's return trip with the token `respond`
+    // handed it.
+    expect(
+      agentIsAttached({
+        agent: {
+          signalAtMs: NOW - 60_000,
+          claimToken: "spent",
+          claimClosedAtMs: NOW - 1_000,
+        },
+        nowMs: NOW,
+      }),
+    ).toBe(true);
+  });
+
+  it("should let the seat go once the return window has passed", () => {
+    expect(
+      agentIsAttached({
+        agent: {
+          signalAtMs: NOW - AGENT_STALL_MS - 2,
+          claimToken: "spent",
+          claimClosedAtMs: NOW - AGENT_STALL_MS - 1,
+        },
+        nowMs: NOW,
+      }),
+    ).toBe(false);
+  });
+
+  it("should answer with the membership the server already decided", () => {
+    // The browser is handed the fact, not the inputs: it holds neither the
+    // claim token nor the close time, so deriving this itself is how the rail
+    // came to disagree with the roster it was drawing.
+    expect(
+      agentIsAttached({
+        agent: { signalAtMs: NOW - AGENT_RECOVERY_HORIZON_MS, attached: true },
+        nowMs: NOW,
+      }),
+    ).toBe(true);
+    expect(
+      agentIsAttached({
+        agent: { signalAtMs: NOW, attached: false },
+        nowMs: NOW,
+      }),
     ).toBe(false);
   });
 });

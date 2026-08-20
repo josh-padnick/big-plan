@@ -538,14 +538,26 @@ describe("agent work loop lifecycle", () => {
         }),
       });
     };
-    // One turn of the loop the agent prompt describes: take the work, report
-    // progress the way the returned command does, answer, and come back.
-    const takeOneTurn = async (requestId: string): Promise<void> => {
+    /*
+    One turn of the loop the agent prompt describes: take the work, report
+    progress the way the returned command does, answer, and come back.
+
+    The return trip carries the token, because that is what the product tells
+    the agent to do - `respond` hands back a `next` command with `--agent
+    <token>` on it, and the prompt says to run it as given. The token is how a
+    fresh process finds the record it is coming back to instead of arriving as
+    a stranger.
+    */
+    const takeOneTurn = async (
+      requestId: string,
+      agentToken?: string,
+    ): Promise<string> => {
       const pickup = await runAgentWorkLoopAction({
         kind: "next",
         planPath,
         shouldWait: false,
         executablePath,
+        ...(agentToken === undefined ? {} : { agentToken }),
       });
       expect(pickup).toMatchObject({
         pending: true,
@@ -554,7 +566,8 @@ describe("agent work loop lifecycle", () => {
       if (
         typeof pickup.note_command !== "string" ||
         typeof pickup.respond_command !== "string" ||
-        typeof pickup.response_file !== "string"
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
       ) {
         throw new Error("Pickup did not return executable agent commands");
       }
@@ -563,18 +576,26 @@ describe("agent work loop lifecycle", () => {
         pickup.response_file,
         JSON.stringify({ requestId, message: "Answered." }),
       );
-      await execAsync(pickup.respond_command, { cwd: directory });
+      const responded = await execAsync(pickup.respond_command, {
+        cwd: directory,
+      });
+      // The command the agent is told to run next carries the token it just
+      // answered under, which is what makes the next turn the same agent.
+      expect(responded.stdout).toMatch(
+        new RegExp(`agent next .*--agent \\S*${pickup.agent_token}`, "u"),
+      );
+      return pickup.agent_token;
     };
 
     try {
       await ask("1212121212121212", "What is the first answer?");
-      await takeOneTurn("1212121212121212");
+      const agentToken = await takeOneTurn("1212121212121212");
       await ask("3434343434343434", "What is the second answer?");
       // The second turn is the whole test. Nothing else has connected, so the
       // only agent this review has ever seen must still be its primary - a
       // loop that comes back to find itself an observer of its own last turn
       // stops answering the reviewer entirely (BIG-171).
-      await takeOneTurn("3434343434343434");
+      await takeOneTurn("3434343434343434", agentToken);
 
       // One agent connected, so the review has one agent - not a queue of
       // strangers, and never a question to the reviewer about a second agent
@@ -1544,6 +1565,7 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request: firstRequest });
     await writeAgentRequest({ store: review.store, request: secondRequest });
 
+    let observing: Promise<Record<string, unknown>> | undefined;
     try {
       const firstPickup = await runAgentWorkLoopAction({
         kind: "next",
@@ -1559,28 +1581,48 @@ describe("agent work loop lifecycle", () => {
 
       // A second connector arrives while the first holds the plan. It is told
       // its role rather than handed the queued request.
-      const secondPickup = await runAgentWorkLoopAction({
+      const oneShot = await runAgentWorkLoopAction({
         kind: "next",
         planPath,
         shouldWait: false,
         executablePath,
         modelName: "gpt-5-6-sol",
       });
-      expect(secondPickup).toMatchObject({ pending: false, role: "observer" });
-      expect(secondPickup["work"]).toBeUndefined();
+      expect(oneShot).toMatchObject({ pending: false, role: "observer" });
+      expect(oneShot["work"]).toBeUndefined();
 
-      // The reviewer, not the arriving agent, is the one being asked.
-      const roster = await reviewStore.readAgentRoster({
-        store: review.store,
-        sessionId: review.sessionId,
+      /*
+      A connector that stays, which is what the reviewer is asked about.
+
+      The question belongs to an agent that is waiting for the answer, so it is
+      raised by a loop that is still there to hear it. The one-shot above took
+      no work and left nothing behind - a card offering to promote a process
+      that has already exited would demote the agent actually working.
+      */
+      observing = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "gpt-5-6-sol",
       });
-      const nowMs = Date.now();
-      expect(selectPrimaryAgent({ agents: roster, nowMs })?.model?.name).toBe(
-        "claude-opus-5",
+      // The reviewer, not the arriving agent, is the one being asked.
+      await vi.waitFor(
+        async () => {
+          const roster = await reviewStore.readAgentRoster({
+            store: review.store,
+            sessionId: review.sessionId,
+          });
+          const nowMs = Date.now();
+          expect(
+            selectPrimaryAgent({ agents: roster, nowMs })?.model?.name,
+          ).toBe("claude-opus-5");
+          expect(
+            pendingPrimacyRequest({ agents: roster, nowMs })?.model?.name,
+          ).toBe("gpt-5-6-sol");
+        },
+        { timeout: 5_000 },
       );
-      expect(
-        pendingPrimacyRequest({ agents: roster, nowMs })?.model?.name,
-      ).toBe("gpt-5-6-sol");
 
       // The queued request is still queued: nothing took it.
       const stillQueued = await readAgentExchange({
@@ -1595,6 +1637,7 @@ describe("agent work loop lifecycle", () => {
       ).toBeUndefined();
     } finally {
       await review.close();
+      await observing;
       await rm(directory, { recursive: true, force: true });
     }
   }, 20_000);
@@ -1618,6 +1661,7 @@ describe("agent work loop lifecycle", () => {
         body: "Answer this.",
       }),
     });
+    let observing: Promise<Record<string, unknown>> | undefined;
     try {
       const incumbent = await runAgentWorkLoopAction({
         kind: "next",
@@ -1641,29 +1685,39 @@ describe("agent work loop lifecycle", () => {
         }),
       ).resolves.toMatchObject({ noted: "Reading the request" });
 
-      await runAgentWorkLoopAction({
+      // The arriving connector waits for the answer rather than exiting: the
+      // question the reviewer is shown belongs to an agent that is still here
+      // to be told what it is.
+      observing = runAgentWorkLoopAction({
         kind: "next",
         planPath,
-        shouldWait: false,
+        shouldWait: true,
         executablePath,
         modelName: "gpt-5-6-sol",
       });
-      const observer = pendingPrimacyRequest({
-        agents: await reviewStore.readAgentRoster({
-          store: review.store,
-          sessionId: review.sessionId,
-        }),
-        nowMs: Date.now(),
-      });
-      if (observer === undefined) {
-        throw new Error("The arriving agent did not ask to be the primary");
-      }
+      let observerWriterId = "";
+      await vi.waitFor(
+        async () => {
+          const observer = pendingPrimacyRequest({
+            agents: await reviewStore.readAgentRoster({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+            nowMs: Date.now(),
+          });
+          if (observer === undefined) {
+            throw new Error("The arriving agent did not ask to be the primary");
+          }
+          observerWriterId = observer.writerId;
+        },
+        { timeout: 5_000 },
+      );
 
       // The reviewer answers.
       await reviewStore.grantAgentPrimacy({
         store: review.store,
         sessionId: review.sessionId,
-        writerId: observer.writerId,
+        writerId: observerWriterId,
       });
 
       // The displaced agent learns at its very next command, in a code its
@@ -1682,6 +1736,7 @@ describe("agent work loop lifecycle", () => {
       });
     } finally {
       await review.close();
+      await observing;
       await rm(directory, { recursive: true, force: true });
     }
   }, 20_000);

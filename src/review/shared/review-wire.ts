@@ -12,7 +12,11 @@ import {
   decodeAgentModelIdentity,
   type AgentModelIdentity,
 } from "./agent-model.js";
-import type { AttachedAgent } from "./agent-primacy.js";
+import {
+  projectRosterForBrowser,
+  type AttachedAgent,
+  type RosterAgent,
+} from "./agent-primacy.js";
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 import {
@@ -133,7 +137,7 @@ export type AgentSnapshot = {
   readonly currentSnapshot: string;
   readonly presence: AgentPresence;
   /** Every agent attached to this review, primary first-come order. */
-  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly agents: ReadonlyArray<RosterAgent>;
   readonly requests: ReadonlyArray<AgentRequest>;
   readonly responses: ReadonlyArray<AgentResponse>;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -239,13 +243,18 @@ export type ChangeDispositionStateSource = ChangeDispositionState;
 export type AgentSnapshotSource = {
   readonly currentSnapshot: string;
   readonly presence: unknown;
-  readonly agents: ReadonlyArray<unknown>;
+  readonly agents: ReadonlyArray<AttachedAgent>;
   readonly requests: ReadonlyArray<unknown>;
   readonly responses: ReadonlyArray<unknown>;
   readonly connectionLog: ReadonlyArray<unknown>;
   readonly plan: string;
   readonly agentCommand: string;
   readonly recoveryPrompt: string;
+};
+
+/** What the agent snapshot looks like once it is safe to serve. */
+export type AgentSnapshotWire = Omit<AgentSnapshotSource, "agents"> & {
+  readonly agents: ReadonlyArray<RosterAgent>;
 };
 
 export type RuntimeSessionSource = {
@@ -532,11 +541,20 @@ export const emptyAgentSnapshot = (): AgentSnapshot => ({
   recoveryPrompt: "",
 });
 
-/** Encodes the runtime-owned exchange in the shape consumed by the browser. */
+/**
+ * Encodes the runtime-owned exchange in the shape consumed by the browser.
+ *
+ * The roster is projected rather than passed through. What the browser needs
+ * from a roster record is who an agent is, what it is, and whether it is still
+ * here; what it does not need - and must not be given - is the pickup token
+ * that fences publication, or the fields whose reading is the server's job.
+ */
 export const encodeAgentSnapshot = (
   value: AgentSnapshotSource,
-): AgentSnapshotSource => ({
+  { nowMs }: { readonly nowMs: number },
+): AgentSnapshotWire => ({
   ...value,
+  agents: projectRosterForBrowser({ agents: value.agents, nowMs }),
   requests: encodeAgentRequests(value.requests),
 });
 
@@ -752,7 +770,7 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
   exactly the ambiguity this surface exists to remove.
   */
   const agents = Array.isArray(value.agents)
-    ? value.agents.flatMap((agent): ReadonlyArray<AttachedAgent> => {
+    ? value.agents.flatMap((agent): ReadonlyArray<RosterAgent> => {
         if (
           !isReviewWireRecord(agent) ||
           typeof agent.writerId !== "string" ||
@@ -761,7 +779,11 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           typeof agent.attachedAtMs !== "number" ||
           !Number.isFinite(agent.attachedAtMs) ||
           typeof agent.signalAtMs !== "number" ||
-          !Number.isFinite(agent.signalAtMs)
+          !Number.isFinite(agent.signalAtMs) ||
+          // Membership is answered by the server or not at all. A record that
+          // cannot say whether its agent is still here would be drawn as one
+          // that is, which is the ambiguity this surface exists to remove.
+          typeof agent.attached !== "boolean"
         ) {
           return [];
         }
@@ -772,6 +794,7 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
             role: agent.role,
             attachedAtMs: agent.attachedAtMs,
             signalAtMs: agent.signalAtMs,
+            attached: agent.attached,
             ...(typeof agent.requestedPrimacyAtMs === "number" &&
             Number.isFinite(agent.requestedPrimacyAtMs)
               ? { requestedPrimacyAtMs: agent.requestedPrimacyAtMs }

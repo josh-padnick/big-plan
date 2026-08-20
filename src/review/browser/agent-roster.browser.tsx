@@ -16,7 +16,7 @@ import {
   orderAttachedAgents,
   pendingPrimacyRequest,
   selectPrimaryAgent,
-  type AttachedAgent,
+  type RosterAgent,
 } from "../shared/agent-primacy.js";
 import { agentClientDisplayName } from "../shared/agent-identity-catalog.js";
 import { compactDurationLabel } from "../shared/time-label.js";
@@ -27,7 +27,7 @@ import { AlertDialog, Button } from "./ui.browser.js";
 export type PrimacyAnswer = "primary" | "observer" | "disconnect";
 
 export type AgentRosterProps = {
-  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly agents: ReadonlyArray<RosterAgent>;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
   readonly onAnswer: (input: {
@@ -56,7 +56,7 @@ const ConsequenceNote = ({ text }: { readonly text: string }) => (
 );
 
 /** The identity line every agent card carries. */
-const AgentIdentity = ({ agent }: { readonly agent: AttachedAgent }) => {
+const AgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
   const client = agent.model?.client;
   return (
     <p
@@ -78,7 +78,7 @@ const AttachedSince = ({
   agent,
   nowMs,
 }: {
-  readonly agent: AttachedAgent;
+  readonly agent: RosterAgent;
   readonly nowMs: number;
 }) => {
   const since = compactDurationLabel({
@@ -104,8 +104,8 @@ const PrimacyRequestCard = ({
   isReadOnly,
   onAnswer,
 }: {
-  readonly agent: AttachedAgent;
-  readonly primary: AttachedAgent | undefined;
+  readonly agent: RosterAgent;
+  readonly primary: RosterAgent | undefined;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
   readonly onAnswer: AgentRosterProps["onAnswer"];
@@ -189,7 +189,7 @@ const AgentCard = ({
   isReadOnly,
   onAnswer,
 }: {
-  readonly agent: AttachedAgent;
+  readonly agent: RosterAgent;
   readonly isPrimary: boolean;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
@@ -324,8 +324,8 @@ export const PrimacyHandoffDialog = ({
   onConfirm,
   onCancel,
 }: {
-  readonly agent: AttachedAgent;
-  readonly primary: AttachedAgent | undefined;
+  readonly agent: RosterAgent;
+  readonly primary: RosterAgent | undefined;
   readonly onConfirm: (input: {
     readonly carryWorkInProgress: boolean;
   }) => void;

@@ -169,11 +169,20 @@ export const agentIsAttached = ({
   readonly agent: Pick<
     AttachedAgent,
     "signalAtMs" | "claimToken" | "claimClosedAtMs"
-  >;
+  > & {
+    readonly attached?: boolean;
+  };
   readonly nowMs: number;
 }): boolean => {
+  // A record that crossed the wire carries the server's own answer, and that
+  // answer is the whole membership fact it is given. The browser used to hold
+  // the inputs instead and re-derive this, which it could not do: the fields
+  // that make a working agent patient are server-only, so a primary mid turn
+  // vanished from the rail and the hand-off confirmation was skipped for it.
+  if (agent.attached !== undefined) return agent.attached;
   /*
-  An agent that has not been heard from since its turn ended is gone.
+  An agent that has not been heard from since its turn ended is on its way out,
+  and it is given the stall window to come back before it is gone.
 
   This is the one case where silence says something definite. Every other
   quiet agent might be mid answer, because `agent next` hands its work to the
@@ -182,17 +191,30 @@ export const agentIsAttached = ({
   at that moment the process that ran the turn has already exited and the
   commands that finished it have too. Nobody is behind this record.
 
-  Leaving it standing is what made a single agent unable to keep working: it
-  came back for its next turn, found the seat still held by the record of its
-  own last one, and attached as an observer of itself - taking no further work
-  and asking the reviewer, every turn, whether to promote a second agent that
-  did not exist (BIG-171).
+  Leaving it standing forever is what made a single agent unable to keep
+  working: it came back for its next turn, found the seat still held by the
+  record of its own last one, and attached as an observer of itself - taking no
+  further work and asking the reviewer, every turn, whether to promote a second
+  agent that did not exist (BIG-171).
+
+  Dropping it the instant the claim closed was just as wrong the other way. The
+  agent publishes and the seat is empty in the same millisecond, so a waiting
+  observer the reviewer had explicitly left as an observer promoted itself on
+  its very next refresh - silently reversing an answer the reviewer had given.
+  The window between the two is the outgoing agent's own return trip: the
+  `next` command `respond` hands back carries its token and reclaims this
+  record at once, and nothing else may take the seat until that chance has
+  passed.
   */
   if (
     agent.claimClosedAtMs !== undefined &&
     agent.signalAtMs <= agent.claimClosedAtMs
   ) {
-    return false;
+    return agentIsLive({
+      agent: { signalAtMs: agent.claimClosedAtMs },
+      nowMs,
+      maximumAgeMs: AGENT_STALL_MS,
+    });
   }
   return agentIsLive({
     agent,
@@ -216,6 +238,72 @@ export const agentIsAttached = ({
 };
 
 /**
+ * One attached agent as the browser is allowed to see it.
+ *
+ * Two things are true of this shape and neither is cosmetic. The pickup token
+ * is the capability that fences publication, so it never leaves the server;
+ * and membership arrives already decided, because the fields it is decided
+ * from are among the ones withheld. A browser handed the inputs would answer a
+ * different question from the server it is drawing, which is exactly what it
+ * did: it dropped a working primary from the rail after 75 seconds and then
+ * offered a hand-off with no confirmation, because as far as it could tell
+ * there was nobody to displace.
+ */
+export type RosterAgent = Omit<
+  AttachedAgent,
+  "claimToken" | "claimClosedAtMs" | "inheritedDraftPath"
+> & {
+  readonly attached: boolean;
+};
+
+/**
+ * What every selector below needs of a record, from either side of the wire.
+ *
+ * The server passes its own `AttachedAgent`s and the browser passes the
+ * projection above, so the rules that decide who is primary are one
+ * implementation rather than two that can drift.
+ */
+export type RosterMember = Pick<
+  AttachedAgent,
+  | "writerId"
+  | "role"
+  | "attachedAtMs"
+  | "signalAtMs"
+  | "requestedPrimacyAtMs"
+  | "claimToken"
+  | "claimClosedAtMs"
+  | "model"
+> & {
+  readonly attached?: boolean;
+};
+
+/**
+ * Projects the roster into the browser's copy, membership already answered.
+ *
+ * This is the single place that fact is computed for a reviewer's surface,
+ * which is what keeps the rail, the request card, and the confirmation dialog
+ * unable to disagree with the roster they are drawn from.
+ */
+export const projectRosterForBrowser = ({
+  agents,
+  nowMs,
+}: {
+  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly nowMs: number;
+}): ReadonlyArray<RosterAgent> =>
+  agents.map((agent) => ({
+    writerId: agent.writerId,
+    role: agent.role,
+    attachedAtMs: agent.attachedAtMs,
+    signalAtMs: agent.signalAtMs,
+    ...(agent.requestedPrimacyAtMs === undefined
+      ? {}
+      : { requestedPrimacyAtMs: agent.requestedPrimacyAtMs }),
+    ...(agent.model === undefined ? {} : { model: agent.model }),
+    attached: agentIsAttached({ agent, nowMs }),
+  }));
+
+/**
  * The agents a reviewer should be shown, oldest attachment first.
  *
  * Order is by attachment rather than by role, because the rail lists agents as
@@ -223,9 +311,9 @@ export const agentIsAttached = ({
  * and who turned up". Ties fall back to the writer id so the order is total
  * and two records written in the same millisecond cannot swap between polls.
  */
-export const orderAttachedAgents = (
-  agents: ReadonlyArray<AttachedAgent>,
-): ReadonlyArray<AttachedAgent> =>
+export const orderAttachedAgents = <Agent extends RosterMember>(
+  agents: ReadonlyArray<Agent>,
+): ReadonlyArray<Agent> =>
   [...agents].sort(
     (left, right) =>
       left.attachedAtMs - right.attachedAtMs ||
@@ -233,25 +321,25 @@ export const orderAttachedAgents = (
   );
 
 /** The live agent holding primacy, when there is one. */
-export const selectPrimaryAgent = ({
+export const selectPrimaryAgent = <Agent extends RosterMember>({
   agents,
   nowMs,
 }: {
-  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly agents: ReadonlyArray<Agent>;
   readonly nowMs: number;
-}): AttachedAgent | undefined =>
+}): Agent | undefined =>
   orderAttachedAgents(agents).find(
     (agent) => agent.role === "primary" && agentIsAttached({ agent, nowMs }),
   );
 
 /** The live observers, in the order the rail lists them. */
-export const selectObserverAgents = ({
+export const selectObserverAgents = <Agent extends RosterMember>({
   agents,
   nowMs,
 }: {
-  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly agents: ReadonlyArray<Agent>;
   readonly nowMs: number;
-}): ReadonlyArray<AttachedAgent> =>
+}): ReadonlyArray<Agent> =>
   orderAttachedAgents(agents).filter(
     (agent) => agent.role === "observer" && agentIsAttached({ agent, nowMs }),
   );
@@ -263,13 +351,13 @@ export const selectObserverAgents = ({
  * cannot tell which answer applies to which agent, and the second question is
  * still there after the first is answered.
  */
-export const pendingPrimacyRequest = ({
+export const pendingPrimacyRequest = <Agent extends RosterMember>({
   agents,
   nowMs,
 }: {
-  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly agents: ReadonlyArray<Agent>;
   readonly nowMs: number;
-}): AttachedAgent | undefined =>
+}): Agent | undefined =>
   selectObserverAgents({ agents, nowMs }).find(
     (agent) => agent.requestedPrimacyAtMs !== undefined,
   );
@@ -292,7 +380,7 @@ export const agentPrimacyHealth = ({
   agents,
   nowMs,
 }: {
-  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly agents: ReadonlyArray<RosterMember>;
   readonly nowMs: number;
 }): AgentPrimacyHealth =>
   pendingPrimacyRequest({ agents, nowMs }) === undefined
@@ -310,7 +398,7 @@ export const roleForArrivingAgent = ({
   agents,
   nowMs,
 }: {
-  readonly agents: ReadonlyArray<AttachedAgent>;
+  readonly agents: ReadonlyArray<RosterMember>;
   readonly nowMs: number;
 }): AgentRole =>
   selectPrimaryAgent({ agents, nowMs }) === undefined ? "primary" : "observer";

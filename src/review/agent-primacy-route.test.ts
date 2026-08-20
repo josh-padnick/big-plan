@@ -11,9 +11,20 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  deriveSnapshotDigest,
+  messageAgentRequest,
+  readAgentExchange,
+  writeAgentRequest,
+} from "./agent-exchange.js";
+import { claimAgentRequest } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { attachAgentToRoster, readAgentRoster } from "./store.js";
+import {
+  attachAgentToRoster,
+  readAgentRoster,
+  recordAgentClaimToken,
+} from "./store.js";
 import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import type { AttachedAgent } from "./shared/agent-primacy.js";
 
@@ -229,6 +240,106 @@ describe("the reviewer's primacy answer over the wire", () => {
     await expect(rosterOf(runtime)).resolves.toEqual([
       expect.objectContaining({ writerId: "incumbent" }),
     ]);
+  });
+
+  /*
+  Attaches an agent that is mid turn: on the roster, and holding the claim on a
+  real request. The claim is what actually fences publication, so a card that
+  promises an agent is dropped from the review has to reach it.
+  */
+  const attachWorkingPrimary = async ({
+    runtime,
+    writerId,
+  }: {
+    readonly runtime: ReviewRuntime;
+    readonly writerId: string;
+  }): Promise<string> => {
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "1212121212121212",
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+      premiseSnapshot: deriveSnapshotDigest(PLAN),
+      createdAt: "2026-08-19T12:00:00.000Z",
+      body: "Answer this.",
+    });
+    await writeAgentRequest({ store: runtime.store, request });
+    const claimToken = "abcdefabcdefabcd";
+    await claimAgentRequest({
+      store: runtime.store,
+      activeSessionId: runtime.sessionId,
+      requestId: request.requestId,
+      claimedBy: claimToken,
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await attach({ runtime, writerId });
+    await recordAgentClaimToken({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId,
+      claimToken,
+    });
+    return request.requestId;
+  };
+
+  const claimHolderOf = async ({
+    runtime,
+    requestId,
+  }: {
+    readonly runtime: ReviewRuntime;
+    readonly requestId: string;
+  }): Promise<string | undefined> =>
+    (
+      await readAgentExchange({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+      })
+    ).requests.find((request) => request.requestId === requestId)?.claimedBy;
+
+  it("should fence the turn a disconnected agent was part way through", async () => {
+    // Removing the record is not a fence on its own: the commands that finish
+    // a turn know their token and not their registration, so a disconnected
+    // agent still published the revision the reviewer had just removed it
+    // from. The card promises it is dropped from this review; this is what
+    // makes that true.
+    const { runtime, token } = await startReview();
+    const requestId = await attachWorkingPrimary({
+      runtime,
+      writerId: "incumbent",
+    });
+
+    const response = await answerPrimacy({
+      runtime,
+      token,
+      body: { writerId: "incumbent", answer: "disconnect" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(
+      claimHolderOf({ runtime, requestId }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("should leave the working primary alone when an observer is disconnected", async () => {
+    const { runtime, token } = await startReview();
+    const requestId = await attachWorkingPrimary({
+      runtime,
+      writerId: "incumbent",
+    });
+    await attach({ runtime, writerId: "arriving" });
+
+    const response = await answerPrimacy({
+      runtime,
+      token,
+      body: { writerId: "arriving", answer: "disconnect" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(claimHolderOf({ runtime, requestId })).resolves.toBe(
+      "abcdefabcdefabcd",
+    );
   });
 
   it("should hand the outgoing draft over only when the reviewer asked for it", async () => {

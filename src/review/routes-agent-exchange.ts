@@ -123,26 +123,29 @@ export const readAgentSnapshot = async (
   const agents = await readAgentRoster({ store, sessionId });
   return jsonResponse({
     status: 200,
-    value: encodeAgentSnapshot({
-      // The browser reloads only revisions the response command has
-      // rendered, linted, and accepted. Watching the raw file here would
-      // navigate the reviewer onto a transient parse error while an agent
-      // is midway through editing the authoritative MDX.
-      currentSnapshot: readerProgress.currentSnapshot(),
-      presence: {
-        ...presence,
-        ...(disconnect === undefined
-          ? {}
-          : { disconnectRequestedAtMs: disconnect.requestedAtMs }),
+    value: encodeAgentSnapshot(
+      {
+        // The browser reloads only revisions the response command has
+        // rendered, linted, and accepted. Watching the raw file here would
+        // navigate the reviewer onto a transient parse error while an agent
+        // is midway through editing the authoritative MDX.
+        currentSnapshot: readerProgress.currentSnapshot(),
+        presence: {
+          ...presence,
+          ...(disconnect === undefined
+            ? {}
+            : { disconnectRequestedAtMs: disconnect.requestedAtMs }),
+        },
+        agents,
+        connectionLog,
+        plan: context.resolvedPlanPath,
+        agentCommand: context.agentCommand,
+        recoveryPrompt: context.recoveryPrompt,
+        requests: exchange.requests,
+        responses: exchange.responses,
       },
-      agents,
-      connectionLog,
-      plan: context.resolvedPlanPath,
-      agentCommand: context.agentCommand,
-      recoveryPrompt: context.recoveryPrompt,
-      requests: exchange.requests,
-      responses: exchange.responses,
-    }),
+      { nowMs: Date.now() },
+    ),
   });
 };
 
@@ -736,14 +739,27 @@ export const answerAgentPrimacy = async (
   // The same test the cards are drawn from. A record the roster has stopped
   // counting as here describes a process that is gone, and answering a
   // question about it would install a dead agent as the plan's primary.
-  if (
-    !attached.some(
-      (agent) =>
-        agent.writerId === writerId && agentIsAttached({ agent, nowMs }),
-    )
-  ) {
+  const target = attached.find(
+    (agent) => agent.writerId === writerId && agentIsAttached({ agent, nowMs }),
+  );
+  if (target === undefined) {
     return refusal({ status: 404, reason: "That agent is not attached" });
   }
+  /*
+  Whether this answer leaves a turn in flight behind it.
+
+  Removing the record is not by itself a fence: the commands that finish a turn
+  know their token and not their registration, so a disconnected agent whose
+  claim was left open still publishes the revision the reviewer had just
+  removed it from - and the card promised the opposite. The release below is
+  the same boundary a hand-off uses, and it is taken only when this agent is
+  the one holding the claim, because it frees every open claim on the plan and
+  disconnecting an observer must not fence the primary that is working.
+  */
+  const disconnectingAHeldTurn =
+    answer === "disconnect" &&
+    target.claimToken !== undefined &&
+    target.claimClosedAtMs === undefined;
   /*
   The reviewer may hand the outgoing agent's unpublished draft to the new
   primary. It is resolved before anything moves, because the release below is
@@ -793,6 +809,9 @@ export const answerAgentPrimacy = async (
     ) {
       return refusal({ status: 404, reason: "That agent is not attached" });
     }
+    await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
+  }
+  if (disconnectingAHeldTurn) {
     await releaseClaimsForPrimacyHandoff({ store, sessionId, planId });
   }
   await appendProgressBestEffort({
