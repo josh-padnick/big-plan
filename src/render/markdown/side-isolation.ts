@@ -112,14 +112,25 @@ const forEachElement = ({
   }
 };
 
-const identityPrefixFor = (identifiers: ReadonlyArray<string>): string => {
-  const fingerprint = [...identifiers].sort().join("\0");
+const identityPrefixFor = ({
+  identifiers,
+  key,
+}: {
+  readonly identifiers: ReadonlyArray<string>;
+  readonly key: string;
+}): string => {
+  const fingerprint = `${key}\0${[...identifiers].sort().join("\0")}`;
   let hash = 2166136261;
   for (const character of fingerprint) {
     hash ^= character.charCodeAt(0);
     hash = Math.imul(hash, 16777619);
   }
   return `diff-baseline-${(hash >>> 0).toString(36)}-`;
+};
+
+const sanitizeIsolationKey = (key: string): string => {
+  const safe = key.replace(/[^a-z0-9]+/giu, "-").replace(/^-+|-+$/g, "");
+  return safe.length > 0 ? safe : "side";
 };
 
 const rewriteReferences = ({
@@ -159,7 +170,10 @@ const rewriteReferences = ({
   );
 };
 
-const namespaceOrdinaryIdentity = (subtree: Element): void => {
+const namespaceOrdinaryIdentity = (
+  subtree: Element,
+  isolationKey: string,
+): void => {
   const originalIds: Array<string> = [];
   forEachElement({
     node: subtree,
@@ -172,7 +186,10 @@ const namespaceOrdinaryIdentity = (subtree: Element): void => {
   if (originalIds.length === 0) {
     return;
   }
-  const prefix = identityPrefixFor(originalIds);
+  const prefix = identityPrefixFor({
+    identifiers: originalIds,
+    key: isolationKey,
+  });
   const identifiers = new Map(
     originalIds.map((id) => [id, `${prefix}${id}`] as const),
   );
@@ -247,14 +264,21 @@ const holdRootAffordancesInert = (subtree: Element): void => {
  * Applies every per-side rule to one baseline rendering: mark it, keep review
  * identity out of it, namespace its ordinary DOM identity, and hold its root
  * affordances inert so the proposed side remains the one live owner.
+ *
+ * `key` distinguishes two baseline subtrees that happen to carry the same
+ * original ids. It is folded into the prefix, so the same subtree isolated
+ * under the same key always namespaces the same way, and two copies in one
+ * document do not collide. Increment 3 will pass the instance it is isolating.
  */
 export const isolateBaselineSide = ({
   subtree,
+  key = "side",
 }: {
   readonly subtree: Element;
+  readonly key?: string;
 }): void => {
   subtree.properties[DIFF_SIDE_ATTRIBUTE] = DIFF_BASELINE_SIDE;
   stripReviewIdentity(subtree);
-  namespaceOrdinaryIdentity(subtree);
+  namespaceOrdinaryIdentity(subtree, sanitizeIsolationKey(key));
   holdRootAffordancesInert(subtree);
 };

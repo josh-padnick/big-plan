@@ -409,6 +409,26 @@ describe("side isolation", () => {
     expect(inertButtons.length).toBeGreaterThan(0);
   });
 
+  it("should give two identical baseline subtrees different ordinary ids", () => {
+    const copy = (): Element => ({
+      type: "element",
+      tagName: "label",
+      properties: { id: "choice", htmlFor: "choice" },
+      children: [],
+    });
+    const first = copy();
+    const second = copy();
+    isolateBaselineSide({ subtree: first, key: "was-a" });
+    isolateBaselineSide({ subtree: second, key: "was-b" });
+    const firstId = ordinaryIdsOf(first)[0];
+    const secondId = ordinaryIdsOf(second)[0];
+    expect(firstId).toBeDefined();
+    expect(secondId).toBeDefined();
+    expect(firstId).not.toBe(secondId);
+    expect(htmlForTargets(first)).toEqual([firstId]);
+    expect(htmlForTargets(second)).toEqual([secondId]);
+  });
+
   it("should mint the same proposed-side block ids as the same document without a baseline side", () => {
     const withoutBaseline = compileMarkdown({ markdown: BOTH_SIDES_FIXTURE });
     const { root } = documentWithBothSides();
