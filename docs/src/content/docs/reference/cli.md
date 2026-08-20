@@ -197,12 +197,12 @@ new address.
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
 a model provider itself. The launched coding-agent session uses:
 
-- `agent next <input.mdx> --wait [--agent <token>] [--connection <token>]` to receive the oldest pending feedback,
+- `agent next <input.mdx> --wait` to receive the oldest pending feedback,
   thread reply, or plan-wide chat question, its prior conversation, a validated
   response template, the private candidate to edit, and the exact publish command;
-- `agent note <input.mdx> "<progress>" --agent <token>` to keep the reviewer
+- `agent note <input.mdx> "<progress>"` to keep the reviewer
   informed as each meaningful work step begins; and
-- `agent respond <input.mdx> <response.json> --agent <token>` to publish one
+- `agent respond <input.mdx> <response.json>` to publish one
   complete answer, and the candidate it was written against, after that
   candidate has rendered and passed lint.
 
