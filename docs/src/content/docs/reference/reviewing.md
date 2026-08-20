@@ -137,7 +137,7 @@ directory such as `.big-plan/`, and any path that leaves the plan's directory
 are all refused.
 
 Comments, replies, and plan-wide chat accept PNG, JPEG, and WebP screenshots.
-Paste an image into a composer, drop a file onto it, or choose **Choose image**.
+Paste an image into a composer or drag and drop a file onto it.
 The runtime stores each image by its SHA-256 digest and inserts a Markdown
 reference into the message.
 Images are limited to four per message, 10 MiB per image, and 20 MiB total.
