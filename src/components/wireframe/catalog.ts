@@ -211,7 +211,7 @@ const LIST_ITEM_SCHEMA = {
 } satisfies ComponentAttributeSchema;
 
 const CHOICE_CARD_SCHEMA = {
-  icon: { kind: "string", required: true, nonEmpty: true },
+  emoji: { kind: "string", nonEmpty: true },
   title: { kind: "string", required: true, nonEmpty: true },
   description: { kind: "string", required: true, nonEmpty: true },
   selected: { kind: "booleanShorthand" },
@@ -889,7 +889,7 @@ const CATALOG = {
     summary:
       "Two to five simple alternatives as one dominant touch decision; each option supplies an icon, title, and one-line consequence.",
     example:
-      '<ChoiceGroup><ChoiceCard icon="⚽" title="Ask about a purchase" description="See how much money I would have left" /></ChoiceGroup>',
+      '<ChoiceGroup><ChoiceCard emoji="⚽" title="Ask about a purchase" description="See how much money I would have left" /></ChoiceGroup>',
     compile: ({ attributes, children, position, diagnostics }) => {
       validateComponentAttributes({
         component: "ChoiceGroup",
@@ -912,9 +912,9 @@ const CATALOG = {
     acceptsChildren: false,
     allowedParents: ["ChoiceGroup"],
     summary:
-      "One whole-surface touch option. selected adds radio, check, border, and fill signals; navigateTo may reveal the deliberate selected state.",
+      "One whole-surface touch option. Optional emoji draws card art for the option - a card without it reads fine, and a glyph-set name never belongs here. selected adds radio, check, border, and fill signals; navigateTo may reveal the deliberate selected state.",
     example:
-      '<ChoiceCard icon="⚽" title="Ask about a purchase" description="See how much money I would have left" navigateTo="purchase-selected" />',
+      '<ChoiceCard emoji="⚽" title="Ask about a purchase" description="See how much money I would have left" navigateTo="purchase-selected" />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "ChoiceCard",
@@ -925,7 +925,7 @@ const CATALOG = {
       });
       return {
         element: "ChoiceCard",
-        icon: validated.icon ?? "",
+        ...(validated.emoji === undefined ? {} : { emoji: validated.emoji }),
         title: validated.title ?? "",
         description: validated.description ?? "",
         selected: validated.selected === true,
@@ -940,7 +940,7 @@ const CATALOG = {
     acceptsChildren: false,
     allowedParents: ["List"],
     summary:
-      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen. status draws a state mark (done, attention, waiting, blocked) so a checklist is scannable without reading every line.",
+      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen and draws a trailing push chevron, except in the collection pane of a master/detail row, where it selects the record in place instead. status draws a state mark (done, attention, waiting, blocked) so a checklist is scannable without reading every line.",
     example:
       '<ListItem label="Checkout freeze" meta="Northwind · Priority" value="14m · #4821" navigateTo="ticket" />',
     compile: ({ attributes, position, diagnostics }) => {

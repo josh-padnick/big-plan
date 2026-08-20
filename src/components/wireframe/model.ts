@@ -554,7 +554,7 @@ export type WireframeNode =
     }
   | {
       readonly element: "ChoiceCard";
-      readonly icon: string;
+      readonly emoji?: string;
       readonly title: string;
       readonly description: string;
       readonly selected: boolean;

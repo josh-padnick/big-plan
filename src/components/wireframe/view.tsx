@@ -567,9 +567,11 @@ const WireframeElement = ({
             ? {}
             : { "data-wireframe-navigate": node.navigateTo })}
         >
-          <span className="wireframe-choice-icon" aria-hidden="true">
-            {node.icon}
-          </span>
+          {node.emoji === undefined ? null : (
+            <span className="wireframe-choice-icon" aria-hidden="true">
+              {node.emoji}
+            </span>
+          )}
           <span className="wireframe-choice-copy">
             <span className="wireframe-choice-title">{node.title}</span>
             <span className="wireframe-choice-description">

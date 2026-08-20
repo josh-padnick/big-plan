@@ -1277,6 +1277,13 @@ marks and a plan diff never jitters.
       [data-wireframe-device="tablet"],
       [data-wireframe-device="tablet-portrait"]
     )
+    .wireframe-choice-card:not(:has(> .wireframe-choice-icon)) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
     .wireframe-choice-icon {
     width: 3.75rem;
     height: 3.75rem;
@@ -2383,6 +2390,12 @@ marks and a plan diff never jitters.
     background: var(--color-paper);
     text-align: left;
     cursor: pointer;
+  }
+  /* A card with no art is two columns, not three with an empty first one, so
+     the copy starts at the card's leading edge and the selection control
+     stays at its end. */
+  .wireframe-choice-card:not(:has(> .wireframe-choice-icon)) {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
   .wireframe-choice-card:hover {
     border-color: var(--wf-stroke);

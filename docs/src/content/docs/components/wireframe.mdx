@@ -189,9 +189,9 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Divider`          | Optional `label`.                                                                                                   |
 | `ImagePlaceholder` | Required `label`; optional `shape="square\|wide\|tall"`.                                                            |
 | `List`             | Holds only `ListItem`.                                                                                              |
-| `ListItem`         | Required `label`; optional `meta`, `value`, `status="done\|attention\|waiting\|blocked"`, `selected`, and `navigateTo`; valid only in `List`. A row with `navigateTo` draws a trailing push chevron on its own. |
+| `ListItem`         | Required `label`; optional `meta`, `value`, `status="done\|attention\|waiting\|blocked"`, `selected`, and `navigateTo`; valid only in `List`. A row with `navigateTo` draws a trailing push chevron on its own, except in the collection pane of a master/detail row, where it selects in place. |
 | `ChoiceGroup`      | Holds two to five `ChoiceCard` options as one dominant simple-decision surface.                                     |
-| `ChoiceCard`       | Required `icon`, `title`, and one-line `description`; optional `selected` and `navigateTo`; valid only in `ChoiceGroup`. Its `icon` is a large identifying pictogram for the option, not a glyph from the named set below. |
+| `ChoiceCard`       | Required `title` and one-line `description`; optional `emoji`, `selected`, and `navigateTo`; valid only in `ChoiceGroup`. Its `emoji` is large card art identifying that one option, never a glyph from the named set below; a card without it reads fine. |
 | `Message`          | Required `author`, `time`, and `text`; optional `kind="customer\|agent\|internal"`.                                  |
 
 ### Forms and flows

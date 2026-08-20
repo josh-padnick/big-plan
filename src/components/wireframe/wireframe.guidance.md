@@ -108,6 +108,7 @@ Implementation principles:
 - Use decoration only to identify content, communicate state, reinforce the emotional goal, or explain an unfinished visual decision.
 - Draw an icon the product actually shows as an `Icon`, or as `icon` on the `Button` that owns it, never as a character typed into a label. A mark typed into copy is not a mark a reviewer can judge: it takes the label's size instead of its own, it cannot be told apart from the words around it, and it reaches a screen reader as part of the sentence. Give each meaning one named glyph and reuse it on every screen, so the drawing reads as one system.
 - Keep the two owners separate. `Icon` is a mark that identifies or annotates and is never clickable; anything a person clicks is a `Button` carrying the same named glyph. One drawn affordance never has two ways to be authored.
+- `icon` always names a glyph from the closed set, with one attribute that is not an icon at all: a `ChoiceCard` takes an optional `emoji`, which is card art identifying that one option rather than a glyph the drawing reuses. Card art is optional and a card without it reads fine, so leave `emoji` off rather than inventing decoration to fill it, and never put a glyph name there.
 - Reach for `iconOnly` only where the product would: a toolbar of marks a user already recognizes, a close control, a copy affordance beside the thing it copies. An icon-only control still carries its `label`, which becomes its accessible name and its tooltip, so hiding the words never hides the meaning. A row of unrecognizable icon-only controls is worse than a row of short labels.
 - Size an icon by its job rather than by taste: `sm` rides a line of metadata, `md` stands with body copy, and `lg` is the one mark a screen is about or a target a finger reaches for. The steps are multiples of the artboard's own body type, so the same authored size is correct on every device.
 - Anchor a bar's two ends with two `Group`s inside `<Row justify="between">`. A `Row` gives a flexible share only to a `Panel`, `Stack`, `Row`, or `Center`; loose children such as a `Heading`, a `Text`, or a `Button` keep their natural width and cluster at the start, and `justify="between"` then spreads all four of a title and three buttons evenly rather than settling two ends. Wrapping each side in a `Group` makes the row exactly two items, and those two settle where the product puts them. `TopBar` already reads this way - its title leads and its loose controls trail - so reach for `Group` when a `Row`, a panel header, or a command bar needs the same split.
@@ -144,7 +145,7 @@ The two shapes, side by side - panes directly in the row, controls clustered at 
 
 Reject equal-weight regions, a simple tablet choice split into columns, thin-line pseudo-selection, graph paper louder than the decision, a shrunken desktop form floating in an iPad, four squeezed full-screen panes, card walls, floating metadata or actions, cramped comparison headers, criteria styled like option titles, definitions that read as answers, comment borders crossing text, repeated anchored context, detached tray actions, unrelated dependencies, recommendation/value ambiguity, oversized empty panels, nonparallel choices, decorative filler, icons typed into labels as characters, unlabelled icon-only controls, placeholder glyphs left in a delivered plan, toolbar controls clustered against their own title, and anything visually louder than its importance.
 
-Defaults keep panels plain, derive dominant panes, give secondary width to `Rail`, draw a push chevron on any `ListItem` that names a screen, and lead a `TopBar` with a `Group` written first and then its title while every later child trails; a `Group` hugs what it holds so two of them anchor a row's two ends. The derivation names exactly one collection per row - the first pane holding a `List` or `Table` - so a detail pane that also holds a list (properties, context, a checklist) stays the primary surface instead of becoming a second bounded column. That derivation is device-independent: a tablet master/detail row is proportioned the same way a desktop one is. Compilation blocks equal desktop thirds, four-or-more outlined sibling panels, and a pane or collection wrapped in a `Group`; lint blocks a Row past its device's column budget; a ramp test keeps the type roles a visible step apart; geometry tests block cramped panes, overlap, manufactured dead bands, painted type below the legibility floor, and a primary surface less than a third wider than the panes beside it.
+Defaults keep panels plain, derive dominant panes, give secondary width to `Rail`, draw a push chevron on a `ListItem` that names a screen unless it sits in the collection pane of a master/detail row, where naming a screen selects in place and the detail is already drawn beside it, and lead a `TopBar` with a `Group` written first and then its title while every later child trails; a `Group` hugs what it holds so two of them anchor a row's two ends. The derivation names exactly one collection per row - the first pane holding a `List` or `Table` - so a detail pane that also holds a list (properties, context, a checklist) stays the primary surface instead of becoming a second bounded column. That derivation is device-independent: a tablet master/detail row is proportioned the same way a desktop one is. Compilation blocks equal desktop thirds, four-or-more outlined sibling panels, and a pane or collection wrapped in a `Group`; lint blocks a Row past its device's column budget; a ramp test keeps the type roles a visible step apart; geometry tests block cramped panes, overlap, manufactured dead bands, painted type below the legibility floor, and a primary surface less than a third wider than the panes beside it.
 
 ## E · Explicit change
 
@@ -257,13 +258,13 @@ Simple tablet choice:
       />
       <ChoiceGroup>
         <ChoiceCard
-          icon="⚽"
+          emoji="⚽"
           title="Ask about a purchase"
           description="See how much money I would have left"
           navigateTo="purchase-selected"
         />
         <ChoiceCard
-          icon="💵"
+          emoji="💵"
           title="Ask about my loan"
           description="See what I owe and ask a question"
           navigateTo="loan-selected"
@@ -284,13 +285,13 @@ Simple tablet choice:
       />
       <ChoiceGroup>
         <ChoiceCard
-          icon="⚽"
+          emoji="⚽"
           title="Ask about a purchase"
           description="See how much money I would have left"
           selected
         />
         <ChoiceCard
-          icon="💵"
+          emoji="💵"
           title="Ask about my loan"
           description="See what I owe and ask a question"
           navigateTo="loan-selected"
@@ -316,13 +317,13 @@ Simple tablet choice:
       />
       <ChoiceGroup>
         <ChoiceCard
-          icon="⚽"
+          emoji="⚽"
           title="Ask about a purchase"
           description="See how much money I would have left"
           navigateTo="purchase-selected"
         />
         <ChoiceCard
-          icon="💵"
+          emoji="💵"
           title="Ask about my loan"
           description="See what I owe and ask a question"
           selected

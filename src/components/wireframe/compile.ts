@@ -698,14 +698,16 @@ const checkOneClearJob = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const pageHeaders = flattenNodes(screen.children).filter(
-    (node) => node.element === "PageHeader",
-  );
-  if (pageHeaders.length > 1) {
-    diagnostics.add({
-      message: `Screen "${screen.id}" draws ${pageHeaders.length} PageHeaders; keep one page-level job and move the other task into another Screen`,
-      position,
-    });
+  for (const layer of screenLayers(screen)) {
+    const pageHeaders = flattenNodes(layer.nodes).filter(
+      (node) => node.element === "PageHeader",
+    );
+    if (pageHeaders.length > 1) {
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} draws ${pageHeaders.length} PageHeaders; keep one page-level job and move the other task into another Screen`,
+        position,
+      });
+    }
   }
 };
 

@@ -157,7 +157,7 @@ const choiceGroup = (selected?: ChoiceName): ScopedChild =>
       element({
         name: "ChoiceCard",
         attributes: {
-          icon: "⚽",
+          emoji: "⚽",
           title: "Ask about a purchase",
           description: "See how much money I would have left",
           ...(selected === "purchase"
@@ -168,7 +168,7 @@ const choiceGroup = (selected?: ChoiceName): ScopedChild =>
       element({
         name: "ChoiceCard",
         attributes: {
-          icon: "💵",
+          emoji: "💵",
           title: "Ask about my loan",
           description: "See what I owe and ask a question",
           ...(selected === "loan"
@@ -2147,7 +2147,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         element({
           name: "ChoiceCard",
           attributes: {
-            icon: "⚽",
+            emoji: "⚽",
             title: "Ask about a purchase",
             description: "See how much money I would have left",
             navigateTo: "purchase-selected",
@@ -2156,7 +2156,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         element({
           name: "ChoiceCard",
           attributes: {
-            icon: "💵",
+            emoji: "💵",
             title: "Ask about my loan",
             description: "See what I owe and ask a question",
             navigateTo: "purchase-selected",
@@ -2180,6 +2180,123 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics[0]?.message).toContain(
       "every option needs its own truthful visible outcome",
     );
+  });
+
+  it("should draw a choice card's art only when the author wrote it", () => {
+    // Every card in the plan carries art, or none does, so the assertion about
+    // the drawn art slot is about the whole rendered wireframe.
+    const cards = (art: boolean, selected?: ChoiceName): ScopedChild =>
+      element({
+        name: "ChoiceGroup",
+        children: [
+          element({
+            name: "ChoiceCard",
+            attributes: {
+              ...(art ? { emoji: "⚽" } : {}),
+              title: "Ask about a purchase",
+              description: "See how much money I would have left",
+              ...(selected === "purchase"
+                ? { selected: true }
+                : { navigateTo: "purchase-selected" }),
+            },
+          }),
+          element({
+            name: "ChoiceCard",
+            attributes: {
+              ...(art ? { emoji: "💵" } : {}),
+              title: "Ask about my loan",
+              description: "See what I owe and ask a question",
+              ...(selected === "loan"
+                ? { selected: true }
+                : { navigateTo: "loan-selected" }),
+            },
+          }),
+        ],
+      });
+    const plan = (art: boolean) =>
+      compile({
+        scopedChildren: [
+          screen({
+            id: "choose",
+            attributes: { device: "tablet" },
+            children: [cards(art)],
+          }),
+          ...(["purchase", "loan"] as const).map((selected) =>
+            screen({
+              id: `${selected}-selected`,
+              name: `${selected} selected`,
+              attributes: { device: "tablet" },
+              children: [
+                cards(art, selected),
+                element({
+                  name: "Button",
+                  attributes: { label: "Continue", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ),
+        ],
+      });
+
+    const withArt = plan(true);
+    expect(withArt.diagnostics).toEqual([]);
+    const drawn = elementWithClass({
+      node: render(withArt.compiled),
+      className: "wireframe-choice-icon",
+    });
+    expect(drawn).toBeDefined();
+    expect(html(drawn as Element)).toContain("⚽");
+
+    // Card art is optional, and a card without it draws no art slot at all
+    // rather than an empty one a reader would take for a missing mark.
+    const withoutArt = plan(false);
+    expect(withoutArt.diagnostics).toEqual([]);
+    expect(
+      elementWithClass({
+        node: render(withoutArt.compiled),
+        className: "wireframe-choice-icon",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should refuse a glyph-set name written as a choice card icon", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "ChoiceGroup",
+              children: [
+                element({
+                  name: "ChoiceCard",
+                  attributes: {
+                    icon: "star",
+                    title: "Ask about a purchase",
+                    description: "See how much money I would have left",
+                    navigateTo: "purchase-selected",
+                  },
+                }),
+                element({
+                  name: "ChoiceCard",
+                  attributes: {
+                    title: "Ask about my loan",
+                    description: "See what I owe and ask a question",
+                    navigateTo: "loan-selected",
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Unknown attribute "icon" on ChoiceCard',
+    ]);
   });
 
   it("should reject preselection on the initial consequential choice", () => {
@@ -2715,6 +2832,41 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     // A drawing of a modal must not hide the plan around it from a reader
     // using assistive technology, so the instruction to do that is never set.
     expect(rendered).not.toContain("ariaModal");
+  });
+
+  it("should judge a page header apart from the overlay drawn over it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "plans",
+          children: [
+            element({ name: "PageHeader", attributes: { title: "Plans" } }),
+            element({
+              name: "Panel",
+              attributes: { title: "Plans" },
+              children: [
+                element({ name: "Text", attributes: { text: "One" } }),
+              ],
+            }),
+            element({
+              name: "Overlay",
+              attributes: { title: "Rename" },
+              children: [
+                element({
+                  name: "PageHeader",
+                  attributes: { title: "Rename this plan" },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Rename", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
   });
 
   it("should report an overlay with no page under it and no way out", () => {
