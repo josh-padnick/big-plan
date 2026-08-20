@@ -274,7 +274,22 @@ const installColumnPointerReorder = ({
 // refresh replaces them all. The scroll and resize listeners register once and
 // call through this mutable reference.
 let applyScrollSpy = () => {};
+let pendingDesktopTocNavigation = null;
+const wiredDesktopTocNavigationLinks = new WeakSet();
+addEventListener("scrollend", () => {
+  const navigation = pendingDesktopTocNavigation;
+  if (navigation === null) return;
+  requestAnimationFrame(() => {
+    if (pendingDesktopTocNavigation === navigation)
+      pendingDesktopTocNavigation = null;
+  });
+});
 const wireScrollSpy = () => {
+  if (
+    pendingDesktopTocNavigation !== null &&
+    !pendingDesktopTocNavigation.list.isConnected
+  )
+    pendingDesktopTocNavigation = null;
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
   const overviewLinks = Array.from(
     document.querySelectorAll("[data-overview-link]"),
@@ -291,6 +306,38 @@ const wireScrollSpy = () => {
     applyScrollSpy = () => {};
     window.__bigPlanRefreshScrollSpy = applyScrollSpy;
     return;
+  }
+  for (const link of links) {
+    if (
+      wiredDesktopTocNavigationLinks.has(link) ||
+      link.closest("[data-desktop-toc]") === null
+    )
+      continue;
+    wiredDesktopTocNavigationLinks.add(link);
+    link.addEventListener("click", (event) => {
+      const target = link.getAttribute("target");
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        link.hasAttribute("download") ||
+        (target !== null && target.toLowerCase() !== "_self")
+      )
+        return;
+      const list = link.closest("[data-desktop-toc-list]");
+      if (!(list instanceof HTMLElement)) return;
+      if (link.getAttribute("aria-current") === "true") {
+        pendingDesktopTocNavigation = null;
+        return;
+      }
+      pendingDesktopTocNavigation = {
+        list,
+        scrollTop: list.scrollTop,
+      };
+    });
   }
   const isReadableHeading = (heading) => {
     if (!(heading instanceof Element)) return false;
@@ -323,6 +370,32 @@ const wireScrollSpy = () => {
     }
     return true;
   };
+  let revealedHeading = null;
+  const revealCurrentDesktopLink = (heading) => {
+    if (heading === null || heading === revealedHeading) return;
+    revealedHeading = heading;
+    const sectionLinks = targets.get(heading) || [];
+    const link = sectionLinks.find(
+      (candidate) => candidate.closest("[data-desktop-toc]") !== null,
+    );
+    const list = link?.closest("[data-desktop-toc-list]");
+    if (!(link instanceof HTMLElement) || !(list instanceof HTMLElement))
+      return;
+    if (
+      pendingDesktopTocNavigation !== null &&
+      pendingDesktopTocNavigation.list === list
+    ) {
+      list.scrollTop = pendingDesktopTocNavigation.scrollTop;
+      return;
+    }
+    const linkRect = link.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    if (linkRect.top < listRect.top) {
+      list.scrollTop -= listRect.top - linkRect.top;
+    } else if (linkRect.bottom > listRect.bottom) {
+      list.scrollTop += linkRect.bottom - listRect.bottom;
+    }
+  };
   const apply = () => {
     const readingLine = window.innerHeight * 0.25;
     let current = null;
@@ -340,6 +413,7 @@ const wireScrollSpy = () => {
       if (current === null) link.setAttribute("aria-current", "true");
       else link.removeAttribute("aria-current");
     }
+    revealCurrentDesktopLink(current);
   };
   applyScrollSpy = apply;
   window.__bigPlanRefreshScrollSpy = apply;

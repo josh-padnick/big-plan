@@ -182,6 +182,163 @@ test("should provide a compact sticky table of contents on mobile", async ({
   });
 });
 
+test("should keep a long desktop TOC usable while the plan scrolls", async ({
+  page,
+  longNavigationViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(longNavigationViewerUrl);
+  const toc = page
+    .getByRole("navigation", { name: "Contents" })
+    .filter({ visible: true });
+  const list = toc.locator("ol");
+
+  await test.step("the section list is bounded by the viewport and scrolls independently", async () => {
+    const listBox = await boxOf(list);
+    expect(listBox.y + listBox.height).toBeLessThanOrEqual(900 - 48);
+    await list.hover();
+    const pageScrollBefore = await page.evaluate(() => window.scrollY);
+    await page.mouse.wheel(0, 500);
+    await expect
+      .poll(() => list.evaluate((node) => node.scrollTop))
+      .toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(pageScrollBefore);
+  });
+
+  await test.step("clicking a distant section preserves the reader's TOC position", async () => {
+    const listScrollBefore = await list.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+      return node.scrollTop;
+    });
+    expect(listScrollBefore).toBeGreaterThan(0);
+
+    const lastLink = toc.getByRole("link", {
+      name: "Sustainability section 35",
+    });
+    const navigationSamplesPromise = list.evaluate((node) => {
+      return new Promise<{
+        readonly samples: ReadonlyArray<number>;
+        readonly scrollEvents: number;
+      }>((resolve) => {
+        const samples = [node.scrollTop];
+        let scrollEvents = 0;
+        let frame = 0;
+        const sample = () => {
+          samples.push(node.scrollTop);
+          frame = requestAnimationFrame(sample);
+        };
+        const finish = () => {
+          cancelAnimationFrame(frame);
+          samples.push(node.scrollTop);
+          resolve({ samples, scrollEvents });
+        };
+        window.addEventListener("scroll", () => {
+          scrollEvents += 1;
+        });
+        window.addEventListener("scrollend", finish, { once: true });
+        frame = requestAnimationFrame(sample);
+      });
+    });
+    await lastLink.click();
+    await expect(page).toHaveURL(/#sustainability-section-35$/);
+    await expect(
+      page.getByRole("heading", {
+        level: 2,
+        name: "Sustainability section 35",
+      }),
+    ).toBeInViewport();
+    const navigation = await navigationSamplesPromise;
+    expect(navigation.scrollEvents).toBeGreaterThan(1);
+    expect(navigation.samples.length).toBeGreaterThan(2);
+    expect(new Set(navigation.samples)).toEqual(new Set([listScrollBefore]));
+  });
+
+  await test.step("active-entry reveal resumes after distant navigation", async () => {
+    const listScrollBefore = await list.evaluate((node) => node.scrollTop);
+    await page
+      .getByRole("heading", {
+        level: 2,
+        name: "Sustainability section 01",
+      })
+      .evaluate((node) => node.scrollIntoView({ behavior: "instant" }));
+    const firstLink = toc.getByRole("link", {
+      name: "Sustainability section 01",
+    });
+    await expect(firstLink).toHaveAttribute("aria-current", "true");
+    await expect
+      .poll(() => list.evaluate((node) => node.scrollTop))
+      .toBeLessThan(listScrollBefore);
+    await expect(firstLink).toBeInViewport();
+  });
+
+  await test.step("modified and new-context clicks do not suppress tracking", async () => {
+    const distantLink = toc.getByRole("link", {
+      name: "Sustainability section 30",
+    });
+    await list.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    const modifiedPagePromise = page.context().waitForEvent("page");
+    await distantLink.click({ modifiers: ["ControlOrMeta"] });
+    const modifiedPage = await modifiedPagePromise;
+    await modifiedPage.close();
+
+    await page
+      .getByRole("heading", {
+        level: 2,
+        name: "Sustainability section 02",
+      })
+      .evaluate((node) => node.scrollIntoView({ behavior: "instant" }));
+    const secondLink = toc.getByRole("link", {
+      name: "Sustainability section 02",
+    });
+    await expect(secondLink).toHaveAttribute("aria-current", "true");
+    await expect(secondLink).toBeInViewport();
+
+    await list.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    await distantLink.evaluate((node) => node.setAttribute("target", "_blank"));
+    const targetPagePromise = page.context().waitForEvent("page");
+    await distantLink.click();
+    const targetPage = await targetPagePromise;
+    await targetPage.close();
+
+    await page
+      .getByRole("heading", {
+        level: 2,
+        name: "Sustainability section 03",
+      })
+      .evaluate((node) => node.scrollIntoView({ behavior: "instant" }));
+    const thirdLink = toc.getByRole("link", {
+      name: "Sustainability section 03",
+    });
+    await expect(thirdLink).toHaveAttribute("aria-current", "true");
+    await expect(thirdLink).toBeInViewport();
+  });
+
+  await test.step("the current section remains visible as reading advances", async () => {
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await expect(toc.getByRole("link", { name: "Contents" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    await page.getByRole("main").hover();
+    await page.mouse.wheel(0, 3_800);
+    const current = toc.locator('[data-section-link][aria-current="true"]');
+    await expect(current).toHaveCount(1);
+    await expect
+      .poll(() => current.getAttribute("href"))
+      .not.toBe("#sustainability-section-01");
+    const listBox = await boxOf(list);
+    const currentBox = await boxOf(current);
+    expect(currentBox.y).toBeGreaterThanOrEqual(listBox.y);
+    expect(currentBox.y + currentBox.height).toBeLessThanOrEqual(
+      listBox.y + listBox.height,
+    );
+  });
+});
+
 test("should highlight the section being read and return to the top through Contents", async ({
   page,
   sampleViewerUrl,

@@ -66,6 +66,7 @@ type WorkerFixtures = {
   };
   readonly quickDecisionViewerUrl: string;
   readonly sampleViewerUrl: string;
+  readonly longNavigationViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
   readonly weightedAuditDecisionAnalysisViewerUrl: string;
   readonly wireframeFormFactorsViewerUrl: string;
@@ -134,6 +135,17 @@ Reviewers should be able to comment on visual evidence alongside text.
 Review the deployment result before approving the rollout.
 
 ![Deployment screenshot](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=)
+`;
+
+const LONG_NAVIGATION_MDX = `# Long navigation
+
+Long-plan navigation stays usable across more sections than fit in one desktop viewport.
+
+${Array.from(
+  { length: 35 },
+  (_, index) =>
+    `## Sustainability section ${String(index + 1).padStart(2, "0")}\n\nSection ${String(index + 1)} provides enough content to exercise long-plan navigation.`,
+).join("\n\n")}
 `;
 
 const MERMAID_REVIEW_MDX = `# Mermaid diagram review
@@ -844,6 +856,20 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         outputPath,
         outputDir,
       });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  longNavigationViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-long-navigation-"),
+      );
+      const inputPath = join(outputDir, "long-navigation.mdx");
+      const outputPath = join(outputDir, "long-navigation.html");
+      await writeFile(inputPath, LONG_NAVIGATION_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
