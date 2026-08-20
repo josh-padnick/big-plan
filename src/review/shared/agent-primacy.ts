@@ -128,8 +128,13 @@ export const agentForClaimToken = ({
  * Enough to separate two agents in one review, and no more. The id is a
  * disambiguator, not an identifier the reader is expected to use, so it earns
  * a glance rather than a line.
+ *
+ * Four, at the captain's measurement: six put a run of digits inside the
+ * parentheses that the eye tried to read as a word, in a label that already
+ * carries a model name and a client. Two agents in one review is the case this
+ * has to separate, and four hex characters separate them.
  */
-const SHORT_WRITER_ID_LENGTH = 6;
+const SHORT_WRITER_ID_LENGTH = 4;
 
 /**
  * Names one attached agent well enough to tell it from another.
@@ -147,7 +152,12 @@ const SHORT_WRITER_ID_LENGTH = 6;
 export const agentModelLabel = (
   agent: Pick<AttachedAgent, "writerId" | "model">,
 ): string => {
-  const short = `…${agent.writerId.slice(0, SHORT_WRITER_ID_LENGTH)}`;
+  // The END of the id, because the ellipsis in front of it promises exactly
+  // that. It read from the front for as long as this label existed, so every
+  // card said "…586687" about an id that starts with those characters - a
+  // reader checking the card against the id the CLI printed found the two
+  // disagreeing about which end had been cut.
+  const short = `…${agent.writerId.slice(-SHORT_WRITER_ID_LENGTH)}`;
   const name = agent.model?.name;
   return name === undefined
     ? short

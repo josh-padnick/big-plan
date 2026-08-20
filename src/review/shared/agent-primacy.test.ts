@@ -6,6 +6,7 @@ import { AGENT_RECOVERY_HORIZON_MS, AGENT_STALL_MS } from "./agent-timing.js";
 import {
   agentIsAttached,
   agentIsLive,
+  agentModelLabel,
   agentPrimacyHealth,
   applyPrimacyDeclined,
   applyPrimacyHandoff,
@@ -105,6 +106,29 @@ describe("agentIsAttached", () => {
         nowMs: NOW,
       }),
     ).toBe(false);
+  });
+});
+
+describe("agentModelLabel", () => {
+  it("should name an agent by its model and the tail of its id", () => {
+    /*
+    The tail, because the ellipsis in front of it says so. It read from the
+    front for as long as this label existed, so a reviewer checking a card
+    against the id their agent printed found the two disagreeing about which
+    end had been cut.
+    */
+    expect(
+      agentModelLabel({
+        writerId: "0123456789abcdef",
+        model: { name: "claude-opus-5" },
+      }),
+    ).toBe("Claude Opus 5 (…cdef)");
+  });
+
+  it("should name an agent that declared no model by its id alone", () => {
+    // The id is true; an invented word like "Unknown agent" would only look
+    // like a name.
+    expect(agentModelLabel({ writerId: "0123456789abcdef" })).toBe("…cdef");
   });
 });
 
