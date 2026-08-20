@@ -32,9 +32,9 @@ Usage:
   big-plan compile <input.mdx> [output.json]  Compile an MDX plan to its
                                              validated plan model as JSON
                                              (defaults to <input>.model.json)
-  big-plan validate <input.mdx>               Check structure, HTML delivery,
-                                             and authoring lint without
-                                             writing an output file
+  big-plan validate <input.mdx>               Check structure and authoring
+                                             lint by rendering in memory,
+                                             without writing an output file
   big-plan review <input.mdx>                 Serve the plan on loopback for
                                              interactive review with anchored
                                              comments and real agent responses

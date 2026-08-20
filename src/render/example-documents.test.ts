@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { lintPlan } from "../lint/lint-plan.js";
+import { COMPONENT_INSTANCE_ATTRIBUTE } from "./markdown/component-pipeline/component-instance.js";
 import { renderDocument } from "./render-document.js";
 
 const EXAMPLES_DIR = new URL("../../examples", import.meta.url).pathname;
@@ -26,6 +27,10 @@ describe("example documents", () => {
       const markdown = readFileSync(join(EXAMPLES_DIR, name), "utf8");
       const { html } = renderDocument({ markdown, fallbackTitle: name });
       expect(html).toContain("<!doctype html>");
+      // The instance key that joins a rendered root to its model lives inside
+      // one compilation. A document that ships one has leaked a pipeline
+      // detail into the contract every reader's HTML is.
+      expect(html).not.toContain(COMPONENT_INSTANCE_ATTRIBUTE);
     },
     15000,
   );

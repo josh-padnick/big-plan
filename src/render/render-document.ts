@@ -1,10 +1,7 @@
-// The renderer's document entry points: render HTML or exercise HTML and model
-// delivery together for validation.
+// The renderer's document entry points: render a plan as HTML, or exercise
+// that same rendering while publishing the machine-readable model it collected.
 
-import {
-  componentsInDocumentOrder,
-  type PlanModel,
-} from "./compile-plan-model.js";
+import { planComponents, type PlanModel } from "./compile-plan-model.js";
 import type {
   BlockDescriptor,
   CompiledMarkdown,
@@ -12,7 +9,7 @@ import type {
 } from "./markdown/compile-markdown.js";
 import {
   compileMarkdown,
-  compileMarkdownWithModels,
+  compileMarkdownModel,
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 export type { BlockDescriptor } from "./markdown/compile-markdown.js";
@@ -139,8 +136,29 @@ export const renderDocument = ({
 };
 
 /**
- * Exercises complete HTML delivery while returning the collected plan-model
+ * Exercises complete rendering while returning the collected plan-model
  * summary and discarding the generated document.
+ *
+ * It compiles through machine delivery, because the summary it returns is the
+ * one the compile command publishes and the two are asserted to agree. Human
+ * delivery would hand back a model still holding a nested component's deferred
+ * outline placeholder, so validation would pass a plan whose published model
+ * the compile command would never produce.
+ *
+ * That choice narrows what validation covers, and the cost is worth naming.
+ * Under machine delivery a nested outline-aware component presents eagerly
+ * against the empty outline instead of deferring, so validation no longer
+ * exercises the placeholder-completion path human delivery takes, and a defect
+ * confined to the whole-tree walk in completeOutlinePlaceholders would pass
+ * validation and surface only at render. The cost is accepted because the
+ * returned model is an asserted contract while the generated document is
+ * discarded, which makes publishing a model the compile command would never
+ * produce the worse of the two failures.
+ *
+ * The tradeoff disappears entirely once completeOutlinePlaceholders also
+ * completes the placeholders held by collected models: the two deliveries
+ * would then be identical, the materializeNestedModels flag would go, and
+ * validation would render exactly what render renders.
  */
 export const validateDocument = ({
   markdown,
@@ -149,7 +167,7 @@ export const validateDocument = ({
   readonly markdown: string;
   readonly fallbackTitle: string;
 }): PlanModel => {
-  const compiled = compileMarkdownWithModels({ markdown });
+  const compiled = compileMarkdownModel({ markdown });
   const rendered = renderCompiledDocument({
     compiled,
     fallbackTitle,
@@ -158,6 +176,9 @@ export const validateDocument = ({
   return {
     title: rendered.title,
     sections: compiled.sections,
-    components: componentsInDocumentOrder(compiled.components),
+    components: planComponents({
+      components: compiled.components,
+      blocks: compiled.blocks,
+    }),
   };
 };

@@ -17,11 +17,15 @@ import {
 } from "../../components/_authoring/diagnostics.js";
 import type { ComponentDiagnostic } from "../../components/_authoring/diagnostics.js";
 import { rehypeCodeFigures } from "./code-figure.js";
+import { stripComponentInstanceKeys } from "./component-pipeline/component-instance.js";
 import {
   rehypeRenderComponents,
   rehypeValidateComponentSemantics,
 } from "./component-pipeline/deliver.js";
-import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
+import type {
+  CollectedComponentModel,
+  CollectedComponentModels,
+} from "./component-pipeline/deliver.js";
 export type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 import { completeOutlinePlaceholders } from "./component-pipeline/outline-placeholder.js";
 import type { DeferredOutlinePresentations } from "./component-pipeline/outline-placeholder.js";
@@ -59,20 +63,14 @@ export type CompiledMarkdown = {
   readonly title: string | undefined;
   readonly embeddedStyles: ReadonlyArray<string>;
   // Rendered Part divider anchors in document order, so navigation can link
-  // each act header to its divider; parts carry no anchor in model delivery.
+  // each act header to its divider.
   readonly partIds: ReadonlyArray<string>;
   // Every commentable unit this compile addressed, in document order, so a
   // feedback package can be resolved without re-reading the HTML.
   readonly blocks: ReadonlyArray<BlockDescriptor>;
-};
-
-export type CompiledMarkdownModel = {
-  readonly sections: ReadonlyArray<Section>;
-  readonly title: string | undefined;
-  readonly components: ReadonlyArray<CollectedComponentModel>;
-};
-
-export type CompiledMarkdownWithModels = CompiledMarkdown & {
+  // Every component instance this compile delivered, in collection order.
+  // Collection is unconditional because the block descriptors carry the models
+  // too: one compile answers both machine delivery and the diff engine.
   readonly components: ReadonlyArray<CollectedComponentModel>;
 };
 
@@ -218,8 +216,9 @@ type PartTracker = {
   count: number;
 };
 
-// Gathers every authored slugged h2 before component model delivery can
-// remove a parent body, preserving nested headings and their source order.
+// Gathers every authored slugged h2 before component delivery replaces an
+// authored body with React-produced HAST, preserving nested headings and
+// their source order.
 const collectSections = (
   node: StructuredParent,
   sections: Array<MetadataSection>,
@@ -258,8 +257,8 @@ type MarkdownMetadata = {
   readonly sections: Array<MetadataSection>;
 };
 
-// Captures authored headings after slugging but before model delivery removes
-// component bodies or HTML delivery replaces them with React-produced HAST.
+// Captures authored headings after slugging but before component delivery
+// replaces authored bodies with React-produced HAST.
 const rehypeCollectMetadata =
   ({ metadata }: { readonly metadata: MarkdownMetadata }) =>
   (tree: Root): void => {
@@ -292,13 +291,14 @@ const collectElementIds = (
  */
 const compileMarkdownTree = ({
   markdown,
-  models,
-  collectModels,
+  materializeNestedModels,
   renderArtifacts,
 }: {
   readonly markdown: string;
-  readonly models?: Array<CollectedComponentModel>;
-  readonly collectModels?: Array<CollectedComponentModel>;
+  // Machine delivery needs a parent's model to carry its nested components'
+  // presentation rather than the placeholder a deferred outline leaves, since
+  // nothing downstream completes a placeholder held only by a model.
+  readonly materializeNestedModels: boolean;
   readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): CompiledMarkdown => {
   const diagnostics = createDiagnosticCollector();
@@ -309,6 +309,9 @@ const compileMarkdownTree = ({
   const deferredOutline: DeferredOutlinePresentations = [];
   const outline: MutableDocumentOutline = { parts: [], sections: [] };
   const blocks: Array<BlockDescriptor> = [];
+  // Delivery fills this as it compiles each instance; block identity reads it
+  // back to record what the component asserted on the root it stamps.
+  const componentModels: CollectedComponentModels = new Map();
   const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMdx);
   let parsed: MarkdownRoot;
   try {
@@ -358,8 +361,8 @@ const compileMarkdownTree = ({
     .use(rehypeMarkAuthoredProse)
     .use(rehypeRenderComponents, {
       diagnostics,
-      ...(models === undefined ? {} : { models }),
-      ...(collectModels === undefined ? {} : { collectModels }),
+      collectModels: componentModels,
+      materializeNestedModels,
       deferOutline: deferredOutline,
       renderArtifacts: resolvedRenderArtifacts,
     })
@@ -379,7 +382,10 @@ const compileMarkdownTree = ({
     })
     // Identity runs last, over the finished deck, so every block it addresses
     // is the one the reader will actually point at.
-    .use(rehypeBlockIdentity, { blocks });
+    .use(rehypeBlockIdentity, { blocks, componentModels })
+    // The instance keys existed only to carry that join across the pipeline,
+    // so they leave before anything can serialize them.
+    .use(() => stripComponentInstanceKeys);
   const tree: Root = processor.runSync(parsed);
 
   if (diagnostics.diagnostics.length > 0) {
@@ -418,40 +424,29 @@ const compileMarkdownTree = ({
     title: metadata.title,
     partIds: outline.parts.map((part) => part.id ?? ""),
     blocks,
+    components: [...componentModels.values()],
   };
 };
 
-/** Compiles Markdown through the HTML continuation. */
+/**
+ * Compiles Markdown for human delivery, where a deferred outline completes in
+ * the document tree.
+ */
 export const compileMarkdown = ({
   markdown,
 }: {
   readonly markdown: string;
-}): CompiledMarkdown => compileMarkdownTree({ markdown });
+}): CompiledMarkdown =>
+  compileMarkdownTree({ markdown, materializeNestedModels: false });
 
-/** Compiles Markdown through the model continuation without top-level HTML. */
+/**
+ * Compiles Markdown for machine delivery, where a component's model has to
+ * carry its nested components' presentation: no later pass reaches a
+ * placeholder that only a model holds.
+ */
 export const compileMarkdownModel = ({
   markdown,
 }: {
   readonly markdown: string;
-}): CompiledMarkdownModel => {
-  const components: Array<CollectedComponentModel> = [];
-  const { sections, title } = compileMarkdownTree({
-    markdown,
-    models: components,
-  });
-  return { sections, title, components };
-};
-
-/** Compiles through HTML delivery while collecting the same component models. */
-export const compileMarkdownWithModels = ({
-  markdown,
-}: {
-  readonly markdown: string;
-}): CompiledMarkdownWithModels => {
-  const components: Array<CollectedComponentModel> = [];
-  const compiled = compileMarkdownTree({
-    markdown,
-    collectModels: components,
-  });
-  return { ...compiled, components };
-};
+}): CompiledMarkdown =>
+  compileMarkdownTree({ markdown, materializeNestedModels: true });

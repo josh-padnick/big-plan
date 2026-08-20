@@ -360,4 +360,23 @@ describe("validateDocument", () => {
 
     expect(validateDocument(input)).toEqual(compilePlanModel(input));
   });
+
+  // The equality above holds for any nesting the two deliveries agree on. A
+  // nested outline component is the one that separates them: it defers behind
+  // a placeholder that only the document tree ever completes, so a model
+  // collected through human delivery keeps the placeholder forever. Validation
+  // that published that model would pass a plan whose model the compile
+  // command would never produce.
+  it("should publish no deferred placeholder for a nested outline component", () => {
+    const input = {
+      markdown:
+        '<Callout type="note">\n\n<Part title="Context" />\n\n</Callout>\n',
+      fallbackTitle: "Fallback",
+    };
+    const validated = validateDocument(input);
+
+    expect(JSON.stringify(validated)).not.toContain("data-outline-placeholder");
+    expect(JSON.stringify(validated)).toContain("data-part-title");
+    expect(validated).toEqual(compilePlanModel(input));
+  });
 });

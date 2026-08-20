@@ -21,6 +21,8 @@ import {
   CALLOUT_TYPES,
   type CalloutType,
 } from "../../components/callout/compile.js";
+import { componentInstanceKeyOf } from "./component-pipeline/component-instance.js";
+import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js";
 
 // The meaning-bearing presentation facts a snapshot must record so a diff can
@@ -40,6 +42,15 @@ export type BlockPresentation =
   | { readonly aspect: "wireframe"; readonly currentScreenId: string }
   | { readonly aspect: "image"; readonly source: string; readonly alt: string };
 
+/**
+ * The component models one delivery collected, keyed by instance key, so this
+ * walk can name the model behind a rendered root it is stamping.
+ */
+export type ComponentModelsByInstance = ReadonlyMap<
+  string,
+  CollectedComponentModel
+>;
+
 /** The document-order block descriptors one compile produced. */
 export type BlockDescriptor = {
   readonly id: string;
@@ -53,6 +64,30 @@ export type BlockDescriptor = {
   // answer that structurally, so it is recorded here instead of being
   // re-derived downstream from kind strings.
   readonly isComponentRoot: boolean;
+  // The authored name of the component whose root this block is, and the model
+  // that component compiled. Both are absent on every block that is not a
+  // component root, and on a component root the walk could not join back to
+  // its delivery - a component rendered privately inside another component's
+  // markup, or a hand-built tree with no delivery behind it.
+  //
+  // They exist so that a consumer holding a block address can read what the
+  // component asserted instead of sniffing the markup the component just
+  // produced. Sniffing is what made every new component an edit to this file.
+  //
+  // The model's value depends on which delivery compiled it. Where a component
+  // holds a nested outline-aware component, human delivery leaves that nested
+  // component as a deferred outline placeholder inside the parent's model,
+  // because the document tree holds the copy a later pass completes; machine
+  // delivery holds its completed presentation instead, because no later pass
+  // reaches a placeholder only a model holds. The difference disappears once
+  // completeOutlinePlaceholders also completes the placeholders held by
+  // collected models.
+  readonly component?: string;
+  readonly model?: unknown;
+  // The delivery-local key that joins this block back to its entry in the
+  // collected component models. It names one instance inside one compilation
+  // and is meaningless outside it, so nothing may persist or transmit it.
+  readonly componentInstance?: string;
   // The id of the block that declared this one as a sub-target: the table for
   // its rows, columns, and cells, or the component root for its declared
   // internals. Absent on every top-level block.
@@ -458,19 +493,40 @@ const stampCodeLines = (node: Element): void => {
   });
 };
 
-// Reads the meaning-bearing presentation facts off the stamped element.
-// Component attributes record authored presentation only when they change
-// meaning: callout type, list ordering, and the wireframe screen presented
-// first. Unknown facts replay neutrally instead of being guessed.
+// Reads one string field off a component model without trusting its shape.
+// The model is `unknown` here on purpose: this walk joins to whatever the
+// component compiled, and a field it cannot read must replay neutrally rather
+// than crash the whole document.
+const modelString = ({
+  model,
+  field,
+}: {
+  readonly model: unknown;
+  readonly field: string;
+}): string | undefined => {
+  if (typeof model !== "object" || model === null) {
+    return undefined;
+  }
+  const value: unknown = (model as Record<string, unknown>)[field];
+  return typeof value === "string" && value !== "" ? value : undefined;
+};
+
+// Reads the meaning-bearing presentation facts of a stamped block. A component
+// answers from the model it compiled, because that model is what the component
+// asserted; only Markdown's own blocks - a list's ordering, a picture's source
+// - are read off the element, because Markdown has no model behind it.
+// Unknown facts replay neutrally instead of being guessed.
 const presentationOf = ({
   node,
   kind,
+  model,
 }: {
   readonly node: Element;
   readonly kind: string;
+  readonly model?: unknown;
 }): BlockPresentation | undefined => {
   if (kind === "callout") {
-    const type = node.properties["data-callout"];
+    const type = modelString({ model, field: "type" });
     const calloutType = CALLOUT_TYPES.find((candidate) => candidate === type);
     return calloutType === undefined
       ? undefined
@@ -480,13 +536,8 @@ const presentationOf = ({
     return { aspect: "list", isOrdered: node.tagName === "ol" };
   }
   if (kind === "wireframe") {
-    const currentScreen = findDescendant({
-      node,
-      match: (candidate) =>
-        candidate.properties["data-wireframe-current"] !== undefined,
-    });
-    const currentScreenId = currentScreen?.properties["data-wireframe-screen"];
-    if (typeof currentScreenId === "string" && currentScreenId !== "") {
+    const currentScreenId = modelString({ model, field: "initialScreenId" });
+    if (currentScreenId !== undefined) {
       return { aspect: "wireframe", currentScreenId };
     }
   }
@@ -530,6 +581,7 @@ const stampBlock = ({
   blocks,
   counter,
   isComponentRoot = false,
+  instance,
   ownerId,
   tableHeaders,
   isTableHeader = false,
@@ -542,6 +594,8 @@ const stampBlock = ({
   readonly blocks: Array<BlockDescriptor>;
   readonly counter: ScopeCounter;
   readonly isComponentRoot?: boolean;
+  // The delivery entry behind a component root, absent for every other block.
+  readonly instance?: CollectedComponentModel;
   readonly ownerId?: string;
   readonly tableHeaders?: ReadonlyArray<string>;
   readonly isTableHeader?: boolean;
@@ -551,7 +605,7 @@ const stampBlock = ({
   node.properties["data-block-kind"] = kind;
   node.properties["data-block-label"] = label;
   node.properties["data-block-section"] = section;
-  const presentation = presentationOf({ node, kind });
+  const presentation = presentationOf({ node, kind, model: instance?.model });
   blocks.push({
     id,
     kind,
@@ -559,6 +613,13 @@ const stampBlock = ({
     section,
     text: textOf(node),
     isComponentRoot,
+    ...(instance === undefined
+      ? {}
+      : {
+          component: instance.component,
+          model: instance.model,
+          componentInstance: instance.instanceKey,
+        }),
     ...(ownerId === undefined ? {} : { ownerId }),
     ...(tableHeaders === undefined ? {} : { tableHeaders }),
     ...(isTableHeader ? { isTableHeader: true } : {}),
@@ -717,12 +778,14 @@ const stampScope = ({
   scope,
   section,
   blocks,
+  componentModels,
   counter = new Map(),
 }: {
   readonly container: Element | Root;
   readonly scope: string;
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
+  readonly componentModels: ComponentModelsByInstance;
   readonly counter?: ScopeCounter;
 }): void => {
   for (const child of container.children) {
@@ -734,10 +797,20 @@ const stampScope = ({
     }
     const kind = kindOf(child);
     if (kind === undefined) {
-      stampScope({ container: child, scope, section, blocks, counter });
+      stampScope({
+        container: child,
+        scope,
+        section,
+        blocks,
+        componentModels,
+        counter,
+      });
       continue;
     }
     const label = labelOf({ node: child, kind });
+    const instanceKey = componentInstanceKeyOf(child);
+    const instance =
+      instanceKey === undefined ? undefined : componentModels.get(instanceKey);
     const id = stampBlock({
       node: child,
       kind,
@@ -747,6 +820,7 @@ const stampScope = ({
       blocks,
       counter,
       isComponentRoot: componentName(child) !== undefined,
+      ...(instance === undefined ? {} : { instance }),
     });
     stampInlineImageTargets({
       block: child,
@@ -912,7 +986,13 @@ const scopeNameFor = ({
  * deck and reports the descriptors it minted.
  */
 export const rehypeBlockIdentity =
-  ({ blocks }: { readonly blocks?: Array<BlockDescriptor> } = {}) =>
+  ({
+    blocks,
+    componentModels = new Map(),
+  }: {
+    readonly blocks?: Array<BlockDescriptor>;
+    readonly componentModels?: ComponentModelsByInstance;
+  } = {}) =>
   (tree: Root): void => {
     const collected: Array<BlockDescriptor> = [];
     // Everything above the first slide - the title, lede, summary card, and
@@ -931,6 +1011,7 @@ export const rehypeBlockIdentity =
       scope: "document",
       section: "Overview",
       blocks: collected,
+      componentModels,
     });
     const usedScopes = new Set(["document"]);
     let slideIndex = 0;
@@ -962,7 +1043,13 @@ export const rehypeBlockIdentity =
             ? `Section ${slideIndex}`
             : headingTextOf(sectionHeading);
         const before = collected.length;
-        stampScope({ container: child, scope, section, blocks: collected });
+        stampScope({
+          container: child,
+          scope,
+          section,
+          blocks: collected,
+          componentModels,
+        });
         // Everything stamped between here and the nested walk below is this
         // slide's own content, so the heading can carry the slide it names.
         recordSlideContent({

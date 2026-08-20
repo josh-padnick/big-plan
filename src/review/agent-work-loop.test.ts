@@ -88,12 +88,15 @@ const heartbeatAroundAgentWait = ({
 }) => {
   let waiting = false;
   let missed = 0;
+  // Resolves on the first read of the dead phase, so a test can write the
+  // request the loop is waiting for instead of racing the loop with a timer.
+  const agentIsWaiting = deferred();
   const live = () => ({
     sessionId: review.sessionId,
     running: true,
     updatedAtMs: Date.now(),
   });
-  return vi
+  const reads = vi
     .spyOn(reviewStore, "readSessionHeartbeatValue")
     .mockImplementation(async () => {
       if (!waiting) {
@@ -101,13 +104,18 @@ const heartbeatAroundAgentWait = ({
           store: review.store,
           sessionId: review.sessionId,
         });
-        if (!presence.connected) return live();
+        // Connected is not waiting: an agent that claimed work without waiting
+        // is connected too, and starting the dead phase there spends the
+        // missed reads on the claim's authority check rather than on the wait.
+        if (!presence.connected || presence.state !== "waiting") return live();
         waiting = true;
+        agentIsWaiting.resolve();
       }
       if (missed >= missedReads) return live();
       missed += 1;
       return undefined;
     });
+  return { reads, agentIsWaiting: agentIsWaiting.promise };
 };
 
 const holdAgentRequestLock = async ({
@@ -2462,9 +2470,19 @@ describe("agent work loop lifecycle", () => {
       createdAt: "2026-08-12T12:00:00.000Z",
       body: "Is the plan ready?",
     });
-    setTimeout(() => {
-      void writeAgentRequest({ store: review.store, request });
-    }, 50);
+    // Written once the loop is provably waiting. A request that lands before
+    // then is claimed straight away, and the scripted dead reads land on the
+    // claim rather than on the wait this test is about.
+    let requestWriteError: unknown;
+    // Handled here rather than awaited in teardown: the chain only settles on
+    // a path that reaches the wait, so blocking on it would turn a failed
+    // assertion into a timeout. A rejection left floating instead would
+    // surface as an unhandled rejection that can take the whole worker down.
+    void heartbeat.agentIsWaiting
+      .then(() => writeAgentRequest({ store: review.store, request }))
+      .catch((error: unknown) => {
+        requestWriteError = error;
+      });
     const recoveryLog = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -2483,8 +2501,16 @@ describe("agent work loop lifecycle", () => {
         expect.stringContaining("Review session heartbeat recovered"),
       );
     } finally {
-      heartbeat.mockRestore();
+      heartbeat.reads.mockRestore();
       recoveryLog.mockRestore();
+      // Reported with the real console.error back, and reported rather than
+      // rethrown so it cannot mask whatever the assertions above already found.
+      if (requestWriteError !== undefined) {
+        console.error(
+          "the agent request under test failed to write",
+          requestWriteError,
+        );
+      }
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
@@ -2512,9 +2538,9 @@ describe("agent work loop lifecycle", () => {
         ended: true,
         reason: "The review server stopped while the agent was waiting.",
       });
-      expect(heartbeat.mock.calls.length).toBeGreaterThan(6);
+      expect(heartbeat.reads.mock.calls.length).toBeGreaterThan(6);
     } finally {
-      heartbeat.mockRestore();
+      heartbeat.reads.mockRestore();
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }

@@ -1,4 +1,4 @@
-// Owns the outline-placeholder leg of HTML delivery: outline-aware
+// Owns the outline-placeholder leg of delivery: outline-aware
 // components leave attribute-marked placeholders during component delivery,
 // the deck transform reads those attributes to compute the document outline,
 // and this module then replaces every placeholder with its outline-aware
@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import type { DiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
 import type { DocumentOutline } from "../../../components/_model/document-outline/document-outline.js";
 import type { OutlineMarker } from "../../../components/_registration/define-component.js";
+import { COMPONENT_INSTANCE_ATTRIBUTE } from "./component-instance.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-name.js";
 import { reactToHast } from "./react-hast-adapter.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
@@ -35,6 +36,7 @@ export const createOutlinePlaceholder = ({
   marker,
   position,
   component,
+  instanceKey,
 }: {
   readonly index: number;
   readonly marker: OutlineMarker;
@@ -42,6 +44,8 @@ export const createOutlinePlaceholder = ({
   // The authored name, held across deferral so the presented root carries the
   // same component identity a directly delivered root does.
   readonly component?: string;
+  // The delivery-local instance key, held across deferral for the same reason.
+  readonly instanceKey?: string;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -50,6 +54,9 @@ export const createOutlinePlaceholder = ({
     ...(component === undefined
       ? {}
       : { [COMPONENT_NAME_ATTRIBUTE]: component }),
+    ...(instanceKey === undefined
+      ? {}
+      : { [COMPONENT_INSTANCE_ATTRIBUTE]: instanceKey }),
     ...(marker.kind === "part"
       ? {
           [OUTLINE_PART_TITLE_ATTRIBUTE]: marker.title,
@@ -108,6 +115,10 @@ const presentPlaceholder = ({
   const component = placeholder.properties[COMPONENT_NAME_ATTRIBUTE];
   if (typeof component === "string") {
     rendered.properties[COMPONENT_NAME_ATTRIBUTE] = component;
+  }
+  const instanceKey = placeholder.properties[COMPONENT_INSTANCE_ATTRIBUTE];
+  if (typeof instanceKey === "string") {
+    rendered.properties[COMPONENT_INSTANCE_ATTRIBUTE] = instanceKey;
   }
   return rendered;
 };

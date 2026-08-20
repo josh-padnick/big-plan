@@ -19,8 +19,12 @@ import type { ComponentDiagnostic } from "../../../components/_authoring/diagnos
 import { defineComponent } from "../../../components/_registration/define-component.js";
 import type { ComponentRegistry } from "../../../components/_registration/registry.js";
 import { hastContentToReact } from "../../../components/_shared/hast-content/hast-content.js";
+import {
+  COMPONENT_INSTANCE_ATTRIBUTE,
+  stripComponentInstanceKeys,
+} from "./component-instance.js";
 import { rehypeRenderComponents } from "./deliver.js";
-import type { CollectedComponentModel } from "./deliver.js";
+import type { CollectedComponentModels } from "./deliver.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
 import { remarkValidateComponents } from "./validate-authoring.js";
 
@@ -91,14 +95,19 @@ const NESTED_REGISTRY = {
 const compileWithRegistry = ({
   markdown,
   registry,
-  models,
   collectModels,
+  materializeNestedModels,
+  keepInstanceKeys = false,
   adapt,
 }: {
   readonly markdown: string;
   readonly registry: ComponentRegistry;
-  readonly models?: Array<CollectedComponentModel>;
-  readonly collectModels?: Array<CollectedComponentModel>;
+  readonly collectModels?: CollectedComponentModels;
+  readonly materializeNestedModels?: boolean;
+  // The production pipeline strips delivery-local instance keys once block
+  // identity has read them, so this harness does too unless a test is about
+  // the key itself.
+  readonly keepInstanceKeys?: boolean;
   readonly adapt?: ReactHastAdapter;
 }): {
   readonly root: Root;
@@ -121,11 +130,16 @@ const compileWithRegistry = ({
     .use(rehypeRenderComponents, {
       diagnostics,
       registry,
-      ...(models === undefined ? {} : { models }),
       ...(collectModels === undefined ? {} : { collectModels }),
+      ...(materializeNestedModels === undefined
+        ? {}
+        : { materializeNestedModels }),
       ...(adapt === undefined ? {} : { adapt }),
     });
   const root: Root = processor.runSync(processor.parse(markdown));
+  if (!keepInstanceKeys) {
+    stripComponentInstanceKeys(root);
+  }
   return { root, diagnostics: diagnostics.diagnostics };
 };
 
@@ -191,45 +205,13 @@ describe("scoped child dispatch", () => {
     );
   });
 
-  it("should compile once without adapting React for model delivery", () => {
+  it("should collect one keyed model per instance while adapting React once", () => {
     const compile = vi.fn(() => ({ value: "compiled" }));
     const View = () => createElement("section", null, "React view");
     const registry = {
       Fixture: defineComponent({ compile, view: View }),
     } satisfies ComponentRegistry;
-    const models: Array<CollectedComponentModel> = [];
-    const adapt = vi.fn(() => {
-      throw new Error("model delivery crossed the React adapter");
-    });
-
-    const { root, diagnostics } = compileWithRegistry({
-      markdown: "<Fixture />\n",
-      registry,
-      models,
-      adapt,
-    });
-
-    expect(diagnostics).toEqual([]);
-    expect(compile).toHaveBeenCalledOnce();
-    expect(adapt).not.toHaveBeenCalled();
-    expect(models).toEqual([
-      {
-        component: "Fixture",
-        line: 1,
-        column: 1,
-        model: { value: "compiled" },
-      },
-    ]);
-    expect(serializeHtml({ root })).toBe("");
-  });
-
-  it("should collect the model while adapting React for HTML delivery", () => {
-    const compile = vi.fn(() => ({ value: "compiled" }));
-    const View = () => createElement("section", null, "React view");
-    const registry = {
-      Fixture: defineComponent({ compile, view: View }),
-    } satisfies ComponentRegistry;
-    const collectModels: Array<CollectedComponentModel> = [];
+    const collectModels: CollectedComponentModels = new Map();
     const adapt = vi.fn((): Element => ({
       type: "element",
       tagName: "section",
@@ -247,16 +229,54 @@ describe("scoped child dispatch", () => {
     expect(diagnostics).toEqual([]);
     expect(compile).toHaveBeenCalledOnce();
     expect(adapt).toHaveBeenCalledOnce();
-    expect(collectModels).toEqual([
+    expect([...collectModels.values()]).toEqual([
       {
         component: "Fixture",
         line: 1,
         column: 1,
+        instanceKey: expect.any(String),
         model: { value: "compiled" },
       },
     ]);
     expect(serializeHtml({ root })).toBe(
       '<section data-component="Fixture">React view</section>',
+    );
+  });
+
+  // The key is how block identity reaches the model behind a rendered root.
+  // It has to be on the root while the pipeline runs and gone by the time the
+  // document is serialized, because a reader's HTML is a contract of its own.
+  it("should stamp each rendered root with the key its collected model is under", () => {
+    const registry = {
+      Fixture: defineComponent({
+        compile: () => ({ value: "compiled" }),
+        view: () => createElement("section", null, "React view"),
+      }),
+    } satisfies ComponentRegistry;
+    const collectModels: CollectedComponentModels = new Map();
+
+    const stamped = compileWithRegistry({
+      markdown: "<Fixture />\n\n<Fixture />\n",
+      registry,
+      collectModels,
+      keepInstanceKeys: true,
+    });
+
+    const keys = [...collectModels.keys()];
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+    for (const key of keys) {
+      expect(serializeHtml({ root: stamped.root })).toContain(
+        `${COMPONENT_INSTANCE_ATTRIBUTE}="${key}"`,
+      );
+    }
+
+    const stripped = compileWithRegistry({
+      markdown: "<Fixture />\n\n<Fixture />\n",
+      registry,
+    });
+    expect(serializeHtml({ root: stripped.root })).not.toContain(
+      COMPONENT_INSTANCE_ATTRIBUTE,
     );
   });
 

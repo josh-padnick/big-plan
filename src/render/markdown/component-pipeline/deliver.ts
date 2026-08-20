@@ -1,5 +1,6 @@
 // Owns the post-MDX delivery phase: attribute normalization, scoped child
-// collection, compile-once dispatch, model/HTML delivery, and MDX removal.
+// collection, compile-once dispatch, rendering and model collection, and MDX
+// removal.
 
 import type { Element, Root, RootContent } from "hast";
 import type {
@@ -18,6 +19,10 @@ import {
   type ComponentRegistry,
   type ScopedParentDefinition,
 } from "../../../components/_registration/registry.js";
+import {
+  COMPONENT_INSTANCE_ATTRIBUTE,
+  createComponentInstanceKeys,
+} from "./component-instance.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-name.js";
 import { createOutlinePlaceholder } from "./outline-placeholder.js";
 import type { DeferredOutlinePresentations } from "./outline-placeholder.js";
@@ -34,24 +39,34 @@ export type CollectedComponentModel = {
   readonly component: string;
   readonly line?: number;
   readonly column?: number;
+  // The delivery-local key this instance's rendered root carries, so a
+  // document-wide pass holding that root can name the model behind it. It is
+  // internal to one compilation and never reaches machine output.
+  readonly instanceKey: string;
   readonly model: unknown;
 };
+
+/**
+ * Every component instance one delivery compiled, keyed by its instance key
+ * and held in collection order.
+ */
+export type CollectedComponentModels = Map<string, CollectedComponentModel>;
 
 type ComponentDelivery =
   | {
       readonly kind: "validation";
     }
   | {
-      readonly kind: "html";
+      readonly kind: "render";
       readonly adapt: ReactHastAdapter;
-      readonly collected?: Array<CollectedComponentModel>;
+      readonly instanceKeys: () => string;
+      readonly collected?: CollectedComponentModels;
       readonly deferOutline?: DeferredOutlinePresentations;
-    }
-  | {
-      readonly kind: "model";
-      readonly collected: Array<CollectedComponentModel>;
-      readonly adapt: ReactHastAdapter;
-      readonly deferOutline?: DeferredOutlinePresentations;
+      // Whether a component's model must carry its nested components'
+      // presentation instead of the placeholder a deferred outline leaves
+      // behind. Machine delivery needs the presentation, because nothing
+      // downstream completes a placeholder that only a model holds.
+      readonly materializeNestedModels: boolean;
     };
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
@@ -132,14 +147,15 @@ const collectExistingIds = (
 };
 
 // Reports an unknown name, validates attributes, recursively prepares direct
-// scoped children, compiles once, then chooses model or HTML delivery.
+// scoped children, compiles once, then collects that model and renders it -
+// unless the delivery only validates, which stops at compilation.
 const renderFlowElement = ({
   node,
   diagnostics,
   registry,
   ids,
   delivery,
-  materializeModel,
+  insideComponentBody,
   renderArtifacts,
 }: {
   readonly node: MdxJsxFlowElement;
@@ -147,7 +163,10 @@ const renderFlowElement = ({
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
-  readonly materializeModel: boolean;
+  // Whether this element is being rendered into another component's body
+  // rather than into the document. See the instance key and the materialized
+  // model below.
+  readonly insideComponentBody: boolean;
   readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): Element | undefined => {
   const name = node.name;
@@ -166,10 +185,7 @@ const renderFlowElement = ({
     registry,
     ids,
     delivery,
-    // A model carrying authored HAST must retain a nested component's
-    // presentation inside its parent body. Top-level model entries stop
-    // before adaptation.
-    materializeModels: delivery.kind === "model",
+    insideComponentBody: true,
     ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
   });
   if (definition === undefined) {
@@ -188,8 +204,12 @@ const renderFlowElement = ({
   if (delivery.kind === "validation") {
     return undefined;
   }
-  if (name !== null && delivery.collected !== undefined) {
-    delivery.collected.push({
+  // The key is minted before the root exists, so it can ride whichever element
+  // ends up standing for this instance: its presentation, or the placeholder an
+  // outline-aware component leaves until the outline is known.
+  const instanceKey = name === null ? undefined : delivery.instanceKeys();
+  if (name !== null && instanceKey !== undefined) {
+    delivery.collected?.set(instanceKey, {
       component: name,
       ...(node.position === undefined
         ? {}
@@ -197,19 +217,34 @@ const renderFlowElement = ({
             line: node.position.start.line,
             column: node.position.start.column,
           }),
+      instanceKey,
       model: compiled.model,
     });
   }
-  // The authored component name rides on its own rendered root so later
-  // document-wide passes can name what a reader is pointing at without knowing
-  // any component's markup. Both deliveries mark it, so a model carrying a
-  // nested presentation stays identical to the same nesting in HTML.
+  // Only a root the document will hold carries the key. A root rendered into
+  // another component's body is that component's private markup: block
+  // identity never stamps it, so it needs no key - and it would never lose
+  // one, because the parent's model holds this very element while the document
+  // holds the copy the parent's own rendering reparsed, and only that copy
+  // passes under the strip.
+  const stampedKey = insideComponentBody ? undefined : instanceKey;
+  // The authored component name and that key ride on the rendered root so
+  // later document-wide passes can name what a reader is pointing at, and
+  // reach the model behind it, without knowing any component's markup.
   const named = (element: Element | undefined): Element | undefined => {
     if (element !== undefined && name !== null) {
       element.properties[COMPONENT_NAME_ATTRIBUTE] = name;
     }
+    if (element !== undefined && stampedKey !== undefined) {
+      element.properties[COMPONENT_INSTANCE_ATTRIBUTE] = stampedKey;
+    }
     return element;
   };
+  // A model carrying authored HAST must retain a nested component's
+  // presentation inside its parent body, which is a property of where this
+  // element is being rendered rather than a second thing to thread.
+  const materializeModel =
+    insideComponentBody && delivery.materializeNestedModels;
   // An outline-aware component defers its presentation behind a placeholder
   // until the deck transform has computed the document outline. A model being
   // materialized inside a parent's body never reaches the document tree, so
@@ -225,12 +260,8 @@ const renderFlowElement = ({
       marker: compiled.outline.marker,
       ...(node.position === undefined ? {} : { position: node.position }),
       ...(name === null ? {} : { component: name }),
+      ...(stampedKey === undefined ? {} : { instanceKey: stampedKey }),
     });
-  }
-  if (delivery.kind === "model") {
-    return materializeModel
-      ? named(delivery.adapt(compiled.presentation()))
-      : undefined;
   }
   const rendered = named(delivery.adapt(compiled.presentation()));
   if (rendered !== undefined) {
@@ -251,7 +282,7 @@ const renderChildren = ({
   registry,
   ids,
   delivery,
-  materializeModels,
+  insideComponentBody = false,
   renderArtifacts,
 }: {
   readonly parent: ParentNode;
@@ -260,7 +291,7 @@ const renderChildren = ({
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
-  readonly materializeModels: boolean;
+  readonly insideComponentBody?: boolean;
   readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
@@ -288,7 +319,7 @@ const renderChildren = ({
         registry,
         ids,
         delivery,
-        materializeModels,
+        insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
       scopedChildren.push({
@@ -310,7 +341,7 @@ const renderChildren = ({
         registry,
         ids,
         delivery,
-        materializeModels,
+        insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
     }
@@ -321,7 +352,7 @@ const renderChildren = ({
         registry,
         ids,
         delivery,
-        materializeModel: materializeModels,
+        insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
       parent.children.splice(
@@ -372,50 +403,36 @@ export const rehypeRenderComponents =
   ({
     diagnostics,
     registry = COMPONENT_REGISTRY,
-    models,
     collectModels,
+    materializeNestedModels = false,
     deferOutline,
     adapt = reactToHast,
     renderArtifacts,
   }: {
     readonly diagnostics: DiagnosticCollector;
     readonly registry?: ComponentRegistry;
-    readonly models?: Array<CollectedComponentModel>;
-    readonly collectModels?: Array<CollectedComponentModel>;
+    readonly collectModels?: CollectedComponentModels;
+    readonly materializeNestedModels?: boolean;
     readonly deferOutline?: DeferredOutlinePresentations;
     readonly adapt?: ReactHastAdapter;
     readonly renderArtifacts?: ReadonlyMap<string, unknown>;
   }) =>
   (tree: Root): void => {
-    if (models !== undefined && collectModels !== undefined) {
-      throw new Error(
-        "Component delivery cannot use model-only and HTML model collection together",
-      );
-    }
     const reservedIds = collectExistingIds(tree);
     renderChildren({
       parent: tree,
       diagnostics,
       registry,
       ids: createComponentIdAllocator({ reservedIds }),
-      materializeModels: false,
       ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
-      delivery:
-        models === undefined
-          ? {
-              kind: "html",
-              adapt,
-              ...(collectModels === undefined
-                ? {}
-                : { collected: collectModels }),
-              ...(deferOutline === undefined ? {} : { deferOutline }),
-            }
-          : {
-              kind: "model",
-              collected: models,
-              adapt,
-              ...(deferOutline === undefined ? {} : { deferOutline }),
-            },
+      delivery: {
+        kind: "render",
+        adapt,
+        instanceKeys: createComponentInstanceKeys(),
+        materializeNestedModels,
+        ...(collectModels === undefined ? {} : { collected: collectModels }),
+        ...(deferOutline === undefined ? {} : { deferOutline }),
+      },
     });
     reportSurvivors({ parent: tree, diagnostics });
   };
@@ -435,7 +452,6 @@ export const rehypeValidateComponentSemantics =
       diagnostics,
       registry,
       ids: createComponentIdAllocator({ reservedIds }),
-      materializeModels: false,
       delivery: { kind: "validation" },
     });
     reportSurvivors({ parent: tree, diagnostics });
