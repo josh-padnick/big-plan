@@ -42,7 +42,6 @@ import {
   readAgentDisconnectRequests,
   writeAgentHeartbeat,
   writeAgentHeartbeatEnded,
-  withReviewStoreLock,
   writeAgentResponseValue,
   writeStoreJson,
   withReviewStoreLock,

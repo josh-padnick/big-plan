@@ -389,7 +389,6 @@ export const deleteQueuedAgentRequest = async (
   return jsonResponse({ status: 200, value: { requestId } });
 };
 
-/** Withdraws a request the agent has not answered yet. */
 /** What the claim gate decided: who was disconnected, or why nobody was. */
 type DisconnectDecision =
   | { readonly refusal: string }
@@ -521,6 +520,7 @@ export const disconnectAgent = async (
   });
 };
 
+/** Withdraws a request the agent has not answered yet. */
 export const cancelPendingAgentRequest = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
