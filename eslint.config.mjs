@@ -38,16 +38,45 @@ const PLAN_IDENTITY_SELECTOR = {
 // one pasted code line clipped every card in the feedback sidebar (BIG-185).
 // Naming the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and
 // it is fenced because the failure is silent: the markup is valid, the cascade
-// is clean, and only a reader at a narrow width ever sees it.
+// is clean, and only a reader at a narrow width ever sees it. Nothing at
+// runtime fails when the declaration goes missing, so this fence is the whole
+// guard rather than a second one.
 //
 // The fence reads every grid container, not only the lists: the panels the
 // same fix had to touch are `grid ... content-start` divs with no `list-none`
 // in them, so a fence that asked for a list would have watched the narrower
-// half of the defect it was written for. A container that already names any
-// `grid-cols-` track has answered the question and is exempt.
+// half of the defect it was written for.
+//
+// Three things the predicate is deliberate about. A variant may prefix the
+// `grid` token - `wide:grid` and `[&>li]:grid` are the same container to a
+// reader at a narrow width, so they are the same container here. Only an
+// unprefixed `grid-cols-` answers the question, because a track declared at a
+// breakpoint leaves the narrow regime this fence exists for undeclared; a
+// container that only becomes a grid at a breakpoint may still carry the
+// unprefixed track, which is inert wherever `display` is not grid. And tokens
+// are split on any whitespace with `[\s\S]` rather than `.`, so a class list
+// a formatter wrapped across lines is still read.
+const GRID_TRACK_PATTERN =
+  "/^(?![\\s\\S]*(?:^|\\s)grid-cols-)[\\s\\S]*(?:^|\\s)(?:\\S*:)?grid(?=\\s|$)/";
+
+// Where a class string can live. Reading every string literal instead would
+// report a Tailwind column-track error on prose - an error message or a label
+// that happens to contain the word - so the fence looks only at `className`
+// values and at the shapes a class constant is declared in. The alternative,
+// asking whether a string looks like a class list, cannot be written without
+// either losing `className="grid"` or carrying a list of bare utilities that
+// goes stale.
+const classStringsIn = (host) =>
+  `${host} :matches(Literal[value=${GRID_TRACK_PATTERN}], TemplateElement[value.raw=${GRID_TRACK_PATTERN}])`;
+
 const GRID_TRACK_SELECTOR = {
-  selector:
-    "Literal[value=/^(?!.*grid-cols-)(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/], TemplateElement[value.raw=/^(?!.*grid-cols-)(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/]",
+  selector: [
+    classStringsIn('JSXAttribute[name.name="className"]'),
+    `VariableDeclarator > Literal[value=${GRID_TRACK_PATTERN}]`,
+    classStringsIn(
+      "VariableDeclarator > :matches(TemplateLiteral, BinaryExpression, ConditionalExpression, ObjectExpression, TSAsExpression)",
+    ),
+  ].join(", "),
   message:
     "A grid container in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
 };
@@ -503,12 +532,14 @@ export default tseslint.config(
     },
   },
   {
-    // The shell takes the identity fence alone. The grid fence's premise is
-    // the sidebar - a fixed-width column whose every list is one column, so
-    // the track is always the container's to set. A plan component is a
-    // different regime: `decision-card.css` gives `.decision-rows` a
-    // responsive `repeat(auto-fit, ...)` track, and a utility here would
-    // outrank it and collapse the option cards into a stack.
+    // The shell takes the identity fence alone. The grid fence's ratified
+    // scope is the review sidebar - a fixed-width column whose containers are
+    // one column by construction, which is what makes `minmax(0, 1fr)` always
+    // the right answer there. The shell is the reading chrome and does not
+    // share that premise: its settings dialog sets its section list beside its
+    // panel on a `[12rem_1fr]` track at wide widths. Reaching the shell would
+    // therefore be its own decision about a different regime rather than a
+    // consequence of the sidebar's, so the fence stops at the sidebar.
     files: ["src/render/shell/**/*.ts"],
     rules: {
       "no-restricted-syntax": ["error", PLAN_IDENTITY_SELECTOR],
