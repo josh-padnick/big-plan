@@ -113,7 +113,7 @@ export const ChatSurface = ({
                   Archive
                 </Button>
               </div>
-              <ol className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-3 p-0 [&>li]:min-w-0">
+              <ol className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-3 p-0">
                 {model.exchanges}
               </ol>
             </>
@@ -129,7 +129,7 @@ export const ChatSurface = ({
               <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                 Archived ({model.archivedCount})
               </summary>
-              <ol className="mt-3 mb-0 grid grid-cols-[minmax(0,1fr)] list-none gap-3 p-0 [&>li]:min-w-0">
+              <ol className="mt-3 mb-0 grid grid-cols-[minmax(0,1fr)] list-none gap-3 p-0">
                 {model.archivedExchanges}
               </ol>
             </details>

@@ -245,7 +245,7 @@ export const CommentsSurface = ({
         </p>
       ) : null}
       {sectionCount === 0 ? null : (
-        <div className="grid min-w-0 gap-4 border-t border-edge pt-4">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 border-t border-edge pt-4">
           {ready.length === 0 ? null : (
             <LifecycleSection
               label="Ready for review"

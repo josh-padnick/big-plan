@@ -31,19 +31,25 @@ const PLAN_IDENTITY_SELECTOR = {
     "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
 };
 
-// A list laid out as a grid must say what its column is. A grid item keeps
-// `min-width: auto`, so an implicit track is floored at the widest item's
-// min-content width and the whole list grows past its container - which a
-// scrolling panel then hides rather than reports. That is how one pasted
-// code line clipped every card in the feedback sidebar (BIG-185). Naming
-// the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and it
-// is fenced because the failure is silent: the markup is valid, the
-// cascade is clean, and only a reader at a narrow width ever sees it.
-const GRID_LIST_TRACK_SELECTOR = {
+// Anything laid out as a grid in the sidebar must say what its column is. A
+// grid item keeps `min-width: auto`, so an implicit track is floored at the
+// widest item's min-content width and the whole container grows past the
+// panel - which a scrolling panel then hides rather than reports. That is how
+// one pasted code line clipped every card in the feedback sidebar (BIG-185).
+// Naming the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and
+// it is fenced because the failure is silent: the markup is valid, the cascade
+// is clean, and only a reader at a narrow width ever sees it.
+//
+// The fence reads every grid container, not only the lists: the panels the
+// same fix had to touch are `grid ... content-start` divs with no `list-none`
+// in them, so a fence that asked for a list would have watched the narrower
+// half of the defect it was written for. A container that already names any
+// `grid-cols-` track has answered the question and is exempt.
+const GRID_TRACK_SELECTOR = {
   selector:
-    "Literal[value=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/], TemplateElement[value.raw=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/]",
+    "Literal[value=/^(?!.*grid-cols-)(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/], TemplateElement[value.raw=/^(?!.*grid-cols-)(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/]",
   message:
-    "A grid list in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
+    "A grid container in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
 };
 
 export default tseslint.config(
@@ -492,7 +498,7 @@ export default tseslint.config(
       "no-restricted-syntax": [
         "error",
         PLAN_IDENTITY_SELECTOR,
-        GRID_LIST_TRACK_SELECTOR,
+        GRID_TRACK_SELECTOR,
       ],
     },
   },

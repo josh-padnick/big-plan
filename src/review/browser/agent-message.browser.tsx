@@ -236,7 +236,7 @@ export const RequestStatusStrip = ({
     ) : null;
   return (
     <div
-      className={`my-1.5 grid min-w-0 gap-1 rounded-md border border-l-[3px] px-2 py-2 text-2xs ${STATUS_TONES[status.tone]}`}
+      className={`my-1.5 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-md border border-l-[3px] px-2 py-2 text-2xs ${STATUS_TONES[status.tone]}`}
       data-review-thread-status={status.stage}
     >
       <div className="flex items-center gap-1.5 [&>svg]:size-[0.85rem] [&>svg]:shrink-0">
@@ -312,7 +312,7 @@ export const RequestStatusStrip = ({
         </button>
       ) : null}
       {isWorking && isExpanded && earlier.length > 0 ? (
-        <ol className="m-0 grid max-h-36 min-w-0 grid-cols-[minmax(0,1fr)] list-none overflow-y-auto pl-1 text-ink [&>li]:min-w-0">
+        <ol className="m-0 grid max-h-36 min-w-0 grid-cols-[minmax(0,1fr)] list-none overflow-y-auto pl-1 text-ink">
           {earlier.map((event) => (
             <li
               key={event.seq}
@@ -492,7 +492,7 @@ export const AgentChangeDigest = ({
     return null;
   };
   return (
-    <div className="mt-2 grid min-w-0 gap-2 border-t border-edge pt-2">
+    <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge pt-2">
       <button
         type="button"
         className="flex w-full cursor-pointer items-center gap-1 rounded-sm bg-transparent px-1 py-0.5 text-left text-2xs font-bold text-muted hover:bg-surface hover:text-accent [&>svg]:size-3"

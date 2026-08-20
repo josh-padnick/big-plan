@@ -787,7 +787,7 @@ const RecoveryConflictDialog = ({
       onAction={() => onKeep("runtime")}
       onDismiss={onDismiss}
     >
-      <div className="mt-4 grid gap-3">
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3">
         <div>
           <p className="m-0 text-2xs font-semibold text-subtle uppercase">
             Yours
@@ -3817,7 +3817,7 @@ const SentThread = ({
           <div className="mt-3 border-t border-edge pt-3">
             {latestExchange?.response === undefined ? null : (
               <section
-                className="mb-3 grid gap-2"
+                className="mb-3 grid grid-cols-[minmax(0,1fr)] gap-2"
                 data-review-thread-next-steps
               >
                 <strong className="text-2xs font-bold uppercase tracking-caps text-subtle">
@@ -3945,7 +3945,7 @@ const ChatExchange = ({
     (request.baselineSnapshot ?? request.premiseSnapshot) !==
       response.resultSnapshot;
   return (
-    <li className="grid min-w-0 gap-2">
+    <li className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
       <MessageTurn
         role="user"
         surface="chat"
