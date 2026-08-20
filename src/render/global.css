@@ -283,14 +283,14 @@ its light counterpart so the three-deep ladder keeps the same separation.
   --comment-toolbar-c: light-dark(var(--comment-header-c), var(--grey-900));
   /* Modal backdrops dim every theme with the same neutral black overlay. */
   --backdrop-c: rgb(0 0 0);
-  /* A tooltip is a slab that floats above the page, not an inversion of it. In
-     light it reads as dark chrome lifted off a pale page. In dark it stays
-     dark and separates by elevation and an edge instead, because inverting
-     there produces a pale card that reads as a page torn out of another
-     document rather than as this document's own chrome. */
-  --tooltip-c: light-dark(var(--grey-925), var(--grey-800));
-  --tooltip-ink-c: light-dark(var(--grey-25), var(--grey-150));
-  --tooltip-edge-c: light-dark(var(--grey-925), var(--grey-700));
+  /* A tooltip is a slab that floats above the page, not an inversion of it, so
+     it stays in the reader's theme: light chrome in light, dark chrome in
+     dark. It separates by elevation and an edge rather than by flipping to
+     the opposite theme, because an inverted hint reads as a scrap of another
+     document dropped onto this one. */
+  --tooltip-c: light-dark(var(--grey-0), var(--grey-800));
+  --tooltip-ink-c: light-dark(var(--grey-925), var(--grey-150));
+  --tooltip-edge-c: light-dark(var(--grey-250), var(--grey-700));
 
   /* Text, in three weights of attention. */
   --ink-c: light-dark(var(--grey-925), var(--grey-150));

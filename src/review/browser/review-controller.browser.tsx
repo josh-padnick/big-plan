@@ -2151,12 +2151,12 @@ const SUBMIT_RIGHT_AWAY_HELP = [
   {
     term: "Submit right away",
     detail:
-      "The comment goes to the agent the moment you add it, so you get an answer straight away. The comments you write next wait until the agent finishes this one.",
+      "Send the comment to the agent immediately. The comments you send next wait until the agent finishes this one.",
   },
   {
     term: "Submit later",
     detail:
-      "Comments are staged and sent as a batch, so nothing goes out until you send. No answer straight away, but agents work better from a batch than from a stream of interruptions.",
+      "Stage this comment and send it to the agent later as a batch. Agents tend work best with a batch rather than a series of requests.",
   },
 ] as const;
 

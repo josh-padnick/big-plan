@@ -386,8 +386,8 @@ const tooltipMaxWidth = (shape: TooltipShape) =>
 // A keystroke is a thing the reader presses, so it is drawn as a key rather
 // than set in the sentence: one chip per key, found by the eye before the
 // sentence explaining what it does is read. The chip borrows the tooltip's own
-// text colour instead of naming one, because the surface under it is inverted
-// and a fixed ink would have to be re-picked per theme.
+// text colour instead of naming one, so the same chip holds its contrast on
+// either theme's tooltip surface without a colour re-picked per theme.
 const ShortcutKey = ({ children }: { readonly children: string }) => (
   <kbd className="inline-flex min-w-[1.25em] items-center justify-center rounded-sm border border-[color-mix(in_srgb,currentColor_30%,transparent)] bg-[color-mix(in_srgb,currentColor_12%,transparent)] px-1 py-px font-sans font-semibold">
     {children}

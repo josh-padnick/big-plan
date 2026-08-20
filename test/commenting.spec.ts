@@ -622,7 +622,7 @@ test("should remember the submit-right-away choice across new composers", async 
   const help = composer.getByRole("button", {
     name: "About Submit right away",
   });
-  const helpTooltip = page.getByRole("tooltip", { name: /goes to the agent/ });
+  const helpTooltip = page.getByRole("tooltip", { name: /Send the comment to the agent/ });
   await expect(helpTooltip).toHaveCount(0);
   await preference.focus();
   await page.keyboard.press("Tab");
@@ -635,7 +635,9 @@ test("should remember the submit-right-away choice across new composers", async 
     "Submit right away:",
     "Submit later:",
   ]);
-  await expect(helpTooltip).toContainText("staged and sent as a batch");
+  await expect(helpTooltip).toContainText(
+    "send it to the agent later as a batch",
+  );
   await expect(help).toHaveAttribute(
     "aria-describedby",
     (await helpTooltip.getAttribute("id")) ?? "",

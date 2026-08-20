@@ -115,10 +115,10 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
    action is disabled.
    The mark beside **Submit right away** explains the trade-off the same way,
    as one short paragraph per setting.
-   **Submit right away** sends the comment the moment you add it and holds your
-   next comments until the agent finishes it.
-   **Submit later** stages comments and sends them as a batch, which agents
-   work better from than a stream of interruptions.
+   **Submit right away** sends the comment to the agent immediately, and the
+   comments you send next wait until the agent finishes that one.
+   **Submit later** stages the comment and sends it to the agent later as a
+   batch, which agents tend to work better from than a series of requests.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
    **Chat** tab asks questions about the plan as a whole, **Inputs** lists what
    the review is still waiting for, and **Agent Status** - its own control beside
