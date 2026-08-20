@@ -1396,41 +1396,6 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
-  it("should see equal flexible thirds through the Group that holds them", () => {
-    const { diagnostics } = compile({
-      scopedChildren: [
-        screen({
-          id: "ticket",
-          attributes: { device: "desktop" },
-          children: [
-            element({
-              name: "Row",
-              children: [
-                element({
-                  name: "Group",
-                  children: [
-                    element({ name: "Panel", attributes: { title: "Queue" } }),
-                    element({
-                      name: "Panel",
-                      attributes: { title: "Conversation" },
-                    }),
-                    element({
-                      name: "Panel",
-                      attributes: { title: "Properties" },
-                    }),
-                  ],
-                }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    });
-    expect(diagnostics.map((entry) => entry.message)).toEqual([
-      'Desktop Screen "ticket" draws 3 flexible panes in one Row; keep the primary surface dominant and wrap secondary content in Rail',
-    ]);
-  });
-
   it("should still accept a toolbar Row whose two Groups hold only controls", () => {
     const { diagnostics } = compile({
       scopedChildren: [
@@ -1790,7 +1755,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           attributes: { device: "tablet" },
           children: [
             element({
-              name: "Row",
+              name: "Stack",
               children: [
                 element({
                   name: "Group",
@@ -2572,8 +2537,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       'Button "Copy command" is iconOnly with no icon, so it would draw nothing; give it icon="..." or remove iconOnly',
     ]);
   });
-  it("should lay out panes wrapped in a Group as the row's own panes", () => {
-    const { compiled, diagnostics } = compile({
+  it("should refuse a pane wrapped in a Group inside a Row", () => {
+    const { diagnostics } = compile({
       scopedChildren: [
         screen({
           id: "home",
@@ -2589,26 +2554,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                       attributes: { title: "Queue" },
                       children: [
                         element({
-                          name: "List",
-                          children: [
-                            element({
-                              name: "ListItem",
-                              attributes: {
-                                label: "Billing refund",
-                                selected: true,
-                              },
-                            }),
-                          ],
-                        }),
-                      ],
-                    }),
-                    element({
-                      name: "Panel",
-                      attributes: { title: "Billing refund" },
-                      children: [
-                        element({
                           name: "Text",
-                          attributes: { text: "Raised two hours ago" },
+                          attributes: { text: "Billing refund" },
                         }),
                       ],
                     }),
@@ -2620,26 +2567,48 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         }),
       ],
     });
-    expect(diagnostics).toEqual([]);
-    // The compiler read this Row as a collection beside its detail, so the
-    // drawing has to lay out the same two panes: each one a direct item of the
-    // row, with the collection marked as the pane that stays narrow.
-    const row = elementWithClass({
-      node: render(compiled),
-      className: "wireframe-row",
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home": a Group inside a Row holds a Panel, so the row cannot lay it out as a pane. Inside a Row, a Group clusters loose controls - buttons, text, badges - so they travel together as one item. Panes are direct children of the Row: write the Panel as a child of the Row itself and use the Row gap and justify to space them',
+    ]);
+  });
+
+  it("should refuse a pane reached through a nested Group inside a Row", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Group",
+                      children: [
+                        element({
+                          name: "Stack",
+                          children: [
+                            element({
+                              name: "Button",
+                              attributes: { label: "New plan" },
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
     });
-    expect(row?.properties["data-wireframe-workspace"]).toBe("");
-    const panes = (row?.children ?? []).filter(
-      (child): child is Element => child.type === "element",
-    );
-    expect(
-      panes.map((pane) => {
-        const classes = pane.properties["className"];
-        return Array.isArray(classes) && classes.includes("wireframe-panel");
-      }),
-    ).toEqual([true, true]);
-    expect(panes[0]?.properties["data-wireframe-master"]).toBe("");
-    expect(panes[1]?.properties["data-wireframe-master"]).toBeUndefined();
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home": a Group inside a Row holds a Stack, so the row cannot lay it out as a pane. Inside a Row, a Group clusters loose controls - buttons, text, badges - so they travel together as one item. Panes are direct children of the Row: write the Stack as a child of the Row itself and use the Row gap and justify to space them',
+    ]);
   });
 
   it("should draw an overlay over the page with alert semantics", () => {
@@ -2787,6 +2756,90 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     });
     expect(diagnostics).toEqual([]);
   });
+  it("should draw a push chevron on a list row that names a screen", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "List",
+              children: [
+                element({
+                  name: "ListItem",
+                  attributes: {
+                    label: "Checkout freeze",
+                    meta: "Northwind",
+                    navigateTo: "ticket",
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Checkout freeze" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const disclosure = elementWithClass({
+      node: render(compiled),
+      className: "wireframe-list-disclosure",
+    });
+    expect(disclosure).toBeDefined();
+    // The mark rides the primary line, and it is the chevron the named set
+    // already holds rather than a second drawing of the same meaning.
+    expect(
+      elementWithClass({
+        node: render(compiled),
+        className: "wireframe-list-row-primary",
+      })?.children.some(
+        (child) =>
+          child.type === "element" &&
+          Array.isArray(child.properties["className"]) &&
+          child.properties["className"].includes("wireframe-list-disclosure"),
+      ),
+    ).toBe(true);
+    expect(
+      elementWithClass({
+        node: disclosure as Element,
+        className: "wireframe-glyph",
+      })?.properties["data-wireframe-icon"],
+    ).toBe("chevron");
+  });
+
+  it("should draw no chevron on a list row that names no screen", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "List",
+              children: [
+                element({
+                  name: "ListItem",
+                  attributes: { label: "Quiet hours", meta: "Off" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(
+      elementWithClass({
+        node: render(compiled),
+        className: "wireframe-list-disclosure",
+      }),
+    ).toBeUndefined();
+  });
+
   it("should let a Row anchor one Group at each end", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

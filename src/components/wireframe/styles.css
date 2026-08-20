@@ -2320,6 +2320,22 @@ marks and a plan diff never jitters.
     font-variant-numeric: tabular-nums;
     color: var(--color-muted);
   }
+  /* A row that pushes to another screen carries the mark a product puts at its
+     trailing edge: quieter than the label it follows, riding the primary line
+     rather than the metadata beneath it, and sized on the metadata step of the
+     icon scale so it never competes with the trailing value beside it. */
+  .wireframe-list-disclosure {
+    display: inline-flex;
+    flex: none;
+    align-self: center;
+    margin-left: 0.15rem;
+    color: var(--color-muted);
+  }
+  .wireframe-list-disclosure > .wireframe-glyph > svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+
   /* Whole-row tappable list entries (mobile inbox). */
   .wireframe-list-row {
     min-width: 0;

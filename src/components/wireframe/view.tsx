@@ -15,7 +15,6 @@ import type {
   WireframeStatus,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
-import { ROW_PANES } from "./nodes.js";
 import {
   WIREFRAME_PLACEHOLDER_GLYPH,
   wireframeGlyphFor,
@@ -145,30 +144,6 @@ const isWorkspaceRow = (children: ReadonlyArray<WireframeNode>): boolean =>
   children.some((child) => child.element === "Rail") ||
   masterIndexIn(children) >= 0;
 
-// Whether a node puts a pane into the row it stands in, reading through the
-// Groups a pane may be wrapped in.
-const holdsPane = (node: WireframeNode): boolean =>
-  node.element === "Group"
-    ? node.children.some(holdsPane)
-    : ROW_PANES.has(node.element);
-
-// The items a Row really lays out, with every pane-bearing Group opened.
-//
-// Compilation counts a Group's panes as the Row's own, and so does the column
-// budget: a Group is a run of items that travel together as one item, not a
-// pane of its own. Drawing it as one hugging item instead would lay out a row
-// the compiler already read - and validated - as something else, and nothing
-// would report the difference. A Group carrying no pane still travels as one
-// item, which is what settles the two ends of a toolbar.
-const rowItems = (
-  children: ReadonlyArray<WireframeNode>,
-): ReadonlyArray<WireframeNode> =>
-  children.flatMap((child) =>
-    child.element === "Group" && holdsPane(child)
-      ? rowItems(child.children)
-      : [child],
-  );
-
 // A conversation has two independently behaving regions behind the ordinary
 // Panel interface: the thread scrolls, while the mode and composer stay
 // anchored. Authors only arrange the familiar message and control primitives.
@@ -215,17 +190,20 @@ const WireframeElement = ({
           <WireframeElements nodes={node.children} />
         </div>
       );
-    case "Row": {
-      const items = rowItems(node.children);
+    case "Row":
       return (
         <div
           className={`wireframe-row flex flex-wrap ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]} ${JUSTIFY_CLASSES[node.justify]}`}
-          {...(isWorkspaceRow(items) ? { "data-wireframe-workspace": "" } : {})}
+          {...(isWorkspaceRow(node.children)
+            ? { "data-wireframe-workspace": "" }
+            : {})}
         >
-          <WireframeElements nodes={items} masterIndex={masterIndexIn(items)} />
+          <WireframeElements
+            nodes={node.children}
+            masterIndex={masterIndexIn(node.children)}
+          />
         </div>
       );
-    }
     case "Group":
       return (
         <div
@@ -608,12 +586,23 @@ const WireframeElement = ({
         node.value === undefined ? null : (
           <span className="wireframe-list-value">{node.value}</span>
         );
+      // A row that pushes to another screen says so with the mark a product
+      // puts there. navigateTo is the author declaring the push, so the mark
+      // reports intent already written rather than inventing an affordance:
+      // a row without one never gets it.
+      const disclosure =
+        node.navigateTo === undefined ? null : (
+          <span className="wireframe-list-disclosure">
+            <Glyph name="chevron" />
+          </span>
+        );
       const rowInner = (
         <>
           <span className="wireframe-list-row-primary flex w-full min-w-0 flex-nowrap items-baseline gap-2">
             {statusMarkFor(node.status)}
             <span className="wireframe-list-label grow">{node.label}</span>
             {valueOnMetaLine ? null : value}
+            {disclosure}
           </span>
           {node.meta === undefined ? null : (
             <span className="wireframe-list-row-secondary flex w-full min-w-0 flex-nowrap items-baseline justify-between gap-2">

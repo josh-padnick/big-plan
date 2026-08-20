@@ -159,7 +159,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Stack`            | `gap="none\|xs\|sm\|md\|lg\|xl"` and `align="start\|center\|end\|stretch"`.                                                                       |
 | `Row`              | `gap`, `align`, and `justify="start\|center\|end\|between"`; a direct record collection derives a master pane while remaining content dominates. |
 | `Panel`            | Optional `title`, `eyebrow`, `surface="plain\|filled\|outlined"`, and `status="done\|attention\|waiting\|blocked"`; defaults to a plain, unboxed region.        |
-| `Group`            | A run of elements that travels together as one item of a `Row`; two of them inside `<Row justify="between">` anchor one set at the start and the other at the end. Optional `gap` and `align`. |
+| `Group`            | A run of loose controls that travels together as one item of a `Row`; two of them inside `<Row justify="between">` anchor one set at the start and the other at the end. Inside a `Row` it may not hold a `Panel`, `Stack`, `Row`, `Center`, or `Rail` - a pane is a direct child of its row. Optional `gap` and `align`. |
 | `Overlay`          | A surface drawn over the page. Optional `title`, `kind="dialog\|alert"`, and `backdrop="dim\|clear"`; holds any drawing elements; valid only directly in `Screen`.                              |
 | `Rail`             | The only secondary-width primitive; owns a readable fixed width and wraps rather than squeezing the primary pane.                            |
 | `Center`           | `measure="narrow\|prose\|wide"` for horizontally centered, bounded content; as the only direct child of a screen canvas or desktop `AppContent`, it also fills the available height and centers its content vertically. |
@@ -189,7 +189,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Divider`          | Optional `label`.                                                                                                   |
 | `ImagePlaceholder` | Required `label`; optional `shape="square\|wide\|tall"`.                                                            |
 | `List`             | Holds only `ListItem`.                                                                                              |
-| `ListItem`         | Required `label`; optional `meta`, `value`, `status="done\|attention\|waiting\|blocked"`, `selected`, and `navigateTo`; valid only in `List`. |
+| `ListItem`         | Required `label`; optional `meta`, `value`, `status="done\|attention\|waiting\|blocked"`, `selected`, and `navigateTo`; valid only in `List`. A row with `navigateTo` draws a trailing push chevron on its own. |
 | `ChoiceGroup`      | Holds two to five `ChoiceCard` options as one dominant simple-decision surface.                                     |
 | `ChoiceCard`       | Required `icon`, `title`, and one-line `description`; optional `selected` and `navigateTo`; valid only in `ChoiceGroup`. Its `icon` is a large identifying pictogram for the option, not a glyph from the named set below. |
 | `Message`          | Required `author`, `time`, and `text`; optional `kind="customer\|agent\|internal"`.                                  |

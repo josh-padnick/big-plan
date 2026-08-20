@@ -16,6 +16,7 @@ import { wireframeElementFor } from "./catalog.js";
 import type { WireframeElementDefinition } from "./catalog.js";
 import {
   FLEXIBLE_PANES,
+  ROW_PANES,
   flattenNodes,
   paneSiblings,
   workActionButtons,
@@ -394,6 +395,47 @@ const checkSelection = ({
                 selected.length === 0
                   ? `Screen "${screen.id}" shows detail beside a record list, but no ListItem or Table row is selected`
                   : `Screen "${screen.id}" selects ${selected.length} records beside one detail pane; select exactly one`,
+              position,
+            });
+          }
+        }
+      }
+      visit(childNodes(node));
+    }
+  };
+  visit(screen.children);
+};
+
+/**
+ * Inside a Row, a Group clusters loose controls; it never wraps a pane.
+ *
+ * A Row lays out its own panes, so a Group holding one would have to be both a
+ * single travelling item and a pane at the same time. Only the first meaning
+ * survives, and an author who wrote the other one is told the shape that works
+ * rather than shown a layout they did not write.
+ */
+const checkGroupedPanes = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
+    for (const node of nodes) {
+      if (node.element === "Row") {
+        for (const child of node.children) {
+          if (child.element !== "Group") {
+            continue;
+          }
+          const pane = paneSiblings(child.children).find((candidate) =>
+            ROW_PANES.has(candidate.element),
+          );
+          if (pane !== undefined) {
+            diagnostics.add({
+              message: `Screen "${screen.id}": a Group inside a Row holds a ${pane.element}, so the row cannot lay it out as a pane. Inside a Row, a Group clusters loose controls - buttons, text, badges - so they travel together as one item. Panes are direct children of the Row: write the ${pane.element} as a child of the Row itself and use the Row gap and justify to space them`,
               position,
             });
           }
@@ -886,6 +928,7 @@ const compileScreen = ({
       : { url: validated.url }),
     children,
   };
+  checkGroupedPanes({ screen, position: child.position, diagnostics });
   checkSelection({ screen, position: child.position, diagnostics });
   checkEqualThirds({ screen, position: child.position, diagnostics });
   checkOutlinedSiblingBudget({
