@@ -291,6 +291,16 @@ its light counterpart so the three-deep ladder keeps the same separation.
   --tooltip-c: light-dark(var(--grey-0), var(--grey-800));
   --tooltip-ink-c: light-dark(var(--grey-925), var(--grey-150));
   --tooltip-edge-c: light-dark(var(--grey-250), var(--grey-700));
+  /* A shortcut chip is a key resting on the hint's surface, so it is the same
+     ink held back to a tint rather than a colour of its own. Light needs less
+     of that ink than dark does: dark ink on a pale slab reads heavier at the
+     same strength than pale ink on a dark one, so the light chip stays the
+     lighter mix and both themes land on a key that is present without
+     competing with the sentence beside it. */
+  --tooltip-key-c: light-dark(
+    color-mix(in srgb, var(--grey-925) 6%, transparent),
+    color-mix(in srgb, var(--grey-150) 12%, transparent)
+  );
 
   /* Text, in three weights of attention. */
   --ink-c: light-dark(var(--grey-925), var(--grey-150));
@@ -879,6 +889,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-tooltip: var(--tooltip-c);
   --color-tooltip-ink: var(--tooltip-ink-c);
   --color-tooltip-edge: var(--tooltip-edge-c);
+  --color-tooltip-key: var(--tooltip-key-c);
   --color-accent: var(--accent-c);
   --color-accent-soft: var(--accent-soft-c);
   --color-accent-wash: var(--accent-wash-c);
