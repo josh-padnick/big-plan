@@ -287,10 +287,14 @@ export const Badge = ({
 );
 
 /**
- * A tooltip either names the control it hangs off or explains a choice the
- * reader is about to make; the two want different measures.
+ * A tooltip names the control it hangs off, explains a choice the reader is
+ * about to make, or tells the keystroke that drives the control; the three
+ * want different measures. The shortcut shape is not a caller's choice: it
+ * follows from the tooltip having keys, so a caller cannot pair chipped keys
+ * with a centred caption measure.
  */
 type TooltipVariant = "label" | "explanation";
+type TooltipShape = TooltipVariant | "shortcut";
 
 type TooltipChildProps = {
   readonly "aria-describedby"?: string;
@@ -303,6 +307,12 @@ type TooltipChildProps = {
 
 type TooltipProps = {
   readonly label: string;
+  /**
+   * One entry per keystroke, chipped ahead of the label. Present makes this a
+   * shortcut tooltip; the label then reads as the rest of the sentence the
+   * keys start, as in ⌘ Enter "to submit this comment now".
+   */
+  readonly shortcutKeys?: readonly string[];
   readonly children: ReactElement<TooltipChildProps>;
   readonly className?: string;
   readonly tooltipProps?: HTMLAttributes<HTMLSpanElement> &
@@ -322,7 +332,7 @@ type TooltipProps = {
 // positioner clamps against; both are the same rem measure, so they sit
 // together and stay equal.
 const TOOLTIP_VARIANTS: Record<
-  TooltipVariant,
+  TooltipShape,
   { readonly className: string; readonly maxWidthRem: number }
 > = {
   label: {
@@ -334,18 +344,34 @@ const TOOLTIP_VARIANTS: Record<
     className: "max-w-[min(17rem,calc(100vw_-_2rem))] text-left font-normal",
     maxWidthRem: 17,
   },
+  shortcut: {
+    className: "max-w-[min(15rem,calc(100vw_-_2rem))] text-left font-normal",
+    maxWidthRem: 15,
+  },
 };
 
-/** Reads the variant's authored measure back at the reader's own root size. */
-const tooltipMaxWidth = (variant: TooltipVariant) =>
+/** Reads the shape's authored measure back at the reader's own root size. */
+const tooltipMaxWidth = (shape: TooltipShape) =>
   resolveRemMeasure(
-    TOOLTIP_VARIANTS[variant].maxWidthRem,
+    TOOLTIP_VARIANTS[shape].maxWidthRem,
     getComputedStyle(document.documentElement).fontSize,
   );
+
+// A keystroke is a thing the reader presses, so it is drawn as a key rather
+// than set in the sentence: one chip per key, found by the eye before the
+// sentence explaining what it does is read. The chip borrows the tooltip's own
+// text colour instead of naming one, because the surface under it is inverted
+// and a fixed ink would have to be re-picked per theme.
+const ShortcutKey = ({ children }: { readonly children: string }) => (
+  <kbd className="inline-flex min-w-[1.25em] items-center justify-center rounded-sm border border-[color-mix(in_srgb,currentColor_30%,transparent)] bg-[color-mix(in_srgb,currentColor_12%,transparent)] px-1 py-px font-sans font-semibold">
+    {children}
+  </kbd>
+);
 
 /** A portal tooltip with a deliberate default pause before secondary help. */
 export const Tooltip = ({
   label,
+  shortcutKeys,
   children,
   className,
   tooltipProps,
@@ -354,6 +380,7 @@ export const Tooltip = ({
   isInstant = false,
   variant = "label",
 }: TooltipProps) => {
+  const shape: TooltipShape = shortcutKeys === undefined ? variant : "shortcut";
   const tooltipId = useId();
   const anchorRef = useRef<HTMLElement>(null);
   const showTimerRef = useRef<number | null>(null);
@@ -388,7 +415,7 @@ export const Tooltip = ({
         anchor: rect,
         viewport: { width: window.innerWidth, height: window.innerHeight },
         preferredPlacement: placement,
-        maxWidth: tooltipMaxWidth(variant),
+        maxWidth: tooltipMaxWidth(shape),
       }),
     );
   };
@@ -447,7 +474,7 @@ export const Tooltip = ({
           <span
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-auto fixed z-[2147483647] w-max -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-ink px-2 py-1 text-2xs leading-snug whitespace-normal text-paper shadow-floating [overflow-wrap:anywhere] ${TOOLTIP_VARIANTS[variant].className} ${position.placement === "above" ? "-translate-y-full" : ""}`}
+            className={`pointer-events-auto fixed z-[2147483647] w-max -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-ink px-2 py-1 text-2xs leading-snug whitespace-normal text-paper shadow-floating [overflow-wrap:anywhere] ${TOOLTIP_VARIANTS[shape].className} ${position.placement === "above" ? "-translate-y-full" : ""}`}
             style={{
               top: position.top,
               left: position.left,
@@ -461,7 +488,16 @@ export const Tooltip = ({
             onMouseLeave={scheduleHide}
             {...tooltipProps}
           >
-            {label}
+            {shortcutKeys === undefined ? (
+              label
+            ) : (
+              <span className="inline-flex flex-wrap items-center gap-1">
+                {shortcutKeys.map((key) => (
+                  <ShortcutKey key={key}>{key}</ShortcutKey>
+                ))}
+                <span>{label}</span>
+              </span>
+            )}
           </span>,
           document.body,
         );

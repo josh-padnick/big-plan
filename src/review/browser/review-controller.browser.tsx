@@ -425,14 +425,17 @@ const TOOLBAR_CONTROL_CLASS =
 const FEEDBACK_TAB_CLASS =
   "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>span]:min-w-5 [&>span]:justify-center [&>span]:bg-[var(--annotation-bg)] [&>span]:text-2xs [&>span]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
-const MODIFIER_SHORTCUT = /Mac|iPhone|iPad/u.test(navigator.platform)
-  ? "⌘+Enter"
-  : "Ctrl+Enter";
-// Named beside the modifier shortcut because the two are read together: they
-// are the composer's whole keyboard vocabulary, now told at the controls they
-// drive rather than in a standing line of helper text.
-const ESCAPE_SHORTCUT = "Escape";
 const APPLE_PLATFORM = /Mac|iPhone|iPad/u.test(navigator.platform);
+const MODIFIER_SHORTCUT = APPLE_PLATFORM ? "⌘+Enter" : "Ctrl+Enter";
+// The composer's whole keyboard vocabulary, told at the controls it drives
+// rather than in a standing line of helper text. Each chord travels as its
+// keystrokes rather than as one joined string, because the composer's tooltips
+// draw a keystroke as a key the reader presses rather than as prose. Every
+// other surface still reads the joined form; chipping those is BIG-203.
+const MODIFIER_SHORTCUT_KEYS = APPLE_PLATFORM
+  ? (["⌘", "Enter"] as const)
+  : (["Ctrl", "Enter"] as const);
+const ESCAPE_SHORTCUT_KEYS = ["Esc"] as const;
 const NEW_COMMENT_SHORTCUT = APPLE_PLATFORM ? "⌃+⌘+C" : "Ctrl+Alt+C";
 const isNewCommentShortcut = (event: globalThis.KeyboardEvent): boolean =>
   event.key.toLocaleLowerCase() === "c" &&
@@ -2330,12 +2333,24 @@ const CommentComposer = ({
             through to it.
           */}
           <div className="mt-2 flex items-center justify-end gap-1">
-            <Tooltip label={ESCAPE_SHORTCUT} placement="below">
+            <Tooltip
+              label="to close without adding"
+              shortcutKeys={ESCAPE_SHORTCUT_KEYS}
+              placement="below"
+            >
               <Button variant="outline" size="compact" onClick={onCancel}>
                 Cancel
               </Button>
             </Tooltip>
-            <Tooltip label={MODIFIER_SHORTCUT} placement="below">
+            <Tooltip
+              label={
+                submitRightAway
+                  ? "to submit this comment now"
+                  : "to add this comment"
+              }
+              shortcutKeys={MODIFIER_SHORTCUT_KEYS}
+              placement="below"
+            >
               <Button
                 size="micro"
                 disabled={

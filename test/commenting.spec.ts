@@ -639,10 +639,9 @@ test("should remember the submit-right-away choice across new composers", async 
   // anchored to the wrapper rather than to the button itself.
   const submit = composer.getByRole("button", { name: "Submit Now" });
   await expect(submit).toBeDisabled();
-  const modifierShortcut = await page.evaluate(() =>
-    /Mac|iPhone|iPad/u.test(navigator.platform) ? "\u2318+Enter" : "Ctrl+Enter",
-  );
-  const shortcut = page.getByRole("tooltip", { name: modifierShortcut });
+  const shortcut = page.getByRole("tooltip", {
+    name: /to submit this comment now/,
+  });
   await expect(shortcut).toHaveCount(0);
   // Moved rather than hovered: Playwright refuses to hover a disabled control
   // because its wrapper intercepts the pointer, which is the very mechanism
@@ -650,10 +649,22 @@ test("should remember the submit-right-away choice across new composers", async 
   await hoverCentre(page, submit);
   await expect(shortcut).toBeVisible();
 
+  // A keystroke is drawn as a key rather than set in the sentence, so each key
+  // of the chord is its own element the reader can pick out at a glance.
+  const modifierKeys = await page.evaluate(() =>
+    /Mac|iPhone|iPad/u.test(navigator.platform)
+      ? ["\u2318", "Enter"]
+      : ["Ctrl", "Enter"],
+  );
+  await expect(shortcut.locator("kbd")).toHaveText(modifierKeys);
+
   const cancel = composer.getByRole("button", { name: "Cancel" });
-  const escapeHint = page.getByRole("tooltip", { name: "Escape" });
+  const escapeHint = page.getByRole("tooltip", {
+    name: /to close without adding/,
+  });
   await cancel.hover();
   await expect(escapeHint).toBeVisible();
+  await expect(escapeHint.locator("kbd")).toHaveText(["Esc"]);
   await expect(shortcut).toHaveCount(0);
 
   // The composer carries no standing line of helper text; the shortcuts are
