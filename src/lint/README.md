@@ -25,7 +25,7 @@ The validate command runs those layers in order:
 
 ```text
 plan.mdx
-  -> validateDocument()  structural compilation and in-memory HTML delivery
+  -> validateDocument()  structural compilation and in-memory rendering
   -> lintPlan()          authoring rules
   -> validation summary or aggregated lint diagnostics
 ```

@@ -5,7 +5,8 @@ This directory owns document-wide compilation and delivery; component semantics 
 
 The renderer parses and validates a plan source through one shared pipeline.
 Each component's compilation function returns plain validated data paired with a presentation that consumes it.
-The machine-readable continuation collects that data for JSON without top-level presentation; the HTML continuation invokes the paired presentations through the single React-to-HAST boundary, applies document transforms, then adds the review shell and page envelope.
+Both deliveries invoke the paired presentations through the single React-to-HAST boundary and apply the same document transforms; only what they publish differs, and the [agent guide](../../AGENTS.md) owns that contract.
+Machine delivery publishes the collected component models for JSON; human delivery adds the review shell and page envelope.
 An outline-aware presentation crosses that same boundary after the deck transform has computed the document outline it consumes.
 
 - Put plan-source parsing, document metadata, heading identity, and document-wide HAST transforms under `markdown/`; the module returns structured HAST and never serializes it.
