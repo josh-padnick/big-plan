@@ -63,6 +63,7 @@ Only what each delivery publishes differs:
 
 - **Machine delivery**, used by `big-plan compile` and `big-plan validate`, publishes the collected component models.
   It renders for the same reason: each published model carries the block address its rendered root was given, and a block address only exists over a finished deck.
+  That address is present only where the component's root became a block a reader can point at, so a component rendered privately inside another component's markup, and a slide, which is a scope rather than a block, each publish a model with no address.
   Validation keeps that summary, discards the generated document, and applies its registered linting rules to the authored plan.
 - **Human delivery**, used by `big-plan render`, packages the rendered result as the self-contained inert HTML review document.
 
