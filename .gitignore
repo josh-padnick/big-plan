@@ -8,7 +8,4 @@ examples/*.html
 .DS_Store
 .claude/
 .big-plan/
-data/*
-!data/bp-choose-image-removal/
-data/bp-choose-image-removal/*
-!data/bp-choose-image-removal/review.html
+data/
