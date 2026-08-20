@@ -5819,6 +5819,27 @@ describe("review runtime agent disconnect", () => {
       connected: true,
       writerId: "8888888888888888",
     });
+    /*
+    And the reviewer's decision is stated, not inferred.
+
+    The ordinary edge cannot state it here: presence goes on describing the
+    bystander, healthy and connected, long after the addressee has gone, so
+    waiting for that edge reports a disconnect the reviewer asked for as
+    nothing at all. The row is asserted by its reason rather than by being
+    last, because the checker keeps describing the bystander's live connection
+    afterwards (BIG-156, BIG-190).
+    */
+    await expect(
+      readAgentConnectionEvents({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+      }),
+    ).resolves.toContainEqual(
+      expect.objectContaining({
+        connected: false,
+        reason: AGENT_DISCONNECTED_REASON,
+      }),
+    );
   });
 
   it("should state the reported end after disconnecting a working agent", async () => {

@@ -398,6 +398,13 @@ type DisconnectDecision =
   | {
       readonly requestedAtMs: number;
       readonly presenceWasConnected: boolean;
+      /**
+       * Whether the live presence record describes the agent just addressed.
+       *
+       * False whenever a second agent owns the heartbeat, which is what tells
+       * the caller that no ordinary edge will ever report this departure.
+       */
+      readonly presenceNamedAddressee: boolean;
       readonly claimToken?: string;
       readonly requestId?: string;
     };
@@ -495,6 +502,7 @@ export const disconnectAgent = async (
       return {
         requestedAtMs,
         presenceWasConnected: presence.connected,
+        presenceNamedAddressee: presence.writerId === addressee,
         ...(claimToken === undefined ? {} : { claimToken }),
         ...(claimed === undefined ? {} : { requestId: claimed.requestId }),
       };
@@ -535,8 +543,17 @@ export const disconnectAgent = async (
   The record supersedes an inferred gap and never replaces it, so the silence
   Big Plan honestly wrote down keeps its row and the end somebody asked for is
   stated after it (BIG-156).
+
+  It is written for a live presence too, in the one case where that presence is
+  somebody else: with two agents attached, a waiting loop owns the heartbeat
+  while the agent being disconnected owns only its claim. "The ordinary edge
+  reports it" holds only while the log is describing the agent that left, and
+  here it never will - presence goes on describing the bystander, healthy and
+  connected, long after the addressee has gone. Left to that edge the reviewer's
+  own decision is reported as nothing at all, which is the inferred gap
+  requirement 1 exists to rule out (BIG-190).
   */
-  if (!decision.presenceWasConnected) {
+  if (!decision.presenceWasConnected || !decision.presenceNamedAddressee) {
     await recordAgentConnectionState({
       store,
       sessionId,
