@@ -540,6 +540,10 @@ const wireCopyControls = () => {
       if (!visible(row)) continue;
       lines.push(columns.map((column) => value(row, column)).join("\\t"));
     }
+    const summary = table.querySelector("tfoot > tr[data-table-summary-row]");
+    if (summary !== null && visible(summary)) {
+      lines.push(columns.map((column) => value(summary, column)).join("\\t"));
+    }
     return lines.join("\\n");
   };
 
@@ -1682,6 +1686,10 @@ const wireDataTables = () => {
     wiredDataTables.add(figure);
     const heads = Array.from(headRow.children);
     const rows = Array.from(authoredBody.querySelectorAll("[data-table-row]"));
+    const summaryRow = grid.querySelector("[data-table-summary-row]");
+    const summaryBody = summaryRow?.closest("tfoot") || null;
+    const columnRows =
+      summaryRow === null ? rows : rows.concat([summaryRow]);
     const authoredRows = rows.slice().sort(
       (a, b) =>
         Number(a.getAttribute("data-table-row")) -
@@ -1785,7 +1793,7 @@ const wireDataTables = () => {
         if (Number(head.getAttribute("data-table-column")) !== column) continue;
         head.hidden = hidden;
       }
-      for (const row of rows) {
+      for (const row of columnRows) {
         for (const cell of row.children) {
           if (Number(cell.getAttribute("data-table-column")) !== column)
             continue;
@@ -1817,7 +1825,7 @@ const wireDataTables = () => {
         parent.insertBefore(moving, reference);
       };
       moveWithin(headRow);
-      for (const row of rows) moveWithin(row);
+      for (const row of columnRows) moveWithin(row);
       if (save !== false) persist();
     };
 
@@ -2016,10 +2024,10 @@ const wireDataTables = () => {
         for (const label of seen) {
           const body = buildGroupBody(label);
           groupBodies.push(body);
-          grid.appendChild(body);
+          grid.insertBefore(body, summaryBody);
         }
       } else {
-        grid.appendChild(authoredBody);
+        grid.insertBefore(authoredBody, summaryBody);
       }
       figure.toggleAttribute("data-table-grouped", groupColumn >= 0);
       // Column 0 is only lockable while it is not the one supplying bands.

@@ -3,6 +3,34 @@
 
 import { expect, test } from "./fixtures";
 
+test("should keep the aggregate row pinned when sorting data rows", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    hasText: "Retry outcomes",
+  });
+  const attemptsSort = table.getByRole("button", {
+    name: "Attempts",
+    exact: true,
+  });
+
+  await attemptsSort.click();
+  await attemptsSort.click();
+
+  await expect(table.locator("[data-table-count]")).toHaveText("3 rows");
+  await expect(
+    table.locator("tbody > tr[data-table-row]").first().locator("td").first(),
+  ).toHaveText("Processor timeout");
+  await expect(
+    table.locator("table tr").last().locator("td").first(),
+  ).toHaveText("Total");
+  await expect(table.locator("tfoot > tr[data-table-summary-row]")).toHaveCount(
+    1,
+  );
+});
+
 test("should preserve content-proportional columns when truncating text", async ({
   page,
   allComponentsViewerUrl,

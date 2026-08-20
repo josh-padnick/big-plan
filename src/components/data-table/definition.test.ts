@@ -2,7 +2,10 @@
 // authored-order fallback used before the viewer enhancement runs.
 
 import { describe, expect, it } from "vitest";
-import { compileMarkdown } from "../../render/markdown/compile-markdown.js";
+import {
+  compileMarkdown,
+  MarkdownDiagnosticsError,
+} from "../../render/markdown/compile-markdown.js";
 import { serializeHtml } from "../../render/serialize-html.js";
 
 const render = (markdown: string): string => {
@@ -46,5 +49,69 @@ describe("DataTable rendering", () => {
     expect(itemTitles).toEqual(["First", "Second", "Third"]);
     expect(groupedCells.length).toBeGreaterThan(0);
     expect(groupedCells.every((cell) => !cell.includes(" hidden"))).toBe(true);
+  });
+
+  it("should render one summary row in a semantic footer", () => {
+    const html = render(`<DataTable title="Totals">
+
+\`\`\`table
+| Region | Requests |
+| --- | ---: |
+| Europe | 120 |
+| Asia Pacific | 80 |
+\`\`\`
+
+<SummaryRow>
+
+\`\`\`table
+| Total | 200 |
+\`\`\`
+
+</SummaryRow>
+</DataTable>`);
+
+    expect(html).toMatch(
+      /<tfoot><tr[^>]*data-table-summary-row[^>]*>[\s\S]*title="Total"[\s\S]*title="200"[\s\S]*<\/tr><\/tfoot>/u,
+    );
+    expect(html).toContain("2 rows");
+  });
+
+  it("should reject a second SummaryRow at its authored location", () => {
+    const source = `<DataTable>
+
+\`\`\`table
+| Name | Count |
+| --- | ---: |
+| One | 1 |
+\`\`\`
+
+<SummaryRow>
+
+\`\`\`table
+| Total | 1 |
+\`\`\`
+
+</SummaryRow>
+<SummaryRow>
+
+\`\`\`table
+| Duplicate | 1 |
+\`\`\`
+
+</SummaryRow>
+</DataTable>`;
+
+    try {
+      compileMarkdown({ markdown: source });
+      throw new Error("expected duplicate SummaryRow to fail compilation");
+    } catch (error) {
+      expect(error).toBeInstanceOf(MarkdownDiagnosticsError);
+      if (!(error instanceof MarkdownDiagnosticsError)) return;
+      expect(error.diagnostics.map((diagnostic) => diagnostic.message)).toEqual(
+        [
+          "DataTable allows one SummaryRow; combine the table-wide aggregates into that row",
+        ],
+      );
+    }
   });
 });

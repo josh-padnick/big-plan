@@ -34,7 +34,7 @@ Use `DataTable` when the grid is a **dataset the reviewer will query** rather th
 
 The body is one fenced block with language `table` holding an ordinary GFM pipe grid, so a markdown table that outgrew itself is wrapped rather than rewritten. The delimiter row's colons still set alignment.
 
-```mdx
+````mdx
 <DataTable title="Queue depth by processor" filter groupBy="Tier">
 
 <Column name="Attempts" type="number" align="right" sort="desc" />
@@ -42,8 +42,16 @@ The body is one fenced block with language `table` holding an ordinary GFM pipe 
 
 ...one fenced `table` block here...
 
-</DataTable>
+<SummaryRow>
+
+```table
+| Total | 222 |  |  |
 ```
+
+</SummaryRow>
+
+</DataTable>
+````
 
 With no `Column` children every column is text and sortable, takes its alignment from the delimiter row, inherits the table's fit, and is shown in authored order.
 
@@ -67,6 +75,32 @@ With no `Column` children every column is text and sortable, takes its alignment
 | `align` | `left`, `center`, `right` | Cell alignment, overriding the delimiter row. |
 | `sort` | `asc`, `desc` | The table's opening order. At most one column may declare it. |
 | `fit` | `wrap`, `truncate`, `scroll` | Overrides the table's fit for this column alone. |
+
+### `SummaryRow`
+
+When one row describes the complete dataset rather than one record, use `SummaryRow`.
+Common summaries include totals, averages, ranges, and overall budgets.
+If a reader should sort, filter, or group the row like a record, keep it in the main grid.
+
+`SummaryRow` takes no attributes.
+Give it one fenced `table` block that contains one pipe row.
+Write one cell for every table column, in the same order as the headers.
+
+````mdx
+<SummaryRow>
+
+```table
+| Total | 222 requests |  | Across all processors |
+```
+
+</SummaryRow>
+````
+
+A table accepts one summary row.
+To report several aggregates, place them in the relevant cells of that row.
+The summary row stays at the bottom and never participates in sorting, filtering, grouping, or the row count.
+Its values summarize the complete authored dataset and do not recalculate when a reader filters the table.
+A summary row is also valid when the table does not declare an opening sort.
 
 ## Text fit
 

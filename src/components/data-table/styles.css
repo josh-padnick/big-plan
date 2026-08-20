@@ -27,6 +27,13 @@
   article .data-table-grid tbody tr:hover td {
     background: color-mix(in srgb, var(--ink-c) 4%, var(--raised-c));
   }
+  /* The summary is table-wide context, not another data record. A distinct
+     surface and label weight separate it without competing with the header. */
+  article .data-table-grid tfoot td {
+    background: var(--surface-c);
+    border-bottom: 0;
+    font-weight: var(--font-weight-semibold);
+  }
   article .data-table-sort-glyph svg {
     width: 0.7rem;
     height: 0.7rem;

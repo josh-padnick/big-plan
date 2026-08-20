@@ -29,6 +29,11 @@ export type ParsedTableGrid = {
   readonly diagnostics: ReadonlyArray<TableGridDiagnostic>;
 };
 
+export type ParsedTableRow = {
+  readonly row?: ReadonlyArray<TableCell>;
+  readonly diagnostics: ReadonlyArray<TableGridDiagnostic>;
+};
+
 type SourceLine = { readonly text: string; readonly line: number };
 
 // Splits on syntactic pipes only. An odd run of backslashes escapes the pipe
@@ -213,4 +218,38 @@ export const parseTableGrid = (source: string): ParsedTableGrid => {
   }
 
   return { headers, alignments, rows, diagnostics };
+};
+
+/** Parses the single pipe row authored inside a SummaryRow. */
+export const parseTableRow = ({
+  source,
+  columnCount,
+}: {
+  readonly source: string;
+  readonly columnCount: number;
+}): ParsedTableRow => {
+  const lines = meaningfulLines(source);
+  if (lines.length !== 1) {
+    return {
+      diagnostics: [
+        {
+          line: lines[1]?.line ?? 1,
+          message: "Expected exactly one pipe row",
+        },
+      ],
+    };
+  }
+  const line = lines[0];
+  const cells = rowCells(line?.text ?? "");
+  if (cells.length !== columnCount) {
+    return {
+      diagnostics: [
+        {
+          line: line?.line ?? 1,
+          message: `Row has ${cells.length} cells but the table has ${columnCount} columns`,
+        },
+      ],
+    };
+  }
+  return { row: cells.map(toCell), diagnostics: [] };
 };

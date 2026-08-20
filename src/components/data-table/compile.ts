@@ -13,6 +13,7 @@ import { singleAuthoredFence } from "../_authoring/authored-body.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import {
   parseTableGrid,
+  parseTableRow,
   type TableCell,
   type TableGridAlignment,
 } from "./parse-table-grid.js";
@@ -60,6 +61,7 @@ export type CompiledDataTable = {
   readonly fit: DataTableFit;
   readonly columns: ReadonlyArray<CompiledDataTableColumn>;
   readonly rows: ReadonlyArray<CompiledDataTableRow>;
+  readonly summaryRow?: CompiledDataTableRow;
   // Group labels in first-appearance order; empty on an ungrouped table.
   readonly groups: ReadonlyArray<string>;
   // Index of the column the bands come from, or -1 when the table is flat.
@@ -80,6 +82,8 @@ const COLUMN_SCHEMA = {
   fit: { kind: "enum", values: FITS },
   sort: { kind: "enum", values: SORTS },
 } satisfies ComponentAttributeSchema;
+
+const SUMMARY_ROW_SCHEMA = {} satisfies ComponentAttributeSchema;
 
 type ColumnOverride = {
   readonly type?: DataTableColumnType;
@@ -145,6 +149,63 @@ const collectOverrides = ({
     });
   }
   return overrides;
+};
+
+// Compiles the one global aggregate row separately from sortable data.
+// Keeping the distinction in the model lets every delivery preserve it.
+const compileSummaryRow = ({
+  children,
+  columnCount,
+  diagnostics,
+}: {
+  readonly children: ReadonlyArray<ScopedChild>;
+  readonly columnCount: number;
+  readonly diagnostics: DiagnosticCollector;
+}): CompiledDataTableRow | undefined => {
+  const summaries = children.filter((child) => child.name === "SummaryRow");
+  for (const duplicate of summaries.slice(1)) {
+    diagnostics.add({
+      message:
+        "DataTable allows one SummaryRow; combine the table-wide aggregates into that row",
+      position: duplicate.position,
+    });
+  }
+  const summary = summaries[0];
+  if (summary === undefined) return undefined;
+  validateComponentAttributes({
+    component: "SummaryRow",
+    attributes: summary.attributes,
+    position: summary.position,
+    diagnostics,
+    schema: SUMMARY_ROW_SCHEMA,
+  });
+  const fence = singleAuthoredFence({
+    children: summary.children,
+    language: "table",
+  });
+  if (fence === undefined) {
+    diagnostics.add({
+      message:
+        "SummaryRow expects exactly one fenced code block with language table containing one pipe row",
+      position: summary.position,
+    });
+    return undefined;
+  }
+  const parsed = parseTableRow({ source: fence.source, columnCount });
+  const fenceLine = fence.codePosition?.start.line;
+  for (const diagnostic of parsed.diagnostics) {
+    diagnostics.add({
+      message: `Invalid summary row line ${diagnostic.line}: ${diagnostic.message}`,
+      position:
+        fenceLine === undefined
+          ? summary.position
+          : {
+              start: { line: fenceLine + diagnostic.line, column: 1 },
+              end: { line: fenceLine + diagnostic.line, column: 1 },
+            },
+    });
+  }
+  return parsed.row === undefined ? undefined : { cells: parsed.row };
 };
 
 /** Compiles one DataTable component into the model consumed by rendering. */
@@ -241,6 +302,12 @@ export const compileDataTable = ({
     },
   );
 
+  const summaryRow = compileSummaryRow({
+    children: scopedChildren,
+    columnCount: parsed.headers.length,
+    diagnostics,
+  });
+
   // Rows stay in authored order. Grouping is activated only by the viewer
   // enhancement so the inert document remains the complete authored grid.
   const groups: Array<string> = [];
@@ -262,6 +329,7 @@ export const compileDataTable = ({
     fit,
     columns,
     rows,
+    ...(summaryRow === undefined ? {} : { summaryRow }),
     groups,
     groupColumn: groupIndex,
   };
