@@ -1625,6 +1625,30 @@ describe("agent work loop lifecycle", () => {
         { timeout: 5_000 },
       );
 
+      /*
+      The review has one presence record, and it belongs to the agent that
+      answers the review.
+
+      An observer waiting beside the primary writes its own heartbeat twice a
+      second, and this record is replaced whole, so an observer allowed to
+      write it renamed the review's agent to itself on every pass. The
+      reviewer's activity card is drawn from exactly this, and with both loops
+      idle it alternated between the two of them twice a second (BIG-171).
+      */
+      const presence = await reviewStore.readAgentPresence({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(presence.model?.name).toBe("claude-opus-5");
+      const primaryWriterId = selectPrimaryAgent({
+        agents: await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+        nowMs: Date.now(),
+      })?.writerId;
+      expect(presence.writerId).toBe(primaryWriterId);
+
       // The queued request is still queued: nothing took it.
       const stillQueued = await readAgentExchange({
         store: review.store,
@@ -3514,32 +3538,34 @@ describe("agent work loop lifecycle", () => {
       body: "Keep working on this request.",
     });
     await writeAgentRequest({ store: review.store, request });
-    let waiting: Promise<Record<string, unknown>> | undefined;
     try {
-      await runAgentWorkLoopAction({
+      const pickup = await runAgentWorkLoopAction({
         kind: "next",
         planPath,
         shouldWait: false,
         executablePath,
       });
       await expect(fetch(review.url)).resolves.toMatchObject({ status: 200 });
-      waiting = runAgentWorkLoopAction({
-        kind: "next",
-        planPath,
-        shouldWait: true,
-        executablePath,
+      /*
+      The agent goes back to waiting while its claim is still open, which is
+      the ordinary shape of a turn: `next` hands the work to the harness and
+      the process exits, so the loop reports waiting long before the answer is
+      published. The heartbeat is written directly rather than by standing up a
+      second loop - a second loop attaches as an observer now, and an observer
+      is deliberately unable to say anything about the review's presence.
+      */
+      await reviewStore.writeAgentHeartbeat({
+        store: review.store,
+        sessionId: review.sessionId,
+        state: "waiting",
+        writerId: String(pickup["connection_token"]),
       });
-      await vi.waitFor(
-        async () => {
-          expect(
-            await reviewStore.readAgentPresence({
-              store: review.store,
-              sessionId: review.sessionId,
-            }),
-          ).toMatchObject({ state: "waiting" });
-        },
-        { timeout: 5_000 },
-      );
+      expect(
+        await reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).toMatchObject({ state: "waiting" });
       const survivedUntil = Date.now() + 1_100;
       await vi.waitFor(
         () => {
@@ -3550,7 +3576,6 @@ describe("agent work loop lifecycle", () => {
       await expect(fetch(review.url)).resolves.toMatchObject({ status: 200 });
     } finally {
       await review.close();
-      await waiting;
       await rm(directory, { recursive: true, force: true });
     }
   });

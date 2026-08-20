@@ -19,6 +19,7 @@ import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
+  attachAgentToRoster,
   anchorReviewStore,
   deriveReviewPlanId,
   prepareStore,
@@ -593,6 +594,72 @@ describe("review store agent presence", () => {
       model: { client: "grok-cli 0.2.99" },
       updatedAtMs: 11_000,
     });
+  });
+
+  it("refuses a heartbeat from a writer the roster has never seen", async () => {
+    /*
+    There is one presence record per review and it is replaced whole, so
+    whoever writes it becomes, to every reviewer-facing surface, the agent
+    attached to this plan. Every shipped path registers before it heartbeats,
+    but that was a property of the call sites and nothing enforced it - and the
+    failure it left open was silent, which is the shape of failure this
+    subsystem exists to remove (BIG-171).
+    */
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await attachAgentToRoster({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      writerId: "0123456789abcdef",
+      now: 10_000,
+    });
+    await expect(
+      writeAgentHeartbeat({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        writerId: "0123456789abcdef",
+        now: 10_000,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      writeAgentHeartbeat({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "working",
+        requestId: "bbbbbbbbbbbbbbbb",
+        writerId: "feedfeedfeedfeed",
+        now: 11_000,
+      }),
+    ).resolves.toBe(false);
+    // The refused write left the record exactly as the registered agent wrote
+    // it, rather than half-applying and renaming the review's agent.
+    await expect(
+      readAgentPresence({ store, sessionId: "aaaaaaaaaaaaaaaa", now: 12_000 }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      writerId: "0123456789abcdef",
+      updatedAtMs: 10_000,
+    });
+  });
+
+  it("lets a review nobody has attached to yet record its first heartbeat", async () => {
+    // An empty roster is not evidence of an unregistered writer, only of a
+    // review no agent has reached; there is nobody there to be spoken over.
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await expect(
+      writeAgentHeartbeat({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        writerId: "0123456789abcdef",
+        now: 10_000,
+      }),
+    ).resolves.toBe(true);
   });
 
   it("reports only a fresh heartbeat from the matching agent session", async () => {

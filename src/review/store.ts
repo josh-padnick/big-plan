@@ -2517,6 +2517,30 @@ export const writeAgentHeartbeat = async ({
     store,
     lockAttempts,
     change: async () => {
+      /*
+      A writer the roster has never heard of may not speak for the review.
+
+      There is one presence record per review and it is replaced whole, so
+      whoever writes it becomes, to every reviewer-facing surface, the agent
+      attached to this plan. Every shipped path registers on the roster before
+      it heartbeats - the work loop's `refreshRoster` runs first, on every pass
+      - but that was a property of the call sites rather than a rule, and the
+      failure it leaves open is silent: the write lands, the card renames
+      itself, and nothing refuses. This is that rule (BIG-171).
+
+      An empty roster is not evidence of an unregistered writer, only of a
+      review no agent has attached to yet, so it is allowed through: there is
+      no one there to be spoken over.
+      */
+      if (writerId !== undefined) {
+        const roster = await readAgentRoster({ store, sessionId });
+        if (
+          roster.length > 0 &&
+          !roster.some((agent) => agent.writerId === writerId)
+        ) {
+          return false;
+        }
+      }
       const stored = await storedHeartbeatContinuity({ store, sessionId });
       const writer = writerId ?? stored.writerId;
       /*

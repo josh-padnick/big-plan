@@ -852,6 +852,26 @@ const nextWork = async ({
   replaced nor be mistaken for it.
   */
   const writerId = connectionToken ?? randomId(8);
+  /*
+  The identity this loop answers to on the roster, which is not the same thing
+  as the identity of the process running it.
+
+  A process id is minted here and lives as long as this command. An agent's
+  place on the reviewer's rail has to outlast that: it is one row for one
+  agent, across the pickup, the notes, the answer, and the next pickup. So the
+  first registration decides which record this loop is, and every later one
+  goes back to that record rather than proposing a new name for it.
+
+  Everything this loop writes about itself is written under this name, and that
+  is why it is declared up here rather than beside the registration that sets
+  it. A loop that came back holding only its pickup token adopts an older
+  record and keeps the id it minted this time, so the two diverge - and for as
+  long as the presence record, the ended marker, and the disconnect lookup used
+  the minted one, they were about an agent no card on the rail could name.
+  Until the registration below runs, this is the minted id, which is the same
+  thing: nothing has claimed the loop by another name yet.
+  */
+  let rosterWriterId = writerId;
   const binPath = resolve(executablePath);
   const nextCommand = agentNextCommand({
     executablePath: binPath,
@@ -872,7 +892,7 @@ const nextWork = async ({
     await writeAgentHeartbeatEnded({
       store: session.store,
       sessionId: session.sessionId,
-      writerId,
+      writerId: rosterWriterId,
     });
     fail("The process that started this agent loop has exited");
   };
@@ -912,7 +932,11 @@ const nextWork = async ({
     (await acknowledgeDisconnect({
       store: session.store,
       sessionId: session.sessionId,
-      writerId,
+      // The reviewer's directive is addressed to the name on the card they
+      // pressed, which is this loop's roster identity. Asking under the id the
+      // process minted let a loop that had adopted an older record work on
+      // past a disconnect it could not see.
+      writerId: rosterWriterId,
       ...(heldRequestId === undefined ? {} : { requestId: heldRequestId }),
     })) !== undefined;
   if (await wasDisconnected()) return disconnectedResult();
@@ -925,17 +949,6 @@ const nextWork = async ({
   Arriving as an observer is also the request the reviewer answers, so a second
   agent showing up is what raises the question rather than a flag nobody pastes.
   */
-  /*
-  The identity this loop answers to on the roster, which is not the same thing
-  as the identity of the process running it.
-
-  A process id is minted here and lives as long as this command. An agent's
-  place on the reviewer's rail has to outlast that: it is one row for one
-  agent, across the pickup, the notes, the answer, and the next pickup. So the
-  first registration decides which record this loop is, and every later one
-  goes back to that record rather than proposing a new name for it.
-  */
-  let rosterWriterId = writerId;
   let adoptClaimToken = agentToken;
   let registered = false;
   /*
@@ -1044,13 +1057,28 @@ const nextWork = async ({
       while (request === undefined && shouldWait) {
         await endWhenSpawnerIsGone();
         if (await wasDisconnected()) return disconnectedResult();
-        await writeAgentHeartbeat({
-          store: session.store,
-          sessionId: session.sessionId,
-          state: "waiting",
-          writerId,
-          ...(model === undefined ? {} : { model }),
-        });
+        /*
+        The review's presence record belongs to the agent that answers it.
+
+        There is one such record per review and it is replaced whole, so an
+        observer writing to it renamed the review's agent to itself. With two
+        loops idle-waiting, both wrote every half second and the reviewer's
+        activity card alternated between them twice a second - one card,
+        claiming in turn to be each of the two agents underneath it (BIG-171).
+
+        An observer loses nothing by staying out of it. Its own place on the
+        roster is kept by `refreshRoster` below, on the same tick, and that is
+        the record its card is drawn from.
+        */
+        if (role === "primary") {
+          await writeAgentHeartbeat({
+            store: session.store,
+            sessionId: session.sessionId,
+            state: "waiting",
+            writerId: rosterWriterId,
+            ...(model === undefined ? {} : { model }),
+          });
+        }
         const liveness = await reviewSessionIsAvailable({
           store: session.store,
           sessionId: session.sessionId,
@@ -1135,7 +1163,7 @@ const nextWork = async ({
           ...(requestId === undefined
             ? { state: "waiting" as const }
             : { state: "working" as const, requestId }),
-          writerId,
+          writerId: rosterWriterId,
           ...(model === undefined ? {} : { model }),
         });
       await markWorkingOn(request.requestId);
