@@ -722,6 +722,58 @@ test("should remember the submit-right-away choice across new composers", async 
   ).toHaveAttribute("aria-checked", "true");
 });
 
+test("should dismiss composer tooltips before closing a typed comment", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+
+  await page
+    .getByRole("button", { name: "Comment on slide" })
+    .first()
+    .click();
+  const composer = page.getByRole("dialog", { name: /Comment on/ });
+  const input = composer.getByLabel("Add a comment");
+  const submit = composer.getByRole("button", { name: "Submit Now" });
+  const submitTooltip = page.getByRole("tooltip", {
+    name: /to submit this comment now/,
+  });
+  await expect(submit).toBeDisabled();
+  await hoverCentre(page, submit);
+  await expect(submitTooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(submitTooltip).toHaveCount(0);
+  await expect(composer).toBeVisible();
+
+  await input.fill("Keep this typed comment intact.");
+  const cancel = composer.getByRole("button", { name: "Cancel" });
+  const cancelTooltip = page.getByRole("tooltip", {
+    name: /to close without adding/,
+  });
+  await cancel.hover();
+  await expect(cancelTooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(cancelTooltip).toHaveCount(0);
+  await expect(input).toHaveValue("Keep this typed comment intact.");
+
+  const help = composer.getByRole("button", {
+    name: "About Submit right away",
+  });
+  const helpTooltip = page.getByRole("tooltip", {
+    name: /Send the comment to the agent/,
+  });
+  await help.focus();
+  await expect(helpTooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(helpTooltip).toHaveCount(0);
+  await expect(composer).toBeVisible();
+  await expect(input).toHaveValue("Keep this typed comment intact.");
+
+  await page.keyboard.press("Escape");
+  await expect(composer).toHaveCount(0);
+});
+
 test("should replace an empty composer and protect a non-empty draft", async ({
   page,
   deckViewerUrl,
