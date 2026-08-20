@@ -205,7 +205,35 @@ test("should keep a long desktop TOC usable while the plan scrolls", async ({
     expect(await page.evaluate(() => window.scrollY)).toBe(pageScrollBefore);
   });
 
+  await test.step("clicking a distant section preserves the reader's TOC position", async () => {
+    const listScrollBefore = await list.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+      return node.scrollTop;
+    });
+    expect(listScrollBefore).toBeGreaterThan(0);
+
+    const lastLink = toc.getByRole("link", {
+      name: "Sustainability section 35",
+    });
+    await lastLink.click();
+    await expect(page).toHaveURL(/#sustainability-section-35$/);
+    await expect(
+      page.getByRole("heading", {
+        level: 2,
+        name: "Sustainability section 35",
+      }),
+    ).toBeInViewport();
+    await expect
+      .poll(() => list.evaluate((node) => node.scrollTop))
+      .toBe(listScrollBefore);
+  });
+
   await test.step("the current section remains visible as reading advances", async () => {
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await expect(toc.getByRole("link", { name: "Contents" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
     await page.getByRole("main").hover();
     await page.mouse.wheel(0, 3_800);
     const current = toc.locator('[data-section-link][aria-current="true"]');

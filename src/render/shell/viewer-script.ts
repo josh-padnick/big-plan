@@ -274,6 +274,8 @@ const installColumnPointerReorder = ({
 // refresh replaces them all. The scroll and resize listeners register once and
 // call through this mutable reference.
 let applyScrollSpy = () => {};
+let pendingDesktopTocNavigation = null;
+const wiredDesktopTocNavigationLinks = new WeakSet();
 const wireScrollSpy = () => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
   const overviewLinks = Array.from(
@@ -291,6 +293,29 @@ const wireScrollSpy = () => {
     applyScrollSpy = () => {};
     window.__bigPlanRefreshScrollSpy = applyScrollSpy;
     return;
+  }
+  for (const link of links) {
+    if (
+      wiredDesktopTocNavigationLinks.has(link) ||
+      link.closest("[data-desktop-toc]") === null
+    )
+      continue;
+    wiredDesktopTocNavigationLinks.add(link);
+    link.addEventListener("click", () => {
+      const list = link.closest("[data-desktop-toc-list]");
+      if (!(list instanceof HTMLElement)) return;
+      if (link.getAttribute("aria-current") === "true") {
+        pendingDesktopTocNavigation = null;
+        return;
+      }
+      pendingDesktopTocNavigation = {
+        list,
+        scrollTop: list.scrollTop,
+        targetId: decodeURIComponent(
+          (link.getAttribute("href") || "").slice(1),
+        ),
+      };
+    });
   }
   const isReadableHeading = (heading) => {
     if (!(heading instanceof Element)) return false;
@@ -334,6 +359,15 @@ const wireScrollSpy = () => {
     const list = link?.closest("[data-desktop-toc-list]");
     if (!(link instanceof HTMLElement) || !(list instanceof HTMLElement))
       return;
+    if (
+      pendingDesktopTocNavigation !== null &&
+      pendingDesktopTocNavigation.list === list
+    ) {
+      list.scrollTop = pendingDesktopTocNavigation.scrollTop;
+      if (heading.id === pendingDesktopTocNavigation.targetId)
+        pendingDesktopTocNavigation = null;
+      return;
+    }
     const linkRect = link.getBoundingClientRect();
     const listRect = list.getBoundingClientRect();
     if (linkRect.top < listRect.top) {
