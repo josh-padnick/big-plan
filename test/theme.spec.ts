@@ -1084,14 +1084,18 @@ test("should say when a write fails and keep the typed note", async ({
   await openSection(page, "Approval message");
   await message.fill(written);
   await expect(
-    page.getByText("This note could not be saved. It is still here, but it will be lost if you close this page."),
+    page.getByText(
+      "This note could not be saved. It is still here, but it will be lost if you close this page.",
+    ),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await settings.click();
   await openSection(page, "Approval message");
   await expect(message).toHaveValue(written);
   await expect(
-    page.getByText("This note could not be saved. It is still here, but it will be lost if you close this page."),
+    page.getByText(
+      "This note could not be saved. It is still here, but it will be lost if you close this page.",
+    ),
   ).toBeVisible();
 });
 

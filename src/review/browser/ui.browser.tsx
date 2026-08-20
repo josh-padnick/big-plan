@@ -742,7 +742,9 @@ export const AlertDialog = ({
             size="md"
             onClick={onAction}
             aria-describedby={footnote === undefined ? undefined : footnoteId}
-            className={width === "wide" ? "wide:w-auto max-sm:w-full" : undefined}
+            className={
+              width === "wide" ? "wide:w-auto max-sm:w-full" : undefined
+            }
           >
             {actionLabel}
           </Button>

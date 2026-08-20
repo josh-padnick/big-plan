@@ -94,7 +94,8 @@ export const changeSetsFromExchange = ({
     const placeIds = placeIdsByRevision.get(key) ?? [];
     sets.push({
       id: response.requestId,
-      label: request.targetLabel ?? `Version ${response.resultSnapshot.slice(0, 7)}`,
+      label:
+        request.targetLabel ?? `Version ${response.resultSnapshot.slice(0, 7)}`,
       from,
       to: response.resultSnapshot,
       placeIds,

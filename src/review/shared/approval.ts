@@ -103,8 +103,7 @@ export const inForceApproval = (
   const revoked = record.entries
     .slice(latestIndex + 1)
     .some(
-      (entry) =>
-        entry.kind === "revocation" && entry.approvalId === latestId,
+      (entry) => entry.kind === "revocation" && entry.approvalId === latestId,
     );
   return revoked ? undefined : latest;
 };

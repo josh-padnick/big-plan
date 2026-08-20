@@ -228,9 +228,7 @@ const logEntry = (value: unknown): ApprovalLogEntry => {
   const candidate = record({ value, field: "entry" });
   if (candidate.kind === "approval") return approvalEntry(candidate);
   if (candidate.kind === "revocation") return revocationEntry(candidate);
-  throw new ApprovalRecordRejected(
-    '"kind" must be "approval" or "revocation"',
-  );
+  throw new ApprovalRecordRejected('"kind" must be "approval" or "revocation"');
 };
 
 /** Validates the complete on-disk record, treating an absent file as empty. */

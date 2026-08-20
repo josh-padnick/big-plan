@@ -6523,87 +6523,86 @@ describe("review runtime approval", () => {
     });
 
   it("writes the approval record, pins the digest, and survives a reread", async () => {
-    await withApprovalRuntime(DECISION_PLAN, async ({
-      target,
-      sessionToken,
-      digest,
-    }) => {
-      expect(
-        (
-          await callRuntime({
-            target,
-            sessionToken,
-            path: "/api/inputs",
-            method: "POST",
-            body: {
-              op: "stage",
-              answer: {
-                decisionId: DECISION_ID,
-                optionId: GRADUAL_OPTION_ID,
-                optionTitle: "Gradual rollout",
-                prompt: "Which release path should we use?",
-                premiseSnapshot: digest,
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        expect(
+          (
+            await callRuntime({
+              target,
+              sessionToken,
+              path: "/api/inputs",
+              method: "POST",
+              body: {
+                op: "stage",
+                answer: {
+                  decisionId: DECISION_ID,
+                  optionId: GRADUAL_OPTION_ID,
+                  optionTitle: "Gradual rollout",
+                  prompt: "Which release path should we use?",
+                  premiseSnapshot: digest,
+                },
               },
+            })
+          ).status,
+        ).toBe(200);
+
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+          message: "Start on it now.",
+        });
+        expect(response.status).toBe(200);
+        const body: unknown = await response.json();
+        expect(body).toMatchObject({
+          pinnedSnapshot: digest,
+          canceledRequests: 0,
+          approval: { status: "approved", pinnedSnapshot: digest },
+        });
+
+        const stored: unknown = JSON.parse(
+          await readFile(target.store.approvalPath, "utf8"),
+        );
+        expect(stored).toMatchObject({
+          version: 1,
+          entries: [
+            {
+              kind: "approval",
+              pinnedSnapshot: digest,
+              message: "Start on it now.",
+              recordedAnswers: [
+                {
+                  decisionId: DECISION_ID,
+                  optionTitle: "Gradual rollout",
+                },
+              ],
             },
-          })
-        ).status,
-      ).toBe(200);
+          ],
+        });
 
-      const response = await approve(target, sessionToken, {
-        expectedSnapshot: digest,
-        message: "Start on it now.",
-      });
-      expect(response.status).toBe(200);
-      const body: unknown = await response.json();
-      expect(body).toMatchObject({
-        pinnedSnapshot: digest,
-        canceledRequests: 0,
-        approval: { status: "approved", pinnedSnapshot: digest },
-      });
-
-      const stored: unknown = JSON.parse(
-        await readFile(target.store.approvalPath, "utf8"),
-      );
-      expect(stored).toMatchObject({
-        version: 1,
-        entries: [
-          {
-            kind: "approval",
-            pinnedSnapshot: digest,
-            message: "Start on it now.",
-            recordedAnswers: [
-              {
-                decisionId: DECISION_ID,
-                optionTitle: "Gradual rollout",
-              },
-            ],
-          },
-        ],
-      });
-
-      const session = await (
-        await callRuntime({ target, sessionToken, path: "/api/session" })
-      ).json();
-      expect(session).toMatchObject({
-        approval: { status: "approved", pinnedSnapshot: digest },
-      });
-    });
+        const session = await (
+          await callRuntime({ target, sessionToken, path: "/api/session" })
+        ).json();
+        expect(session).toMatchObject({
+          approval: { status: "approved", pinnedSnapshot: digest },
+        });
+      },
+    );
   });
 
   it("refuses a digest that no longer matches the source", async () => {
-    await withApprovalRuntime(DECISION_PLAN, async ({
-      target,
-      sessionToken,
-    }) => {
-      const response = await approve(target, sessionToken, {
-        expectedSnapshot: "ffffffffffffffff",
-        message: "Start on it now.",
-      });
-      expect(response.status).toBe(409);
-      await expect(response.json()).resolves.toMatchObject({
-        code: "plan-changed",
-      });
-    });
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken }) => {
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: "ffffffffffffffff",
+          message: "Start on it now.",
+        });
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toMatchObject({
+          code: "plan-changed",
+        });
+      },
+    );
   });
 
   it("refuses unanswered critical decisions", async () => {
@@ -6611,102 +6610,97 @@ describe("review runtime approval", () => {
       '<Decision question="Which release path should we use?">',
       '<Decision critical question="Which release path should we use?">',
     );
-    await withApprovalRuntime(criticalPlan, async ({
-      target,
-      sessionToken,
-      digest,
-    }) => {
-      const response = await approve(target, sessionToken, {
-        expectedSnapshot: digest,
-      });
-      expect(response.status).toBe(409);
-      await expect(response.json()).resolves.toMatchObject({
-        code: "critical-unanswered",
-        blockingDecisionIds: [DECISION_ID],
-      });
-    });
+    await withApprovalRuntime(
+      criticalPlan,
+      async ({ target, sessionToken, digest }) => {
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toMatchObject({
+          code: "critical-unanswered",
+          blockingDecisionIds: [DECISION_ID],
+        });
+      },
+    );
   });
 
   it("refuses a second approve of the same snapshot", async () => {
-    await withApprovalRuntime(DECISION_PLAN, async ({
-      target,
-      sessionToken,
-      digest,
-    }) => {
-      expect(
-        (await approve(target, sessionToken, { expectedSnapshot: digest }))
-          .status,
-      ).toBe(200);
-      const again = await approve(target, sessionToken, {
-        expectedSnapshot: digest,
-      });
-      expect(again.status).toBe(409);
-      await expect(again.json()).resolves.toMatchObject({
-        code: "already-approved",
-      });
-    });
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        expect(
+          (await approve(target, sessionToken, { expectedSnapshot: digest }))
+            .status,
+        ).toBe(200);
+        const again = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        expect(again.status).toBe(409);
+        await expect(again.json()).resolves.toMatchObject({
+          code: "already-approved",
+        });
+      },
+    );
   });
 
   it("revokes the in-force approval", async () => {
-    await withApprovalRuntime(DECISION_PLAN, async ({
-      target,
-      sessionToken,
-      digest,
-    }) => {
-      const approved = await approve(target, sessionToken, {
-        expectedSnapshot: digest,
-      });
-      const body = (await approved.json()) as {
-        readonly approvalId: string;
-      };
-      const revoked = await callRuntime({
-        target,
-        sessionToken,
-        path: "/api/revoke-approval",
-        method: "POST",
-        body: { approvalId: body.approvalId },
-      });
-      expect(revoked.status).toBe(200);
-      const session = (await (
-        await callRuntime({ target, sessionToken, path: "/api/session" })
-      ).json()) as { readonly approval?: unknown };
-      expect(session.approval).toBeUndefined();
-    });
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        const body = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+        const revoked = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/revoke-approval",
+          method: "POST",
+          body: { approvalId: body.approvalId },
+        });
+        expect(revoked.status).toBe(200);
+        const session = (await (
+          await callRuntime({ target, sessionToken, path: "/api/session" })
+        ).json()) as { readonly approval?: unknown };
+        expect(session.approval).toBeUndefined();
+      },
+    );
   });
 
   it("cancels open agent requests on approve", async () => {
-    await withApprovalRuntime(DECISION_PLAN, async ({
-      target,
-      sessionToken,
-      digest,
-      planPath,
-    }) => {
-      await writeAgentRequest({
-        store: target.store,
-        request: messageAgentRequest({
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        await writeAgentRequest({
+          store: target.store,
+          request: messageAgentRequest({
+            sessionId: target.sessionId,
+            planId: target.planId,
+            requestId: "aaaaaaaaaaaaaaaa",
+            kind: "chat",
+            body: "Please look at the retry queue.",
+            premiseSnapshot: digest,
+            createdAt: "2026-08-19T17:00:00.000Z",
+          }),
+        });
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          canceledRequests: 1,
+        });
+        const exchange = await readAgentExchange({
+          store: target.store,
           sessionId: target.sessionId,
           planId: target.planId,
-          requestId: "aaaaaaaaaaaaaaaa",
-          kind: "chat",
-          body: "Please look at the retry queue.",
-          premiseSnapshot: digest,
-          createdAt: "2026-08-19T17:00:00.000Z",
-        }),
-      });
-      const response = await approve(target, sessionToken, {
-        expectedSnapshot: digest,
-      });
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toMatchObject({
-        canceledRequests: 1,
-      });
-      const exchange = await readAgentExchange({
-        store: target.store,
-        sessionId: target.sessionId,
-        planId: target.planId,
-      });
-      expect(exchange.requests[0]?.canceledAt).toBeDefined();
-      void planPath;
-    });
+        });
+        expect(exchange.requests[0]?.canceledAt).toBeDefined();
+        void planPath;
+      },
+    );
   });
 });

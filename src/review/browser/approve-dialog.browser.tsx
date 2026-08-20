@@ -3,13 +3,7 @@
 // revoke. The record itself is written by the runtime; this file only asks
 // and paints what comes back.
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
@@ -134,7 +128,9 @@ const Disclosure = ({
         <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
           {title}
         </span>
-        <span className="shrink-0 text-xs tabular-nums text-muted">{count}</span>
+        <span className="shrink-0 text-xs tabular-nums text-muted">
+          {count}
+        </span>
         <span
           className={`inline-flex size-4 shrink-0 text-muted transition-transform ${open ? "rotate-90" : ""}`}
           aria-hidden="true"
@@ -151,7 +147,11 @@ const Disclosure = ({
   );
 };
 
-const BoundedList = ({ items }: { readonly items: ReadonlyArray<ReactNode> }) => {
+const BoundedList = ({
+  items,
+}: {
+  readonly items: ReadonlyArray<ReactNode>;
+}) => {
   const extra = items.length - VIEW_ALL_LIMIT;
   const shown = extra > 0 ? items.slice(0, VIEW_ALL_LIMIT) : items;
   return (
@@ -186,7 +186,9 @@ const DecisionRow = ({
     >
       <span className="min-w-0 flex-1">
         <span className="block text-sm text-ink">{decision.label}</span>
-        <span className="mt-0.5 block text-xs text-muted">{decision.detail}</span>
+        <span className="mt-0.5 block text-xs text-muted">
+          {decision.detail}
+        </span>
       </span>
       {decision.isCritical ? (
         <Badge size="status" tone="statusWarningOutline">
@@ -236,7 +238,9 @@ const useApprovalMessage = (open: boolean): string => {
   return message;
 };
 
-const useInputContract = (identity: RuntimeIdentity | null): ReviewInputContract => {
+const useInputContract = (
+  identity: RuntimeIdentity | null,
+): ReviewInputContract => {
   const [contract, setContract] = useState(emptyReviewInputContract);
   useEffect(() => {
     if (identity === null) return;
@@ -282,7 +286,10 @@ const useChangeSetDiffs = ({
           path: `/api/snapshot-diff?from=${encodeURIComponent(changeSet.from)}&to=${encodeURIComponent(changeSet.to)}`,
           identity,
         });
-        return { key: `${changeSet.from}:${changeSet.to}`, diff: decodeSnapshotDiff(value) };
+        return {
+          key: `${changeSet.from}:${changeSet.to}`,
+          diff: decodeSnapshotDiff(value),
+        };
       }),
     )
       .then((loaded) => {
@@ -371,7 +378,7 @@ export const ApproveDialog = ({
           </p>
         ) : null}
         <div className="grid gap-2">
-          <p className="m-0 text-xs font-semibold tracking-wide text-muted uppercase">
+          <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
             Review status
           </p>
           <Disclosure
@@ -402,7 +409,9 @@ export const ApproveDialog = ({
             title="Decisions"
             count={`${items.decisions.answered} of ${items.decisions.total} answered`}
             complete={decisionComplete}
-            defaultOpen={!decisionComplete || items.decisions.recorded.length > 0}
+            defaultOpen={
+              !decisionComplete || items.decisions.recorded.length > 0
+            }
           >
             {decisionComplete ? (
               items.decisions.recorded.length === 0 ? (
@@ -417,7 +426,9 @@ export const ApproveDialog = ({
                       className="px-1 py-1 text-sm text-ink"
                     >
                       <span className="block">{decision.label}</span>
-                      <span className="text-xs text-muted">{decision.detail}</span>
+                      <span className="text-xs text-muted">
+                        {decision.detail}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -426,21 +437,23 @@ export const ApproveDialog = ({
               <>
                 <BoundedList
                   items={[
-                    ...items.decisions.blockingCritical.map((decision, index) => (
-                      <DecisionRow
-                        key={decision.inputId}
-                        decision={decision}
-                        action="Answer"
-                        onJump={onJumpToDecision}
-                        rowRef={
-                          index === 0
-                            ? (element) => {
-                                firstBlocking.current = element;
-                              }
-                            : undefined
-                        }
-                      />
-                    )),
+                    ...items.decisions.blockingCritical.map(
+                      (decision, index) => (
+                        <DecisionRow
+                          key={decision.inputId}
+                          decision={decision}
+                          action="Answer"
+                          onJump={onJumpToDecision}
+                          rowRef={
+                            index === 0
+                              ? (element) => {
+                                  firstBlocking.current = element;
+                                }
+                              : undefined
+                          }
+                        />
+                      ),
+                    ),
                     ...unansweredAdvisory.map((decision) => (
                       <DecisionRow
                         key={decision.inputId}
@@ -493,7 +506,7 @@ export const ApproveDialog = ({
         </div>
         <div className="min-w-0 rounded-lg border border-edge bg-paper px-3 py-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="m-0 text-xs font-semibold tracking-wide text-muted uppercase">
+            <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
               Message to your agent
             </p>
             <button
@@ -760,9 +773,7 @@ export const ApproveControl = ({
         body: { expectedSnapshot: currentSnapshot, message },
       });
       const next =
-        typeof value === "object" &&
-        value !== null &&
-        "approval" in value
+        typeof value === "object" && value !== null && "approval" in value
           ? decodeApprovalSummary(
               (value as { readonly approval: unknown }).approval,
             )
@@ -804,7 +815,11 @@ export const ApproveControl = ({
           onClick={() => setDetailsOpen((current) => !current)}
           data-review-approve-status="approved"
         >
-          <Badge size="status" tone="statusAccent" className="whitespace-nowrap">
+          <Badge
+            size="status"
+            tone="statusAccent"
+            className="whitespace-nowrap"
+          >
             {`Approved ${formatApprovalClock(approval.at)}`}
           </Badge>
         </button>
@@ -830,7 +845,9 @@ export const ApproveControl = ({
         </Badge>
       ) : null}
       <Button
-        variant={status === "stale" ? "secondary" : primary ? "default" : "secondary"}
+        variant={
+          status === "stale" ? "secondary" : primary ? "default" : "secondary"
+        }
         size="sm"
         onClick={() => setDialogOpen(true)}
         data-review-approve-trigger=""

@@ -14,9 +14,7 @@ import type { ReviewInput } from "./input-contract.js";
 const FROM = "aaaaaaaaaaaaaaaa";
 const TO = "bbbbbbbbbbbbbbbb";
 
-const changeSet = (
-  overrides: Partial<OpenChangeSet> = {},
-): OpenChangeSet => ({
+const changeSet = (overrides: Partial<OpenChangeSet> = {}): OpenChangeSet => ({
   id: "req1req1req1req1",
   label: "Retry backoff",
   from: FROM,
@@ -118,8 +116,6 @@ describe("openRequestsFromExchange", () => {
           answeredAt: "2026-08-19T18:00:00.000Z",
         },
       ]),
-    ).toEqual([
-      { requestId: "aaaaaaaaaaaaaaaa", label: "Please start." },
-    ]);
+    ).toEqual([{ requestId: "aaaaaaaaaaaaaaaa", label: "Please start." }]);
   });
 });

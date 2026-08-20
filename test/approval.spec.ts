@@ -660,7 +660,9 @@ test("should approve a plan, stamp the page, and keep the record across reload",
   try {
     await openWritableReview(page, runtime.url);
     await page.getByRole("button", { name: "Approve plan" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Approve this plan?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
     await expect(dialog).toBeVisible();
     await expect(
       dialog.locator("[data-review-approve-disclosure=approve-decisions]"),
@@ -668,7 +670,9 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     await expect(dialog.locator("[data-review-approve-message]")).toContainText(
       "This plan is approved and we are ready to begin.",
     );
-    await expect(dialog.locator("[data-review-approve-footnote]")).toBeVisible();
+    await expect(
+      dialog.locator("[data-review-approve-footnote]"),
+    ).toBeVisible();
 
     const approved = page.waitForResponse((response) =>
       response.url().endsWith("/api/approve"),
@@ -676,20 +680,24 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     await dialog.getByRole("button", { name: "Approve plan" }).click();
     expect((await approved).ok()).toBe(true);
 
-    await expect(page.getByRole("button", { name: "Approve plan" })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole("button", { name: "Approve plan" }),
+    ).toHaveCount(0);
     await expect(
       page.locator("[data-review-approval-stamp]").filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.locator("[data-review-approve-status=approved]")).toBeVisible();
+    await expect(
+      page.locator("[data-review-approve-status=approved]"),
+    ).toBeVisible();
 
     const stored: unknown = JSON.parse(
       await readFile(runtime.store.approvalPath, "utf8"),
     );
     expect(stored).toMatchObject({
       version: 1,
-      entries: [{ kind: "approval", pinnedSnapshot: deriveSnapshotDigest(PLAN) }],
+      entries: [
+        { kind: "approval", pinnedSnapshot: deriveSnapshotDigest(PLAN) },
+      ],
     });
 
     await page.reload();
@@ -697,9 +705,9 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     await expect(
       page.locator("[data-review-approval-stamp]").filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Approve plan" })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole("button", { name: "Approve plan" }),
+    ).toHaveCount(0);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
@@ -722,9 +730,13 @@ test("should refuse approve until a critical decision is answered", async ({
   try {
     await openWritableReview(page, runtime.url);
     await page.getByRole("button", { name: "Approve plan" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Approve this plan?" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator("[data-review-approve-critical]")).toBeVisible();
+    await expect(
+      dialog.locator("[data-review-approve-critical]"),
+    ).toBeVisible();
     await dialog.getByRole("button", { name: "Approve plan" }).click();
     await expect(dialog.locator("[data-review-approve-block]")).toBeVisible();
     await expect(dialog).toBeVisible();

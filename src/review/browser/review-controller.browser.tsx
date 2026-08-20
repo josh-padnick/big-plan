@@ -7189,9 +7189,7 @@ export const ReviewController = () => {
         <ApprovalStampPortal
           identity={identity}
           approval={approval}
-          canRevoke={
-            runtimeSession?.authoritative !== false && !serverGone
-          }
+          canRevoke={runtimeSession?.authoritative !== false && !serverGone}
           onApprovalChange={setApproval}
         />
       )}

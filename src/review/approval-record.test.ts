@@ -58,9 +58,9 @@ describe("approval record", () => {
       entry,
     });
     expect(inForceApproval(record)).toEqual(entry);
-    expect(
-      deriveApprovalStatus({ entry, currentSnapshot: SNAPSHOT }),
-    ).toBe("approved");
+    expect(deriveApprovalStatus({ entry, currentSnapshot: SNAPSHOT })).toBe(
+      "approved",
+    );
     expect(
       deriveApprovalStatus({ entry, currentSnapshot: NEXT_SNAPSHOT }),
     ).toBe("stale");

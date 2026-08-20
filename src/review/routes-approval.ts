@@ -17,10 +17,7 @@ import {
   deriveSnapshotDigest,
   readAgentExchange,
 } from "./agent-exchange.js";
-import {
-  appendProgressEvent,
-  cancelAgentRequest,
-} from "./request-mailbox.js";
+import { appendProgressEvent, cancelAgentRequest } from "./request-mailbox.js";
 import { randomId, writeSnapshot } from "./store.js";
 import { currentAnswers } from "./plan-inputs-store.js";
 import { reviewInputs } from "./input-contract.js";
@@ -56,12 +53,13 @@ const coveringMessage = (value: unknown): string => {
   return trimmed === "" ? DEFAULT_APPROVAL_MESSAGE : trimmed;
 };
 
-const summaryResponse = (summary: ApprovalSummary | undefined): ReviewRouteResponse =>
+const summaryResponse = (
+  summary: ApprovalSummary | undefined,
+): ReviewRouteResponse =>
   jsonResponse({
     status: 200,
     value: {
-      approval:
-        summary === undefined ? null : encodeApprovalSummary(summary),
+      approval: summary === undefined ? null : encodeApprovalSummary(summary),
     },
   });
 
@@ -218,7 +216,9 @@ class CriticalDecisionsOpen extends Error {
   readonly blockingDecisionIds: ReadonlyArray<string>;
 
   constructor(blockingDecisionIds: ReadonlyArray<string>) {
-    super("This plan cannot be approved until every critical decision is answered");
+    super(
+      "This plan cannot be approved until every critical decision is answered",
+    );
     this.name = "CriticalDecisionsOpen";
     this.blockingDecisionIds = blockingDecisionIds;
   }
@@ -367,7 +367,9 @@ export const revokeApproval = async (
       requestId: approvalId,
     });
     const { digest } = await readCurrentSource(context);
-    return summaryResponse(approvalSummary({ record: next, currentSnapshot: digest }));
+    return summaryResponse(
+      approvalSummary({ record: next, currentSnapshot: digest }),
+    );
   } catch (error: unknown) {
     if (error instanceof ApprovalRecordRejected) {
       return refusal({ status: 409, reason: error.message });
