@@ -907,7 +907,7 @@ const headingTextOf = (heading: Element): string =>
 // before its sub-slides have been walked.
 const directSubSlidesOf = (container: Element): ReadonlyArray<Element> =>
   container.children.flatMap((child) =>
-    !isElement(child)
+    !isElement(child) || isBaselineDiffSide(child)
       ? []
       : child.properties["data-slide"] !== undefined
         ? [child]

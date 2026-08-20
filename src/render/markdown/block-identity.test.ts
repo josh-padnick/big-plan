@@ -791,4 +791,67 @@ describe("block identity baseline-side skip", () => {
 
     expect(stamp(withBaseline)).toEqual(stamp(withoutBaseline));
   });
+
+  it("should keep proposed-side slide headings when a baseline subtree contains a slide", () => {
+    const subSlide = ({ title }: { readonly title: string }): Element => ({
+      type: "element",
+      tagName: "section",
+      properties: { "data-slide": "", "data-subslide": "" },
+      children: [
+        {
+          type: "element",
+          tagName: "h3",
+          properties: { id: title.toLowerCase().replaceAll(" ", "-") },
+          children: [{ type: "text", value: title }],
+        },
+        {
+          type: "element",
+          tagName: "p",
+          properties: {},
+          children: [{ type: "text", value: "Body." }],
+        },
+      ],
+    });
+    const groupedSlide = (children: ReadonlyArray<Element>): Element => ({
+      type: "element",
+      tagName: "section",
+      properties: { "data-slide": "" },
+      children: [
+        {
+          type: "element",
+          tagName: "h2",
+          properties: { id: "design" },
+          children: [{ type: "text", value: "Design" }],
+        },
+        ...children,
+      ],
+    });
+    const withoutBaseline: Root = {
+      type: "root",
+      children: [groupedSlide([subSlide({ title: "Pipeline" })])],
+    };
+    const withBaseline = structuredClone(withoutBaseline);
+    const slide = withBaseline.children[0];
+    if (slide === undefined || slide.type !== "element") {
+      throw new Error("expected a slide");
+    }
+    slide.children.splice(1, 0, {
+      type: "element",
+      tagName: "div",
+      properties: { [DIFF_SIDE_ATTRIBUTE]: DIFF_BASELINE_SIDE },
+      children: [subSlide({ title: "Ghost pipeline" })],
+    });
+
+    const withoutBlocks: Array<BlockDescriptor> = [];
+    const withBlocks: Array<BlockDescriptor> = [];
+    rehypeBlockIdentity({ blocks: withoutBlocks })(withoutBaseline);
+    rehypeBlockIdentity({ blocks: withBlocks })(withBaseline);
+    expect(withBlocks.map((block) => block.id)).toEqual(
+      withoutBlocks.map((block) => block.id),
+    );
+    expect(
+      withBlocks.find((block) => block.id === "section/design/heading-1")
+        ?.slideSubHeadings,
+    ).toEqual(["Pipeline"]);
+  });
 });

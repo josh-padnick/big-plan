@@ -51,6 +51,45 @@ const ROOT_AFFORDANCE_ATTRIBUTES = [
   COPY_CODE_ATTRIBUTE,
 ] as const;
 
+// Properties whose value names an element id, or contains `url(#...)` /
+// `href="#..."` fragments. Everything else is content: a value that happens
+// to equal an id must stay as authored, including the `data-diff-side`
+// mark this module just wrote.
+const ARIA_ID_REFERENCE_PROPERTIES = new Set([
+  "aria-activedescendant",
+  "aria-controls",
+  "aria-describedby",
+  "aria-details",
+  "aria-errormessage",
+  "aria-flowto",
+  "aria-labelledby",
+  "aria-owns",
+]);
+
+const REFERENCE_PROPERTIES = new Set([
+  "id",
+  "href",
+  "xlinkHref",
+  "xlink:href",
+  "htmlFor",
+  "for",
+  "form",
+  "list",
+  "headers",
+  "itemRef",
+  "popoverTarget",
+  "clipPath",
+  "clip-path",
+  "mask",
+  "fill",
+  "filter",
+  "style",
+  ...ARIA_ID_REFERENCE_PROPERTIES,
+]);
+
+const isReferenceProperty = (property: string): boolean =>
+  REFERENCE_PROPERTIES.has(property);
+
 const isElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";
 
@@ -73,11 +112,14 @@ const forEachElement = ({
   }
 };
 
-let isolatedCount = 0;
-
-const nextIdentityPrefix = (): string => {
-  isolatedCount += 1;
-  return `diff-baseline-${isolatedCount}-`;
+const identityPrefixFor = (identifiers: ReadonlyArray<string>): string => {
+  const fingerprint = [...identifiers].sort().join("\0");
+  let hash = 2166136261;
+  for (const character of fingerprint) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `diff-baseline-${(hash >>> 0).toString(36)}-`;
 };
 
 const rewriteReferences = ({
@@ -92,7 +134,7 @@ const rewriteReferences = ({
     return exactReplacement;
   }
   const tokens = value.split(/\s+/u);
-  if (tokens.length > 1 && tokens.every((token) => identifiers.has(token))) {
+  if (tokens.length > 1 && tokens.some((token) => identifiers.has(token))) {
     return tokens.map((token) => identifiers.get(token) ?? token).join(" ");
   }
   return value.replace(
@@ -118,24 +160,27 @@ const rewriteReferences = ({
 };
 
 const namespaceOrdinaryIdentity = (subtree: Element): void => {
-  const prefix = nextIdentityPrefix();
-  const identifiers = new Map<string, string>();
+  const originalIds: Array<string> = [];
   forEachElement({
     node: subtree,
     visit: (node) => {
       if (typeof node.properties.id === "string") {
-        identifiers.set(node.properties.id, `${prefix}${node.properties.id}`);
+        originalIds.push(node.properties.id);
       }
     },
   });
-  if (identifiers.size === 0) {
+  if (originalIds.length === 0) {
     return;
   }
+  const prefix = identityPrefixFor(originalIds);
+  const identifiers = new Map(
+    originalIds.map((id) => [id, `${prefix}${id}`] as const),
+  );
   forEachElement({
     node: subtree,
     visit: (node) => {
       for (const [property, value] of Object.entries(node.properties)) {
-        if (property === "className") {
+        if (!isReferenceProperty(property)) {
           continue;
         }
         if (typeof value === "string") {

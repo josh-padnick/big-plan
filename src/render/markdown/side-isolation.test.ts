@@ -315,13 +315,66 @@ describe("side isolation", () => {
     );
   });
 
+  it("should keep the baseline mark when a descendant id is the word baseline", () => {
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: { id: "panel" },
+      children: [
+        {
+          type: "element",
+          tagName: "span",
+          properties: { id: "baseline", alt: "panel", title: "panel" },
+          children: [],
+        },
+      ],
+    };
+    isolateBaselineSide({ subtree });
+    expect(isBaselineDiffSide(subtree)).toBe(true);
+    expect(subtree.properties[DIFF_SIDE_ATTRIBUTE]).toBe(DIFF_BASELINE_SIDE);
+    expect(ordinaryIdsOf(subtree)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^diff-baseline-[a-z0-9]+-panel$/u),
+        expect.stringMatching(/^diff-baseline-[a-z0-9]+-baseline$/u),
+      ]),
+    );
+    const labelled: Element = {
+      type: "element",
+      tagName: "span",
+      properties: { id: "baseline" },
+      children: [],
+    };
+    const marked: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {},
+      children: [
+        labelled,
+        {
+          type: "element",
+          tagName: "p",
+          properties: {
+            "aria-labelledby": "baseline external-note",
+            alt: "baseline",
+          },
+          children: [],
+        },
+      ],
+    };
+    isolateBaselineSide({ subtree: marked });
+    const prefixed = ordinaryIdsOf(marked)[0];
+    expect(typeof prefixed).toBe("string");
+    expect(marked.children[1]).toMatchObject({
+      type: "element",
+      properties: {
+        "aria-labelledby": `${prefixed} external-note`,
+        alt: "baseline",
+      },
+    });
+  });
+
   it("should keep one live maximize trigger when a DataTable renders on both sides", () => {
     const { table, baselineTable } = documentWithBothSides();
-    const liveTriggers = collect({
-      node: table,
-      match: (candidate) =>
-        candidate.properties[TRIGGER_ATTRIBUTE] !== undefined,
-    });
     const liveFrames = collect({
       node: table,
       match: (candidate) =>
@@ -331,10 +384,16 @@ describe("side isolation", () => {
       node: table,
       match: (candidate) => candidate.properties[BODY_ATTRIBUTE] !== undefined,
     });
-    expect(liveTriggers).toHaveLength(1);
     expect(liveFrames).toHaveLength(1);
     expect(liveBodies).toHaveLength(1);
-    expect(isBaselineDiffSide(liveTriggers[0] ?? table)).toBe(false);
+    expect(
+      collect({
+        node: table,
+        skipBaseline: true,
+        match: (candidate) =>
+          candidate.properties[TRIGGER_ATTRIBUTE] !== undefined,
+      }),
+    ).toHaveLength(1);
     expect(
       collect({
         node: baselineTable,
