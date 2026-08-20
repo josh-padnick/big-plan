@@ -11,12 +11,15 @@ import { boxOf, expect, test, type Locator, type Page } from "./fixtures";
  * tooltip the hover opened.
  */
 const settled = async (target: Locator): Promise<void> => {
-  let previous = Number.NaN;
+  // Both axes: the composer's left edge is derived from its target's right
+  // edge, so a layout that is still settling moves it sideways as well as
+  // down, and a helper that watched only one axis could return mid-slide.
+  let previous: { readonly x: number; readonly y: number } | undefined;
   await expect
     .poll(async () => {
-      const { y } = await boxOf(target);
-      const stable = y === previous;
-      previous = y;
+      const { x, y } = await boxOf(target);
+      const stable = previous?.x === x && previous.y === y;
+      previous = { x, y };
       return stable;
     })
     .toBe(true);
