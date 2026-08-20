@@ -256,7 +256,7 @@ export const approvePlan = async (
     throw error;
   }
 
-  const { source, digest } = await readCurrentSource(context);
+  const { digest } = await readCurrentSource(context);
   if (digest !== expectedSnapshot) {
     return refusal({
       status: 409,
