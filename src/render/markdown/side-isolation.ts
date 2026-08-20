@@ -265,17 +265,18 @@ const holdRootAffordancesInert = (subtree: Element): void => {
  * identity out of it, namespace its ordinary DOM identity, and hold its root
  * affordances inert so the proposed side remains the one live owner.
  *
- * `key` distinguishes two baseline subtrees that happen to carry the same
- * original ids. It is folded into the prefix, so the same subtree isolated
- * under the same key always namespaces the same way, and two copies in one
- * document do not collide. Increment 3 will pass the instance it is isolating.
+ * `key` is required so two baseline subtrees that carry the same original
+ * ids cannot silently collide. It is folded into the prefix: the same
+ * subtree under the same key always namespaces the same way, and two copies
+ * in one document do not collide. Increment 3 will pass the instance it is
+ * isolating.
  */
 export const isolateBaselineSide = ({
   subtree,
-  key = "side",
+  key,
 }: {
   readonly subtree: Element;
-  readonly key?: string;
+  readonly key: string;
 }): void => {
   subtree.properties[DIFF_SIDE_ATTRIBUTE] = DIFF_BASELINE_SIDE;
   stripReviewIdentity(subtree);

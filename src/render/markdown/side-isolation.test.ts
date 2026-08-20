@@ -187,9 +187,9 @@ const referencesOf = (node: Element): Array<string> => {
   return references;
 };
 
-const nestedBaselineCopy = (root: Element): Element => {
+const nestedBaselineCopy = (root: Element, key: string): Element => {
   const clone = structuredClone(root);
-  isolateBaselineSide({ subtree: clone });
+  isolateBaselineSide({ subtree: clone, key });
   root.children = [clone, ...root.children];
   return clone;
 };
@@ -213,8 +213,8 @@ const documentWithBothSides = () => {
     blocks: compiled.blocks,
     decision,
     table,
-    baselineDecision: nestedBaselineCopy(decision),
-    baselineTable: nestedBaselineCopy(table),
+    baselineDecision: nestedBaselineCopy(decision, "decision"),
+    baselineTable: nestedBaselineCopy(table, "table"),
   };
 };
 
@@ -226,7 +226,7 @@ describe("side isolation", () => {
       properties: { id: "panel" },
       children: [],
     };
-    isolateBaselineSide({ subtree });
+    isolateBaselineSide({ subtree, key: "mark" });
     expect(isBaselineDiffSide(subtree)).toBe(true);
     expect(subtree.properties[DIFF_SIDE_ATTRIBUTE]).toBe(DIFF_BASELINE_SIDE);
   });
@@ -304,7 +304,7 @@ describe("side isolation", () => {
         },
       ],
     };
-    isolateBaselineSide({ subtree: svg });
+    isolateBaselineSide({ subtree: svg, key: "svg" });
     const svgIds = new Set(ordinaryIdsOf(svg));
     for (const reference of referencesOf(svg)) {
       expect(svgIds.has(reference)).toBe(true);
@@ -329,7 +329,7 @@ describe("side isolation", () => {
         },
       ],
     };
-    isolateBaselineSide({ subtree });
+    isolateBaselineSide({ subtree, key: "mark" });
     expect(isBaselineDiffSide(subtree)).toBe(true);
     expect(subtree.properties[DIFF_SIDE_ATTRIBUTE]).toBe(DIFF_BASELINE_SIDE);
     expect(ordinaryIdsOf(subtree)).toEqual(
@@ -361,7 +361,7 @@ describe("side isolation", () => {
         },
       ],
     };
-    isolateBaselineSide({ subtree: marked });
+    isolateBaselineSide({ subtree: marked, key: "labelled" });
     const prefixed = ordinaryIdsOf(marked)[0];
     expect(typeof prefixed).toBe("string");
     expect(marked.children[1]).toMatchObject({
