@@ -267,6 +267,7 @@ The disconnect is a message rather than a kill: Big Plan never reaches into the 
 The agent is told at its next command - `big-plan agent next`, `agent note`, or `agent respond` - and ends its own session there, which is why the connection log records a **Session ended** row stating that the reviewer disconnected the agent rather than a quiet period it had to infer.
 The row says so whether or not the agent lived long enough to acknowledge, because the decision is recorded against the connection you disconnected rather than against the message it was holding.
 That row is recorded even when the agent had already gone quiet long enough for the log to write the silence off as a gap: the earlier row stays, because it was honest when it was written, and the end you asked for is recorded after it.
+It is recorded when a second agent was waiting beside the one you disconnected too, and that agent stays attached and untouched: the log describes the review's connection rather than each agent separately, so it states the end you asked for and then shows the review continuing under the agent that stayed.
 `agent next` reports the disconnect as an ordinary end; `agent note` and `agent respond` refuse with the `AGENT_DISCONNECTED` code, so a harness stops instead of retrying.
 The review itself is free the moment you confirm, so a second agent can connect without waiting for the first one to notice.
 

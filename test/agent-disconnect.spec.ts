@@ -9,7 +9,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  nextPendingAgentRequest,
+  readAgentExchange,
+} from "../src/review/agent-exchange.js";
+import { claimAgentRequest } from "../src/review/request-mailbox.js";
 import { startReviewRuntime } from "../src/review/server.js";
+import { AGENT_STALL_MS } from "../src/review/shared/agent-timing.js";
 import {
   agentIdOf,
   agentSidebar,
@@ -225,6 +231,82 @@ test("should disconnect a waiting agent without the dropped-work warning", async
     expect(waitingOutput).toContain("disconnected: true");
   } finally {
     waiting.kill("SIGTERM");
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should not contradict a stalled card in the disconnect dialog", async ({
+  page,
+}, testInfo) => {
+  /*
+  Disconnecting drops work for a working, a stalled and an errored agent alike,
+  because it is the live claim that costs something rather than the health of
+  whoever holds it. The destructive dialog therefore appears over a card that
+  does not always say the agent is answering, and copy asserting that it is
+  contradicted the headline directly above it (BIG-190).
+  */
+  test.setTimeout(90_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-stalled-off-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  const claimant = "cccccccccccccccc";
+  const pendingQuestion = async () =>
+    nextPendingAgentRequest(
+      await readAgentExchange({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+      }),
+      { claimedBy: claimant, nowMs: Date.now() },
+    );
+  try {
+    await page.goto(runtime.url);
+    await askPlanWideQuestion(page);
+    await expect.poll(pendingQuestion, { timeout: 20_000 }).toBeDefined();
+    const pending = await pendingQuestion();
+    if (pending === undefined) throw new Error("The question was not stored");
+
+    // An agent picked the question up and has narrated nothing since, so its
+    // lease has lapsed: the card reads stalled while the claim is still held.
+    const stalledAtMs = Date.now() - AGENT_STALL_MS - 5_000;
+    await claimAgentRequest({
+      store: runtime.store,
+      activeSessionId: runtime.sessionId,
+      requestId: pending.requestId,
+      claimedBy: claimant,
+      connectionToken: "6666666666666666",
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date(stalledAtMs).toISOString(),
+      clock: () => stalledAtMs,
+    });
+
+    await agentStatusTrigger(page).click();
+    const sidebar = agentSidebar(page);
+    const card = sidebar.locator("[data-review-current-activity]");
+    await expect(card).toHaveAttribute(
+      "data-review-current-activity",
+      "stalled",
+      { timeout: 20_000 },
+    );
+    await expect(card).toContainText("Agent may be stalled");
+
+    // The dialog still says the work goes, because it does, but it names the
+    // claim rather than a state the card above it denies.
+    await sidebar.locator("[data-review-agent-disconnect]").click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText(
+      "This agent is holding work on this review",
+    );
+    await expect(dialog).toContainText(
+      "the answer it has in flight is dropped rather than delivered",
+    );
+    await expect(dialog).not.toContainText("answering right now");
+    await page.screenshot({
+      path: testInfo.outputPath("disconnect-confirm-stalled.png"),
+    });
+  } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
