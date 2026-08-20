@@ -152,6 +152,8 @@ test("rejects a palette pairing below WCAG AA", async () => {
 const CHROME_BASE_CSS = `${BASE_CSS}:root {
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
+  --neutral-200: #c4c4c4;
+  --neutral-250: #a9a9a9;
   --neutral-300: #828282;
   --neutral-400: #787878;
   --chrome-dark-band: #2b2b2b;
@@ -164,6 +166,14 @@ const CHROME_BASE_CSS = `${BASE_CSS}:root {
     var(--neutral-400),
     var(--chrome-dark-edge-strong)
   );
+  --review-panel-edge-c: light-dark(
+    var(--neutral-200),
+    var(--chrome-dark-edge)
+  );
+  --review-panel-edge-strong-c: light-dark(
+    var(--neutral-250),
+    var(--chrome-dark-edge-strong)
+  );
   --toolbar-surface-c: light-dark(var(--neutral-100), var(--chrome-dark-lift));
 }
 `;
@@ -172,6 +182,8 @@ const CHROME_BASE_CSS = `${BASE_CSS}:root {
 const chromePalette = ({
   n100 = "#e2ded0",
   n150 = "#dcd8ca",
+  n200,
+  n250,
   n300,
   n400,
   band = "#1f1f1f",
@@ -186,6 +198,8 @@ const chromePalette = ({
   --grey-950: #121212;
   --neutral-100: ${n100};
   --neutral-150: ${n150};
+  --neutral-200: ${n200};
+  --neutral-250: ${n250};
   --neutral-300: ${n300};
   --neutral-400: ${n400};
   --chrome-dark-band: ${band};
@@ -197,6 +211,8 @@ const chromePalette = ({
 
 /** The shipped brutalist chrome shades, which clear every floor and ladder. */
 const SOUND_CHROME = {
+  n200: "#b8b5a7",
+  n250: "#9d9a8d",
   n300: "#7c7868",
   n400: "#716d5f",
   lift: "#383838",
@@ -204,7 +220,7 @@ const SOUND_CHROME = {
   edgeStrong: "#848484",
 };
 
-test("rejects a control edge that dissolves into the band it sits on", async () => {
+test("rejects a general control edge below the non-text floor", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
     paletteCss: chromePalette({
@@ -239,14 +255,26 @@ test("rejects a control edge that dissolves into the band it sits on", async () 
   );
   assert.equal(
     nonText.some((failure) =>
-      failure.includes("--toolbar-edge-c (#b8b5a7) on --toolbar-bg (#dcd8ca)"),
+      failure.includes("--toolbar-edge-c (#3a3a3a) on --toolbar-bg (#1f1f1f)"),
     ),
     true,
     nonText.join("\n"),
   );
+  assert.equal(
+    result.failures.some(
+      (failure) =>
+        failure.startsWith("sample/dark") &&
+        failure.includes(
+          "--review-panel-edge-c (#3a3a3a) on --toolbar-bg (#1f1f1f)",
+        ) &&
+        failure.includes("BIG-214 review-panel edge distinction floor"),
+    ),
+    true,
+    result.failures.join("\n"),
+  );
 });
 
-test("accepts a control edge that clears the non-text floor on band and lift", async () => {
+test("accepts general control edges that clear the non-text floor", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
     paletteCss: chromePalette(SOUND_CHROME),
@@ -254,6 +282,39 @@ test("accepts a control edge that clears the non-text floor on band and lift", a
   assert.deepEqual(
     result.failures.filter((failure) =>
       failure.includes("WCAG 1.4.11 non-text floor"),
+    ),
+    [],
+    result.failures.join("\n"),
+  );
+});
+
+test("rejects a BIG-214 review-panel edge that dissolves into its grounds", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({
+      ...SOUND_CHROME,
+      n200: "#d5d1c5",
+      n250: "#cbc7bb",
+    }),
+  });
+  const panelEdges = result.failures.filter((failure) =>
+    failure.includes("BIG-214 review-panel edge distinction floor"),
+  );
+  assert.deepEqual(
+    panelEdges.map((failure) => failure.split(":")[0]),
+    ["sample/light", "sample/light", "sample/light"],
+    result.failures.join("\n"),
+  );
+});
+
+test("accepts the BIG-214 review-panel split", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette(SOUND_CHROME),
+  });
+  assert.deepEqual(
+    result.failures.filter((failure) =>
+      failure.includes("BIG-214 review-panel edge distinction floor"),
     ),
     [],
     result.failures.join("\n"),

@@ -11,8 +11,15 @@ import {
 } from "../src/render/preferences.js";
 import { expect, test, type Page } from "./fixtures";
 
-// WCAG 1.4.11 asks for 3:1 between a control's boundary and its ground.
 const NON_TEXT_FLOOR = 3;
+
+// BIG-214 makes these labeled review-panel controls subtle only in light mode.
+// Dark mode keeps the general 3:1 edge that the captain prefers there.
+const REVIEW_PANEL_EDGE_CONTRAST_FLOORS = {
+  light: 1.4,
+  dark: NON_TEXT_FLOOR,
+} as const;
+const REVIEW_PANEL_LABELS = new Set(["Agent Status", "Feedback"]);
 
 const channel = (value: number): number => {
   const c = value / 255;
@@ -153,10 +160,16 @@ test("should give the toolbar its own band and legible control edges in every pa
         `${where} toolbar band differs from the page`,
       ).not.toBe(chrome.page);
       for (const edge of chrome.edges) {
+        const isReviewPanel = [...REVIEW_PANEL_LABELS].some((label) =>
+          edge.label?.startsWith(label),
+        );
+        const floor = isReviewPanel
+          ? REVIEW_PANEL_EDGE_CONTRAST_FLOORS[mode]
+          : NON_TEXT_FLOOR;
         expect(
           contrastRatio(edge.color, chrome.band),
           `${where} edge on "${edge.label}" against the band`,
-        ).toBeGreaterThanOrEqual(NON_TEXT_FLOOR);
+        ).toBeGreaterThanOrEqual(floor);
       }
 
       // The ground a control takes under the pointer is measured from the
@@ -188,4 +201,29 @@ test("should paint the default light toolbar the requested chrome grey", async (
   for (const band of await page.locator("[data-shell-chrome]").all()) {
     await expect(band).toHaveCSS("background-color", "rgb(232, 232, 232)");
   }
+});
+
+test("should split the default review-panel edges by theme", async ({
+  descenderTitleViewerUrl,
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const agentStatus = page.getByRole("button", { name: "Agent Status" });
+  const feedback = page.getByRole("button", { name: "Feedback" });
+
+  await applyTheme(page, { mode: "light", palette: "default" });
+  await expect(agentStatus).toHaveCSS("border-top-color", "rgb(196, 196, 196)");
+  await expect(feedback).toHaveCSS("border-top-color", "rgb(196, 196, 196)");
+
+  await applyTheme(page, { mode: "dark", palette: "default" });
+  await expect(agentStatus).toHaveCSS("border-top-color", "rgb(118, 118, 118)");
+  await expect(feedback).toHaveCSS("border-top-color", "rgb(118, 118, 118)");
+
+  await page.goto(descenderTitleViewerUrl);
+  const addComment = page.locator("[data-comment-draft-open]");
+  await applyTheme(page, { mode: "light", palette: "default" });
+  await expect(addComment).toHaveCSS("border-top-color", "rgb(130, 130, 130)");
+  await applyTheme(page, { mode: "dark", palette: "default" });
+  await expect(addComment).toHaveCSS("border-top-color", "rgb(118, 118, 118)");
 });
