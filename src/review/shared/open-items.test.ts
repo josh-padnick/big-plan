@@ -92,6 +92,9 @@ describe("deriveOpenItems", () => {
       "critical",
       "advisory",
     ]);
+    expect(
+      items.decisions.unansweredNonCritical.map((row) => row.inputId),
+    ).toEqual(["advisory"]);
     expect(approveFootnote(items)).toBeDefined();
   });
 });

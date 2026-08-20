@@ -1,19 +1,33 @@
 // Owns the approve moment in the review island: the toolbar control, the
-// confirmation dialog, the approved stamp, and the details surface that can
-// revoke. The record itself is written by the runtime; this file only asks
-// and paints what comes back.
+// confirmation dialog, the approved stamp beside the wordmark, and the
+// details popover that can revoke. The record itself is written by the
+// runtime; this file only asks and paints what comes back.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
-import { SETTINGS_ICON } from "../../icons/lucide/settings.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import { X_ICON } from "../../icons/lucide/x.js";
 import {
   effectiveApprovalMessage,
   APPROVAL_MESSAGE_STORAGE_KEY,
 } from "../shared/approval-message.js";
+import {
+  approvedAtExactLabel,
+  approvedOnLabel,
+  unansweredNonCriticalCopy,
+} from "../shared/approval-copy.js";
 import type { ApprovalSummary } from "../shared/approval.js";
 import {
   approveFootnote,
@@ -96,68 +110,31 @@ const readStoredMessage = (): string => {
   }
 };
 
-type ApprovalClockParts = {
-  readonly month: string;
-  readonly day: string;
-  readonly time: string;
-  readonly unavailable: boolean;
-};
+const STAMP_FRAME = "inline-flex rounded-md border-2 border-accent p-0.5";
 
-const approvalClockParts = (at: string): ApprovalClockParts => {
-  const parsed = Date.parse(at);
-  if (Number.isNaN(parsed)) {
-    return {
-      month: "",
-      day: "",
-      time: "Time unavailable",
-      unavailable: true,
-    };
-  }
-  const date = new Date(parsed);
-  return {
-    month: date.toLocaleString(undefined, { month: "short" }),
-    day: date.toLocaleString(undefined, { day: "numeric" }),
-    time: date.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    }),
-    unavailable: false,
-  };
-};
+const STAMP_INNER =
+  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5 group-hover:bg-accent-wash group-active:bg-accent-soft";
 
-type StampSize = "toolbar" | "page";
-
-const STAMP_FRAME: Readonly<Record<StampSize, string>> = {
-  toolbar: "inline-flex rounded-md border-2 border-accent p-0.5",
-  page: "inline-flex -rotate-2 rounded-md border-2 border-accent p-1 motion-reduce:rotate-0",
-};
-
-const STAMP_INNER: Readonly<Record<StampSize, string>> = {
-  toolbar:
-    "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5 group-hover:bg-accent-wash group-active:bg-accent-soft",
-  page: "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-3 py-1",
-};
-
-const STAMP_TYPE: Readonly<Record<StampSize, string>> = {
-  toolbar:
-    "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase",
-  page: "text-sm font-bold tracking-caps whitespace-nowrap text-accent uppercase",
-};
+const STAMP_TYPE =
+  "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase";
 
 const STAMP_BUTTON_CLASS =
   "group inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 transition hover:rotate-0 hover:shadow-lifted active:inset-shadow-pressed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0 motion-reduce:transition-none wide:min-h-0";
 
-const ApproveStampMark = ({
-  label,
-  size,
-}: {
-  readonly label: string;
-  readonly size: StampSize;
-}) => (
-  <span className={STAMP_FRAME[size]}>
-    <span className={STAMP_INNER[size]}>
-      <span className={STAMP_TYPE[size]}>{label}</span>
+const ApproveStampMark = ({ label }: { readonly label: string }) => (
+  <span className={STAMP_FRAME} aria-hidden="true">
+    <span className={STAMP_INNER}>
+      <span className={STAMP_TYPE}>{label}</span>
     </span>
+  </span>
+);
+
+const QuietCheck = () => (
+  <span
+    className="mt-0.5 inline-flex size-3.5 shrink-0 text-[var(--callout-tip-c)]"
+    aria-hidden="true"
+  >
+    <Icon icon={CHECK_ICON} />
   </span>
 );
 
@@ -413,9 +390,7 @@ export const ApproveDialog = ({
   const changeComplete = items.changeSets.open.length === 0;
   const decisionComplete = items.decisions.unanswered.length === 0;
   const footnote = approveFootnote(items);
-  const unansweredAdvisory = items.decisions.unanswered.filter(
-    (decision) => !decision.isCritical,
-  );
+  const unansweredAdvisory = items.decisions.unansweredNonCritical;
 
   const handleApprove = () => {
     if (items.decisions.blockingCritical.length > 0) {
@@ -621,32 +596,39 @@ export const ApproveDialog = ({
   );
 };
 
-const ApprovalClock = ({ at }: { readonly at: string }) => {
-  const parts = approvalClockParts(at);
-  if (parts.unavailable) {
-    return <p className="m-0 text-sm text-muted">{parts.time}</p>;
-  }
-  return (
-    <div className="flex items-end gap-3">
-      <div className="rounded-md border-2 border-accent px-2 py-1 text-center">
-        <p className="m-0 text-2xs font-bold tracking-caps text-accent uppercase">
-          {parts.month}
-        </p>
-        <p className="m-0 text-2xl font-bold tracking-tight text-accent">
-          {parts.day}
-        </p>
-      </div>
-      <div className="min-w-0">
-        <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
-          Stamped at
-        </p>
-        <p className="mt-1 mb-0 text-lg font-semibold text-ink">{parts.time}</p>
-      </div>
-    </div>
+const DETAILS_HEADING = "Approval details";
+
+const DETAILS_FOCUSABLE =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+/** The header slot beside `/big-plan`; hidden until an approval is in force. */
+const useApprovalBrandSlot = (isApproved: boolean): HTMLElement | null => {
+  const [slot, setSlot] = useState<HTMLElement | null>(() =>
+    document.querySelector<HTMLElement>("[data-review-approval-brand-slot]"),
   );
+  useLayoutEffect(() => {
+    const read = () =>
+      setSlot(
+        document.querySelector<HTMLElement>(
+          "[data-review-approval-brand-slot]",
+        ),
+      );
+    read();
+    document.addEventListener("bigplan:article-replaced", read);
+    return () => document.removeEventListener("bigplan:article-replaced", read);
+  }, []);
+  useLayoutEffect(() => {
+    if (slot === null) return;
+    slot.hidden = !isApproved;
+    return () => {
+      slot.hidden = true;
+    };
+  }, [isApproved, slot]);
+  return slot;
 };
 
 const ApprovalDetails = ({
+  id,
   open,
   approval,
   canRevoke,
@@ -654,6 +636,7 @@ const ApprovalDetails = ({
   onClose,
   onRevoke,
 }: {
+  readonly id: string;
   readonly open: boolean;
   readonly approval: ApprovalSummary;
   readonly canRevoke: boolean;
@@ -662,87 +645,156 @@ const ApprovalDetails = ({
   readonly onRevoke: () => void;
 }) => {
   const [confirming, setConfirming] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const leftoverCopy = unansweredNonCriticalCopy(unansweredDecisionIds.length);
+  const approvedLabel = approvedOnLabel(approval.at);
+  const exactLabel = approvedAtExactLabel(approval.at);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => {
+      if (previousFocus?.isConnected === true) previousFocus.focus();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (confirming) return;
+      event.preventDefault();
+      onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [confirming, onClose, open]);
+
   if (!open) return null;
-  const answered = approval.openItemCounts.decisionsAnswered;
-  const total = approval.openItemCounts.decisionsTotal;
-  const unanswered = total - answered;
-  const decisionCopy =
-    total === 0
-      ? undefined
-      : unanswered === 0
-        ? `All ${total} decisions were answered. Review them in the plan.`
-        : unanswered === total
-          ? `None of the ${total} decisions were answered. Jump to them in the plan.`
-          : `${answered} of ${total} decisions were answered. Jump to the unanswered ones.`;
-  return (
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab" || confirming) return;
+    const controls = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(DETAILS_FOCUSABLE) ?? [],
+    ).filter((element) => !element.hasAttribute("disabled"));
+    if (controls.length === 0) return;
+    const current = controls.indexOf(document.activeElement as HTMLElement);
+    const next =
+      current === -1
+        ? event.shiftKey
+          ? controls.length - 1
+          : 0
+        : event.shiftKey
+          ? (current - 1 + controls.length) % controls.length
+          : (current + 1) % controls.length;
+    event.preventDefault();
+    controls[next]?.focus();
+  };
+
+  return createPortal(
     <>
       <div
-        className="fixed inset-0 z-40"
+        className="fixed inset-0 z-50"
         onClick={onClose}
         data-review-approval-details-backdrop=""
       />
       <div
-        className="fixed top-24 right-3 left-3 z-50 rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating wide:absolute wide:top-full wide:right-0 wide:left-auto wide:mt-1 wide:w-80"
+        ref={dialogRef}
+        id={id}
+        className="fixed top-12 right-3 left-3 z-50 max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating wide:right-auto wide:left-6 wide:w-80"
         role="dialog"
-        aria-label="Approval details"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
         data-review-approval-details=""
       >
-        <ApproveStampMark label="Approved" size="toolbar" />
-        <div className="mt-3">
-          <ApprovalClock at={approval.at} />
-        </div>
-        {approval.status === "stale" ? (
-          <p className="mt-3 mb-0 text-xs text-[var(--callout-warning-c)]">
-            The plan changed after this approval. Re-approve to stamp the plan
-            as it reads now.
-          </p>
-        ) : null}
-        <div className="mt-3 min-w-0 rounded-md border border-edge bg-paper px-2 py-2">
-          <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
-            Sent to your agent
-          </p>
-          <p className="mt-1 mb-0 text-xs leading-normal text-muted">
-            This message was sent to your agent so it can start the work.
-          </p>
-          <p className="mt-2 mb-0 text-sm leading-normal text-ink">
-            {approval.message}
-          </p>
+        <div className="flex items-start justify-between gap-2">
+          <h2 id={titleId} className="m-0 text-sm font-semibold text-ink">
+            {DETAILS_HEADING}
+          </h2>
           <button
             type="button"
-            className="mt-2 inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-0 text-xs font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={openApprovalMessageSettings}
-            data-review-approve-settings-message=""
+            className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:size-6"
+            aria-label={`Close ${DETAILS_HEADING}`}
+            onClick={onClose}
+            data-review-approval-details-close=""
           >
-            <span className="inline-flex size-3" aria-hidden="true">
-              <Icon icon={SETTINGS_ICON} />
+            <span className="inline-flex size-4" aria-hidden="true">
+              <Icon icon={X_ICON} />
             </span>
-            Change it in Settings
           </button>
         </div>
-        {decisionCopy === undefined ? null : (
-          <button
-            type="button"
-            className="mt-3 flex min-h-11 w-full cursor-pointer items-start rounded-md border-0 bg-transparent px-0 py-1 text-left text-xs font-medium leading-normal text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={() => {
-              onClose();
-              jumpToPlanDecisions(unansweredDecisionIds);
-            }}
-            data-review-approve-jump-decisions=""
-          >
-            {decisionCopy}
-          </button>
-        )}
-        {canRevoke ? (
-          <Button
-            className="mt-3 w-full"
-            variant="destructive"
-            size="compact"
-            onClick={() => setConfirming(true)}
-            data-review-approve-revoke=""
-          >
-            Revoke approval
-          </Button>
-        ) : null}
+        <div className="mt-3 grid gap-3">
+          <div className="flex items-start gap-2">
+            <QuietCheck />
+            <p
+              className="m-0 text-sm text-ink"
+              {...(exactLabel === undefined ? {} : { title: exactLabel })}
+            >
+              {approvedLabel}
+            </p>
+          </div>
+          {approval.status === "stale" ? (
+            <p className="m-0 text-xs text-[var(--callout-warning-c)]">
+              The plan changed after this approval. Re-approve to stamp the plan
+              as it reads now.
+            </p>
+          ) : null}
+          <div className="flex items-start gap-2 border-t border-edge pt-3">
+            <QuietCheck />
+            <div className="min-w-0 flex-1">
+              <p className="m-0 text-sm font-semibold text-ink">
+                Sent to your agent
+              </p>
+              <p className="mt-1 mb-0 text-xs leading-normal text-muted">
+                This message was sent so work can begin.
+              </p>
+              <blockquote className="mx-0 mt-2 mb-0 rounded-md border-l-2 border-edge bg-paper px-3 py-2 text-sm leading-normal text-ink not-italic">
+                {approval.message}
+              </blockquote>
+            </div>
+          </div>
+          {leftoverCopy === undefined ? null : (
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
+              <span
+                className="mt-0.5 inline-flex size-3.5 shrink-0 text-[var(--callout-warning-c)]"
+                aria-hidden="true"
+              >
+                <Icon icon={TRIANGLE_ALERT_ICON} />
+              </span>
+              <p className="m-0 text-sm text-[var(--callout-warning-c)]">
+                {leftoverCopy}
+              </p>
+              <button
+                type="button"
+                className="col-start-2 min-h-11 cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-sm font-normal text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
+                onClick={() => {
+                  onClose();
+                  jumpToPlanDecisions(unansweredDecisionIds);
+                }}
+                data-review-approve-jump-decisions=""
+              >
+                Review decisions →
+              </button>
+            </div>
+          )}
+          {canRevoke ? (
+            <div className="border-t border-edge pt-3">
+              <Button
+                className="w-full"
+                variant="destructive"
+                size="compact"
+                onClick={() => setConfirming(true)}
+                data-review-approve-revoke=""
+              >
+                Revoke approval
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </div>
       <AlertDialog
         open={confirming}
@@ -756,58 +808,8 @@ const ApprovalDetails = ({
           onRevoke();
         }}
       />
-    </>
-  );
-};
-
-export const ApprovalStamp = ({
-  approval,
-  canRevoke,
-  onRevoke,
-}: {
-  readonly approval: ApprovalSummary;
-  readonly canRevoke: boolean;
-  readonly onRevoke: () => void;
-}) => {
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const stale = approval.status === "stale";
-  return (
-    <div
-      className="relative mb-3 min-w-0"
-      data-review-approval-stamp=""
-      data-review-approval-status={approval.status}
-    >
-      <div className="rounded-md border border-edge bg-surface px-3 py-2">
-        <ApproveStampMark label="Approved" size="page" />
-        <div className="mt-3">
-          <ApprovalClock at={approval.at} />
-        </div>
-        {stale ? (
-          <p className="mt-2 mb-0 text-xs text-[var(--callout-warning-c)]">
-            The plan changed after this approval. Re-approve to stamp the plan
-            as it reads now.
-          </p>
-        ) : null}
-        <button
-          type="button"
-          className="mt-2 inline-flex min-h-11 cursor-pointer items-center rounded-md border-0 bg-transparent px-0 text-xs font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onClick={() => setDetailsOpen((current) => !current)}
-        >
-          Approval details
-        </button>
-      </div>
-      <ApprovalDetails
-        open={detailsOpen}
-        approval={approval}
-        canRevoke={canRevoke}
-        unansweredDecisionIds={[]}
-        onClose={() => setDetailsOpen(false)}
-        onRevoke={() => {
-          setDetailsOpen(false);
-          onRevoke();
-        }}
-      />
-    </div>
+    </>,
+    document.body,
   );
 };
 
@@ -832,6 +834,9 @@ export const ApproveControl = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [blockReason, setBlockReason] = useState<string | undefined>();
+  const detailsId = useId();
+  const isApproved = approval?.status === "approved";
+  const brandSlot = useApprovalBrandSlot(isApproved);
   const contract = useInputContract(identity);
   const dispositions = useChangeDispositions();
   const { openTour } = useDiffTour();
@@ -872,6 +877,17 @@ export const ApproveControl = ({
   );
   const primary = approveIsPrimary(items);
   const status = approval?.status;
+
+  useEffect(() => {
+    if (!isApproved) setDetailsOpen(false);
+  }, [isApproved]);
+
+  useEffect(() => {
+    const onReplaced = () => setDetailsOpen(false);
+    document.addEventListener("bigplan:article-replaced", onReplaced);
+    return () =>
+      document.removeEventListener("bigplan:article-replaced", onReplaced);
+  }, []);
 
   const closeDialog = () => {
     setDialogOpen(false);
@@ -941,24 +957,30 @@ export const ApproveControl = ({
     }
   };
 
-  const unansweredDecisionIds = items.decisions.unanswered.map(
+  const unansweredDecisionIds = items.decisions.unansweredNonCritical.map(
     (decision) => decision.inputId,
   );
 
-  if (approval !== undefined && status === "approved") {
-    return (
-      <span className="relative">
+  if (approval !== undefined && isApproved) {
+    const stamp = (
+      <span
+        data-review-approval-stamp=""
+        data-review-approval-status={approval.status}
+      >
         <button
           type="button"
           className={STAMP_BUTTON_CLASS}
-          aria-label="Approval details"
+          aria-label={DETAILS_HEADING}
+          aria-haspopup="dialog"
           aria-expanded={detailsOpen}
+          aria-controls={detailsOpen ? detailsId : undefined}
           onClick={() => setDetailsOpen((current) => !current)}
           data-review-approve-status="approved"
         >
-          <ApproveStampMark label="Approved" size="toolbar" />
+          <ApproveStampMark label="Approved" />
         </button>
         <ApprovalDetails
+          id={detailsId}
           open={detailsOpen}
           approval={approval}
           canRevoke={canWrite}
@@ -971,6 +993,8 @@ export const ApproveControl = ({
         />
       </span>
     );
+    if (brandSlot === null) return stamp;
+    return createPortal(stamp, brandSlot);
   }
 
   return (
@@ -990,7 +1014,6 @@ export const ApproveControl = ({
       >
         <ApproveStampMark
           label={status === "stale" ? "Re-approve" : "Approve"}
-          size="toolbar"
         />
       </button>
       <ApproveDialog
@@ -1014,60 +1037,6 @@ export const ApproveControl = ({
             : blockReason
         }
       />
-    </>
-  );
-};
-
-export const ApprovalStampPortal = ({
-  identity,
-  approval,
-  canRevoke,
-  onApprovalChange,
-}: {
-  readonly identity: RuntimeIdentity;
-  readonly approval: ApprovalSummary | undefined;
-  readonly canRevoke: boolean;
-  readonly onApprovalChange: (next: ApprovalSummary | undefined) => void;
-}) => {
-  const [slots, setSlots] = useState<ReadonlyArray<HTMLElement>>([]);
-  useEffect(() => {
-    const found = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-review-approval-slot]"),
-    );
-    setSlots(found);
-  }, [approval]);
-  useEffect(() => {
-    for (const slot of slots) {
-      slot.hidden = approval === undefined;
-    }
-    return () => {
-      for (const slot of slots) slot.hidden = true;
-    };
-  }, [approval, slots]);
-  if (approval === undefined) return null;
-  const revoke = () => {
-    void requestJson({
-      path: "/api/revoke-approval",
-      identity,
-      method: "POST",
-      body: { approvalId: approval.approvalId },
-    })
-      .then(() => onApprovalChange(undefined))
-      .catch(() => undefined);
-  };
-  return (
-    <>
-      {slots.map((slot, index) =>
-        createPortal(
-          <ApprovalStamp
-            approval={approval}
-            canRevoke={canRevoke}
-            onRevoke={revoke}
-          />,
-          slot,
-          `approval-stamp-${index}`,
-        ),
-      )}
     </>
   );
 };

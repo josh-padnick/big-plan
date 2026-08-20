@@ -116,8 +116,10 @@ const AgentStatusGlyph = ({
 
 /**
  * The one entry point to the agent sidebar in viewer chrome. It keeps the same
- * shape, width, and label in every state, and it stays legible when the sidebar
- * is closed, so a reader never has to open anything to learn the agent is fine.
+ * shape and label in every state so width does not jump as health changes, and
+ * it stays legible when the sidebar is closed. Below the wide breakpoint the
+ * visible label yields to the approved stamp beside the wordmark; the
+ * accessible name still carries the state.
  */
 export const AgentStatusTrigger = ({
   status,
@@ -148,6 +150,6 @@ export const AgentStatusTrigger = ({
     <span className="mr-0.5 inline-flex">
       <AgentStatusGlyph indicator={status.indicator} />
     </span>
-    {AGENT_STATUS_LABEL}
+    <span className="hidden wide:inline">{AGENT_STATUS_LABEL}</span>
   </button>
 );

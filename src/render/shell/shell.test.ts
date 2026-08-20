@@ -59,6 +59,28 @@ describe("bulk collapse controls", () => {
   });
 });
 
+describe("approval brand slot", () => {
+  it("should keep one hidden slot beside the wordmark on a plan document", () => {
+    const html = shellFor("<p>Plan.</p>");
+    expect(html).toMatch(
+      /data-logo-dark[\s\S]*?<\/a>\s*<span data-review-approval-brand-slot hidden><\/span>/,
+    );
+    expect(html).not.toContain("data-review-approval-slot");
+  });
+
+  it("should omit the slot from standalone chrome", () => {
+    const html = standaloneShellFor("<p>Welcome to Big Plan.</p>");
+    expect(html).not.toContain("data-review-approval-brand-slot");
+  });
+
+  it("should start the contents list at the top of the sidebar", () => {
+    const html = shellFor("<p>Plan.</p>");
+    expect(html).toMatch(
+      /aria-label="Contents">\s*<p class="[^"]*" data-toc-header>/,
+    );
+  });
+});
+
 describe("scripts-disabled notice", () => {
   it("should ship the readable-content notice in every rendered document", () => {
     const html = shellFor("<p>Readable plan content.</p>");

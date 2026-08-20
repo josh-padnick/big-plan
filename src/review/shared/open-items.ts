@@ -52,6 +52,7 @@ export type DerivedOpenItems = {
     readonly answered: number;
     readonly unanswered: ReadonlyArray<OpenDecision>;
     readonly blockingCritical: ReadonlyArray<OpenDecision>;
+    readonly unansweredNonCritical: ReadonlyArray<OpenDecision>;
     readonly recorded: ReadonlyArray<OpenDecision>;
   };
   readonly requests: {
@@ -170,6 +171,9 @@ export const deriveOpenItems = ({
   const unanswered = inputs.filter((input) => input.state !== "answered");
   const recorded = inputs.filter((input) => input.state === "answered");
   const blockingCritical = unanswered.filter((input) => input.isCritical);
+  // Critical unanswered decisions block approval, so an in-force approved
+  // state can only still contain this leftover set.
+  const unansweredNonCritical = unanswered.filter((input) => !input.isCritical);
   return {
     changeSets: {
       total: changeSets.length,
@@ -182,6 +186,7 @@ export const deriveOpenItems = ({
       answered: inputStanding.answered,
       unanswered,
       blockingCritical,
+      unansweredNonCritical,
       recorded,
     },
     requests: { open: requests },

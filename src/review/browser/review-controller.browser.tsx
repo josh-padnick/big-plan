@@ -212,10 +212,7 @@ import {
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
 import { applyAnswersRecord } from "./answers-record.browser.js";
-import {
-  ApprovalStampPortal,
-  ApproveControl,
-} from "./approve-dialog.browser.js";
+import { ApproveControl } from "./approve-dialog.browser.js";
 import type { ApprovalSummary } from "../shared/approval.js";
 import {
   AlertDialog,
@@ -7158,7 +7155,7 @@ export const ReviewController = () => {
                 onClick={toggleFeedbackSidebar}
               >
                 <Icon icon={MESSAGE_SQUARE_ICON} />
-                Feedback
+                <span className="sr-only wide:not-sr-only">Feedback</span>
                 {unresolvedDrafts.length > 0 ? (
                   <Badge
                     size="compact"
@@ -7185,14 +7182,6 @@ export const ReviewController = () => {
             </>,
             feedbackHost,
           )}
-      {identity === null ? null : (
-        <ApprovalStampPortal
-          identity={identity}
-          approval={approval}
-          canRevoke={runtimeSession?.authoritative !== false && !serverGone}
-          onApprovalChange={setApproval}
-        />
-      )}
       {isOpen ? (
         <aside
           ref={sidebarRef}
