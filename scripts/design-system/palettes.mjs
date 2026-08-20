@@ -2,8 +2,9 @@
 // palette is a set of shade ramps behind one shared role mapping, so every
 // palette must supply every shade the roles reach, its chrome shades must run
 // in the order their names claim, every text pairing a document can produce
-// must meet WCAG AA in that palette's light and dark half, and every toolbar
-// control edge must meet the explicit distinction floor in both halves too.
+// must meet WCAG AA in that palette's light and dark half. General toolbar
+// control edges meet the WCAG 1.4.11 non-text floor, while the two labeled
+// review-panel controls meet their explicit product distinction floor.
 //
 // This check owns the exact required pairings and the exact contrast floors;
 // DESIGN_PRINCIPLES.md owns why colour is expressed as roles over ramps. The
@@ -55,6 +56,8 @@ const RAMP_STEP_PATTERN = new RegExp(
 const CHROME_DARK_SHADES = [
   "chrome-dark-band",
   "chrome-dark-lift",
+  "chrome-dark-panel-edge",
+  "chrome-dark-panel-edge-strong",
   "chrome-dark-edge",
   "chrome-dark-edge-strong",
 ];
@@ -101,11 +104,15 @@ const COMMENT_SURFACE_TOKEN_PATTERN = /^comment-[a-z]+-c$/;
 // text allowance never applies: a plan is read at reading size.
 const CONTRAST_FLOOR = 4.5;
 
-// BIG-214 restores the captain's subtle toolbar boundaries on two controls
-// whose text, icons, and persistent shape already identify them. This lower
-// product floor is not a WCAG claim; it keeps those chosen edges from silently
-// dissolving into their band while the chrome ladder guard keeps their order.
-const TOOLBAR_EDGE_CONTRAST_FLOOR = 1.4;
+// WCAG 1.4.11 for the general toolbar controls whose boundary tells a reader
+// where the control is.
+const NON_TEXT_FLOOR = 3;
+
+// BIG-214 restores the captain's subtle boundaries only on the labeled Agent
+// Status and Feedback controls. This product floor is not a WCAG claim; it
+// keeps those chosen edges from silently dissolving into their band while the
+// chrome ladder guard keeps their order.
+const REVIEW_PANEL_EDGE_CONTRAST_FLOOR = 1.4;
 
 // Reading surfaces a document can put primary or secondary text on. Tertiary
 // text is deliberately absent from the bands: _internal/DESIGN_PRINCIPLES.md holds that a
@@ -124,13 +131,32 @@ const BAND_GROUNDS = [
 ];
 const CODE_GROUNDS = ["--diff-hunk-bg", "--diff-content-bg"];
 
-// Subtle control boundaries on the toolbar band, and the ground each one is
+// General control boundaries on the toolbar band, and the ground each one is
 // seen against. The reading surface's own hairlines are deliberately absent:
-// they divide passages of a document rather than bound these labeled controls.
+// they divide passages of a document rather than bound a control.
 const CONTROL_EDGE_PAIRINGS = [
   { edge: "--toolbar-edge-c", ground: "--toolbar-bg" },
   { edge: "--toolbar-edge-strong-c", ground: "--toolbar-bg" },
   { edge: "--toolbar-edge-strong-c", ground: "--toolbar-surface-c" },
+];
+
+const REVIEW_PANEL_EDGE_PAIRINGS = [
+  { edge: "--review-panel-edge-c", ground: "--toolbar-bg" },
+  { edge: "--review-panel-edge-strong-c", ground: "--toolbar-bg" },
+  { edge: "--review-panel-edge-strong-c", ground: "--toolbar-surface-c" },
+];
+
+const EDGE_CONTRAST_GROUPS = [
+  {
+    pairings: CONTROL_EDGE_PAIRINGS,
+    floor: NON_TEXT_FLOOR,
+    name: "WCAG 1.4.11 non-text floor",
+  },
+  {
+    pairings: REVIEW_PANEL_EDGE_PAIRINGS,
+    floor: REVIEW_PANEL_EDGE_CONTRAST_FLOOR,
+    name: "BIG-214 review-panel edge distinction floor",
+  },
 ];
 
 const SYNTAX_TOKENS = [
@@ -513,37 +539,39 @@ export const checkPalettes = async ({
     const overrides = palettes.get(id) ?? new Map();
     const lookup = (name) => overrides.get(name) ?? base.get(name);
     for (const mode of ["light", "dark"]) {
-      for (const { edge, ground } of CONTROL_EDGE_PAIRINGS) {
-        if (
-          base.get(edge.slice(2)) === undefined ||
-          base.get(ground.slice(2)) === undefined
-        ) {
-          continue;
-        }
-        const edgeValue = resolveValue({
-          value: lookup(edge.slice(2)) ?? "",
-          mode,
-          lookup,
-        });
-        const groundValue = resolveValue({
-          value: lookup(ground.slice(2)) ?? "",
-          mode,
-          lookup,
-        });
-        const edgeColor = edgeValue === null ? null : parseColor(edgeValue);
-        const groundColor =
-          groundValue === null ? null : parseColor(groundValue);
-        if (edgeColor === null || groundColor === null) {
-          failures.push(
-            `${id}/${mode}: could not resolve ${edge} on ${ground} to a colour`,
-          );
-          continue;
-        }
-        const ratio = contrastRatio(edgeColor, groundColor);
-        if (ratio < TOOLBAR_EDGE_CONTRAST_FLOOR) {
-          failures.push(
-            `${id}/${mode}: ${edge} (${edgeValue}) on ${ground} (${groundValue}) is ${ratio.toFixed(2)}:1, below the ${TOOLBAR_EDGE_CONTRAST_FLOOR}:1 toolbar-edge distinction floor`,
-          );
+      for (const { pairings, floor, name } of EDGE_CONTRAST_GROUPS) {
+        for (const { edge, ground } of pairings) {
+          if (
+            base.get(edge.slice(2)) === undefined ||
+            base.get(ground.slice(2)) === undefined
+          ) {
+            continue;
+          }
+          const edgeValue = resolveValue({
+            value: lookup(edge.slice(2)) ?? "",
+            mode,
+            lookup,
+          });
+          const groundValue = resolveValue({
+            value: lookup(ground.slice(2)) ?? "",
+            mode,
+            lookup,
+          });
+          const edgeColor = edgeValue === null ? null : parseColor(edgeValue);
+          const groundColor =
+            groundValue === null ? null : parseColor(groundValue);
+          if (edgeColor === null || groundColor === null) {
+            failures.push(
+              `${id}/${mode}: could not resolve ${edge} on ${ground} to a colour`,
+            );
+            continue;
+          }
+          const ratio = contrastRatio(edgeColor, groundColor);
+          if (ratio < floor) {
+            failures.push(
+              `${id}/${mode}: ${edge} (${edgeValue}) on ${ground} (${groundValue}) is ${ratio.toFixed(2)}:1, below the ${floor}:1 ${name}`,
+            );
+          }
         }
       }
       for (const { ink, ground } of requiredPairings()) {
@@ -594,7 +622,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { failures, paletteCount } = await checkPalettes();
   if (failures.length > 0) {
     console.error(
-      "palettes: every palette must declare every shade the roles reach, keep its ladders in order, meet WCAG AA on text, and keep toolbar control edges distinct in both halves",
+      "palettes: every palette must declare every shade the roles reach, keep its ladders in order, meet WCAG AA on text, meet the WCAG 1.4.11 non-text floor on general control edges, and keep BIG-214 review-panel edges distinct in both halves",
     );
     for (const failure of failures) console.error(`  ${failure}`);
     process.exitCode = 1;

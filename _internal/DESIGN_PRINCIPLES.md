@@ -146,25 +146,27 @@ The chrome band's dark half cannot use a number at all: its band is the darkest 
 Markup never names a ramp step.
 Markup names a **role**.
 
-| Role                  | Meaning                                                          |
-| --------------------- | ---------------------------------------------------------------- |
-| `paper`               | The page                                                         |
-| `raised`              | A card, lifted off the page                                      |
-| `surface`             | A quiet separated area: a hover state, a chip, a table head      |
-| `well`                | A recessed area inside a card: a code body, a diff body          |
-| `header`              | A chrome band inside a card                                      |
-| `toolbar`             | The page's own chrome band, above the document                   |
-| `toolbar-surface`     | The ground a control on that band takes on hover and while open  |
-| `ink`                 | Primary text, the thing being read                               |
-| `muted`               | Secondary text, supporting the primary                           |
-| `subtle`              | Tertiary text, a label the reader consults rather than reads     |
-| `edge`                | A hairline, when a border is genuinely the answer                |
-| `edge-strong`         | The edge of a control that must read as an input                 |
-| `toolbar-edge`        | The edge of a control sitting on the toolbar band                |
-| `toolbar-edge-strong` | The same edge, one step firmer, for hover and the open view      |
-| `accent`              | The theme's emphasis colour, for the one thing that matters most |
-| `accent-soft`         | A tinted ground for accent content                               |
-| `accent-ink`          | Text on an accent-filled surface                                 |
+| Role                       | Meaning                                                           |
+| -------------------------- | ----------------------------------------------------------------- |
+| `paper`                    | The page                                                          |
+| `raised`                   | A card, lifted off the page                                       |
+| `surface`                  | A quiet separated area: a hover state, a chip, a table head       |
+| `well`                     | A recessed area inside a card: a code body, a diff body           |
+| `header`                   | A chrome band inside a card                                       |
+| `toolbar`                  | The page's own chrome band, above the document                    |
+| `toolbar-surface`          | The ground a control on that band takes on hover and while open   |
+| `ink`                      | Primary text, the thing being read                                |
+| `muted`                    | Secondary text, supporting the primary                            |
+| `subtle`                   | Tertiary text, a label the reader consults rather than reads      |
+| `edge`                     | A hairline, when a border is genuinely the answer                 |
+| `edge-strong`              | The edge of a control that must read as an input                  |
+| `toolbar-edge`             | The edge of a control sitting on the toolbar band                 |
+| `toolbar-edge-strong`      | The same edge, one step firmer, for hover and the open view       |
+| `review-panel-edge`        | The subtle edge of the labeled Agent Status and Feedback controls |
+| `review-panel-edge-strong` | The same subtle edge, one step firmer for hover and the open view |
+| `accent`                   | The theme's emphasis colour, for the one thing that matters most  |
+| `accent-soft`              | A tinted ground for accent content                                |
+| `accent-ink`               | Text on an accent-filled surface                                  |
 
 Rules:
 
@@ -184,7 +186,7 @@ Rules:
    Every colour theme in both light and dark appearances, every change.
    When white on a colour fails, flip to dark text on a light tint of that colour.
    Pick the edge closest to its band that still clears the floor - darker in the light half, lighter in the dark one: a boundary is a hairline that happens to be legible, not a rule drawn for its own sake.
-   BIG-214 is the explicit product exception: the labeled Agent Status and Feedback toolbar controls use the captain's subtle chrome edges because their text, icons, and persistent button shape identify them without relying on the boundary alone.
+   BIG-214 is the explicit product exception: the labeled Agent Status and Feedback controls use the dedicated subtle `review-panel-edge` roles because their text, icons, and persistent button shape identify them without relying on the boundary alone.
 6. **Accent is scarce.**
    One accent per surface.
    If two things are both the most important, neither is.

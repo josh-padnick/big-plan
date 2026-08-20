@@ -59,12 +59,13 @@ export const STYLESHEET_BUDGETS = {
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },
   "src/components/wireframe/styles.css": { declarations: 1012 },
   "src/render/global.css": {
-    // Bought for the toolbar band: its own ground, the lift a control on it
-    // takes under the pointer, and the two edges its controls take, plus the
-    // chrome-neutral ramp steps every palette has to declare for them. The
+    // Bought for the toolbar band: its own ground, the lift a control on it,
+    // and the general edges its controls take. BIG-214 adds dedicated subtle
+    // Agent Status and Feedback edge roles plus the chrome-neutral steps every
+    // palette declares for them, without weakening the general edge. The
     // shared tooltip adds four semantic theme tokens and their four utility
     // aliases so dialog-owned tooltips can use one light-and-dark treatment.
-    declarations: 537,
+    declarations: 561,
   },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },

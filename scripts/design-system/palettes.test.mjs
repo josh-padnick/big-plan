@@ -152,17 +152,29 @@ test("rejects a palette pairing below WCAG AA", async () => {
 const CHROME_BASE_CSS = `${BASE_CSS}:root {
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
-  --neutral-300: #c4c4c4;
-  --neutral-400: #a9a9a9;
+  --neutral-200: #c4c4c4;
+  --neutral-250: #a9a9a9;
+  --neutral-300: #828282;
+  --neutral-400: #787878;
   --chrome-dark-band: #2b2b2b;
   --chrome-dark-lift: #424242;
-  --chrome-dark-edge: #474747;
-  --chrome-dark-edge-strong: #5f5f5f;
+  --chrome-dark-panel-edge: #474747;
+  --chrome-dark-panel-edge-strong: #5f5f5f;
+  --chrome-dark-edge: #767676;
+  --chrome-dark-edge-strong: #8f8f8f;
   --toolbar-bg: light-dark(var(--neutral-150), var(--chrome-dark-band));
   --toolbar-edge-c: light-dark(var(--neutral-300), var(--chrome-dark-edge));
   --toolbar-edge-strong-c: light-dark(
     var(--neutral-400),
     var(--chrome-dark-edge-strong)
+  );
+  --review-panel-edge-c: light-dark(
+    var(--neutral-200),
+    var(--chrome-dark-panel-edge)
+  );
+  --review-panel-edge-strong-c: light-dark(
+    var(--neutral-250),
+    var(--chrome-dark-panel-edge-strong)
   );
   --toolbar-surface-c: light-dark(var(--neutral-100), var(--chrome-dark-lift));
 }
@@ -172,10 +184,14 @@ const CHROME_BASE_CSS = `${BASE_CSS}:root {
 const chromePalette = ({
   n100 = "#e2ded0",
   n150 = "#dcd8ca",
+  n200,
+  n250,
   n300,
   n400,
   band = "#1f1f1f",
   lift,
+  panelEdge,
+  panelEdgeStrong,
   edge,
   edgeStrong,
 }) =>
@@ -186,10 +202,14 @@ const chromePalette = ({
   --grey-950: #121212;
   --neutral-100: ${n100};
   --neutral-150: ${n150};
+  --neutral-200: ${n200};
+  --neutral-250: ${n250};
   --neutral-300: ${n300};
   --neutral-400: ${n400};
   --chrome-dark-band: ${band};
   --chrome-dark-lift: ${lift};
+  --chrome-dark-panel-edge: ${panelEdge};
+  --chrome-dark-panel-edge-strong: ${panelEdgeStrong};
   --chrome-dark-edge: ${edge};
   --chrome-dark-edge-strong: ${edgeStrong};
 }
@@ -197,30 +217,33 @@ const chromePalette = ({
 
 /** The shipped brutalist chrome shades, which clear every floor and ladder. */
 const SOUND_CHROME = {
-  n300: "#b8b5a7",
-  n400: "#9d9a8d",
+  n200: "#b8b5a7",
+  n250: "#9d9a8d",
+  n300: "#7c7868",
+  n400: "#716d5f",
   lift: "#383838",
-  edge: "#3a3a3a",
-  edgeStrong: "#515151",
+  panelEdge: "#3a3a3a",
+  panelEdgeStrong: "#515151",
+  edge: "#6c6c6c",
+  edgeStrong: "#848484",
 };
 
-test("rejects a toolbar edge that dissolves into its chrome grounds", async () => {
+test("rejects a general control edge below the non-text floor", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
     paletteCss: chromePalette({
       ...SOUND_CHROME,
-      n300: "#d5d1c5",
-      n400: "#cbc7bb",
-      lift: "#242424",
-      edge: "#292929",
-      edgeStrong: "#303030",
+      n300: "#b8b5a7",
+      n400: "#9d9a8d",
+      edge: "#3a3a3a",
+      edgeStrong: "#515151",
     }),
   });
-  const toolbarEdges = result.failures.filter((failure) =>
-    failure.includes("toolbar-edge distinction floor"),
+  const nonText = result.failures.filter((failure) =>
+    failure.includes("WCAG 1.4.11 non-text floor"),
   );
   assert.deepEqual(
-    toolbarEdges.map((failure) => failure.split(":")[0]),
+    nonText.map((failure) => failure.split(":")[0]),
     [
       "sample/light",
       "sample/light",
@@ -232,29 +255,71 @@ test("rejects a toolbar edge that dissolves into its chrome grounds", async () =
     result.failures.join("\n"),
   );
   assert.equal(
-    toolbarEdges.some((failure) =>
-      failure.includes("--toolbar-edge-c (#d5d1c5) on --toolbar-bg (#dcd8ca)"),
+    nonText.some((failure) =>
+      failure.includes("--toolbar-edge-c (#b8b5a7) on --toolbar-bg (#dcd8ca)"),
     ),
     true,
-    toolbarEdges.join("\n"),
+    nonText.join("\n"),
   );
   assert.equal(
-    toolbarEdges.some((failure) =>
-      failure.includes("--toolbar-edge-c (#292929) on --toolbar-bg (#1f1f1f)"),
+    nonText.some((failure) =>
+      failure.includes("--toolbar-edge-c (#3a3a3a) on --toolbar-bg (#1f1f1f)"),
     ),
     true,
-    toolbarEdges.join("\n"),
+    nonText.join("\n"),
   );
 });
 
-test("accepts a subtle toolbar edge that stays distinct from band and lift", async () => {
+test("accepts general control edges that clear the non-text floor", async () => {
   const result = await runAgainst({
     baseCss: CHROME_BASE_CSS,
     paletteCss: chromePalette(SOUND_CHROME),
   });
   assert.deepEqual(
     result.failures.filter((failure) =>
-      failure.includes("toolbar-edge distinction floor"),
+      failure.includes("WCAG 1.4.11 non-text floor"),
+    ),
+    [],
+    result.failures.join("\n"),
+  );
+});
+
+test("rejects a BIG-214 review-panel edge that dissolves into its grounds", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette({
+      ...SOUND_CHROME,
+      n200: "#d5d1c5",
+      n250: "#cbc7bb",
+      panelEdge: "#292929",
+      panelEdgeStrong: "#303030",
+    }),
+  });
+  const panelEdges = result.failures.filter((failure) =>
+    failure.includes("BIG-214 review-panel edge distinction floor"),
+  );
+  assert.deepEqual(
+    panelEdges.map((failure) => failure.split(":")[0]),
+    [
+      "sample/light",
+      "sample/light",
+      "sample/light",
+      "sample/dark",
+      "sample/dark",
+      "sample/dark",
+    ],
+    result.failures.join("\n"),
+  );
+});
+
+test("accepts subtle BIG-214 review-panel edges", async () => {
+  const result = await runAgainst({
+    baseCss: CHROME_BASE_CSS,
+    paletteCss: chromePalette(SOUND_CHROME),
+  });
+  assert.deepEqual(
+    result.failures.filter((failure) =>
+      failure.includes("BIG-214 review-panel edge distinction floor"),
     ),
     [],
     result.failures.join("\n"),

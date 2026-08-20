@@ -11,10 +11,13 @@ import {
 } from "../src/render/preferences.js";
 import { expect, test, type Page } from "./fixtures";
 
-// BIG-214 makes these labeled controls intentionally subtle. This product
-// floor guards visible separation without treating the border as their only
-// identifying cue or making a WCAG 1.4.11 claim for it.
-const TOOLBAR_EDGE_CONTRAST_FLOOR = 1.4;
+const NON_TEXT_FLOOR = 3;
+
+// BIG-214 makes only these labeled review-panel controls intentionally subtle.
+// This product floor guards visible separation without treating the border as
+// their only identifying cue or making a WCAG 1.4.11 claim for it.
+const REVIEW_PANEL_EDGE_CONTRAST_FLOOR = 1.4;
+const REVIEW_PANEL_LABELS = new Set(["Agent Status", "Feedback"]);
 
 const channel = (value: number): number => {
   const c = value / 255;
@@ -155,10 +158,16 @@ test("should give the toolbar its own band and legible control edges in every pa
         `${where} toolbar band differs from the page`,
       ).not.toBe(chrome.page);
       for (const edge of chrome.edges) {
+        const isReviewPanel = [...REVIEW_PANEL_LABELS].some((label) =>
+          edge.label?.startsWith(label),
+        );
+        const floor = isReviewPanel
+          ? REVIEW_PANEL_EDGE_CONTRAST_FLOOR
+          : NON_TEXT_FLOOR;
         expect(
           contrastRatio(edge.color, chrome.band),
           `${where} edge on "${edge.label}" against the band`,
-        ).toBeGreaterThanOrEqual(TOOLBAR_EDGE_CONTRAST_FLOOR);
+        ).toBeGreaterThanOrEqual(floor);
       }
 
       // The ground a control takes under the pointer is measured from the
@@ -192,16 +201,27 @@ test("should paint the default light toolbar the requested chrome grey", async (
   }
 });
 
-test("should keep the default toolbar controls on the subtle chrome edges", async ({
+test("should scope the default subtle edges to Agent Status and Feedback", async ({
+  descenderTitleViewerUrl,
   page,
   reviewRuntimeUrl,
 }) => {
   await page.goto(reviewRuntimeUrl);
+  const agentStatus = page.getByRole("button", { name: "Agent Status" });
   const feedback = page.getByRole("button", { name: "Feedback" });
 
   await applyTheme(page, { mode: "light", palette: "default" });
+  await expect(agentStatus).toHaveCSS("border-top-color", "rgb(196, 196, 196)");
   await expect(feedback).toHaveCSS("border-top-color", "rgb(196, 196, 196)");
 
   await applyTheme(page, { mode: "dark", palette: "default" });
+  await expect(agentStatus).toHaveCSS("border-top-color", "rgb(71, 71, 71)");
   await expect(feedback).toHaveCSS("border-top-color", "rgb(71, 71, 71)");
+
+  await page.goto(descenderTitleViewerUrl);
+  const addComment = page.locator("[data-comment-draft-open]");
+  await applyTheme(page, { mode: "light", palette: "default" });
+  await expect(addComment).toHaveCSS("border-top-color", "rgb(130, 130, 130)");
+  await applyTheme(page, { mode: "dark", palette: "default" });
+  await expect(addComment).toHaveCSS("border-top-color", "rgb(118, 118, 118)");
 });

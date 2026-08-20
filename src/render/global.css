@@ -182,26 +182,30 @@ document painted in another and never restate a colour to preview it.
      edges.
 
      The light half is a ramp and reads like one, lightest number first: the
-     lift a control takes under the pointer, the band itself, the control edge
-     at rest, and that edge one step firmer for hover and the open view. The
-     dark half is the same four shades in the same order, but a lift in dark is
-     LIGHTER than its band rather than darker, so its ladder climbs where a
-     numeric ramp descends. Naming those four for what they are keeps the
-     numeric ramp a lightness position everywhere it appears; scripts/design-
-     system/palettes.mjs enforces both ladders.
+     lift a control takes under the pointer, the band itself, the subtle panel
+     edge and its firm step, then the general control edge and its firm step.
+     The dark half is the same ladder, but a lift in dark is LIGHTER than its
+     band rather than darker, so the ladder climbs where a numeric ramp
+     descends. Naming those shades for what they are keeps the numeric ramp a
+     lightness position everywhere it appears; scripts/design-system/
+     palettes.mjs enforces both ladders.
 
-     BIG-214 restores the quieter edge values the captain chose for Agent
-     Status and Feedback. Those labeled controls remain identifiable without
-     their boundary, so their edge is guarded as a subtle distinction rather
-     than as the sole 3:1 non-text cue. */
+     General control edges clear the 3:1 WCAG 1.4.11 non-text floor against
+     the band and lift. BIG-214 restores the quieter prior values only for the
+     labeled Agent Status and Feedback controls, which remain identifiable
+     without relying on their boundary. */
   --neutral-100: #eeeeee;
   --neutral-150: #e8e8e8;
-  --neutral-300: #c4c4c4;
-  --neutral-400: #a9a9a9;
+  --neutral-200: #c4c4c4;
+  --neutral-250: #a9a9a9;
+  --neutral-300: #828282;
+  --neutral-400: #787878;
   --chrome-dark-band: #2b2b2b;
   --chrome-dark-lift: #424242;
-  --chrome-dark-edge: #474747;
-  --chrome-dark-edge-strong: #5f5f5f;
+  --chrome-dark-panel-edge: #474747;
+  --chrome-dark-panel-edge-strong: #5f5f5f;
+  --chrome-dark-edge: #767676;
+  --chrome-dark-edge-strong: #8f8f8f;
 
   /* The one role a palette carries with its ramps; THE PALETTES says why. */
   --ink-c: light-dark(var(--grey-925), var(--grey-150));
@@ -269,6 +273,17 @@ its light counterpart so the three-deep ladder keeps the same separation.
   --toolbar-edge-strong-c: light-dark(
     var(--neutral-400),
     var(--chrome-dark-edge-strong)
+  );
+  /* BIG-214 restores the prior subtle edge only for the labeled review
+     controls. Keeping this separate preserves the stronger edge on toolbar
+     controls whose shape still depends on the generic role. */
+  --review-panel-edge-c: light-dark(
+    var(--neutral-200),
+    var(--chrome-dark-panel-edge)
+  );
+  --review-panel-edge-strong-c: light-dark(
+    var(--neutral-250),
+    var(--chrome-dark-panel-edge-strong)
   );
   /* The ground a control on that band takes under the pointer and while its
      view is open. Separate from --raised-c and --surface-c because those are
@@ -529,12 +544,16 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #efe6de;
   --neutral-150: #e9e0d8;
-  --neutral-300: #c5bcb5;
-  --neutral-400: #aaa19a;
+  --neutral-200: #c5bcb5;
+  --neutral-250: #aaa19a;
+  --neutral-300: #837d78;
+  --neutral-400: #78726e;
   --chrome-dark-band: #2b2740;
   --chrome-dark-lift: #423e57;
-  --chrome-dark-edge: #48435e;
-  --chrome-dark-edge-strong: #605b77;
+  --chrome-dark-panel-edge: #48435e;
+  --chrome-dark-panel-edge-strong: #605b77;
+  --chrome-dark-edge: #78709a;
+  --chrome-dark-edge-strong: #9188b9;
 
   --ink-c: light-dark(#403a5e, var(--grey-150));
 
@@ -605,12 +624,16 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e3e7ee;
   --neutral-150: #dde1e8;
-  --neutral-300: #b9bdc4;
-  --neutral-400: #9ea2a9;
+  --neutral-200: #b9bdc4;
+  --neutral-250: #9ea2a9;
+  --neutral-300: #7b7e82;
+  --neutral-400: #707377;
   --chrome-dark-band: #39404f;
   --chrome-dark-lift: #4f5564;
-  --chrome-dark-edge: #575e6e;
-  --chrome-dark-edge-strong: #6f7787;
+  --chrome-dark-panel-edge: #575e6e;
+  --chrome-dark-panel-edge-strong: #6f7787;
+  --chrome-dark-edge: #838da4;
+  --chrome-dark-edge-strong: #9ca8c3;
 
   --ink-c: light-dark(#2e3440, var(--grey-150));
 
@@ -681,12 +704,16 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e2e5ec;
   --neutral-150: #dcdfe6;
-  --neutral-300: #b8bbc2;
-  --neutral-400: #9ea0a7;
+  --neutral-200: #b8bbc2;
+  --neutral-250: #9ea0a7;
+  --neutral-300: #7a7c81;
+  --neutral-400: #707277;
   --chrome-dark-band: #2b2c3f;
   --chrome-dark-lift: #424255;
-  --chrome-dark-edge: #48495d;
-  --chrome-dark-edge-strong: #606076;
+  --chrome-dark-panel-edge: #48495d;
+  --chrome-dark-panel-edge-strong: #606076;
+  --chrome-dark-edge: #757695;
+  --chrome-dark-edge-strong: #8d8eb3;
 
   --ink-c: light-dark(#4c4f69, var(--grey-150));
 
@@ -758,12 +785,16 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --neutral-100: #e2ded0;
   --neutral-150: #dcd8ca;
-  --neutral-300: #b8b5a7;
-  --neutral-400: #9d9a8d;
+  --neutral-200: #b8b5a7;
+  --neutral-250: #9d9a8d;
+  --neutral-300: #7c7868;
+  --neutral-400: #716d5f;
   --chrome-dark-band: #1f1f1f;
   --chrome-dark-lift: #383838;
-  --chrome-dark-edge: #3a3a3a;
-  --chrome-dark-edge-strong: #515151;
+  --chrome-dark-panel-edge: #3a3a3a;
+  --chrome-dark-panel-edge-strong: #515151;
+  --chrome-dark-edge: #6c6c6c;
+  --chrome-dark-edge-strong: #848484;
 
   --ink-c: light-dark(#0b0b09, var(--grey-150));
 
@@ -877,6 +908,8 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-toolbar: var(--toolbar-bg);
   --color-toolbar-edge: var(--toolbar-edge-c);
   --color-toolbar-edge-strong: var(--toolbar-edge-strong-c);
+  --color-review-panel-edge: var(--review-panel-edge-c);
+  --color-review-panel-edge-strong: var(--review-panel-edge-strong-c);
   --color-toolbar-surface: var(--toolbar-surface-c);
   --color-comment-body: var(--comment-body-c);
   --color-comment-toolbar: var(--comment-toolbar-c);
