@@ -82,10 +82,7 @@ const ID_REFERENCE_PROPERTIES = new Set([
   ...ARIA_ID_REFERENCE_PROPERTIES,
 ]);
 
-const FRAGMENT_REFERENCE_PROPERTIES = new Set([
-  "href",
-  "xLinkHref",
-]);
+const FRAGMENT_REFERENCE_PROPERTIES = new Set(["href", "xLinkHref"]);
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";
