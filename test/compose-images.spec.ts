@@ -6,7 +6,15 @@ import { expect, test, type Locator, type Page } from "./fixtures";
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-const pastePng = async (composer: Locator, name: string) => {
+const capturePng = async ({
+  composer,
+  eventType,
+  name,
+}: {
+  readonly composer: Locator;
+  readonly eventType: "drop" | "paste";
+  readonly name: string;
+}) => {
   await composer.evaluate(
     (element, value) => {
       const bytes = Uint8Array.from(atob(value.encoded), (character) =>
@@ -15,34 +23,36 @@ const pastePng = async (composer: Locator, name: string) => {
       const file = new File([bytes], value.name, { type: "image/png" });
       const transfer = new DataTransfer();
       transfer.items.add(file);
-      element.dispatchEvent(
-        new ClipboardEvent("paste", {
-          bubbles: true,
-          clipboardData: transfer,
-        }),
-      );
+      const event =
+        value.eventType === "paste"
+          ? new ClipboardEvent("paste", {
+              bubbles: true,
+              clipboardData: transfer,
+            })
+          : new DragEvent("drop", {
+              bubbles: true,
+              dataTransfer: transfer,
+            });
+      element.dispatchEvent(event);
     },
-    { encoded: PASTED_PNG_BASE64, name },
+    { encoded: PASTED_PNG_BASE64, eventType, name },
   );
 };
 
+const pastePng = async (composer: Locator, name: string) => {
+  await capturePng({ composer, eventType: "paste", name });
+};
+
 const dropPng = async (composer: Locator, name: string) => {
-  await composer.evaluate(
-    (element, value) => {
-      const bytes = Uint8Array.from(atob(value.encoded), (character) =>
-        character.charCodeAt(0),
-      );
-      const file = new File([bytes], value.name, { type: "image/png" });
-      const transfer = new DataTransfer();
-      transfer.items.add(file);
-      element.dispatchEvent(
-        new DragEvent("drop", {
-          bubbles: true,
-          dataTransfer: transfer,
-        }),
-      );
-    },
-    { encoded: PASTED_PNG_BASE64, name },
+  await capturePng({ composer, eventType: "drop", name });
+};
+
+const expectPasteAndDropCapture = async (composer: Locator, prefix: string) => {
+  await pastePng(composer, `${prefix}-pasted.png`);
+  await expect(composer).toHaveValue(/review-image:/u);
+  await dropPng(composer, `${prefix}-dropped.png`);
+  await expect(composer).toHaveValue(
+    /review-image:[a-f0-9]{64}[^]*review-image:[a-f0-9]{64}/u,
   );
 };
 
@@ -88,67 +98,68 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-test("should omit the file picker from every image composer", async ({
+test("should compose images only through paste and drop in every composer", async ({
   page,
   reviewRuntimeUrl,
 }) => {
+  await page.emulateMedia({ colorScheme: "light" });
   await page.goto(reviewRuntimeUrl);
-  const { composer, dialog } = await openSlideCommentComposer(page);
   const expectNoPicker = async (surface: Locator) => {
     await expect(
       surface.getByRole("button", { name: "Choose image" }),
     ).toHaveCount(0);
     await expect(surface.locator('input[type="file"]')).toHaveCount(0);
   };
-
-  await expectNoPicker(dialog);
-  await dialog.getByRole("button", { name: "About Submit right away" }).hover();
-  await expect(page.getByRole("tooltip")).toContainText(
-    "Send the comment to the agent immediately",
-  );
-  await page.mouse.move(0, 0);
-  await expect(page.getByRole("tooltip")).toHaveCount(0);
   const commentBody = "Keep image capture on paste and drag-drop only.";
-  await composer.fill(commentBody);
-  await dialog.getByRole("button", { name: "Add Comment" }).click();
 
-  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await test.step("comment composer accepts paste and drop without a picker", async () => {
+    const { composer, dialog } = await openSlideCommentComposer(page);
+    await expectNoPicker(dialog);
+    await dialog
+      .getByRole("button", { name: "About Submit right away" })
+      .hover();
+    await expect(page.getByRole("tooltip")).toContainText(
+      "Send the comment to the agent immediately",
+    );
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await composer.fill(commentBody);
+    await expectPasteAndDropCapture(composer, "comment");
+    await dialog.getByRole("button", { name: "Add Comment" }).click();
+  });
+
   const rail = page.getByRole("complementary", { name: "Feedback" });
-  await rail.getByRole("tab", { name: "Chat" }).click();
-  await expect(rail.getByLabel("Plan-wide chat")).toBeVisible();
-  await expectNoPicker(rail);
-  await rail.getByRole("tab", { name: "Comments" }).click();
-  const sent = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/feedback") &&
-      response.request().method() === "POST",
-  );
-  await rail
-    .getByRole("button", { name: "Send all comments to agent" })
-    .click();
-  expect((await sent).ok()).toBe(true);
-  const thread = rail
-    .locator("[data-review-sent-thread]")
-    .filter({ hasText: commentBody });
-  await thread
-    .getByRole("button", { name: `Expand queued comment: ${commentBody}` })
-    .click();
-  await expect(thread.getByLabel("Reply to the agent")).toBeVisible();
-  await expectNoPicker(thread);
-});
+  await test.step("plan-wide chat accepts paste and drop without a picker", async () => {
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    const composer = rail.getByLabel("Plan-wide chat");
+    await expect(composer).toBeVisible();
+    await expectNoPicker(rail);
+    await expectPasteAndDropCapture(composer, "chat");
+  });
 
-test("should capture images through paste and drag-drop", async ({
-  page,
-  reviewRuntimeUrl,
-}) => {
-  const { composer } = await openChatComposer({ page, reviewRuntimeUrl });
-
-  await pastePng(composer, "pasted.png");
-  await expect(composer).toHaveValue(/review-image:/u);
-  await dropPng(composer, "dropped.png");
-  await expect(composer).toHaveValue(
-    /review-image:[a-f0-9]{64}[^]*review-image:[a-f0-9]{64}/u,
-  );
+  await test.step("reply composer accepts paste and drop without a picker", async () => {
+    await rail.getByRole("tab", { name: "Comments" }).click();
+    const sent = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await sent).ok()).toBe(true);
+    const thread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: commentBody });
+    await thread
+      .getByRole("button", { name: /^Expand queued comment:/u })
+      .click();
+    const composer = thread.getByLabel("Reply to the agent");
+    await expect(composer).toBeVisible();
+    await expectNoPicker(thread);
+    await expectPasteAndDropCapture(composer, "reply");
+  });
 });
 
 test("should keep text and refuse image bytes in a standalone file", async ({
