@@ -5796,6 +5796,19 @@ describe("review runtime agent disconnect", () => {
     });
     // The bystander's waiting loop, which is what the presence record names.
     await attachAgent({ writerId: "8888888888888888" });
+    const edges = async () =>
+      readAgentConnectionEvents({
+        store: disconnected.store,
+        sessionId: disconnected.sessionId,
+      });
+    // The log has to be describing the bystander's live connection before this
+    // disconnect can be seen changing what it says.
+    await vi.waitFor(
+      async () =>
+        expect((await edges()).at(-1)).toMatchObject({ connected: true }),
+      { timeout: 8_000, interval: 100 },
+    );
+    const edgesBefore = await edges();
     expect((await ask({ path: "/api/agent-disconnect" })).status).toBe(200);
     await expect(
       readAgentDisconnectRequestFor({
@@ -5827,20 +5840,17 @@ describe("review runtime agent disconnect", () => {
     waiting for that edge reports a disconnect the reviewer asked for as
     nothing at all. The row is asserted by its reason rather than by being
     last, because the checker keeps describing the bystander's live connection
-    afterwards (BIG-156, BIG-190).
+    afterwards (BIG-156, BIG-190). It is asserted over what this disconnect
+    added rather than over the whole log, because earlier ends this session
+    recorded would answer for it and the row would prove nothing.
     */
-    await expect(
-      readAgentConnectionEvents({
-        store: disconnected.store,
-        sessionId: disconnected.sessionId,
-      }),
-    ).resolves.toContainEqual(
+    expect((await edges()).slice(edgesBefore.length)).toContainEqual(
       expect.objectContaining({
         connected: false,
         reason: AGENT_DISCONNECTED_REASON,
       }),
     );
-  });
+  }, 15_000);
 
   it("should state the reported end after disconnecting a working agent", async () => {
     /*

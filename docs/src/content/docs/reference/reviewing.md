@@ -259,9 +259,9 @@ The taken-over agent's unfinished edits stay in its own copy and never reach you
 Your comments are safe whichever you choose.
 
 The agent status card carries **Disconnect agent** wherever an agent is attached, with a mark beside it that explains on hover or keyboard focus what disconnecting does: the agent is told to end its session so a different agent can attach, work it has in flight is dropped, and your comments stay.
-Confirming is one dialog, and what it says depends on what the agent is doing.
-An agent that is answering right now is named as answering, and the dialog states that the answer it has in flight is dropped rather than delivered; a quiet agent is disconnected without that sentence.
-Either way your comments and questions stay exactly where they are, and the message the agent was answering goes back into the queue for the next agent instead of being canceled.
+Confirming is one dialog, and what it says depends on whether the agent is holding work rather than on how well it is doing.
+An agent that holds a turn - answering, gone quiet mid-turn, or reporting an error - is named as holding work on the review, and the dialog states that the answer it has in flight is dropped rather than delivered; an agent holding nothing is disconnected without that sentence.
+Either way your comments and questions stay exactly where they are, and a message the agent was holding goes back into the queue for the next agent instead of being canceled.
 
 The disconnect is a message rather than a kill: Big Plan never reaches into the agent's process.
 The agent is told at its next command - `big-plan agent next`, `agent note`, or `agent respond` - and ends its own session there, which is why the connection log records a **Session ended** row stating that the reviewer disconnected the agent rather than a quiet period it had to infer.
