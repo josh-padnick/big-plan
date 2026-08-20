@@ -51,10 +51,6 @@ const ROOT_AFFORDANCE_ATTRIBUTES = [
   COPY_CODE_ATTRIBUTE,
 ] as const;
 
-// Properties whose value names an element id, or contains `url(#...)` /
-// `href="#..."` fragments. Everything else is content: a value that happens
-// to equal an id must stay as authored, including the `data-diff-side`
-// mark this module just wrote.
 const ARIA_ID_REFERENCE_PROPERTIES = new Set([
   "aria-activedescendant",
   "aria-controls",
@@ -66,11 +62,8 @@ const ARIA_ID_REFERENCE_PROPERTIES = new Set([
   "aria-owns",
 ]);
 
-const REFERENCE_PROPERTIES = new Set([
+const ID_REFERENCE_PROPERTIES = new Set([
   "id",
-  "href",
-  "xlinkHref",
-  "xlink:href",
   "htmlFor",
   "for",
   "form",
@@ -78,17 +71,23 @@ const REFERENCE_PROPERTIES = new Set([
   "headers",
   "itemRef",
   "popoverTarget",
+  ...ARIA_ID_REFERENCE_PROPERTIES,
+]);
+
+const FRAGMENT_REFERENCE_PROPERTIES = new Set([
+  "href",
+  "xlinkHref",
+  "xlink:href",
+]);
+
+const URL_REFERENCE_PROPERTIES = new Set([
   "clipPath",
   "clip-path",
   "mask",
   "fill",
   "filter",
   "style",
-  ...ARIA_ID_REFERENCE_PROPERTIES,
 ]);
-
-const isReferenceProperty = (property: string): boolean =>
-  REFERENCE_PROPERTIES.has(property);
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";
@@ -129,7 +128,7 @@ const identityPrefixFor = ({
   return `diff-baseline-${encodedKey}-${(hash >>> 0).toString(36)}-`;
 };
 
-const rewriteReferences = ({
+const rewriteIdentifierReferences = ({
   value,
   identifiers,
 }: {
@@ -144,26 +143,60 @@ const rewriteReferences = ({
   if (tokens.length > 1 && tokens.some((token) => identifiers.has(token))) {
     return tokens.map((token) => identifiers.get(token) ?? token).join(" ");
   }
-  return value.replace(
-    /url\(#([^)]+)\)|#([A-Za-z][A-Za-z0-9_:-]*)/gu,
-    (
-      match,
-      urlIdentifier: string | undefined,
-      hashIdentifier: string | undefined,
-    ) => {
-      const identifier = urlIdentifier ?? hashIdentifier;
-      if (identifier === undefined) {
-        return match;
-      }
+  return value;
+};
+
+const rewriteFragmentReference = ({
+  value,
+  identifiers,
+}: {
+  readonly value: string;
+  readonly identifiers: ReadonlyMap<string, string>;
+}): string => {
+  if (!value.startsWith("#")) {
+    return value;
+  }
+  const replacement = identifiers.get(value.slice(1));
+  return replacement === undefined ? value : `#${replacement}`;
+};
+
+const rewriteUrlReferences = ({
+  value,
+  identifiers,
+}: {
+  readonly value: string;
+  readonly identifiers: ReadonlyMap<string, string>;
+}): string =>
+  value.replace(
+    /url\(#([^)]+)\)/gu,
+    (match, identifier: string) => {
       const replacement = identifiers.get(identifier);
       if (replacement === undefined) {
         return match;
       }
-      return urlIdentifier === undefined
-        ? `#${replacement}`
-        : `url(#${replacement})`;
+      return `url(#${replacement})`;
     },
   );
+
+const rewritePropertyReferences = ({
+  property,
+  value,
+  identifiers,
+}: {
+  readonly property: string;
+  readonly value: string;
+  readonly identifiers: ReadonlyMap<string, string>;
+}): string => {
+  if (ID_REFERENCE_PROPERTIES.has(property)) {
+    return rewriteIdentifierReferences({ value, identifiers });
+  }
+  if (FRAGMENT_REFERENCE_PROPERTIES.has(property)) {
+    return rewriteFragmentReference({ value, identifiers });
+  }
+  if (URL_REFERENCE_PROPERTIES.has(property)) {
+    return rewriteUrlReferences({ value, identifiers });
+  }
+  return value;
 };
 
 const namespaceOrdinaryIdentity = (
@@ -193,18 +226,20 @@ const namespaceOrdinaryIdentity = (
     node: subtree,
     visit: (node) => {
       for (const [property, value] of Object.entries(node.properties)) {
-        if (!isReferenceProperty(property)) {
-          continue;
-        }
         if (typeof value === "string") {
-          node.properties[property] = rewriteReferences({
+          node.properties[property] = rewritePropertyReferences({
+            property,
             value,
             identifiers,
           });
         } else if (Array.isArray(value)) {
           node.properties[property] = value.map((entry) =>
             typeof entry === "string"
-              ? rewriteReferences({ value: entry, identifiers })
+              ? rewritePropertyReferences({
+                  property,
+                  value: entry,
+                  identifiers,
+                })
               : entry,
           );
         }
@@ -214,7 +249,7 @@ const namespaceOrdinaryIdentity = (
       }
       for (const child of node.children) {
         if (child.type === "text") {
-          child.value = rewriteReferences({
+          child.value = rewriteUrlReferences({
             value: child.value,
             identifiers,
           });
@@ -236,6 +271,7 @@ const stripReviewIdentity = (subtree: Element): void => {
 };
 
 const holdRootAffordancesInert = (subtree: Element): void => {
+  subtree.properties.inert = true;
   forEachElement({
     node: subtree,
     visit: (node) => {

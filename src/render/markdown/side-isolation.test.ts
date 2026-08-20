@@ -409,6 +409,71 @@ describe("side isolation", () => {
     expect(inertButtons.length).toBeGreaterThan(0);
   });
 
+  it("should hold a baseline Decision root inert without known affordance attributes", () => {
+    const { decision, baselineDecision } = documentWithBothSides();
+    expect(decision.properties.inert).toBeUndefined();
+    expect(baselineDecision.properties.inert).toBe(true);
+  });
+
+  it("should rewrite references according to each property grammar", () => {
+    const subtree: Element = {
+      type: "element",
+      tagName: "svg",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "clipPath",
+          properties: { id: "1clip" },
+          children: [],
+        },
+        {
+          type: "element",
+          tagName: "path",
+          properties: { id: "fff" },
+          children: [],
+        },
+        {
+          type: "element",
+          tagName: "g",
+          properties: { id: "section" },
+          children: [],
+        },
+        {
+          type: "element",
+          tagName: "use",
+          properties: {
+            href: "#1clip",
+            fill: "#fff",
+            style: "fill: #fff; clip-path: url(#1clip)",
+          },
+          children: [],
+        },
+        {
+          type: "element",
+          tagName: "a",
+          properties: { href: "https://host.example/#section" },
+          children: [],
+        },
+      ],
+    };
+    isolateBaselineSide({ subtree, key: "reference-grammar" });
+    const [numericId] = ordinaryIdsOf(subtree);
+    expect(numericId).toBeDefined();
+    expect(subtree.children[3]).toMatchObject({
+      type: "element",
+      properties: {
+        href: `#${numericId}`,
+        fill: "#fff",
+        style: `fill: #fff; clip-path: url(#${numericId})`,
+      },
+    });
+    expect(subtree.children[4]).toMatchObject({
+      type: "element",
+      properties: { href: "https://host.example/#section" },
+    });
+  });
+
   it("should give two identical baseline subtrees different ordinary ids", () => {
     const copy = (): Element => ({
       type: "element",
