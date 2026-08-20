@@ -53,17 +53,11 @@ const isColumnElement = (node: Node): boolean => {
   return false;
 };
 
-// A Group is a run of items that travel together, not a column of its own, so
-// it is transparent here: what it holds still takes a share of the row, and
-// counting the group instead of its contents would let four panes hide behind
-// one wrapper and reach the reviewer as four unreadable columns.
+// A Group is a run of loose controls that travels together as one item, and
+// compilation refuses one that holds a pane or a collection, so a Group never
+// contributes a column and is not looked through here.
 const columnChildren = (node: Parent): ReadonlyArray<Node> =>
-  node.children.flatMap((child) => {
-    if (isNamedFlowElement(child, "Group")) {
-      return columnChildren(child);
-    }
-    return isColumnElement(child) ? [child] : [];
-  });
+  node.children.filter(isColumnElement);
 
 const checkScreen = ({
   screen,

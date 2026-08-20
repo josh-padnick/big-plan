@@ -2541,6 +2541,45 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should refuse a collection in a Group with no Row around it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { device: "phone" },
+          children: [
+            element({
+              name: "Group",
+              children: [
+                element({
+                  name: "List",
+                  children: [
+                    element({
+                      name: "ListItem",
+                      attributes: { label: "One" },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "List",
+                  children: [
+                    element({
+                      name: "ListItem",
+                      attributes: { label: "Two" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home": a Group holds a List, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Write the List directly in the Stack or Row that should lay it out instead of wrapping it in a Group',
+    ]);
+  });
+
   it("should refuse a pane in a Group with no Row around it", () => {
     const { diagnostics } = compile({
       scopedChildren: [

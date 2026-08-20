@@ -35,6 +35,27 @@ export const ROW_PANES: ReadonlySet<WireframeNode["element"]> = new Set([
 ]);
 
 /**
+ * What a Group may never hold, wherever that Group stands.
+ *
+ * A Group clusters loose items so they travel together as one item of a row.
+ * A pane takes its own share of that row, and a collection is a region of
+ * repeating records rather than a control, so either one inside a Group turns
+ * the Group into a second, undeclared layout container - one that escapes both
+ * the row rules and the device column budget that keep a screen readable.
+ */
+export const NEVER_GROUPED: ReadonlySet<WireframeNode["element"]> = new Set([
+  ...ROW_PANES,
+  "List",
+  "Table",
+]);
+
+/** The regions of repeating records, which a Group may not hold either. */
+export const COLLECTIONS: ReadonlySet<WireframeNode["element"]> = new Set([
+  "List",
+  "Table",
+]);
+
+/**
  * The panes a set of siblings really lays out, with every Group opened.
  *
  * A Group is a run of items that travel together as one item of a Row, not a

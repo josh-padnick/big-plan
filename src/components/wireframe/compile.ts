@@ -15,8 +15,9 @@ import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import { wireframeElementFor } from "./catalog.js";
 import type { WireframeElementDefinition } from "./catalog.js";
 import {
+  COLLECTIONS,
   FLEXIBLE_PANES,
-  ROW_PANES,
+  NEVER_GROUPED,
   flattenNodes,
   paneSiblings,
   workActionButtons,
@@ -407,15 +408,16 @@ const checkSelection = ({
 };
 
 /**
- * A Group clusters loose controls; it never holds a pane.
+ * A Group clusters loose controls; it never holds a pane or a collection.
  *
  * A Group is a run of items that travel together as one item of a row, so a
- * Group holding a pane would have to be both that one travelling item and a
- * region taking its own share of the row. Only the first meaning survives,
- * wherever the Group stands: a Group with no Row around it draws panes side by
- * side with none of the row rules that keep them readable, which is the same
- * layout refused here for the same reason. The outermost Group reports,
- * because a pane reached through several Groups is still one mistake.
+ * Group holding a region would have to be both that one travelling item and
+ * the region itself. Only the first meaning survives, wherever the Group
+ * stands: a Group with no Row around it draws its contents side by side with
+ * none of the row rules and none of the device column budget that keep them
+ * readable, which is the same layout refused here for the same reason. The
+ * outermost Group reports, because a region reached through several Groups is
+ * still one mistake.
  */
 const checkGroupedPanes = ({
   screen,
@@ -435,14 +437,17 @@ const checkGroupedPanes = ({
   }): void => {
     for (const node of nodes) {
       if (node.element === "Group") {
-        const pane = insideGroup
+        const region = insideGroup
           ? undefined
           : paneSiblings(node.children).find((candidate) =>
-              ROW_PANES.has(candidate.element),
+              NEVER_GROUPED.has(candidate.element),
             );
-        if (pane !== undefined) {
+        if (region !== undefined) {
+          const remedy = COLLECTIONS.has(region.element)
+            ? `Write the ${region.element} directly in the Stack or Row that should lay it out instead of wrapping it in a Group`
+            : `Panes are direct children of a Row: write the ${region.element} as a child of a Row and use the Row gap and justify to space the panes`;
           diagnostics.add({
-            message: `Screen "${screen.id}": a Group holds a ${pane.element}, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Panes are direct children of a Row: write the ${pane.element} as a child of a Row and use the Row gap and justify to space the panes`,
+            message: `Screen "${screen.id}": a Group holds a ${region.element}, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. ${remedy}`,
             position,
           });
         }

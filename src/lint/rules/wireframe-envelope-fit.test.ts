@@ -36,33 +36,6 @@ describe("lintPlan wireframe-envelope-fit", () => {
     ]);
   });
 
-  it("should count columns a Group holds, since a Group is not one itself", () => {
-    const markdown = wireframe(
-      [
-        '<Screen id="s" name="Triage" device="desktop">',
-        "<Row>",
-        "<Group>",
-        '<List><ListItem label="One" /></List>',
-        '<List><ListItem label="Two" /></List>',
-        "</Group>",
-        "<Group>",
-        '<List><ListItem label="Three" /></List>',
-        '<List><ListItem label="Four" /></List>',
-        "</Group>",
-        "</Row>",
-        "</Screen>",
-      ].join("\n"),
-    );
-
-    expect(
-      lintPlan({ markdown })
-        .filter(({ ruleId }) => ruleId === "wireframe-envelope-fit")
-        .map(({ message }) => message),
-    ).toEqual([
-      "This Row lays out 4 columns on a desktop screen, which the desktop envelope cannot hold at a readable width; the figure never widens, so give the screen 3 columns or fewer and move the rest to another screen, a Rail, or progressive disclosure",
-    ]);
-  });
-
   it("should report side-by-side columns on a phone screen", () => {
     const markdown = wireframe(
       [

@@ -379,7 +379,7 @@ const CATALOG = {
     category: "layout",
     acceptsChildren: true,
     summary:
-      'A run of loose controls that travel together as one item of a Row; it never holds a Panel, Stack, Row, Center, or Rail. Two Groups inside <Row justify="between"> put one set at the start and the other at the end, which is how a real toolbar carries its title on the left and its controls on the right.',
+      'A run of loose controls that travel together as one item of a Row; it never holds a Panel, Stack, Row, Center, Rail, List, or Table. Two Groups inside <Row justify="between"> put one set at the start and the other at the end, which is how a real toolbar carries its title on the left and its controls on the right.',
     example:
       '<Row justify="between"><Group><Heading text="Plans" /></Group><Group><Button icon="settings" label="Settings" iconOnly /></Group></Row>',
     compile: ({ attributes, children, position, diagnostics }) => {
