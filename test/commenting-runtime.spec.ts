@@ -3901,11 +3901,11 @@ test("should restore and submit staged comments through the local review runtime
   await expect(page.getByRole("button", { name: "Dark theme" })).toHaveCount(0);
   await expect(page.getByText("Ring padding", { exact: true })).toHaveCount(0);
   const toolbarGaps = await Promise.all([
-    agentStatus.boundingBox(),
-    feedbackAction.boundingBox(),
     approveAction.boundingBox(),
+    feedbackAction.boundingBox(),
+    agentStatus.boundingBox(),
     settingsAction.boundingBox(),
-  ]).then(([status, feedback, approve, settings]) => {
+  ]).then(([approve, feedback, status, settings]) => {
     if (
       status === null ||
       feedback === null ||
@@ -3914,9 +3914,9 @@ test("should restore and submit staged comments through the local review runtime
     )
       throw new Error("The review toolbar actions were not rendered");
     return [
-      feedback.x - status.x - status.width,
-      approve.x - feedback.x - feedback.width,
-      settings.x - approve.x - approve.width,
+      feedback.x - approve.x - approve.width,
+      status.x - feedback.x - feedback.width,
+      settings.x - status.x - status.width,
     ];
   });
   expect(toolbarGaps).toEqual([4, 4, 4]);

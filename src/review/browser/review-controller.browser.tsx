@@ -121,7 +121,7 @@ import {
   type PrimacyAnswer,
 } from "./agent-roster.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
-import { InputsSurface } from "./inputs-surface.browser.js";
+import { InputsSurface, OPEN_INPUTS_EVENT } from "./inputs-surface.browser.js";
 import {
   batchSectionTone,
   CommentsSurface,
@@ -5059,6 +5059,12 @@ export const ReviewController = () => {
     },
     [selectFeedbackBody],
   );
+
+  useEffect(() => {
+    const openInputs = () => openFeedbackSidebar("inputs");
+    document.addEventListener(OPEN_INPUTS_EVENT, openInputs);
+    return () => document.removeEventListener(OPEN_INPUTS_EVENT, openInputs);
+  }, [openFeedbackSidebar]);
   // Each control owns its own view. Pressing the one that is already pressed
   // closes the sidebar; it never hands the slot to the other body, which is
   // what made Agent Status look like it was opening Feedback.
@@ -7138,12 +7144,17 @@ export const ReviewController = () => {
         ? null
         : createPortal(
             <>
-              {identity === null ? null : (
-                <AgentStatusTrigger
-                  status={agentHealth}
-                  className={TOOLBAR_CONTROL_CLASS}
-                  isSelected={isOpen && sidebarView === "agent"}
-                  onToggle={toggleAgentSidebar}
+              {identity === null ||
+              runtimeSession?.authoritative === false ||
+              serverGone ? null : (
+                <ApproveControl
+                  identity={identity}
+                  approval={approval}
+                  agent={agent}
+                  currentSnapshot={currentSnapshot}
+                  canWrite={true}
+                  onOpenAgent={openAgentSidebar}
+                  onApprovalChange={setApproval}
                 />
               )}
               <button
@@ -7166,17 +7177,12 @@ export const ReviewController = () => {
                   </Badge>
                 ) : null}
               </button>
-              {identity === null ||
-              runtimeSession?.authoritative === false ||
-              serverGone ? null : (
-                <ApproveControl
-                  identity={identity}
-                  approval={approval}
-                  agent={agent}
-                  currentSnapshot={currentSnapshot}
-                  canWrite={true}
-                  onOpenAgent={openAgentSidebar}
-                  onApprovalChange={setApproval}
+              {identity === null ? null : (
+                <AgentStatusTrigger
+                  status={agentHealth}
+                  className={TOOLBAR_CONTROL_CLASS}
+                  isSelected={isOpen && sidebarView === "agent"}
+                  onToggle={toggleAgentSidebar}
                 />
               )}
             </>,

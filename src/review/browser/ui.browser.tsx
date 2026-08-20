@@ -12,6 +12,7 @@ import type {
   ReactElement,
   ReactNode,
   Ref,
+  RefObject,
 } from "react";
 import {
   cloneElement,
@@ -23,6 +24,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Toaster as Sonner, toast } from "sonner";
+import {
+  placeAnchoredDialog,
+  type AnchoredDialogPosition,
+} from "./alert-dialog-position.js";
 import {
   placeTooltip,
   resolveRemMeasure,
@@ -604,6 +609,8 @@ type AlertDialogProps = {
   readonly width?: "default" | "wide";
   /** Split puts cancel on the left and the action on the right. */
   readonly footerAlign?: "end" | "split";
+  /** When set, the panel hangs below this control instead of the viewport center. */
+  readonly anchorRef?: RefObject<HTMLElement | null>;
 };
 
 const FOCUSABLE_SELECTOR =
@@ -625,11 +632,14 @@ export const AlertDialog = ({
   footnote,
   width = "default",
   footerAlign = "end",
+  anchorRef,
 }: AlertDialogProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descriptionId = useId();
   const footnoteId = useId();
+  const [anchorPosition, setAnchorPosition] =
+    useState<AnchoredDialogPosition | null>(null);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -643,6 +653,34 @@ export const AlertDialog = ({
       if (previousFocus?.isConnected === true) previousFocus.focus();
     };
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setAnchorPosition(null);
+      return;
+    }
+    const anchor = anchorRef?.current;
+    if (anchor === undefined || anchor === null) {
+      setAnchorPosition(null);
+      return;
+    }
+    const update = () => {
+      setAnchorPosition(
+        placeAnchoredDialog({
+          anchor: anchor.getBoundingClientRect(),
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          preferredWidth: width === "wide" ? 42 * 16 : 32 * 16,
+        }),
+      );
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anchorRef, open, width]);
 
   if (!open) return null;
 
@@ -684,13 +722,18 @@ export const AlertDialog = ({
     footnote === undefined ? descriptionId : `${descriptionId} ${footnoteId}`;
   const resolvedActionVariant =
     actionVariant ?? (tone === "neutral" ? "default" : "destructive");
+  const anchored = anchorPosition !== null;
   return (
     <div
       // --preferences-backdrop-c was never defined, so every alert opened over
       // a page that still looked active. bg-backdrop/70 is the treatment the
       // settings sheet and the image viewer already use, and the data
       // attribute opts this backdrop into the approved 80% dark-mode dim.
-      className="fixed inset-0 z-50 grid grid-cols-[minmax(0,1fr)] place-items-center bg-backdrop/70 p-4"
+      className={
+        anchored
+          ? "fixed inset-0 z-50 bg-backdrop/70"
+          : "fixed inset-0 z-50 grid grid-cols-[minmax(0,1fr)] place-items-center bg-backdrop/70 p-4"
+      }
       data-modal-backdrop
       onKeyDown={handleKeyDown}
     >
@@ -700,15 +743,29 @@ export const AlertDialog = ({
         // colour first, before its shadow. The danger tone belongs to the
         // destructive action alone, never to the whole dialog.
         className={joinClasses(
-          "flex max-h-[calc(100dvh-1.5rem)] w-full flex-col rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating",
+          "flex w-full flex-col rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating",
+          anchored
+            ? "absolute min-h-0 overflow-y-auto overscroll-contain"
+            : "max-h-[calc(100dvh-1.5rem)]",
           width === "wide" ? "max-w-2xl" : "max-w-lg",
         )}
+        style={
+          anchored
+            ? {
+                top: anchorPosition.top,
+                right: anchorPosition.right,
+                maxHeight: anchorPosition.maxHeight,
+                maxWidth: anchorPosition.maxWidth,
+              }
+            : undefined
+        }
         role="alertdialog"
         tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={describedBy}
         data-review-alert-width={width}
+        data-review-alert-placement={anchored ? "anchor" : "center"}
       >
         <h2 id={titleId} className="text-xl font-semibold">
           {title}
@@ -743,7 +800,9 @@ export const AlertDialog = ({
             onClick={onAction}
             aria-describedby={footnote === undefined ? undefined : footnoteId}
             className={
-              width === "wide" ? "wide:w-auto max-sm:w-full" : undefined
+              width === "wide" && footerAlign === "split"
+                ? "wide:w-auto max-sm:w-full"
+                : undefined
             }
           >
             {actionLabel}

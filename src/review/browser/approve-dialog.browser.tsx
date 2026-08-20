@@ -12,6 +12,7 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
@@ -51,12 +52,10 @@ import {
   type ReviewInputContract,
 } from "../shared/input-contract.js";
 import { Icon } from "./icon.browser.js";
+import { requestOpenInputs } from "./inputs-surface.browser.js";
+import { displayedStandIn, liveDecisionFigure } from "./live-target.browser.js";
 import {
-  displayedStandIn,
-  liveDecisionFigure,
-  liveFirstDecision,
-} from "./live-target.browser.js";
-import {
+  onAppliedReviewRecord,
   requestJson,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
@@ -77,19 +76,6 @@ const showDecision = (decisionId: string): void => {
   const decision = liveDecisionFigure(decisionId);
   if ("missing" in decision) return;
   showLiveElement(decision.found);
-};
-
-const jumpToPlanDecisions = (decisionIds: ReadonlyArray<string>): void => {
-  for (const id of decisionIds) {
-    const decision = liveDecisionFigure(id);
-    if ("found" in decision) {
-      showLiveElement(decision.found);
-      return;
-    }
-  }
-  const first = liveFirstDecision();
-  if ("missing" in first) return;
-  showLiveElement(first.found);
 };
 
 const openApprovalMessageSettings = (): void => {
@@ -305,9 +291,14 @@ const useInputContract = (
         })
         .catch(() => undefined);
     };
+    // The Inputs panel and this dialog must describe the same record. A
+    // one-shot fetch would keep showing unanswered after the cards already
+    // recorded an answer.
     read();
+    const stopWatching = onAppliedReviewRecord(read);
     return () => {
       cancelled = true;
+      stopWatching();
     };
   }, [identity]);
   return contract;
@@ -372,6 +363,7 @@ export const ApproveDialog = ({
   onJumpToRequest,
   submitting,
   blockReason,
+  anchorRef,
 }: {
   readonly open: boolean;
   readonly approval: ApprovalSummary | undefined;
@@ -384,6 +376,7 @@ export const ApproveDialog = ({
   readonly onJumpToRequest: (requestId: string) => void;
   readonly submitting: boolean;
   readonly blockReason: string | undefined;
+  readonly anchorRef: RefObject<HTMLElement | null>;
 }) => {
   const firstBlocking = useRef<HTMLButtonElement | null>(null);
   const stale = approval?.status === "stale";
@@ -414,8 +407,9 @@ export const ApproveDialog = ({
       tone="neutral"
       actionVariant="default"
       width="wide"
-      footerAlign="split"
+      footerAlign="end"
       footnote={footnote}
+      anchorRef={anchorRef}
       onCancel={onKeepReviewing}
       onAction={handleApprove}
     >
@@ -703,7 +697,7 @@ const ApprovalDetails = ({
       <div
         ref={dialogRef}
         id={id}
-        className="fixed top-12 right-3 left-3 z-50 max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating wide:right-auto wide:left-6 wide:w-80"
+        className="fixed top-12 right-3 left-3 z-50 rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating wide:right-auto wide:left-6 wide:w-80"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -781,7 +775,7 @@ const ApprovalDetails = ({
                 className="col-start-2 min-h-11 cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-sm font-normal text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
                 onClick={() => {
                   onClose();
-                  jumpToPlanDecisions(unansweredDecisionIds);
+                  requestOpenInputs();
                 }}
                 data-review-approve-jump-decisions=""
               >
@@ -842,6 +836,7 @@ export const ApproveControl = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [blockReason, setBlockReason] = useState<string | undefined>();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const detailsId = useId();
   const isApproved = approval?.status === "approved";
   const brandSlot = useApprovalBrandSlot(isApproved);
@@ -1033,18 +1028,17 @@ export const ApproveControl = ({
           Changed since approval
         </Badge>
       ) : null}
-      <button
-        type="button"
-        className={STAMP_BUTTON_CLASS}
+      <Button
+        ref={triggerRef}
+        variant="default"
+        size="compact"
         aria-label={status === "stale" ? "Re-approve" : "Approve plan"}
         onClick={() => setDialogOpen(true)}
         data-review-approve-trigger=""
         data-review-approve-emphasis={primary ? "primary" : "secondary"}
       >
-        <ApproveStampMark
-          label={status === "stale" ? "Re-approve" : "Approve"}
-        />
-      </button>
+        {status === "stale" ? "Re-approve" : "Approve"}
+      </Button>
       <ApproveDialog
         open={dialogOpen}
         approval={approval}
@@ -1065,6 +1059,7 @@ export const ApproveControl = ({
             ? "This plan cannot be approved until every critical decision is answered."
             : blockReason
         }
+        anchorRef={triggerRef}
       />
     </>
   );

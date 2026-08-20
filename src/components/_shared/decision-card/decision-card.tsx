@@ -276,12 +276,15 @@ const ReadOnlyNote = ({ className = "" }: { readonly className?: string }) => (
 // radios.
 const ApprovedNotice = () => (
   <div
-    className="decision-approved-note flex items-start gap-2 bg-[var(--callout-note-bg)] px-6 py-3 text-sm text-[var(--callout-note-ink)]"
+    className="decision-approved-note flex items-center gap-2 bg-[var(--callout-note-bg)] px-6 py-3 text-sm text-[var(--callout-note-ink)]"
     data-decision-approved-note=""
     role="status"
     hidden
   >
-    <span className="mt-0.5 inline-flex size-4 shrink-0" aria-hidden="true">
+    <span
+      className="inline-flex size-4 shrink-0 items-center justify-center leading-none [&>svg]:block [&>svg]:size-4"
+      aria-hidden="true"
+    >
       {lucideIconToReact({ icon: LOCK_ICON, hidden: false })}
     </span>
     <p className="m-0 min-w-0">

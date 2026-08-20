@@ -528,6 +528,10 @@ export const renderShell = ({
   // The approved stamp lives in a hidden slot beside the wordmark. The review
   // island reveals it; a scripts-disabled document keeps the slot empty so the
   // table of contents stays the first thing in the sidebar.
+  const approvalBrandSlot = standalone
+    ? ""
+    : // approved-metric: captain asked for ~10px more gap from the wordmark than -ml-8
+      '<span class="-ml-4 wide:-ml-[22px]" data-review-approval-brand-slot hidden></span>';
   const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
 <div class="flex min-w-0 items-center gap-0.5">
@@ -535,7 +539,7 @@ export const renderShell = ({
 <img class="h-auto w-20 wide:w-27" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="h-auto w-20 wide:w-27" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
-${standalone ? "" : '<span class="-ml-4 wide:-ml-8" data-review-approval-brand-slot hidden></span>'}
+${approvalBrandSlot}
 </div>
 ${standalone ? "<p></p>" : `<p class="min-w-0 truncate text-center text-sm text-muted"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 ${renderHeaderActions({ feedback: !standalone })}

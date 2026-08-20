@@ -13,7 +13,14 @@
 // record drives, and two surfaces disagreeing about one review is the failure
 // the contract exists to remove.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { OCTAGON_ALERT_ICON } from "../../icons/lucide/octagon-alert.js";
@@ -40,6 +47,19 @@ import { Badge, Button } from "./ui.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 
 const INPUT_CONTRACT_PATH = "/api/input-contract";
+
+/** Opens the Inputs tab and flashes the standing row. */
+export const OPEN_INPUTS_EVENT = "bigplan:open-inputs";
+
+const NEEDS_FLASH_MS = 1600;
+
+let pendingNeedsFlash = false;
+
+/** Asks the review chrome to show Inputs and highlight what is still owed. */
+export const requestOpenInputs = (): void => {
+  pendingNeedsFlash = true;
+  document.dispatchEvent(new CustomEvent(OPEN_INPUTS_EVENT));
+};
 
 const STATE_LABELS: Readonly<Record<ReviewInputState, string>> = {
   answered: "Answered",
@@ -291,6 +311,28 @@ export const InputsSurface = () => {
     () => inputsPanelReading({ standing, readStanding }),
     [standing, readStanding],
   );
+  const needsRef = useRef<HTMLElement>(null);
+  const [needsFlash, setNeedsFlash] = useState(false);
+
+  const startNeedsFlash = useCallback(() => {
+    pendingNeedsFlash = false;
+    setNeedsFlash(true);
+    needsRef.current?.scrollIntoView({ block: "nearest" });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (pendingNeedsFlash) startNeedsFlash();
+    document.addEventListener(OPEN_INPUTS_EVENT, startNeedsFlash);
+    return () =>
+      document.removeEventListener(OPEN_INPUTS_EVENT, startNeedsFlash);
+  }, [startNeedsFlash]);
+
+  useEffect(() => {
+    if (!needsFlash) return;
+    const timer = window.setTimeout(() => setNeedsFlash(false), NEEDS_FLASH_MS);
+    return () => window.clearTimeout(timer);
+  }, [needsFlash]);
+
   return (
     <div
       id="review-panel-inputs"
@@ -298,7 +340,12 @@ export const InputsSurface = () => {
       role="tabpanel"
       aria-labelledby="review-tab-inputs"
     >
-      <section className="min-w-0 rounded-lg bg-surface p-3">
+      <section
+        ref={needsRef}
+        className={`min-w-0 rounded-lg p-3 transition-colors motion-reduce:transition-none ${needsFlash ? "bg-accent-wash outline-2 outline-offset-2 outline-accent" : "bg-surface"}`}
+        data-review-input-needs=""
+        {...(needsFlash ? { "data-review-input-needs-flash": "" } : {})}
+      >
         <h3 className="m-0 text-xs font-bold tracking-caps text-muted uppercase">
           {"What this review needs"}
         </h3>
