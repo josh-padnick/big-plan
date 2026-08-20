@@ -77,6 +77,49 @@ export const paneSiblings = (
     node.element === "Group" ? paneSiblings(node.children) : [node],
   );
 
+/** A node's own children, or nothing for a leaf. */
+export const childNodes = (
+  node: WireframeNode,
+): ReadonlyArray<WireframeNode> => ("children" in node ? node.children : []);
+
+/** A pane is the row's record collection when it holds a List or a Table. */
+export const holdsRecordCollection = (node: WireframeNode): boolean =>
+  node.element === "Panel" &&
+  node.children.some(
+    (child) => child.element === "List" || child.element === "Table",
+  );
+
+/**
+ * The pane a Row lays out as its collection, when the detail it fills is
+ * actually drawn beside it.
+ *
+ * A master/detail workspace is a record collection with the selected record
+ * shown in the next pane, and both rules that read the pairing need it to be
+ * the real thing: the compiler demands exactly one selected record only when
+ * a detail is there to name it, and the renderer draws no push mark on a row
+ * whose record the pane beside it already shows. A collection followed by a
+ * lone control draws nothing beside the row, so it stays an ordinary list
+ * whose rows genuinely push. One definition, read from both sides, is what
+ * keeps the two from disagreeing about which rows those are.
+ */
+export const masterPaneIn = (
+  children: ReadonlyArray<WireframeNode>,
+): WireframeNode | undefined => {
+  const siblings = paneSiblings(children);
+  const source = siblings.find(holdsRecordCollection);
+  if (source === undefined) {
+    return undefined;
+  }
+  const following = siblings.slice(siblings.indexOf(source) + 1);
+  const dependent =
+    following.find((child) => child.element !== "Rail") ??
+    following.find((child) => child.element === "Rail");
+  return dependent !== undefined &&
+    flattenNodes(childNodes(dependent)).length > 0
+    ? source
+    : undefined;
+};
+
 /**
  * Returns authored buttons that perform work, excluding mode and state.
  *

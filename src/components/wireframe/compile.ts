@@ -18,7 +18,9 @@ import {
   COLLECTIONS,
   FLEXIBLE_PANES,
   NEVER_GROUPED,
+  childNodes,
   flattenNodes,
+  masterPaneIn,
   paneSiblings,
   workActionButtons,
 } from "./nodes.js";
@@ -333,9 +335,6 @@ const expandPattern = ({
   );
 };
 
-const childNodes = (node: WireframeNode): ReadonlyArray<WireframeNode> =>
-  "children" in node ? node.children : [];
-
 const containsElement = ({
   node,
   element,
@@ -345,13 +344,6 @@ const containsElement = ({
 }): boolean =>
   node.element === element ||
   childNodes(node).some((child) => containsElement({ node: child, element }));
-
-const containsRecordCollection = (node: WireframeNode): boolean =>
-  node.element === "Panel" &&
-  node.children.some(
-    (candidate) =>
-      candidate.element === "List" || candidate.element === "Table",
-  );
 
 /** A detail pane that shows content must name the selected record beside it. */
 const checkSelection = ({
@@ -366,19 +358,8 @@ const checkSelection = ({
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
       if (node.element === "Row") {
-        const siblings = paneSiblings(node.children);
-        const source = siblings.find(containsRecordCollection);
-        const sourceIndex =
-          source === undefined ? -1 : siblings.indexOf(source);
-        const following = siblings.slice(sourceIndex + 1);
-        const dependent =
-          following.find((child) => child.element !== "Rail") ??
-          following.find((child) => child.element === "Rail");
-        if (
-          source !== undefined &&
-          dependent !== undefined &&
-          flattenNodes(childNodes(dependent)).length > 0
-        ) {
+        const source = masterPaneIn(node.children);
+        if (source !== undefined) {
           const sourceNodes = flattenNodes([source]);
           const hasRecords = sourceNodes.some(
             (candidate) =>
@@ -695,10 +676,11 @@ const checkChoiceNavigation = ({
         if (
           selectedChoices.length !== 1 ||
           selectedChoice?.title !== choice.title ||
-          selectedChoice?.description !== choice.description
+          selectedChoice?.description !== choice.description ||
+          selectedChoice?.emoji !== choice.emoji
         ) {
           diagnostics.add({
-            message: `ChoiceCard "${choice.title}" on Screen "${screen.id}" navigates to "${choice.navigateTo}" without selecting that same title and consequence; every option needs its own truthful visible outcome`,
+            message: `ChoiceCard "${choice.title}" on Screen "${screen.id}" navigates to "${choice.navigateTo}" without selecting that same title, consequence, and card art; every option needs its own truthful visible outcome`,
             position: positionFor(screen),
           });
         }

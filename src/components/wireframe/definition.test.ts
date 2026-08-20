@@ -2259,6 +2259,70 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ).toBeUndefined();
   });
 
+  it("should refuse an option whose reveal drops the card art it carried", () => {
+    const plan = (destinationArt: boolean) =>
+      compile({
+        scopedChildren: [
+          screen({
+            id: "choose",
+            attributes: { device: "tablet" },
+            children: [choiceGroup()],
+          }),
+          ...(["purchase", "loan"] as const).map((selected) =>
+            screen({
+              id: `${selected}-selected`,
+              name: `${selected} selected`,
+              attributes: { device: "tablet" },
+              children: [
+                element({
+                  name: "ChoiceGroup",
+                  children: (
+                    [
+                      [
+                        "purchase",
+                        "⚽",
+                        "Ask about a purchase",
+                        "See how much money I would have left",
+                      ],
+                      [
+                        "loan",
+                        "💵",
+                        "Ask about my loan",
+                        "See what I owe and ask a question",
+                      ],
+                    ] as const
+                  ).map(([name, emoji, title, description]) =>
+                    element({
+                      name: "ChoiceCard",
+                      attributes: {
+                        ...(destinationArt ? { emoji } : {}),
+                        title,
+                        description,
+                        ...(name === selected
+                          ? { selected: true }
+                          : { navigateTo: `${name}-selected` }),
+                      },
+                    }),
+                  ),
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Continue", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ),
+        ],
+      });
+
+    // The initial cards carry art, so a reveal that drops it redraws the very
+    // option the reader just tapped.
+    expect(plan(false).diagnostics.map((entry) => entry.message)).toContain(
+      'ChoiceCard "Ask about a purchase" on Screen "choose" navigates to "purchase-selected" without selecting that same title, consequence, and card art; every option needs its own truthful visible outcome',
+    );
+    expect(plan(true).diagnostics).toEqual([]);
+  });
+
   it("should refuse a choice group that gives only some options card art", () => {
     const group = (art: ReadonlyArray<boolean>): ScopedChild =>
       element({
@@ -2358,6 +2422,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                   name: "ChoiceCard",
                   attributes: {
                     icon: "star",
+                    emoji: "⚽",
                     title: "Ask about a purchase",
                     description: "See how much money I would have left",
                     navigateTo: "purchase-selected",
@@ -2366,6 +2431,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                 element({
                   name: "ChoiceCard",
                   attributes: {
+                    emoji: "💵",
                     title: "Ask about my loan",
                     description: "See what I owe and ask a question",
                     navigateTo: "loan-selected",
@@ -3187,6 +3253,60 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         className: "wireframe-list-disclosure",
       }),
     ).toBeUndefined();
+  });
+
+  it("should keep the push chevron on a collection row with no detail beside it", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "Inbox" },
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: {
+                            label: "Checkout freeze",
+                            navigateTo: "ticket",
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "New ticket" },
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Checkout freeze" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // Nothing is drawn beside this row, so naming a screen is a real push and
+    // the mark stays.
+    expect(
+      elementWithClass({
+        node: render(compiled),
+        className: "wireframe-list-disclosure",
+      }),
+    ).toBeDefined();
   });
 
   it("should draw no chevron on a list row that names no screen", () => {

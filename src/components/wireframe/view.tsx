@@ -15,6 +15,7 @@ import type {
   WireframeStatus,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
+import { holdsRecordCollection, masterPaneIn } from "./nodes.js";
 import {
   WIREFRAME_PLACEHOLDER_GLYPH,
   wireframeGlyphFor,
@@ -126,19 +127,13 @@ const Glyph = ({ name }: { readonly name: string }): JSX.Element => {
 
 // A direct record collection makes its Panel the master pane. Rail is the only
 // authored width primitive; the Row owns every other workspace proportion.
-const holdsCollection = (node: WireframeNode): boolean =>
-  node.element === "Panel" &&
-  node.children.some(
-    (child) => child.element === "List" || child.element === "Table",
-  );
-
 // Exactly one pane in a row is the collection: the first one. A detail pane
 // often holds a list too - properties, context, a checklist - and reading that
 // as a second collection is what produces two equally bounded panes with no
 // primary surface between them. Reading order decides, because the collection
 // is what the reader came through to reach the record.
 const masterIndexIn = (children: ReadonlyArray<WireframeNode>): number =>
-  children.length > 1 ? children.findIndex(holdsCollection) : -1;
+  children.length > 1 ? children.findIndex(holdsRecordCollection) : -1;
 
 const isWorkspaceRow = (children: ReadonlyArray<WireframeNode>): boolean =>
   children.some((child) => child.element === "Rail") ||
@@ -175,12 +170,17 @@ const conversationPartsFor = (
 const WireframeElement = ({
   node,
   isMasterPane = false,
+  detailBeside = false,
   selectsInPlace = false,
 }: {
   readonly node: WireframeNode;
   // Set only by the Row that owns this pane, because whether a panel is the
   // collection is a fact about its siblings, not about the panel alone.
   readonly isMasterPane?: boolean;
+  // Set by the same Row when the detail that collection fills is really drawn
+  // beside it, which is what makes the pane a workspace master rather than an
+  // ordinary list that happens to lead the row.
+  readonly detailBeside?: boolean;
   // Set only inside that collection pane, where picking a record fills the
   // detail beside it rather than leaving the screen.
   readonly selectsInPlace?: boolean;
@@ -205,6 +205,7 @@ const WireframeElement = ({
           <WireframeElements
             nodes={node.children}
             masterIndex={masterIndexIn(node.children)}
+            detailBeside={masterPaneIn(node.children) !== undefined}
           />
         </div>
       );
@@ -246,7 +247,7 @@ const WireframeElement = ({
             {conversation === undefined ? (
               <WireframeElements
                 nodes={node.children}
-                selectsInPlace={isMasterPane}
+                selectsInPlace={isMasterPane && detailBeside}
               />
             ) : (
               <>
@@ -881,10 +882,12 @@ const Field = ({
 const WireframeElements = ({
   nodes,
   masterIndex = -1,
+  detailBeside = false,
   selectsInPlace = false,
 }: {
   readonly nodes: ReadonlyArray<WireframeNode>;
   readonly masterIndex?: number;
+  readonly detailBeside?: boolean;
   readonly selectsInPlace?: boolean;
 }) => (
   <>
@@ -893,6 +896,7 @@ const WireframeElements = ({
         key={index}
         node={node}
         isMasterPane={index === masterIndex}
+        detailBeside={detailBeside}
         selectsInPlace={selectsInPlace}
       />
     ))}

@@ -940,7 +940,7 @@ const CATALOG = {
     acceptsChildren: false,
     allowedParents: ["List"],
     summary:
-      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen and draws a trailing push chevron, except in the collection pane of a master/detail row, where it selects the record in place instead. status draws a state mark (done, attention, waiting, blocked) so a checklist is scannable without reading every line.",
+      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen and draws a trailing push chevron, except in a collection pane whose detail is drawn beside it, where it selects the record in place instead. status draws a state mark (done, attention, waiting, blocked) so a checklist is scannable without reading every line.",
     example:
       '<ListItem label="Checkout freeze" meta="Northwind · Priority" value="14m · #4821" navigateTo="ticket" />',
     compile: ({ attributes, position, diagnostics }) => {
