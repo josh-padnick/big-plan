@@ -70,6 +70,10 @@ import {
 } from "./review-runtime-client.browser.js";
 import { useChangeDispositions } from "./use-change-dispositions.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
+import {
+  placeAnchoredDialog,
+  type AnchoredDialogPosition,
+} from "./alert-dialog-position.js";
 import { AlertDialog, Badge, Button } from "./ui.browser.js";
 
 const VIEW_ALL_LIMIT = 3;
@@ -101,6 +105,13 @@ const openApprovalMessageSettings = (): void => {
   );
 };
 
+const openSettingsAndClose = (close: () => void): void => {
+  close();
+  queueMicrotask(() => {
+    openApprovalMessageSettings();
+  });
+};
+
 const readStoredMessage = (): string => {
   try {
     return effectiveApprovalMessage(
@@ -117,6 +128,76 @@ const APPROVE_CONTROL_BASE =
 const APPROVE_TRIGGER_CLASS = `${APPROVE_CONTROL_BASE} border border-approve-action-edge bg-approve-action text-approve-action-ink hover:brightness-95 hover:shadow-raised aria-expanded:shadow-raised`;
 
 const APPROVE_APPROVED_CLASS = `${APPROVE_CONTROL_BASE} border border-review-panel-edge bg-transparent text-ink hover:border-review-panel-edge-strong hover:bg-toolbar-surface aria-expanded:border-review-panel-edge-strong aria-expanded:bg-toolbar-surface aria-expanded:inset-shadow-pressed`;
+
+const STAMP_FRAME =
+  "inline-flex rounded-md border-2 border-accent p-0.5 bg-paper";
+
+const STAMP_INNER =
+  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5";
+
+const STAMP_TYPE =
+  "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase";
+
+const ApprovedStampMark = () => (
+  <span className={STAMP_FRAME}>
+    <span className={STAMP_INNER}>
+      <span className={STAMP_TYPE}>Approved</span>
+    </span>
+  </span>
+);
+
+/** A rubber-stamp mark that sits on the header/content seam, not in the bar. */
+const ApprovedStampOverlay = ({
+  anchorRef,
+}: {
+  readonly anchorRef: RefObject<HTMLElement | null>;
+}) => {
+  const [position, setPosition] = useState<{
+    readonly top: number;
+    readonly left: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    const update = () => {
+      const anchor = anchorRef.current;
+      if (anchor === null) {
+        setPosition(null);
+        return;
+      }
+      const header = document.querySelector("[data-shell-chrome]");
+      const headerBottom =
+        header?.getBoundingClientRect().bottom ??
+        anchor.getBoundingClientRect().bottom;
+      const rect = anchor.getBoundingClientRect();
+      setPosition({
+        top: headerBottom,
+        left: rect.left + rect.width / 2,
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    document.addEventListener("bigplan:article-replaced", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      document.removeEventListener("bigplan:article-replaced", update);
+    };
+  }, [anchorRef]);
+
+  if (position === null) return null;
+  return createPortal(
+    <span
+      aria-hidden="true"
+      className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2 -rotate-2"
+      style={{ top: position.top, left: position.left }}
+      data-review-approval-stamp=""
+    >
+      <ApprovedStampMark />
+    </span>,
+    document.body,
+  );
+};
 
 const QuietCheck = () => (
   <span
@@ -640,7 +721,7 @@ export const ApproveDialog = ({
             <button
               type="button"
               className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-xs font-medium text-accent focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
-              onClick={openApprovalMessageSettings}
+              onClick={() => openSettingsAndClose(onKeepReviewing)}
               data-review-approve-edit-message=""
               data-review-chrome-link=""
             >
@@ -687,6 +768,7 @@ const ApprovalDetails = ({
   unansweredDecisionIds,
   onClose,
   onRevoke,
+  anchorRef,
 }: {
   readonly id: string;
   readonly open: boolean;
@@ -695,6 +777,7 @@ const ApprovalDetails = ({
   readonly unansweredDecisionIds: ReadonlyArray<string>;
   readonly onClose: () => void;
   readonly onRevoke: () => void;
+  readonly anchorRef: RefObject<HTMLElement | null>;
 }) => {
   const [confirming, setConfirming] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -702,6 +785,8 @@ const ApprovalDetails = ({
   const leftoverCopy = unansweredNonCriticalCopy(unansweredDecisionIds.length);
   const approvedLabel = approvedOnLabel(approval.at);
   const exactLabel = approvedAtExactLabel(approval.at);
+  const [anchorPosition, setAnchorPosition] =
+    useState<AnchoredDialogPosition | null>(null);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -711,6 +796,34 @@ const ApprovalDetails = ({
       if (previousFocus?.isConnected === true) previousFocus.focus();
     };
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setAnchorPosition(null);
+      return;
+    }
+    const update = () => {
+      const anchor = anchorRef.current;
+      if (anchor === null) {
+        setAnchorPosition(null);
+        return;
+      }
+      setAnchorPosition(
+        placeAnchoredDialog({
+          anchor: anchor.getBoundingClientRect(),
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          preferredWidth: 20 * 16,
+        }),
+      );
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anchorRef, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -755,7 +868,18 @@ const ApprovalDetails = ({
       <div
         ref={dialogRef}
         id={id}
-        className="fixed top-12 right-3 left-3 z-50 rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating wide:right-6 wide:left-auto wide:w-80"
+        className="fixed z-50 rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating"
+        style={
+          anchorPosition === null
+            ? { top: 48, right: 12, width: 20 * 16 }
+            : {
+                top: anchorPosition.top,
+                right: anchorPosition.right,
+                width: anchorPosition.maxWidth,
+                maxHeight: anchorPosition.maxHeight,
+                maxWidth: anchorPosition.maxWidth,
+              }
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -810,7 +934,7 @@ const ApprovalDetails = ({
               <button
                 type="button"
                 className="mt-1.5 inline-flex min-h-11 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0 text-xs font-normal text-muted underline underline-offset-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
-                onClick={openApprovalMessageSettings}
+                onClick={() => openSettingsAndClose(onClose)}
                 data-review-approve-edit-message=""
               >
                 Edit this message
@@ -1044,11 +1168,9 @@ export const ApproveControl = ({
 
   if (approval !== undefined && isApproved) {
     return (
-      <span
-        data-review-approval-stamp=""
-        data-review-approval-status={approval.status}
-      >
+      <span data-review-approval-status={approval.status}>
         <button
+          ref={triggerRef}
           type="button"
           className={APPROVE_APPROVED_CLASS}
           aria-label="Plan approved"
@@ -1062,6 +1184,7 @@ export const ApproveControl = ({
           Plan approved
           <Icon icon={CHEVRON_DOWN_ICON} />
         </button>
+        <ApprovedStampOverlay anchorRef={triggerRef} />
         <ApprovalDetails
           id={detailsId}
           open={detailsOpen}
@@ -1073,6 +1196,7 @@ export const ApproveControl = ({
             setDetailsOpen(false);
             void revoke();
           }}
+          anchorRef={triggerRef}
         />
       </span>
     );

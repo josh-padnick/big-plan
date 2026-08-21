@@ -721,6 +721,7 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     await expect(
       page.getByRole("button", { name: "Plan approved" }),
     ).toBeVisible();
+    const approvedButton = page.getByRole("button", { name: "Plan approved" });
     const stamp = page
       .locator("[data-review-approval-stamp]")
       .filter({ visible: true });
@@ -729,16 +730,42 @@ test("should approve a plan, stamp the page, and keep the record across reload",
       page.locator("[data-review-approve-status=approved]"),
     ).toBeVisible();
     const stampBox = await stamp.boundingBox();
+    const approvedBox = await approvedButton.boundingBox();
+    const headerBox = await page.locator("[data-shell-chrome]").boundingBox();
     const feedbackBox = await page
       .getByRole("button", { name: "Feedback" })
       .boundingBox();
-    if (stampBox === null || feedbackBox === null) {
+    if (
+      stampBox === null ||
+      approvedBox === null ||
+      headerBox === null ||
+      feedbackBox === null
+    ) {
       throw new Error(
-        "The approved stamp and Feedback control were not laid out",
+        "The approved stamp, Plan approved control, and Feedback were not laid out",
       );
     }
-    expect(stampBox.x + stampBox.width).toBeLessThanOrEqual(feedbackBox.x);
-    expect(Math.abs(stampBox.width - triggerBox.width)).toBeLessThan(32);
+    expect(approvedBox.x + approvedBox.width).toBeLessThanOrEqual(
+      feedbackBox.x,
+    );
+    expect(stampBox.y).toBeLessThan(headerBox.y + headerBox.height);
+    expect(stampBox.y + stampBox.height).toBeGreaterThan(
+      headerBox.y + headerBox.height,
+    );
+
+    await approvedButton.click();
+    const details = page.locator("[data-review-approval-details]");
+    await expect(details).toBeVisible();
+    const detailsBox = await details.boundingBox();
+    if (detailsBox === null) {
+      throw new Error("The approval details panel was not laid out");
+    }
+    expect(
+      Math.abs(
+        detailsBox.x + detailsBox.width - (approvedBox.x + approvedBox.width),
+      ),
+    ).toBeLessThan(2);
+    await page.locator("[data-review-approval-details-close]").click();
 
     const stored: unknown = JSON.parse(
       await readFile(runtime.store.approvalPath, "utf8"),
@@ -761,6 +788,32 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     await expect(
       page.getByRole("button", { name: "Approve plan" }),
     ).toHaveCount(0);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should close the approve dialog when Edit in Settings is chosen", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-settings-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Edit in Settings" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "Approval message" }),
+    ).toHaveAttribute("aria-selected", "true");
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

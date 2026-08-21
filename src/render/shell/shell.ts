@@ -531,8 +531,8 @@ export const renderShell = ({
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
 <div class="flex min-w-0 items-center gap-0.5">
 <a class="shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
-<img class="h-auto w-20 wide:w-27" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
-<img class="h-auto w-20 wide:w-27" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
+<img class="h-auto w-27" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
+<img class="h-auto w-27" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
 </div>
 ${standalone ? "<p></p>" : `<p class="col-start-2 hidden min-w-0 truncate text-center text-sm text-muted wide:block"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}

@@ -216,10 +216,10 @@ The lede.
       /<a [^>]*href="https:\/\/big-plan\.ai" target="_blank" rel="noreferrer">/,
     );
     expect(html).toMatch(
-      /<img class="h-auto w-20 wide:w-27" data-logo-light src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
+      /<img class="h-auto w-27" data-logo-light src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
     );
     expect(html).toMatch(
-      /<img class="h-auto w-20 wide:w-27" data-logo-dark src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
+      /<img class="h-auto w-27" data-logo-dark src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
     );
   });
 });
