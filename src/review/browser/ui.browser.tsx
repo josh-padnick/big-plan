@@ -731,19 +731,24 @@ export const AlertDialog = ({
   const anchored = anchorPosition !== null;
   // Header chrome is its own stacking context. Portaling to body is what lets
   // this overlay sit above the mobile sections bar instead of under it.
+  // An anchored panel is a menu over the live page: no dim, and a click on
+  // the transparent overlay dismisses it. A centered alert still dims.
   return createPortal(
     <div
-      // --preferences-backdrop-c was never defined, so every alert opened over
-      // a page that still looked active. bg-backdrop/70 is the treatment the
-      // settings sheet and the image viewer already use, and the data
-      // attribute opts this backdrop into the approved 80% dark-mode dim.
       className={
         anchored
-          ? "fixed inset-0 z-50 bg-backdrop/70"
+          ? "fixed inset-0 z-50"
           : "fixed inset-0 z-50 grid grid-cols-[minmax(0,1fr)] place-items-center bg-backdrop/70 p-4"
       }
-      data-modal-backdrop
+      {...(anchored ? {} : { "data-modal-backdrop": "" })}
       onKeyDown={handleKeyDown}
+      onClick={
+        anchored
+          ? (event) => {
+              if (event.target === event.currentTarget) onDismiss();
+            }
+          : undefined
+      }
     >
       <div
         ref={dialogRef}

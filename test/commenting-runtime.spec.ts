@@ -3919,7 +3919,7 @@ test("should restore and submit staged comments through the local review runtime
       settings.x - status.x - status.width,
     ];
   });
-  expect(toolbarGaps).toEqual([4, 4, 4]);
+  expect(toolbarGaps).toEqual([8, 8, 8]);
   const agentStatusWidth = Math.round(
     (await agentStatus.boundingBox())?.width ?? 0,
   );

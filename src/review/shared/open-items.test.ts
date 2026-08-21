@@ -8,6 +8,8 @@ import {
   approveIsPrimary,
   deriveOpenItems,
   openRequestsFromExchange,
+  sectionIdFromLabel,
+  titleAfterSectionId,
   type OpenChangeSet,
 } from "./open-items.js";
 import type { ReviewInput } from "./input-contract.js";
@@ -89,7 +91,7 @@ describe("deriveOpenItems", () => {
       ],
       requests: [],
     });
-    expect(approveIsPrimary(items)).toBe(true);
+    expect(approveIsPrimary(items)).toBe(false);
     expect(items.decisions.blockingCritical.map((row) => row.inputId)).toEqual([
       "critical",
     ]);
@@ -102,6 +104,43 @@ describe("deriveOpenItems", () => {
     ).toEqual(["advisory"]);
     expect(approveDecisionCaveat(items)).toBeDefined();
     expect(approveChangeSetCaveat(items)).toBeUndefined();
+  });
+
+  it("demotes Approve while a decision is unanswered even with no change sets", () => {
+    const items = deriveOpenItems({
+      changeSets: [],
+      accepted: new Set(),
+      inputs: [input()],
+      requests: [],
+    });
+    expect(approveIsPrimary(items)).toBe(false);
+  });
+
+  it("promotes Approve when the plan has no decisions and no change sets", () => {
+    const items = deriveOpenItems({
+      changeSets: [],
+      accepted: new Set(),
+      inputs: [],
+      requests: [],
+    });
+    expect(approveIsPrimary(items)).toBe(true);
+  });
+});
+
+describe("sectionIdFromLabel", () => {
+  it("reads a dotted kicker and leaves the title", () => {
+    expect(sectionIdFromLabel("1.1 · Status quo")).toBe("1.1");
+    expect(titleAfterSectionId("1.1 · Status quo", "1.1")).toBe("Status quo");
+  });
+
+  it("reads a slash kicker", () => {
+    expect(sectionIdFromLabel("2 / Goals")).toBe("2");
+    expect(titleAfterSectionId("2 / Goals", "2")).toBe("Goals");
+  });
+
+  it("leaves a title with no kicker alone", () => {
+    expect(sectionIdFromLabel("Status quo")).toBeUndefined();
+    expect(titleAfterSectionId("Status quo", undefined)).toBe("Status quo");
   });
 });
 

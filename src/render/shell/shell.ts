@@ -195,7 +195,7 @@ const renderCommentDraftControl = (): string =>
 // readable without exposing a control that cannot open its dialog.
 const renderPreferencesControl = (): string =>
   `<span data-preferences-control hidden>
-<button class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-toolbar-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
+<button class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-toolbar-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
 </span>`;
 
 const renderPreferenceOption = ({
@@ -397,8 +397,8 @@ ${renderPreferencesPanel({
 </div>`;
 
 // The right side of the branding bar keeps status, Feedback, and Settings as
-// separate peer actions. Below the wide breakpoint they sit a half-step apart
-// so icon-only chrome does not read as a scattered cluster.
+// separate peer actions. A full step on a phone and a tight related-line
+// step on a wide screen keep the cluster readable without hugging.
 // Feedback belongs to a document under review; a surface with no plan in it
 // omits it and keeps Settings, which still applies everywhere.
 const renderHeaderActions = ({
@@ -406,7 +406,7 @@ const renderHeaderActions = ({
 }: {
   readonly feedback: boolean;
 }): string =>
-  `<div class="col-start-3 ml-auto flex items-center gap-0.5 wide:gap-1">
+  `<div class="col-start-3 ml-auto flex items-center gap-1.5 wide:gap-2">
 ${feedback ? renderCommentDraftControl() : ""}
 ${renderPreferencesControl()}
 </div>`;
@@ -527,13 +527,6 @@ export const renderShell = ({
   const standalone = chrome === "standalone";
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  // The approved stamp lives in a hidden slot beside the wordmark. The review
-  // island reveals it; a scripts-disabled document keeps the slot empty so the
-  // table of contents stays the first thing in the sidebar.
-  const approvalBrandSlot = standalone
-    ? ""
-    : // approved-metric: captain asked for ~10px more gap from the wordmark than -ml-8
-      '<span class="-ml-4 wide:-ml-[22px]" data-review-approval-brand-slot hidden></span>';
   const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
 <div class="flex min-w-0 items-center gap-0.5">
@@ -541,7 +534,6 @@ export const renderShell = ({
 <img class="h-auto w-20 wide:w-27" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="h-auto w-20 wide:w-27" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
-${approvalBrandSlot}
 </div>
 ${standalone ? "<p></p>" : `<p class="col-start-2 hidden min-w-0 truncate text-center text-sm text-muted wide:block"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 ${renderHeaderActions({ feedback: !standalone })}

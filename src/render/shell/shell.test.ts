@@ -59,16 +59,14 @@ describe("bulk collapse controls", () => {
   });
 });
 
-describe("approval brand slot", () => {
-  it("should keep one hidden slot beside the wordmark on a plan document", () => {
+describe("approval chrome", () => {
+  it("should leave the approved stamp to the review island's toolbar slot", () => {
     const html = shellFor("<p>Plan.</p>");
-    expect(html).toMatch(
-      /data-logo-dark[\s\S]*?<\/a>\s*<span class="-ml-4 wide:-ml-\[22px\]" data-review-approval-brand-slot hidden><\/span>/,
-    );
+    expect(html).not.toContain("data-review-approval-brand-slot");
     expect(html).not.toContain("data-review-approval-slot");
   });
 
-  it("should omit the slot from standalone chrome", () => {
+  it("should omit review-only approval chrome from standalone pages", () => {
     const html = standaloneShellFor("<p>Welcome to Big Plan.</p>");
     expect(html).not.toContain("data-review-approval-brand-slot");
   });

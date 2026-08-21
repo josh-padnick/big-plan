@@ -23,6 +23,7 @@ export type OpenChangeSet = {
   readonly from: string;
   readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
+  readonly sectionId?: string;
 };
 
 /** One decision the approve dialog can name and jump to. */
@@ -38,6 +39,7 @@ export type OpenDecision = {
 export type OpenRequest = {
   readonly requestId: string;
   readonly label: string;
+  readonly sectionId?: string;
 };
 
 export type DerivedOpenItems = {
@@ -94,13 +96,16 @@ export const changeSetsFromExchange = ({
     if (from === response.resultSnapshot) continue;
     const key = `${from}:${response.resultSnapshot}`;
     const placeIds = placeIdsByRevision.get(key) ?? [];
+    const label =
+      request.targetLabel ?? `Version ${response.resultSnapshot.slice(0, 7)}`;
+    const sectionId = sectionIdFromLabel(label);
     sets.push({
       id: response.requestId,
-      label:
-        request.targetLabel ?? `Version ${response.resultSnapshot.slice(0, 7)}`,
+      label,
       from,
       to: response.resultSnapshot,
       placeIds,
+      ...(sectionId === undefined ? {} : { sectionId }),
     });
   }
   return sets;
@@ -119,10 +124,17 @@ export const openRequestsFromExchange = (
 ): ReadonlyArray<OpenRequest> =>
   requests
     .filter((request) => !requestIsTerminal(request))
-    .map((request) => ({
-      requestId: request.requestId,
-      label: requestLabel(request),
-    }));
+    .map((request) => {
+      const sectionId =
+        request.targetLabel === undefined
+          ? undefined
+          : sectionIdFromLabel(request.targetLabel);
+      return {
+        requestId: request.requestId,
+        label: requestLabel(request),
+        ...(sectionId === undefined ? {} : { sectionId }),
+      };
+    });
 
 const requestLabel = (request: {
   readonly body?: string;
@@ -212,6 +224,28 @@ export const approveDecisionCaveat = (
 ): string | undefined =>
   items.decisions.unanswered.length > 0 ? APPROVE_DECISION_CAVEAT : undefined;
 
+/**
+ * Leading slide number in a label such as "1.1 · Status quo" or "2 / Goals".
+ * Absent when the label does not start with a kicker.
+ */
+export const sectionIdFromLabel = (label: string): string | undefined => {
+  const match = label.trim().match(/^(\d+(?:\.\d+)*)(?=\s|[·/]|$)/u);
+  return match?.[1];
+};
+
+/** The title with a leading section kicker removed, so the row can show both. */
+export const titleAfterSectionId = (
+  label: string,
+  sectionId: string | undefined,
+): string => {
+  if (sectionId === undefined) return label;
+  const escaped = sectionId.replaceAll(".", "\\.");
+  const stripped = label
+    .trim()
+    .replace(new RegExp(`^${escaped}\\s*[·/]\\s*`, "u"), "");
+  return stripped === "" ? label : stripped;
+};
+
 /** True when Approve should be the bar's accent, not a quiet secondary. */
 export const approveIsPrimary = (items: DerivedOpenItems): boolean =>
-  items.changeSets.open.length === 0;
+  items.changeSets.open.length === 0 && items.decisions.unanswered.length === 0;

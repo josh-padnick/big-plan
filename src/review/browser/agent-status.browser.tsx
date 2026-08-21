@@ -118,7 +118,7 @@ const AgentStatusGlyph = ({
  * The one entry point to the agent sidebar in viewer chrome. It keeps the same
  * shape and label in every state so width does not jump as health changes, and
  * it stays legible when the sidebar is closed. Below the wide breakpoint the
- * visible label yields to the approved stamp beside the wordmark; the
+ * visible label yields so the icon-only cluster stays compact; the
  * accessible name still carries the state.
  */
 export const AgentStatusTrigger = ({

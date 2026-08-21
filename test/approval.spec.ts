@@ -718,12 +718,24 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     await expect(
       page.getByRole("button", { name: "Approve plan" }),
     ).toHaveCount(0);
-    await expect(
-      page.locator("[data-review-approval-stamp]").filter({ visible: true }),
-    ).toBeVisible();
+    const stamp = page
+      .locator("[data-review-approval-stamp]")
+      .filter({ visible: true });
+    await expect(stamp).toBeVisible();
     await expect(
       page.locator("[data-review-approve-status=approved]"),
     ).toBeVisible();
+    const stampBox = await stamp.boundingBox();
+    const feedbackBox = await page
+      .getByRole("button", { name: "Feedback" })
+      .boundingBox();
+    if (stampBox === null || feedbackBox === null) {
+      throw new Error(
+        "The approved stamp and Feedback control were not laid out",
+      );
+    }
+    expect(stampBox.x + stampBox.width).toBeLessThanOrEqual(feedbackBox.x);
+    expect(Math.abs(stampBox.width - triggerBox.width)).toBeLessThan(32);
 
     const stored: unknown = JSON.parse(
       await readFile(runtime.store.approvalPath, "utf8"),

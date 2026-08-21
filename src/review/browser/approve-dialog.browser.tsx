@@ -1,5 +1,5 @@
 // Owns the approve moment in the review island: the toolbar control, the
-// confirmation dialog, the approved stamp beside the wordmark, and the
+// confirmation dialog, the approved stamp that replaces that control, and the
 // details popover that can revoke. The record itself is written by the
 // runtime; this file only asks and paints what comes back.
 
@@ -16,6 +16,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { CHEVRON_DOWN_ICON } from "../../icons/lucide/chevron-down.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
@@ -37,9 +38,12 @@ import {
   changeSetsFromExchange,
   deriveOpenItems,
   openRequestsFromExchange,
+  sectionIdFromLabel,
+  titleAfterSectionId,
   type DerivedOpenItems,
   type OpenChangeSet,
   type OpenDecision,
+  type OpenRequest,
 } from "../shared/open-items.js";
 import {
   decodeApprovalSummary,
@@ -54,7 +58,12 @@ import {
 } from "../shared/input-contract.js";
 import { Icon } from "./icon.browser.js";
 import { requestOpenInputs } from "./inputs-surface.browser.js";
-import { displayedStandIn, liveDecisionFigure } from "./live-target.browser.js";
+import {
+  displayedStandIn,
+  foundElement,
+  liveBlock,
+  liveDecisionFigure,
+} from "./live-target.browser.js";
 import {
   onAppliedReviewRecord,
   requestJson,
@@ -65,6 +74,10 @@ import { useDiffTour } from "./diff-tour.browser.js";
 import { AlertDialog, Badge, Button } from "./ui.browser.js";
 
 const VIEW_ALL_LIMIT = 3;
+const APPROVE_IN_FLIGHT_CAVEAT = "Approving now cancels all in-flight work.";
+
+const APPROVE_ITEM_ROW_CLASS =
+  "flex min-h-11 w-full cursor-pointer gap-2 rounded-md border border-edge bg-paper px-3 py-2 text-left hover:bg-surface focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 const showLiveElement = (element: HTMLElement): void => {
   (displayedStandIn(element) ?? element).scrollIntoView({
@@ -106,10 +119,14 @@ const STAMP_TYPE =
   "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase";
 
 const STAMP_BUTTON_CLASS =
-  "group inline-flex h-8 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0 wide:h-auto";
+  "group inline-flex h-8 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0";
 
-const APPROVE_TRIGGER_CLASS =
-  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent bg-accent px-1.5 text-2xs font-semibold text-accent-ink shadow-raised hover:shadow-lifted hover:brightness-95 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed wide:px-2 wide:text-xs";
+const APPROVE_TRIGGER_BASE =
+  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md px-1.5 text-2xs focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:px-2 wide:text-xs";
+
+const APPROVE_TRIGGER_PRIMARY = `${APPROVE_TRIGGER_BASE} border border-transparent bg-accent font-semibold text-accent-ink shadow-raised hover:shadow-lifted hover:brightness-95 active:inset-shadow-pressed`;
+
+const APPROVE_TRIGGER_SECONDARY = `${APPROVE_TRIGGER_BASE} border border-transparent bg-surface font-medium text-ink shadow-raised hover:bg-raised hover:shadow-lifted active:inset-shadow-pressed`;
 
 const ApproveStampMark = ({ label }: { readonly label: string }) => (
   <span className={STAMP_FRAME} aria-hidden="true">
@@ -149,7 +166,7 @@ const Disclosure = ({
     <div className="min-w-0 rounded-lg border border-edge bg-paper">
       <button
         type="button"
-        className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-lg border-0 bg-transparent px-3 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-lg border-0 bg-transparent px-3 py-2 text-left focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((current) => !current)}
@@ -179,7 +196,7 @@ const Disclosure = ({
         </span>
       </button>
       {open ? (
-        <div id={panelId} className="border-t border-edge px-3 py-2">
+        <div id={panelId} className="border-t border-edge py-2">
           {children}
         </div>
       ) : null}
@@ -195,13 +212,46 @@ const BoundedList = ({
   const extra = items.length - VIEW_ALL_LIMIT;
   const shown = extra > 0 ? items.slice(0, VIEW_ALL_LIMIT) : items;
   return (
-    <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1 p-0">
+    <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-2 px-3">
       {shown}
       {extra > 0 ? (
         <li className="px-1 py-1 text-xs text-muted">{`View all ${items.length}`}</li>
       ) : null}
     </ul>
   );
+};
+
+const SectionKicker = ({
+  sectionId,
+}: {
+  readonly sectionId: string | undefined;
+}) =>
+  sectionId === undefined ? null : (
+    <span className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-2xs font-semibold tabular-nums tracking-caps text-muted">
+      {sectionId}
+    </span>
+  );
+
+const sectionIdFromDiff = (
+  diff: SnapshotDiff | undefined,
+): string | undefined => {
+  if (diff === undefined) return undefined;
+  for (const place of diff.places) {
+    const fromSection = sectionIdFromLabel(place.section);
+    if (fromSection !== undefined) return fromSection;
+    for (const index of place.locationIndexes) {
+      const location = diff.locations.at(index);
+      const blockId = location?.newBlockId ?? location?.oldBlockId;
+      if (blockId === undefined) continue;
+      const kicker = foundElement(liveBlock(blockId))
+        ?.closest<HTMLElement>("[data-slide]")
+        ?.querySelector<HTMLElement>("[data-slide-kicker]")
+        ?.textContent?.trim();
+      const id = kicker?.match(/^(\d+(?:\.\d+)*)/u)?.[1];
+      if (id !== undefined) return id;
+    }
+  }
+  return undefined;
 };
 
 const DecisionRow = ({
@@ -219,7 +269,7 @@ const DecisionRow = ({
     <button
       ref={rowRef}
       type="button"
-      className="flex min-h-11 w-full cursor-pointer items-start gap-2 rounded-md border-0 bg-transparent px-1 py-1.5 text-left hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className={`${APPROVE_ITEM_ROW_CLASS} items-start`}
       onClick={() => onJump(decision.inputId)}
       data-review-approve-decision={decision.inputId}
       {...(decision.isCritical ? { "data-review-approve-critical": "" } : {})}
@@ -242,25 +292,60 @@ const DecisionRow = ({
 
 const ChangeSetRow = ({
   changeSet,
+  sectionId,
   onJump,
 }: {
   readonly changeSet: OpenChangeSet;
+  readonly sectionId: string | undefined;
   readonly onJump: (changeSet: OpenChangeSet) => void;
-}) => (
-  <li>
-    <button
-      type="button"
-      className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-1.5 text-left hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      onClick={() => onJump(changeSet)}
-      data-review-approve-changeset={changeSet.id}
-    >
-      <span className="min-w-0 flex-1 text-sm text-ink">{changeSet.label}</span>
-      <span className="shrink-0 text-xs font-medium text-accent">
-        Jump to change
-      </span>
-    </button>
-  </li>
-);
+}) => {
+  const title = titleAfterSectionId(changeSet.label, sectionId);
+  return (
+    <li>
+      <button
+        type="button"
+        className={`${APPROVE_ITEM_ROW_CLASS} items-center`}
+        onClick={() => onJump(changeSet)}
+        data-review-approve-changeset={changeSet.id}
+      >
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+          <SectionKicker sectionId={sectionId} />
+          <span className="min-w-0 text-sm text-ink">{title}</span>
+        </span>
+        <span className="shrink-0 text-xs font-medium text-accent">
+          Jump to change
+        </span>
+      </button>
+    </li>
+  );
+};
+
+const RequestRow = ({
+  request,
+  onJump,
+}: {
+  readonly request: OpenRequest;
+  readonly onJump: (requestId: string) => void;
+}) => {
+  const title = titleAfterSectionId(request.label, request.sectionId);
+  return (
+    <li>
+      <button
+        type="button"
+        className={`${APPROVE_ITEM_ROW_CLASS} items-center`}
+        onClick={() => onJump(request.requestId)}
+      >
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+          <SectionKicker sectionId={request.sectionId} />
+          <span className="min-w-0 text-sm text-ink">{title}</span>
+        </span>
+        <span className="shrink-0 text-xs font-medium text-accent">
+          View the work
+        </span>
+      </button>
+    </li>
+  );
+};
 
 const useApprovalMessage = (open: boolean): string => {
   const [message, setMessage] = useState(readStoredMessage);
@@ -359,6 +444,7 @@ export const ApproveDialog = ({
   open,
   approval,
   items,
+  diffs,
   message,
   onKeepReviewing,
   onApprove,
@@ -372,6 +458,7 @@ export const ApproveDialog = ({
   readonly open: boolean;
   readonly approval: ApprovalSummary | undefined;
   readonly items: DerivedOpenItems;
+  readonly diffs: ReadonlyMap<string, SnapshotDiff>;
   readonly message: string;
   readonly onKeepReviewing: () => void;
   readonly onApprove: () => void;
@@ -438,7 +525,7 @@ export const ApproveDialog = ({
             defaultOpen={!changeComplete}
           >
             {changeComplete ? (
-              <p className="m-0 px-1 py-1 text-xs text-muted">
+              <p className="m-0 px-3 py-1 text-xs text-muted">
                 Every change set is accepted.
               </p>
             ) : (
@@ -447,6 +534,12 @@ export const ApproveDialog = ({
                   <ChangeSetRow
                     key={changeSet.id}
                     changeSet={changeSet}
+                    sectionId={
+                      changeSet.sectionId ??
+                      sectionIdFromDiff(
+                        diffs.get(`${changeSet.from}:${changeSet.to}`),
+                      )
+                    }
                     onJump={onJumpToChange}
                   />
                 ))}
@@ -454,7 +547,7 @@ export const ApproveDialog = ({
             )}
             {changeSetCaveat === undefined ? null : (
               <p
-                className="m-0 mt-2 px-1 text-xs text-muted"
+                className="m-0 mt-2 px-3 text-xs text-muted"
                 data-review-approve-changeset-caveat=""
               >
                 {changeSetCaveat}
@@ -472,15 +565,15 @@ export const ApproveDialog = ({
           >
             {decisionComplete ? (
               items.decisions.recorded.length === 0 ? (
-                <p className="m-0 px-1 py-1 text-xs text-muted">
+                <p className="m-0 px-3 py-1 text-xs text-muted">
                   This plan does not ask any decisions.
                 </p>
               ) : (
-                <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1 p-0">
+                <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-2 px-3">
                   {items.decisions.recorded.map((decision) => (
                     <li
                       key={decision.inputId}
-                      className="px-1 py-1 text-sm text-ink"
+                      className="rounded-md border border-edge bg-paper px-3 py-2 text-sm text-ink"
                     >
                       <span className="block">{decision.label}</span>
                       <span className="text-xs text-muted">
@@ -523,7 +616,7 @@ export const ApproveDialog = ({
                 />
                 {decisionCaveat === undefined ? null : (
                   <p
-                    className="m-0 mt-2 px-1 text-xs text-muted"
+                    className="m-0 mt-2 px-3 text-xs text-muted"
                     data-review-approve-decision-caveat=""
                   >
                     {decisionCaveat}
@@ -542,24 +635,15 @@ export const ApproveDialog = ({
             >
               <BoundedList
                 items={items.requests.open.map((request) => (
-                  <li key={request.requestId}>
-                    <button
-                      type="button"
-                      className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-1.5 text-left hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      onClick={() => onJumpToRequest(request.requestId)}
-                    >
-                      <span className="min-w-0 flex-1 text-sm text-ink">
-                        {request.label}
-                      </span>
-                      <span className="shrink-0 text-xs font-medium text-accent">
-                        View the work
-                      </span>
-                    </button>
-                  </li>
+                  <RequestRow
+                    key={request.requestId}
+                    request={request}
+                    onJump={onJumpToRequest}
+                  />
                 ))}
               />
-              <p className="m-0 mt-2 px-1 text-xs text-muted">
-                {`Approving now cancels these ${items.requests.open.length}.`}
+              <p className="m-0 mt-2 px-3 text-xs text-muted">
+                {APPROVE_IN_FLIGHT_CAVEAT}
               </p>
             </Disclosure>
           )}
@@ -609,32 +693,6 @@ const DETAILS_HEADING = "Approval details";
 
 const DETAILS_FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
-
-/** The header slot beside `/big-plan`; hidden until an approval is in force. */
-const useApprovalBrandSlot = (isApproved: boolean): HTMLElement | null => {
-  const [slot, setSlot] = useState<HTMLElement | null>(() =>
-    document.querySelector<HTMLElement>("[data-review-approval-brand-slot]"),
-  );
-  useLayoutEffect(() => {
-    const read = () =>
-      setSlot(
-        document.querySelector<HTMLElement>(
-          "[data-review-approval-brand-slot]",
-        ),
-      );
-    read();
-    document.addEventListener("bigplan:article-replaced", read);
-    return () => document.removeEventListener("bigplan:article-replaced", read);
-  }, []);
-  useLayoutEffect(() => {
-    if (slot === null) return;
-    slot.hidden = !isApproved;
-    return () => {
-      slot.hidden = true;
-    };
-  }, [isApproved, slot]);
-  return slot;
-};
 
 const ApprovalDetails = ({
   id,
@@ -712,7 +770,7 @@ const ApprovalDetails = ({
       <div
         ref={dialogRef}
         id={id}
-        className="fixed top-12 right-3 left-3 z-50 rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating wide:right-auto wide:left-6 wide:w-80"
+        className="fixed top-12 right-3 left-3 z-50 rounded-lg border border-edge bg-raised p-3 text-ink shadow-floating wide:right-6 wide:left-auto wide:w-80"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -854,7 +912,6 @@ export const ApproveControl = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const detailsId = useId();
   const isApproved = approval?.status === "approved";
-  const brandSlot = useApprovalBrandSlot(isApproved);
   const contract = useInputContract(identity);
   const dispositions = useChangeDispositions();
   const { openTour } = useDiffTour();
@@ -1001,7 +1058,7 @@ export const ApproveControl = ({
   );
 
   if (approval !== undefined && isApproved) {
-    const stamp = (
+    return (
       <span
         data-review-approval-stamp=""
         data-review-approval-status={approval.status}
@@ -1032,8 +1089,6 @@ export const ApproveControl = ({
         />
       </span>
     );
-    if (brandSlot === null) return stamp;
-    return createPortal(stamp, brandSlot);
   }
 
   return (
@@ -1046,18 +1101,26 @@ export const ApproveControl = ({
       <button
         ref={triggerRef}
         type="button"
-        className={APPROVE_TRIGGER_CLASS}
+        className={
+          primary ? APPROVE_TRIGGER_PRIMARY : APPROVE_TRIGGER_SECONDARY
+        }
         aria-label={status === "stale" ? "Re-approve" : "Approve plan"}
+        aria-haspopup="dialog"
+        aria-expanded={dialogOpen}
         onClick={() => setDialogOpen(true)}
         data-review-approve-trigger=""
         data-review-approve-emphasis={primary ? "primary" : "secondary"}
       >
         {status === "stale" ? "Re-approve" : "Approve"}
+        <span className="inline-flex size-3 shrink-0" aria-hidden="true">
+          <Icon icon={CHEVRON_DOWN_ICON} />
+        </span>
       </button>
       <ApproveDialog
         open={dialogOpen}
         approval={approval}
         items={items}
+        diffs={diffs}
         message={message}
         onKeepReviewing={closeDialog}
         onApprove={() => void approve()}
