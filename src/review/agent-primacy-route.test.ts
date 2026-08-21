@@ -10,7 +10,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deriveSnapshotDigest,
   messageAgentRequest,
@@ -22,10 +22,12 @@ import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import {
   attachAgentToRoster,
+  readAgentDisconnectRequestFor,
   readAgentRoster,
   recordAgentClaimToken,
   writeAgentHeartbeat,
 } from "./store.js";
+import * as reviewStore from "./store.js";
 import { selectPrimaryAgent } from "./shared/agent-primacy.js";
 import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import type { AttachedAgent } from "./shared/agent-primacy.js";
@@ -130,6 +132,45 @@ const rosterOf = (
   readAgentRoster({ store: runtime.store, sessionId: runtime.sessionId });
 
 describe("the reviewer's primacy answer over the wire", () => {
+  it("should report a failed roster read and leave every card attached", async () => {
+    const { runtime, token } = await startReview();
+    await attach({ runtime, writerId: "1111111111111111" });
+    await attach({ runtime, writerId: "2222222222222222" });
+    await writeAgentHeartbeat({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      state: "waiting",
+      writerId: "1111111111111111",
+    });
+    const rosterRead = vi
+      .spyOn(reviewStore, "readAgentRoster")
+      .mockRejectedValueOnce(new Error("roster read failed"));
+
+    try {
+      const response = await disconnectAgent({ runtime, token });
+
+      expect(response.status).toBe(500);
+    } finally {
+      rosterRead.mockRestore();
+    }
+    await expect(
+      readAgentDisconnectRequestFor({
+        store: runtime.store,
+        writerId: "1111111111111111",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(rosterOf(runtime)).resolves.toEqual([
+      expect.objectContaining({
+        writerId: "1111111111111111",
+        role: "primary",
+      }),
+      expect.objectContaining({
+        writerId: "2222222222222222",
+        role: "observer",
+      }),
+    ]);
+  });
+
   it("should report a failed durable disconnect and leave every card attached", async () => {
     const { runtime, token } = await startReview();
     await attach({ runtime, writerId: "primary0" });

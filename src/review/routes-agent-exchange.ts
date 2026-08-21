@@ -426,6 +426,7 @@ type DisconnectDecision =
       readonly presenceNamedAddressee: boolean;
       /** The connection the directive names, so the roster can drop it too. */
       readonly addressee: string;
+      readonly detached?: string;
       readonly claimToken?: string;
       readonly requestId?: string;
     };
@@ -515,6 +516,12 @@ export const disconnectAgent = async (
             "This agent cannot be identified, so it cannot be disconnected",
         };
       }
+      const attached = await readAgentRoster({ store: claimStore, sessionId });
+      const detached =
+        (claimToken === undefined
+          ? undefined
+          : agentForClaimToken({ agents: attached, claimToken })?.writerId) ??
+        attached.find((agent) => agent.writerId === addressee)?.writerId;
       const requestedAtMs = Date.now();
       await writeAgentDisconnectRequest({
         store: claimStore,
@@ -525,6 +532,7 @@ export const disconnectAgent = async (
         presenceWasConnected: presence.connected,
         presenceNamedAddressee: presence.writerId === addressee,
         addressee,
+        ...(detached === undefined ? {} : { detached }),
         ...(claimToken === undefined ? {} : { claimToken }),
         ...(claimed === undefined ? {} : { requestId: claimed.requestId }),
       };
@@ -546,14 +554,12 @@ export const disconnectAgent = async (
   that survives a loop adopting an older registration; otherwise the connection
   the directive names is the registration's own id.
   */
-  const attached = await readAgentRoster({ store, sessionId }).catch(() => []);
-  const detached =
-    (claimToken === undefined
-      ? undefined
-      : agentForClaimToken({ agents: attached, claimToken })?.writerId) ??
-    attached.find((agent) => agent.writerId === decision.addressee)?.writerId;
-  if (detached !== undefined) {
-    await detachAgentFromRoster({ store, sessionId, writerId: detached });
+  if (decision.detached !== undefined) {
+    await detachAgentFromRoster({
+      store,
+      sessionId,
+      writerId: decision.detached,
+    });
   }
   // Released outside the claim gate, in the order `claimAgentRequest`
   // established: that call takes this gate and then each request lock, so

@@ -60,7 +60,6 @@ import {
 import {
   agentForClaimToken,
   agentModelLabel,
-  selectPrimaryAgent,
   type AgentRole,
 } from "./shared/agent-primacy.js";
 import type { ReviewStore } from "./store.js";
@@ -480,8 +479,8 @@ const assertSessionIsPrimary = async ({
       ],
     );
   }
-  const primary = selectPrimaryAgent({ agents, nowMs });
-  if (primary !== undefined && acting.writerId === primary.writerId) return;
+  if (acting.role === "primary") return;
+  const primary = agents.find((agent) => agent.role === "primary");
   if (primary === undefined) {
     failPrimacyLost("no agent is currently the primary");
   }
@@ -1367,6 +1366,11 @@ const nextWork = async ({
         } catch (releaseError: unknown) {
           releaseFailure = releaseError;
         }
+        if (releaseFailure !== undefined) {
+          return fail(
+            `Cannot release a claim whose ownership was not recorded: ${String(releaseFailure)}`,
+          );
+        }
         if (await wasDisconnected()) return disconnectedResult();
         const acting = (
           await readAgentRoster({
@@ -1374,16 +1378,14 @@ const nextWork = async ({
             sessionId: session.sessionId,
           }).catch(() => [])
         ).find((agent) => agent.writerId === rosterWriterId);
-        if (releaseFailure === undefined && acting?.role === "observer") {
+        if (acting?.role === "observer") {
           return observerResult();
         }
         if (acting?.role === "primary") {
           await markWorkingOn(undefined).catch(() => undefined);
         }
         return fail(
-          releaseFailure === undefined
-            ? `Cannot record this agent's claim ownership: ${String(error)}`
-            : `Cannot release a claim whose ownership was not recorded: ${String(releaseFailure)}`,
+          `Cannot record this agent's claim ownership: ${String(error)}`,
         );
       }
       const respondCommand = agentRespondCommand({

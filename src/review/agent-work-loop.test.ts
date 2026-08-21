@@ -51,7 +51,10 @@ import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
-import { AGENT_STALL_MS } from "./shared/agent-timing.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+} from "./shared/agent-timing.js";
 
 let runtime: ReviewRuntime;
 let pickedUpToken = "";
@@ -607,6 +610,145 @@ describe("agent work loop lifecycle", () => {
       });
       expect(exchange.responses).toEqual([]);
     } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should publish from the recorded primary after the recovery horizon", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-slow-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA slow recorded holder still owns its turn.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const requestId = "eded1212eded1212";
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Can the slow holder publish?",
+      }),
+    });
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.agent_token !== "string" ||
+        typeof pickup.response_file !== "string"
+      ) {
+        throw new Error("Pickup did not return its response contract");
+      }
+      const roster = await reviewStore.readAgentRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      await reviewStore.writeStoreJson({
+        path: review.store.agentRosterPath,
+        value: {
+          sessionId: review.sessionId,
+          agents: roster.map((agent) => ({
+            ...agent,
+            signalAtMs: Date.now() - AGENT_RECOVERY_HORIZON_MS - 1,
+          })),
+        },
+      });
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId, message: "The recorded holder answers." }),
+      );
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: requestId });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.responses).toHaveLength(1);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report a failed release even when the agent was disconnected", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-release-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA failed release is not a completed disconnect.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const requestId = "acac1212acac1212";
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Will a failed release stay visible?",
+      }),
+    });
+    const recordClaim = reviewStore.recordAgentClaimToken;
+    let restoreRequestWrite = (): void => undefined;
+    const linking = vi
+      .spyOn(reviewStore, "recordAgentClaimToken")
+      .mockImplementationOnce(async (options) => {
+        await reviewStore.writeAgentDisconnectRequest({
+          store: review.store,
+          directive: {
+            writerId: options.writerId,
+            requestedAtMs: Date.now(),
+          },
+        });
+        await reviewStore.detachAgentFromRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+          writerId: options.writerId,
+        });
+        const requestWrite = vi
+          .spyOn(reviewStore, "writeAgentRequestValue")
+          .mockRejectedValueOnce(new Error("release write failed"));
+        restoreRequestWrite = () => requestWrite.mockRestore();
+        return recordClaim(options);
+      });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).rejects.toThrow(/Cannot release.*release write failed/iu);
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.requests[0]?.claimedBy).toEqual(expect.any(String));
+    } finally {
+      restoreRequestWrite();
+      linking.mockRestore();
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
@@ -1956,6 +2098,7 @@ describe("agent work loop lifecycle", () => {
       ).rejects.toMatchObject({
         name: "AgentWorkLoopRejected",
         code: "primacy-lost",
+        message: expect.stringContaining("GPT-5.6-sol"),
       });
     } finally {
       await review.close();
