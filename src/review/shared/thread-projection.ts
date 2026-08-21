@@ -8,6 +8,7 @@ import {
   selectPendingAgentRequest,
   type AgentStatus,
 } from "./agent-status.js";
+import type { AgentModelIdentity } from "./agent-model.js";
 import {
   claimIsAbandoned,
   claimSignalAtMs,
@@ -31,6 +32,7 @@ export type ThreadRequest = CancelableRequest &
     readonly premiseSnapshot: string;
     readonly baselineSnapshot?: string;
     readonly claimedAt?: string;
+    readonly claimedModel?: AgentModelIdentity;
     readonly createdAt: string;
     readonly kind: "feedback" | "reply" | "chat" | "push";
     readonly body?: string;
@@ -81,6 +83,11 @@ export type ThreadRuntime = "static" | "online" | "offline";
 export type ThreadSurface = "thread" | "chat";
 export type ThreadGroup = "needs-input" | "ready" | "working" | "queued";
 export type RequestDelivery = "Sent" | "Queued";
+
+export type PushedThreadOpener = {
+  readonly comment: ReviewComment;
+  readonly origin: "prompt" | "about";
+};
 
 export type ProjectedThreadExchange<
   Request extends ThreadRequest = ThreadRequest,
@@ -138,6 +145,40 @@ export const requestCommentIds = (
   return request.kind === "reply" && request.commentId !== undefined
     ? [request.commentId]
     : [];
+};
+
+/**
+ * Projects the immutable opener of each pushed thread for browser presentation.
+ *
+ * A continuation never changes who opened a conversation. Keeping this view
+ * derived from the first push is what lets the UI label origin without adding
+ * a behavioral thread type or another stored record.
+ */
+export const projectPushedThreadOpeners = (
+  requests: ReadonlyArray<ThreadRequest>,
+): ReadonlyArray<PushedThreadOpener> => {
+  const openers = new Map<string, PushedThreadOpener>();
+  for (const request of requests) {
+    if (
+      request.kind !== "push" ||
+      request.threadId === undefined ||
+      request.origin === undefined ||
+      openers.has(request.threadId)
+    ) {
+      continue;
+    }
+    openers.set(request.threadId, {
+      origin: request.origin,
+      comment: {
+        id: request.threadId,
+        body: request.body ?? "",
+        createdAt: request.createdAt,
+        premiseSnapshot: request.premiseSnapshot,
+        target: { type: "document" },
+      },
+    });
+  }
+  return [...openers.values()];
 };
 
 /**

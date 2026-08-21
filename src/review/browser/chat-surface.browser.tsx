@@ -24,6 +24,10 @@ export type ChatSurfaceModel = {
   readonly isSending: boolean;
   readonly exchanges: ReactNode;
   readonly hasExchanges: boolean;
+  readonly pushedThreads: ReactNode;
+  readonly pushedThreadCount: number;
+  readonly resolvedPushedThreads: ReactNode;
+  readonly resolvedPushedThreadCount: number;
   readonly archivedExchanges: ReactNode;
   readonly archivedCount: number;
   readonly onBodyChange: (body: string) => void;
@@ -106,6 +110,16 @@ export const ChatSurface = ({
               )}
             </div>
           </div>
+          {model.pushedThreadCount === 0 ? null : (
+            <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
+              <h3 className="m-0 text-xs font-bold uppercase tracking-caps text-muted">
+                Threads ({model.pushedThreadCount})
+              </h3>
+              <ol className="m-0 grid min-w-0 grid-cols-[minmax(0,1fr)] list-none gap-2 p-0">
+                {model.pushedThreads}
+              </ol>
+            </section>
+          )}
           {model.hasExchanges ? (
             <>
               <div className="flex justify-end">
@@ -117,13 +131,14 @@ export const ChatSurface = ({
                 {model.exchanges}
               </ol>
             </>
-          ) : (
+          ) : model.pushedThreadCount + model.resolvedPushedThreadCount ===
+            0 ? (
             <p className="m-0 text-xs text-subtle">
               {model.archivedCount === 0
                 ? "No plan-wide questions yet."
                 : "No active plan-wide questions."}
             </p>
-          )}
+          ) : null}
           {model.archivedCount === 0 ? null : (
             <details className="group border-t border-edge pt-3">
               <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
@@ -131,6 +146,16 @@ export const ChatSurface = ({
               </summary>
               <ol className="mt-3 mb-0 grid grid-cols-[minmax(0,1fr)] list-none gap-3 p-0">
                 {model.archivedExchanges}
+              </ol>
+            </details>
+          )}
+          {model.resolvedPushedThreadCount === 0 ? null : (
+            <details className="group border-t border-edge pt-3">
+              <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                Resolved ({model.resolvedPushedThreadCount})
+              </summary>
+              <ol className="mt-3 mb-0 grid min-w-0 grid-cols-[minmax(0,1fr)] list-none gap-2 p-0">
+                {model.resolvedPushedThreads}
               </ol>
             </details>
           )}

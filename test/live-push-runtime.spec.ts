@@ -260,6 +260,189 @@ test("should reveal a real agent edit only at commit and preserve review context
   }
 });
 
+test("should review, reply to, and resolve a pushed thread in chat", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-review-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  const previousModel = process.env.BIG_PLAN_AGENT_MODEL;
+  process.env.BIG_PLAN_AGENT_MODEL = "live-push-review-model";
+
+  try {
+    await page.goto(runtime.url);
+    const opened = await runAgentCli([
+      "push",
+      planPath,
+      "--prompt",
+      "Tighten the live publication explanation.",
+    ]);
+    const requestId = agentIdOf(opened.stdout, "requestId");
+    const threadId = agentIdOf(opened.stdout, "threadId");
+    const candidatePath = candidatePlanOf(opened.stdout);
+    const revised = PLAN.replace(
+      "The reviewer keeps reading while an agent prepares a revision.",
+      "The reviewer keeps reading while an agent safely prepares a revision.",
+    ).replace(
+      "The terminal response publishes the candidate atomically.",
+      "The terminal response publishes the reviewed candidate atomically.",
+    );
+    await writeFile(candidatePath, revised, "utf8");
+    await writeFile(
+      responseDraftOf(opened.stdout),
+      JSON.stringify({
+        requestId,
+        outcomes: [
+          {
+            commentId: threadId,
+            state: "changed",
+            message: "Clarified the safe publication flow.",
+            changeTargets: [
+              "document/paragraph-1",
+              "section/delivery-boundary/paragraph-1",
+            ],
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await runAgentCli([
+      "respond",
+      planPath,
+      responseDraftOf(opened.stdout),
+      "--agent",
+      agentIdOf(opened.stdout, "agent_token"),
+    ]);
+
+    await expect(page.locator("article")).toContainText(
+      "publishes the reviewed candidate atomically",
+      { timeout: 15_000 },
+    );
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    const thread = rail.locator(`[data-review-pushed-thread="${threadId}"]`);
+    await expect(thread).toContainText("Reviewer-opened");
+    await expect(thread).toContainText("Prompt");
+    await thread.getByRole("button", { name: /Expand pushed thread/u }).click();
+    await expect(thread.getByText("You said", { exact: true })).toBeVisible();
+    await expect(thread).toContainText(
+      "Tighten the live publication explanation.",
+    );
+
+    const replyBody = "Keep the explanation focused on the atomic boundary.";
+    const replyPosted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/agent-requests") &&
+        response.request().method() === "POST",
+    );
+    await thread.getByPlaceholder("Reply to the agent…").fill(replyBody);
+    await thread.getByRole("button", { name: "Reply" }).click();
+    expect((await replyPosted).ok()).toBe(true);
+    await expect
+      .poll(async () => {
+        const exchange = await readAgentExchange({
+          store: runtime.store,
+          sessionId: runtime.sessionId,
+          planId: runtime.planId,
+        });
+        return exchange.requests.find(
+          (request) => request.kind === "reply" && request.body === replyBody,
+        );
+      })
+      .toMatchObject({ kind: "reply", commentId: threadId });
+
+    const reply = await runAgentCli(["next", planPath, "--wait"]);
+    const replyRequestId = agentIdOf(reply.stdout, "requestId");
+    await writeFile(
+      responseDraftOf(reply.stdout),
+      JSON.stringify({
+        requestId: replyRequestId,
+        outcomes: [
+          {
+            commentId: threadId,
+            state: "answered",
+            message: "The explanation now stays on that boundary.",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await runAgentCli([
+      "respond",
+      planPath,
+      responseDraftOf(reply.stdout),
+      "--agent",
+      agentIdOf(reply.stdout, "agent_token"),
+    ]);
+    await expect(thread).toContainText(
+      "The explanation now stays on that boundary.",
+      { timeout: 15_000 },
+    );
+
+    await thread.getByRole("button", { name: /Review changes \(2\)/u }).click();
+    const stepper = page.locator("[data-review-diff-stepper]");
+    await expect(stepper).toContainText("1 of 2");
+    await stepper.getByRole("button", { name: "Accept this change" }).click();
+    await expect(stepper).toContainText("2 of 2");
+    await stepper.getByRole("button", { name: "Accept this change" }).click();
+    await expect(
+      stepper.getByRole("button", { name: "Resolve thread" }),
+    ).toBeVisible();
+    await stepper.getByRole("button", { name: "Resolve thread" }).click();
+
+    await rail.getByText("Resolved (1)").click();
+    await expect(
+      thread.getByRole("button", { name: "Unresolve thread" }).first(),
+    ).toBeVisible();
+
+    const about = await runAgentCli([
+      "push",
+      planPath,
+      "--about",
+      "I found a related wording concern.",
+    ]);
+    await settlePushWithoutChanges({ planPath, stdout: about.stdout });
+    const aboutThreadId = agentIdOf(about.stdout, "threadId");
+    const aboutThread = rail.locator(
+      `[data-review-pushed-thread="${aboutThreadId}"]`,
+    );
+    await expect(aboutThread).toContainText("Agent-opened", {
+      timeout: 15_000,
+    });
+    await expect(aboutThread).toContainText("About");
+
+    const continued = await runAgentCli([
+      "push",
+      planPath,
+      "--thread",
+      aboutThreadId,
+      "--prompt",
+      "Keep that concern in this conversation.",
+    ]);
+    await settlePushWithoutChanges({ planPath, stdout: continued.stdout });
+    await expect(rail.locator(`[data-review-pushed-thread]`)).toHaveCount(2);
+    await expect(aboutThread).toContainText("Agent-opened");
+    await expect(aboutThread).toContainText("About");
+    await aboutThread
+      .getByRole("button", { name: /Expand pushed thread/u })
+      .click();
+    await expect(
+      aboutThread.getByText("You said", { exact: true }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(aboutThread).toContainText(
+      "Keep that concern in this conversation.",
+    );
+  } finally {
+    if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
+    else process.env.BIG_PLAN_AGENT_MODEL = previousModel;
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should mint, continue, and settle pushes while disclosing queued reviewer work", async ({
   page,
 }) => {

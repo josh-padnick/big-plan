@@ -59,6 +59,7 @@ import {
   selectPrimaryAgent,
 } from "../shared/agent-primacy.js";
 import { selectAgentModelIdentity } from "../shared/agent-model.js";
+import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
 import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
@@ -77,6 +78,7 @@ import {
 } from "../shared/thread-open-state.js";
 import {
   projectCommentThreads,
+  projectPushedThreadOpeners,
   projectLatestAgentStatus,
   projectRequestActivity,
   projectRequestDelivery,
@@ -3313,6 +3315,7 @@ const SentThread = ({
   compact = false,
   queuePosition,
   suppressPendingStatus = false,
+  pushedOrigin,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -3346,6 +3349,7 @@ const SentThread = ({
   readonly compact?: boolean;
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
+  readonly pushedOrigin?: "prompt" | "about";
 }) => {
   const {
     exchanges,
@@ -3429,6 +3433,12 @@ const SentThread = ({
         : deleteKind === "abandoned"
           ? "Delete comment - the agent that picked it up stopped reporting"
           : "Delete queued comment";
+  const pushedOriginLabel =
+    pushedOrigin === "prompt"
+      ? "Reviewer-opened · Prompt"
+      : pushedOrigin === "about"
+        ? "Agent-opened · About"
+        : null;
 
   // Every control in this thread that writes - replying, deleting, reverting,
   // and canceling - is held back by the same answer, so a reviewer is told the
@@ -3587,6 +3597,9 @@ const SentThread = ({
         data-review-comment-ui=""
         data-review-associated={associated ? "true" : undefined}
         data-review-selected={selected ? "true" : undefined}
+        {...(pushedOrigin === undefined
+          ? {}
+          : { "data-review-pushed-thread": comment.id })}
       >
         <CommentCardHeader
           target={comment.target}
@@ -3632,7 +3645,21 @@ const SentThread = ({
           />
         </CommentCardHeader>
         <div className="p-3">
-          <ReviewerMessagePreview body={comment.body} onExpand={onToggle} />
+          {pushedOriginLabel === null ? null : (
+            <Badge tone="secondary" size="status" className="mb-2">
+              {pushedOriginLabel}
+            </Badge>
+          )}
+          <ReviewerMessagePreview
+            body={comment.body}
+            onExpand={onToggle}
+            role={pushedOrigin === "about" ? "agent" : "user"}
+            label={
+              pushedOrigin === undefined
+                ? undefined
+                : `Expand pushed thread: ${comment.body}`
+            }
+          />
           <div className="review-sent-metadata mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-edge pt-2 text-xs text-muted">
             <span className="flex min-w-0 items-baseline gap-1.5 truncate">
               <span className="font-medium">{railState}</span>
@@ -3696,6 +3723,9 @@ const SentThread = ({
       data-review-comment-ui=""
       data-review-associated={associated ? "true" : undefined}
       data-review-selected={selected ? "true" : undefined}
+      {...(pushedOrigin === undefined
+        ? {}
+        : { "data-review-pushed-thread": comment.id })}
     >
       <CommentCardHeader
         target={comment.target}
@@ -3741,6 +3771,11 @@ const SentThread = ({
         />
       </CommentCardHeader>
       <div className={surface === "rail" ? "min-w-0 p-3" : ""}>
+        {pushedOriginLabel === null ? null : (
+          <Badge tone="secondary" size="status" className="mt-2">
+            {pushedOriginLabel}
+          </Badge>
+        )}
         {!targetPresent ? (
           <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)] [overflow-wrap:anywhere]">
             The part of the plan you commented on has since been changed. You
@@ -3784,7 +3819,19 @@ const SentThread = ({
                 return (
                   <div key={request.requestId}>
                     <MessageTurn
-                      role="user"
+                      role={
+                        request.kind === "push" && request.origin === "about"
+                          ? "agent"
+                          : "user"
+                      }
+                      speakerLabel={
+                        request.kind === "push" && request.origin === "prompt"
+                          ? "You said"
+                          : request.kind === "push" &&
+                              request.origin === "about"
+                            ? (request.claimedModel?.name ?? "Agent")
+                            : undefined
+                      }
                       surface="thread"
                       body={
                         request.kind === "feedback"
@@ -3792,7 +3839,11 @@ const SentThread = ({
                           : (request.body ?? "")
                       }
                       createdAt={request.createdAt}
-                      delivery={delivery}
+                      delivery={
+                        request.kind === "push" && request.origin === "about"
+                          ? undefined
+                          : delivery
+                      }
                     >
                       {response === undefined ? (
                         <StalePremiseNotice
@@ -3831,6 +3882,12 @@ const SentThread = ({
                     ) : (
                       <MessageTurn
                         role="agent"
+                        speakerLabel={
+                          pushedOrigin === undefined ||
+                          request.claimedModel?.name === undefined
+                            ? undefined
+                            : agentModelDisplayName(request.claimedModel.name)
+                        }
                         surface="thread"
                         body={requestOutcome.message}
                         createdAt={response.createdAt}
@@ -3906,8 +3963,9 @@ const SentThread = ({
                             currentSnapshot={currentSnapshot}
                             onStatus={onReplySent}
                             onResolve={
+                              request.kind === "push" ||
                               latestChanged?.request.requestId ===
-                              request.requestId
+                                request.requestId
                                 ? onResolve
                                 : undefined
                             }
@@ -6591,8 +6649,19 @@ export const ReviewController = () => {
       ? {}
       : { presenceRequestId: agent.presence.requestId }),
   });
+  const pushedThreadOpeners = projectPushedThreadOpeners(agent.requests);
+  const pushedThreadComments = pushedThreadOpeners.map(
+    (opener) => opener.comment,
+  );
+  const pushedThreadOriginById = new Map(
+    pushedThreadOpeners.map((opener) => [opener.comment.id, opener.origin]),
+  );
+  const sentIds = new Set(sent.map((comment) => comment.id));
   const threadProjections = projectCommentThreads({
-    comments: sent,
+    comments: [
+      ...sent,
+      ...pushedThreadComments.filter((comment) => !sentIds.has(comment.id)),
+    ],
     requests: agent.requests,
     responses: agent.responses,
     progressEvents: progress,
@@ -6680,6 +6749,61 @@ export const ReviewController = () => {
         onCancelRequest={(requestId) => void cancelRequest(requestId)}
         currentSnapshot={currentSnapshot}
       />
+    );
+  };
+  const unresolvedPushedThreadComments = pushedThreadComments.filter(
+    (comment) => !resolvedCommentIds.has(comment.id),
+  );
+  const resolvedPushedThreadComments = pushedThreadComments.filter((comment) =>
+    resolvedCommentIds.has(comment.id),
+  );
+  const renderPushedThread = (comment: ReviewComment) => {
+    if (identity === null) return null;
+    const thread = threadProjections.get(comment.id);
+    const pushedOrigin = pushedThreadOriginById.get(comment.id);
+    if (thread === undefined || pushedOrigin === undefined) return null;
+    const resolved = resolvedCommentIds.has(comment.id);
+    return (
+      <li key={comment.id} className="min-w-0">
+        <SentThread
+          comment={comment}
+          surface="rail"
+          associated={false}
+          selected={false}
+          identity={identity}
+          thread={thread}
+          expanded={threadIsOpen({
+            commentId: comment.id,
+            kind: "sent",
+            surface: "rail",
+          })}
+          resolved={resolved}
+          onToggle={() =>
+            toggleCommentThread({
+              commentId: comment.id,
+              kind: "sent",
+              surface: "rail",
+            })
+          }
+          onResolve={() => toggleResolvedComment(comment.id)}
+          onJump={() => undefined}
+          onAssociate={() => undefined}
+          onReplySent={setStatus}
+          onShowAgent={openAgentSidebar}
+          onCancelRequest={(requestId) => void cancelRequest(requestId)}
+          onDelete={() => undefined}
+          onRevert={(requestId, commentId) =>
+            setPendingRevert({ requestId, commentId })
+          }
+          currentSnapshot={currentSnapshot}
+          reply={replyDrafts.get(comment.id) ?? ""}
+          onReplyChange={(body) => changeReplyDraft(comment.id, body)}
+          isReplying={replyPendingCommentIds.has(comment.id)}
+          onReply={(body) => void sendThreadReply(comment.id, body)}
+          writeAvailability={writeAvailability}
+          pushedOrigin={pushedOrigin}
+        />
+      </li>
     );
   };
   const unresolvedSent = sent.filter(
@@ -6841,6 +6965,25 @@ export const ReviewController = () => {
     const request = agent.requests.find(
       (candidate) => candidate.requestId === requestId,
     );
+    if (
+      kind === "push" &&
+      request?.kind === "push" &&
+      request.threadId !== undefined
+    ) {
+      const threadId = request.threadId;
+      setThreadOpenState((current) =>
+        setThreadOpen({
+          state: current,
+          commentId: threadId,
+          kind: "sent",
+          surface: "rail",
+          isRailOpen: isOpen,
+          open: true,
+        }),
+      );
+      openFeedbackSidebar("chat");
+      return;
+    }
     const commentId =
       request === undefined ? undefined : requestCommentIds(request)[0];
     if (commentId === undefined) return;
@@ -7480,6 +7623,12 @@ export const ReviewController = () => {
                 isSending: isSendingChat,
                 hasExchanges: activeChatRequests.length > 0,
                 exchanges: activeChatRequests.map(renderChatExchange),
+                pushedThreadCount: unresolvedPushedThreadComments.length,
+                pushedThreads:
+                  unresolvedPushedThreadComments.map(renderPushedThread),
+                resolvedPushedThreadCount: resolvedPushedThreadComments.length,
+                resolvedPushedThreads:
+                  resolvedPushedThreadComments.map(renderPushedThread),
                 archivedCount: archivedChatRequests.length,
                 archivedExchanges: archivedChatRequests.map(renderChatExchange),
                 onBodyChange: setChatBody,

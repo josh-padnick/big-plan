@@ -307,10 +307,18 @@ export const sendAgentRequest = async (
   };
   if (agentRequest.kind === "reply") {
     const sent = await planRenderer.readStoredComments(store.sentPath);
-    if (!sent.some((comment) => comment.id === agentRequest.commentId)) {
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    const namesPushedThread = exchange.requests.some(
+      (request) =>
+        request.kind === "push" && request.threadId === agentRequest.commentId,
+    );
+    if (
+      !sent.some((comment) => comment.id === agentRequest.commentId) &&
+      !namesPushedThread
+    ) {
       return refusal({
         status: 400,
-        reason: "The reply points at a comment this session did not send",
+        reason: "The reply points at a thread this session does not know",
       });
     }
   }
