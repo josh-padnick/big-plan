@@ -3,7 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  approveFootnote,
+  approveChangeSetCaveat,
+  approveDecisionCaveat,
   approveIsPrimary,
   deriveOpenItems,
   openRequestsFromExchange,
@@ -41,7 +42,8 @@ describe("deriveOpenItems", () => {
       requests: [],
     });
     expect(approveIsPrimary(items)).toBe(true);
-    expect(approveFootnote(items)).toBeUndefined();
+    expect(approveChangeSetCaveat(items)).toBeUndefined();
+    expect(approveDecisionCaveat(items)).toBeUndefined();
     expect(items.changeSets.open).toEqual([]);
   });
 
@@ -53,8 +55,11 @@ describe("deriveOpenItems", () => {
       requests: [],
     });
     expect(approveIsPrimary(items)).toBe(false);
-    expect(approveFootnote(items)).toBe(
-      "Approval treats all change sets as accepted and reports unanswered decisions as not answered.",
+    expect(approveChangeSetCaveat(items)).toBe(
+      "Approval will auto-accept all change sets.",
+    );
+    expect(approveDecisionCaveat(items)).toBe(
+      "Approval will report unanswered decisions as not answered.",
     );
   });
 
@@ -95,7 +100,8 @@ describe("deriveOpenItems", () => {
     expect(
       items.decisions.unansweredNonCritical.map((row) => row.inputId),
     ).toEqual(["advisory"]);
-    expect(approveFootnote(items)).toBeDefined();
+    expect(approveDecisionCaveat(items)).toBeDefined();
+    expect(approveChangeSetCaveat(items)).toBeUndefined();
   });
 });
 

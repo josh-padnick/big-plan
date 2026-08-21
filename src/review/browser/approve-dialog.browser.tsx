@@ -31,7 +31,8 @@ import {
 } from "../shared/approval-copy.js";
 import type { ApprovalSummary } from "../shared/approval.js";
 import {
-  approveFootnote,
+  approveChangeSetCaveat,
+  approveDecisionCaveat,
   approveIsPrimary,
   changeSetsFromExchange,
   deriveOpenItems,
@@ -105,7 +106,10 @@ const STAMP_TYPE =
   "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase";
 
 const STAMP_BUTTON_CLASS =
-  "group inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0 wide:min-h-0";
+  "group inline-flex h-8 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0 wide:h-auto";
+
+const APPROVE_TRIGGER_CLASS =
+  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent bg-accent px-1.5 text-2xs font-semibold text-accent-ink shadow-raised hover:shadow-lifted hover:brightness-95 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed wide:px-2 wide:text-xs";
 
 const ApproveStampMark = ({ label }: { readonly label: string }) => (
   <span className={STAMP_FRAME} aria-hidden="true">
@@ -382,7 +386,8 @@ export const ApproveDialog = ({
   const stale = approval?.status === "stale";
   const changeComplete = items.changeSets.open.length === 0;
   const decisionComplete = items.decisions.unanswered.length === 0;
-  const footnote = approveFootnote(items);
+  const changeSetCaveat = approveChangeSetCaveat(items);
+  const decisionCaveat = approveDecisionCaveat(items);
   const unansweredAdvisory = items.decisions.unansweredNonCritical;
 
   const handleApprove = () => {
@@ -408,7 +413,6 @@ export const ApproveDialog = ({
       actionVariant="default"
       width="wide"
       footerAlign="end"
-      footnote={footnote}
       anchorRef={anchorRef}
       onCancel={onKeepReviewing}
       onAction={handleApprove}
@@ -444,6 +448,14 @@ export const ApproveDialog = ({
                   />
                 ))}
               />
+            )}
+            {changeSetCaveat === undefined ? null : (
+              <p
+                className="m-0 mt-2 px-1 text-xs text-muted"
+                data-review-approve-changeset-caveat=""
+              >
+                {changeSetCaveat}
+              </p>
             )}
           </Disclosure>
           <Disclosure
@@ -506,11 +518,14 @@ export const ApproveDialog = ({
                     )),
                   ]}
                 />
-                {unansweredAdvisory.length > 0 ? (
-                  <p className="m-0 mt-2 px-1 text-xs text-muted">
-                    {`Approving now records these ${unansweredAdvisory.length} as unanswered.`}
+                {decisionCaveat === undefined ? null : (
+                  <p
+                    className="m-0 mt-2 px-1 text-xs text-muted"
+                    data-review-approve-decision-caveat=""
+                  >
+                    {decisionCaveat}
                   </p>
-                ) : null}
+                )}
               </>
             )}
           </Disclosure>
@@ -546,14 +561,14 @@ export const ApproveDialog = ({
             </Disclosure>
           )}
         </div>
-        <div className="min-w-0 rounded-lg border border-edge bg-paper px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
+        <div className="grid gap-2">
+          <div className="flex items-baseline justify-between gap-2">
             <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
               Message to your agent
             </p>
             <button
               type="button"
-              className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-2 text-xs font-medium text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-xs font-medium text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
               onClick={openApprovalMessageSettings}
               data-review-approve-edit-message=""
             >
@@ -563,15 +578,12 @@ export const ApproveDialog = ({
               Edit in Settings
             </button>
           </div>
-          <p className="mt-2 mb-0 text-xs text-muted">
-            The agent receives this message when you approve.
-          </p>
-          <p
-            className="mt-2 mb-0 text-sm leading-normal text-ink"
+          <blockquote
+            className="m-0 border-l-2 border-accent pl-3 text-sm leading-normal text-ink not-italic"
             data-review-approve-message=""
           >
             {message}
-          </p>
+          </blockquote>
         </div>
         {blockReason === undefined ? null : (
           <p
@@ -1028,17 +1040,17 @@ export const ApproveControl = ({
           Changed since approval
         </Badge>
       ) : null}
-      <Button
+      <button
         ref={triggerRef}
-        variant="default"
-        size="compact"
+        type="button"
+        className={APPROVE_TRIGGER_CLASS}
         aria-label={status === "stale" ? "Re-approve" : "Approve plan"}
         onClick={() => setDialogOpen(true)}
         data-review-approve-trigger=""
         data-review-approve-emphasis={primary ? "primary" : "secondary"}
       >
         {status === "stale" ? "Re-approve" : "Approve"}
-      </Button>
+      </button>
       <ApproveDialog
         open={dialogOpen}
         approval={approval}

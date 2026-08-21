@@ -195,7 +195,7 @@ const renderCommentDraftControl = (): string =>
 // readable without exposing a control that cannot open its dialog.
 const renderPreferencesControl = (): string =>
   `<span data-preferences-control hidden>
-<button class="inline-flex size-11 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-toolbar-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:size-8" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
+<button class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-toolbar-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
 </span>`;
 
 const renderPreferenceOption = ({
@@ -397,7 +397,8 @@ ${renderPreferencesPanel({
 </div>`;
 
 // The right side of the branding bar keeps status, Feedback, and Settings as
-// separate peer actions with one closed spacing-scale step between them.
+// separate peer actions. Below the wide breakpoint they sit a half-step apart
+// so icon-only chrome does not read as a scattered cluster.
 // Feedback belongs to a document under review; a surface with no plan in it
 // omits it and keeps Settings, which still applies everywhere.
 const renderHeaderActions = ({
@@ -405,7 +406,7 @@ const renderHeaderActions = ({
 }: {
   readonly feedback: boolean;
 }): string =>
-  `<div class="ml-auto flex items-center gap-1">
+  `<div class="col-start-3 ml-auto flex items-center gap-0.5 wide:gap-1">
 ${feedback ? renderCommentDraftControl() : ""}
 ${renderPreferencesControl()}
 </div>`;
@@ -508,8 +509,9 @@ export const renderShell = ({
   chrome = "document",
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
-  // The plan's own title, shown quietly in the bar so a reader deep in a long
-  // document can still see which plan they are in.
+  // The plan's own title, shown quietly in the wide bar so a reader deep in a
+  // long document can still see which plan they are in. Below that breakpoint
+  // the bar drops it: chrome buttons need the width more than a truncated echo.
   readonly title: string;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
@@ -541,7 +543,7 @@ export const renderShell = ({
 </a>
 ${approvalBrandSlot}
 </div>
-${standalone ? "<p></p>" : `<p class="min-w-0 truncate text-center text-sm text-muted"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
+${standalone ? "<p></p>" : `<p class="col-start-2 hidden min-w-0 truncate text-center text-sm text-muted wide:block"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 ${renderHeaderActions({ feedback: !standalone })}
 </div>
   </header>

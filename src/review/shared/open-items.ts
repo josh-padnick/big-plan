@@ -60,8 +60,9 @@ export type DerivedOpenItems = {
   };
 };
 
-const APPROVE_FOOTNOTE =
-  "Approval treats all change sets as accepted and reports unanswered decisions as not answered.";
+const APPROVE_CHANGE_SET_CAVEAT = "Approval will auto-accept all change sets.";
+const APPROVE_DECISION_CAVEAT =
+  "Approval will report unanswered decisions as not answered.";
 
 /**
  * Change sets as the approve dialog counts them: one responded revision that
@@ -194,21 +195,22 @@ export const deriveOpenItems = ({
 };
 
 /**
- * The footnote the Approve button is described by. Present only while something
- * is still open; omitted entirely when the plan is ready, rather than replaced
- * with reassuring filler.
+ * The change-set disclosure's caveat. Present only while a set is still open,
+ * so a fully accepted list is not followed by a promise to auto-accept.
  */
-export const approveFootnote = (
+export const approveChangeSetCaveat = (
   items: DerivedOpenItems,
-): string | undefined => {
-  if (
-    items.changeSets.open.length === 0 &&
-    items.decisions.unanswered.length === 0
-  ) {
-    return undefined;
-  }
-  return APPROVE_FOOTNOTE;
-};
+): string | undefined =>
+  items.changeSets.open.length > 0 ? APPROVE_CHANGE_SET_CAVEAT : undefined;
+
+/**
+ * The decisions disclosure's caveat. Present only while an answer is still
+ * owed, so a settled list is not followed by a report about unanswered ones.
+ */
+export const approveDecisionCaveat = (
+  items: DerivedOpenItems,
+): string | undefined =>
+  items.decisions.unanswered.length > 0 ? APPROVE_DECISION_CAVEAT : undefined;
 
 /** True when Approve should be the bar's accent, not a quiet secondary. */
 export const approveIsPrimary = (items: DerivedOpenItems): boolean =>

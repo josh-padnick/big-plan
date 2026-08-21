@@ -665,6 +665,12 @@ export const AlertDialog = ({
       return;
     }
     const update = () => {
+      // Below the reading breakpoint a hanging panel collides with the
+      // mobile sections bar and is too narrow for the disclosures.
+      if (window.innerWidth < 80 * 16) {
+        setAnchorPosition(null);
+        return;
+      }
       setAnchorPosition(
         placeAnchoredDialog({
           anchor: anchor.getBoundingClientRect(),
@@ -723,7 +729,9 @@ export const AlertDialog = ({
   const resolvedActionVariant =
     actionVariant ?? (tone === "neutral" ? "default" : "destructive");
   const anchored = anchorPosition !== null;
-  return (
+  // Header chrome is its own stacking context. Portaling to body is what lets
+  // this overlay sit above the mobile sections bar instead of under it.
+  return createPortal(
     <div
       // --preferences-backdrop-c was never defined, so every alert opened over
       // a page that still looked active. bg-backdrop/70 is the treatment the
@@ -818,6 +826,7 @@ export const AlertDialog = ({
           </p>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

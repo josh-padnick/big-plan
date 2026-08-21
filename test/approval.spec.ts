@@ -700,8 +700,14 @@ test("should approve a plan, stamp the page, and keep the record across reload",
       "This plan is approved and we are ready to begin.",
     );
     await expect(
-      dialog.locator("[data-review-approve-footnote]"),
-    ).toBeVisible();
+      dialog.locator("[data-review-approve-decision-caveat]"),
+    ).toHaveText("Approval will report unanswered decisions as not answered.");
+    await expect(
+      dialog.locator("[data-review-approve-changeset-caveat]"),
+    ).toHaveCount(0);
+    await expect(dialog.locator("[data-review-approve-footnote]")).toHaveCount(
+      0,
+    );
 
     const approved = page.waitForResponse((response) =>
       response.url().endsWith("/api/approve"),
