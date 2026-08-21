@@ -47,7 +47,9 @@ export const STYLESHEET_BUDGETS = {
     // Clear answer exit from the change flow, the narrow-viewport touch floor
     // those controls keep, and the two notices the review island reveals - a
     // superseded answer and a read-only review.
-    declarations: 394,
+    // The changed-Decision Confirm gate adds its hazard-marked explanation,
+    // keyboard focus treatment, and narrow-viewport width at point of use.
+    declarations: 427,
   },
   "src/components/_shared/figure-controls/figure-controls.css": {
     declarations: 58,

@@ -5700,12 +5700,24 @@ The release gets a full soak.
       await proposed
         .getByRole("radio", { name: /Ship after a one-day canary/u })
         .check();
-      await expect(
-        proposed.getByRole("button", { name: "Confirm choice" }),
-      ).toBeDisabled();
+      const confirm = proposed.getByRole("button", { name: "Confirm choice" });
+      await expect(confirm).toBeDisabled();
       await expect(proposed).toContainText(
         "Accept this change before answering this decision.",
       );
+      const confirmGate = proposed.locator("[data-decision-confirm-gate]");
+      const confirmTooltip = proposed.getByRole("tooltip");
+      await expect(confirmTooltip).toBeHidden();
+      await confirmGate.hover();
+      await expect(confirmTooltip).toBeVisible();
+      await expect(confirmTooltip).toHaveText(
+        "You're viewing a proposed change to this component. Accept the change and then confirm your choice.",
+      );
+      await expect(
+        confirmTooltip.locator('[data-lucide="triangle-alert"]'),
+      ).toBeVisible();
+      await confirmGate.focus();
+      await expect(confirmGate).not.toHaveCSS("box-shadow", "none");
 
       const sideToggle = diff.locator("[data-component-diff-toggle]");
       await diff.locator('[data-component-diff-choice="proposed"]').focus();
@@ -5759,6 +5771,10 @@ The release gets a full soak.
           { exact: true },
         ),
       ).toBeHidden();
+      await expect(
+        reinstalled.locator("[data-decision-confirm-gate]"),
+      ).toHaveAttribute("tabindex", "-1");
+      await expect(reinstalled.getByRole("tooltip")).toBeHidden();
 
       await diff.getByText("Was", { exact: true }).click();
       await expect(

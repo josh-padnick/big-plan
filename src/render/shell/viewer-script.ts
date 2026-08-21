@@ -2572,6 +2572,7 @@ const wireDecisions = () => {
     const own = (selector) => ownAll(selector)[0] || null;
 
     const confirm = own("[data-decision-confirm]");
+    const confirmGate = own("[data-decision-confirm-gate]");
     const change = own("[data-decision-change]");
     const clear = own("[data-decision-clear]");
     const footer = own("[data-decision-footer]");
@@ -2906,6 +2907,14 @@ const wireDecisions = () => {
         changeIsOpen() ||
         choice === null ||
         (proposing && proposalValue() === "");
+      if (confirmGate !== null) {
+        const confirmHelpActive = changeIsOpen();
+        confirmGate.toggleAttribute(
+          "data-decision-confirm-help-active",
+          confirmHelpActive,
+        );
+        confirmGate.tabIndex = confirmHelpActive ? 0 : -1;
+      }
       change.disabled = locked;
       for (const candidate of choices) candidate.disabled = locked;
       if (proposalText !== null) proposalText.disabled = locked;

@@ -287,7 +287,16 @@ const SupersededNotice = () => (
 // end of the document, so the action is never screens away from the choice.
 // The whole card is about one screen now, which is why this is close rather
 // than sticky: pinning it would add chrome without shortening the reach.
-const AnswerControls = () => (
+const CHANGE_CONFIRM_HELP =
+  "You're viewing a proposed change to this component. Accept the change and then confirm your choice.";
+
+const AnswerControls = ({
+  changeOpen,
+  confirmHelpId,
+}: {
+  readonly changeOpen: boolean;
+  readonly confirmHelpId: string;
+}) => (
   <>
     <div
       className="decision-footer flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-6 py-4"
@@ -321,14 +330,44 @@ const AnswerControls = () => (
       >
         {"Clear answer"}
       </button>
-      <button
-        className="decision-confirm"
-        type="button"
-        data-decision-confirm=""
-        disabled
+      <span
+        className="decision-confirm-gate"
+        data-decision-confirm-gate=""
+        {...(changeOpen
+          ? {
+              "aria-describedby": confirmHelpId,
+              "aria-label": "Why Confirm choice is unavailable",
+              "data-decision-confirm-help-active": "",
+              role: "group",
+              tabIndex: 0,
+            }
+          : {})}
       >
-        {"Confirm choice"}
-      </button>
+        <button
+          className="decision-confirm"
+          type="button"
+          data-decision-confirm=""
+          disabled
+        >
+          {"Confirm choice"}
+        </button>
+        {changeOpen ? (
+          <span
+            id={confirmHelpId}
+            className="decision-confirm-tooltip"
+            data-decision-confirm-tooltip=""
+            role="tooltip"
+          >
+            <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+              {lucideIconToReact({
+                icon: TRIANGLE_ALERT_ICON,
+                hidden: false,
+              })}
+            </span>
+            <span>{CHANGE_CONFIRM_HELP}</span>
+          </span>
+        ) : null}
+      </span>
     </div>
     <div
       className="decision-answer group gap-3 px-6 py-4 data-[decision-persistence-failed]:bg-[var(--callout-danger-bg)]!"
@@ -558,7 +597,12 @@ export const DecisionCard = ({
       </fieldset>
       <Reversibility model={model} />
       <Details model={model} />
-      {answerable ? <AnswerControls /> : null}
+      {answerable ? (
+        <AnswerControls
+          changeOpen={isChangeOpen}
+          confirmHelpId={`${model.id}-change-confirm-help`}
+        />
+      ) : null}
     </figure>
   );
 };

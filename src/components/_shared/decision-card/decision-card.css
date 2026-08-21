@@ -812,6 +812,56 @@
     font-size: 0.8125rem;
     font-weight: var(--font-weight-semibold);
   }
+  article .decision-confirm-gate {
+    position: relative;
+    display: inline-flex;
+    border-radius: var(--radius-md);
+  }
+  article
+    .decision-confirm-gate[data-decision-confirm-help-active]:focus-visible {
+    outline: none;
+    box-shadow: var(--elevation-focus);
+  }
+  article .decision-confirm-tooltip {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.5rem);
+    z-index: 2147483647;
+    display: flex;
+    width: max-content;
+    max-width: min(18rem, calc(100vw - 2rem));
+    align-items: flex-start;
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--tooltip-edge-c);
+    border-radius: var(--radius-sm);
+    visibility: hidden;
+    background: var(--tooltip-c);
+    color: var(--tooltip-ink-c);
+    box-shadow: var(--elevation-floating);
+    font-size: 0.6875rem;
+    font-weight: var(--font-weight-medium);
+    line-height: 1.35;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity 60ms ease-out,
+      visibility 0s linear 60ms;
+  }
+  article .decision-confirm-tooltip > :first-child {
+    margin-top: 0.0625rem;
+    color: var(--callout-warning-c);
+  }
+  article
+    .decision-confirm-gate[data-decision-confirm-help-active]:hover
+    .decision-confirm-tooltip,
+  article
+    .decision-confirm-gate[data-decision-confirm-help-active]:focus-visible
+    .decision-confirm-tooltip {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 60ms ease-out;
+  }
   /* Nothing to confirm, or a read-only review that could not record it either
      way: both read as the same inert control. */
   article .decision-confirm:disabled,
@@ -938,6 +988,9 @@
       justify-items: stretch;
     }
     article .decision-footer .decision-confirm {
+      width: 100%;
+    }
+    article .decision-footer .decision-confirm-gate {
       width: 100%;
     }
   }
