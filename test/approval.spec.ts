@@ -649,3 +649,503 @@ test("should keep a failed decision save visible after its toast is dismissed", 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("should approve a plan, stamp the page, and keep the record across reload", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-ui-"));
+  const planPath = join(directory, "plan.mdx");
+  const source = PLAN.replace(
+    "Choose the release path before implementation begins.",
+    `Choose the release path before implementation begins.
+
+## Release path
+
+Pick the path before the work starts.
+
+## Rollback owner
+
+Name who can reverse the release.
+
+## Follow-through
+
+The approved stamp travels with this reading surface, so the rest of the page needs enough height that a reviewer can scroll it off the toolbar.
+
+The follow-through is not extra product scope. It only gives the stamp a long page to ride.`,
+  );
+  await writeFile(planPath, source);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute(
+      "data-review-alert-placement",
+      "anchor",
+    );
+    const triggerBox = await page
+      .getByRole("button", { name: "Approve plan" })
+      .first()
+      .boundingBox();
+    const dialogBox = await dialog.boundingBox();
+    if (triggerBox === null || dialogBox === null) {
+      throw new Error("The approve control and dialog were not laid out");
+    }
+    expect(dialogBox.y).toBeGreaterThan(triggerBox.y + triggerBox.height - 1);
+    expect(
+      Math.abs(
+        dialogBox.x + dialogBox.width - (triggerBox.x + triggerBox.width),
+      ),
+    ).toBeLessThan(2);
+    const keepReviewing = dialog.getByRole("button", {
+      name: "Keep reviewing",
+    });
+    const approvePlan = dialog.getByRole("button", { name: "Approve plan" });
+    const keepBox = await keepReviewing.boundingBox();
+    const approveBox = await approvePlan.boundingBox();
+    if (keepBox === null || approveBox === null) {
+      throw new Error("The approve footer controls were not laid out");
+    }
+    expect(keepBox.x + keepBox.width).toBeLessThanOrEqual(approveBox.x);
+    expect(approveBox.x - (keepBox.x + keepBox.width)).toBeLessThan(20);
+    await expect(
+      dialog.locator("[data-review-approve-disclosure=approve-decisions]"),
+    ).toBeVisible();
+    await expect(dialog.locator("[data-review-approve-message]")).toContainText(
+      "This plan is approved and we are ready to begin.",
+    );
+    await expect(
+      dialog.locator("[data-review-approve-decision-caveat]"),
+    ).toHaveText("Approval will report unanswered decisions as not answered.");
+    await expect(
+      dialog.locator("[data-review-approve-changeset-caveat]"),
+    ).toHaveCount(0);
+    await expect(dialog.locator("[data-review-approve-footnote]")).toHaveCount(
+      0,
+    );
+
+    const approved = page.waitForResponse((response) =>
+      response.url().endsWith("/api/approve"),
+    );
+    await dialog.getByRole("button", { name: "Approve plan" }).click();
+    expect((await approved).ok()).toBe(true);
+
+    await expect(
+      page.getByRole("button", { name: "Approve plan" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Plan approved" }),
+    ).toBeVisible();
+    const approvedButton = page.getByRole("button", { name: "Plan approved" });
+    const stamp = page
+      .locator("[data-review-approval-stamp]")
+      .filter({ visible: true });
+    await expect(stamp).toBeVisible();
+    await expect(
+      page.locator("[data-review-approve-status=approved]"),
+    ).toBeVisible();
+    const stampBox = await stamp.boundingBox();
+    const approvedBox = await approvedButton.boundingBox();
+    const titleBox = await page
+      .getByRole("heading", { level: 1 })
+      .boundingBox();
+    const headerBox = await page
+      .locator("header[data-shell-chrome]")
+      .boundingBox();
+    const feedbackBox = await page
+      .getByRole("button", { name: "Feedback" })
+      .boundingBox();
+    if (
+      stampBox === null ||
+      approvedBox === null ||
+      feedbackBox === null ||
+      titleBox === null ||
+      headerBox === null
+    ) {
+      throw new Error(
+        "The approved stamp, Plan approved control, title, and Feedback were not laid out",
+      );
+    }
+    expect(approvedBox.x + approvedBox.width).toBeLessThanOrEqual(
+      feedbackBox.x,
+    );
+    expect(stampBox.x).toBeLessThan(approvedBox.x);
+    expect(Math.abs(stampBox.x - titleBox.x)).toBeLessThan(24);
+    expect(stampBox.y + stampBox.height).toBeLessThanOrEqual(titleBox.y + 4);
+    expect(stampBox.y).toBeGreaterThan(headerBox.y + headerBox.height);
+    const stampLayer = await stamp.evaluate((element) => {
+      const slot = element.closest("[data-review-approval-page-stamp]");
+      if (slot === null) return null;
+      const style = getComputedStyle(slot);
+      return {
+        position: style.position,
+        zIndex: style.zIndex,
+      };
+    });
+    expect(stampLayer?.position).toBe("absolute");
+    expect(
+      stampLayer?.zIndex === "auto" || Number(stampLayer?.zIndex) < 40,
+    ).toBe(true);
+    const stampTopBefore = stampBox.y;
+    const scrolled = await page.evaluate(() => {
+      const html = document.documentElement;
+      const previous = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollBy(0, 240);
+      const y = window.scrollY;
+      html.style.scrollBehavior = previous;
+      return y;
+    });
+    expect(scrolled).toBeGreaterThanOrEqual(200);
+    const stampTopAfter = (await stamp.boundingBox())?.y;
+    if (stampTopAfter === undefined) {
+      throw new Error("The approved stamp left the layout while scrolling");
+    }
+    expect(Math.abs(stampTopAfter - (stampTopBefore - scrolled))).toBeLessThan(
+      2,
+    );
+    await page.evaluate(() => {
+      const html = document.documentElement;
+      const previous = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(0, 0);
+      html.style.scrollBehavior = previous;
+    });
+    const overlapScroll = Math.max(
+      8,
+      Math.round(stampTopBefore - headerBox.height / 2),
+    );
+    await page.evaluate((y) => {
+      const html = document.documentElement;
+      const previous = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(0, y);
+      html.style.scrollBehavior = previous;
+    }, overlapScroll);
+    const covered = await page.evaluate(() => {
+      const header = document.querySelector("header[data-shell-chrome]");
+      const mark = document.querySelector("[data-review-approval-stamp]");
+      if (header === null || mark === null) {
+        return { hitHeader: false, stampY: 0, headerBottom: 0 };
+      }
+      const headerRect = header.getBoundingClientRect();
+      const stampRect = mark.getBoundingClientRect();
+      const x = stampRect.x + stampRect.width / 2;
+      const y = headerRect.top + headerRect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      return {
+        hitHeader: hit !== null && header.contains(hit),
+        stampY: stampRect.y,
+        headerBottom: headerRect.bottom,
+      };
+    });
+    expect(covered.stampY).toBeLessThan(covered.headerBottom);
+    expect(covered.hitHeader).toBe(true);
+    await page.evaluate(() => {
+      const html = document.documentElement;
+      const previous = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(0, 0);
+      html.style.scrollBehavior = previous;
+    });
+
+    await approvedButton.click();
+    const details = page.locator("[data-review-approval-details]");
+    await expect(details).toBeVisible();
+    const detailsBox = await details.boundingBox();
+    if (detailsBox === null) {
+      throw new Error("The approval details panel was not laid out");
+    }
+    expect(
+      Math.abs(
+        detailsBox.x + detailsBox.width - (approvedBox.x + approvedBox.width),
+      ),
+    ).toBeLessThan(2);
+    await page.locator("[data-review-approval-details-close]").click();
+
+    const stored: unknown = JSON.parse(
+      await readFile(runtime.store.approvalPath, "utf8"),
+    );
+    expect(stored).toMatchObject({
+      version: 1,
+      entries: [
+        { kind: "approval", pinnedSnapshot: deriveSnapshotDigest(source) },
+      ],
+    });
+
+    await page.reload();
+    await openWritableReview(page, runtime.url);
+    await expect(
+      page.locator("[data-review-approval-stamp]").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Plan approved" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Approve plan" }),
+    ).toHaveCount(0);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should close the approve dialog when Edit in Settings is chosen", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-settings-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Edit in Settings" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "Approval message" }),
+    ).toHaveAttribute("aria-selected", "true");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should approve with a message that settings could not save", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    };
+    Storage.prototype.removeItem = () => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    };
+  });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-note-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "Approval message" }).click();
+    const note = "Start with the migration, then report back.";
+    await page
+      .getByRole("textbox", { name: "Message", exact: true })
+      .fill(note);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await expect(dialog.locator("[data-review-approve-message]")).toHaveText(
+      note,
+    );
+    await dialog.getByRole("button", { name: "Approve plan" }).click();
+    await expect(
+      page.getByRole("button", { name: "Plan approved" }),
+    ).toBeVisible();
+    const record: unknown = JSON.parse(
+      await readFile(runtime.store.approvalPath, "utf8"),
+    );
+    expect(record).toMatchObject({
+      entries: [expect.objectContaining({ message: note })],
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should keep the approve dialog anchored without a mobile dimmer", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-mobile-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWritableReview(page, runtime.url);
+    const trigger = page.getByRole("button", { name: "Approve plan" }).first();
+    await trigger.click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await expect(dialog).toHaveAttribute(
+      "data-review-alert-placement",
+      "anchor",
+    );
+    await expect(page.locator("[data-modal-backdrop]")).toHaveCount(0);
+    const [triggerBox, dialogBox] = await Promise.all([
+      trigger.boundingBox(),
+      dialog.boundingBox(),
+    ]);
+    if (triggerBox === null || dialogBox === null) {
+      throw new Error(
+        "The mobile approve control and dialog were not laid out",
+      );
+    }
+    expect(
+      Math.abs(
+        dialogBox.x + dialogBox.width - (triggerBox.x + triggerBox.width),
+      ),
+    ).toBeLessThan(2);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should keep an approved stamp when the review becomes read-only", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-readonly-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  let replacement:
+    Awaited<ReturnType<typeof startCompiledReviewRuntime>> | undefined;
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    await page
+      .getByRole("alertdialog", { name: "Approve this plan?" })
+      .getByRole("button", { name: "Approve plan" })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Plan approved" }),
+    ).toBeVisible();
+    replacement = await startCompiledReviewRuntime(planPath, {
+      takeover: true,
+    });
+    await expect(
+      page.getByRole("button", { name: /Using read-only session/ }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("button", { name: "Plan approved" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Plan approved" }).click();
+    await expect(
+      page.getByRole("button", { name: "Revoke approval" }),
+    ).toHaveCount(0);
+    await expect(
+      page.locator("[data-review-approve-status=approved]"),
+    ).toBeVisible();
+  } finally {
+    await replacement?.close();
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should show a recorded decision as answered in the approve dialog", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-answered-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await answerGradualRollout(page);
+    await expect(
+      releaseDecision(page).locator("[data-decision-answer-caption]"),
+    ).toHaveText(SAVED_CAPTION);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.locator("[data-review-approve-disclosure=approve-decisions]"),
+    ).toContainText("1 of 2 answered");
+    await expect(dialog.getByText("Who owns the rollback?")).toBeVisible();
+    await expect(dialog.locator("[data-review-approve-decision]")).toHaveCount(
+      1,
+    );
+    await expect(dialog.getByText("No answer recorded")).toHaveCount(1);
+    await expect(
+      dialog.getByText("Which release path should we use?"),
+    ).toHaveCount(0);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should open Inputs and flash standing from leftover review decisions", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-inputs-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    const approved = page.waitForResponse((response) =>
+      response.url().endsWith("/api/approve"),
+    );
+    await dialog.getByRole("button", { name: "Approve plan" }).click();
+    expect((await approved).ok()).toBe(true);
+    await page.getByRole("button", { name: "Plan approved" }).click();
+    await page.getByRole("button", { name: "Review decisions →" }).click();
+    const inputsTab = page.getByRole("tab", { name: "Inputs" });
+    await expect(inputsTab).toHaveAttribute("aria-selected", "true");
+    const needs = page.locator("[data-review-input-needs]");
+    await expect(needs).toBeVisible();
+    await expect(needs).toContainText("What this review needs");
+    await expect(needs).toHaveAttribute("data-review-input-needs-flash", "");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should refuse approve until a critical decision is answered", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-critical-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(
+    planPath,
+    PLAN.replace(
+      '<Decision question="Which release path should we use?">',
+      '<Decision critical question="Which release path should we use?">',
+    ),
+  );
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.locator("[data-review-approve-critical]"),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "Approve plan" }).click();
+    await expect(dialog.locator("[data-review-approve-block]")).toBeVisible();
+    await expect(dialog).toBeVisible();
+    expect(
+      await readFile(runtime.store.approvalPath, "utf8").catch(() => ""),
+    ).toBe("");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

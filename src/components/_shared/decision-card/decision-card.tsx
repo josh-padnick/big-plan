@@ -20,6 +20,7 @@ import {
   type DecisionCardTone,
 } from "../../_model/decision-card.js";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
+import { LOCK_ICON } from "../../../icons/lucide/lock.js";
 import { PLUS_ICON } from "../../../icons/lucide/plus.js";
 import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 import { type MatrixToneParity } from "../comparison-matrix/comparison-matrix.js";
@@ -269,6 +270,36 @@ const ReadOnlyNote = ({ className = "" }: { readonly className?: string }) => (
 // A masked answer and an unanswered decision are the same empty card, so the
 // reader who answered this one is told what happened to their answer instead of
 // being left to notice the difference.
+// Revealed while an approval is in force. Choosing would change the signed
+// snapshot, so the card explains the unlock rather than silently ignoring
+// clicks. The review island unhides it; the shell script also disables the
+// radios.
+const ApprovedNotice = () => (
+  <div
+    className="decision-approved-note flex items-center gap-2 bg-[var(--callout-note-bg)] px-6 py-3 text-sm text-[var(--callout-note-ink)]"
+    data-decision-approved-note=""
+    role="status"
+    hidden
+  >
+    <span
+      className="inline-flex size-4 shrink-0 items-center justify-center leading-none [&>svg]:block [&>svg]:size-4"
+      aria-hidden="true"
+    >
+      {lucideIconToReact({ icon: LOCK_ICON, hidden: false })}
+    </span>
+    <p className="m-0 min-w-0">
+      {"This plan is approved. To choose an option, revoke the approval first."}{" "}
+      <button
+        type="button"
+        className="inline cursor-pointer border-0 bg-transparent p-0 align-baseline text-sm font-medium text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        data-decision-approved-revoke=""
+      >
+        {"Revoke approval"}
+      </button>
+    </p>
+  </div>
+);
+
 const SupersededNotice = () => (
   <p
     className="decision-superseded flex items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)]"
@@ -520,6 +551,7 @@ export const DecisionCard = ({
             <span>{"Accept this change before answering this decision."}</span>
           </p>
         ) : null}
+        {answerable ? <ApprovedNotice /> : null}
         <div className="decision-zone-question bg-header px-6 py-4">
           {model.layout === "rows" ? (
             <p className="decision-eyebrow m-0 text-xs font-semibold tracking-caps text-subtle uppercase">

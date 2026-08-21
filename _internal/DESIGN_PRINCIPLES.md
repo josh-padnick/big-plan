@@ -167,6 +167,9 @@ Markup names a **role**.
 | `accent`                   | The theme's emphasis colour, for the one thing that matters most  |
 | `accent-soft`              | A tinted ground for accent content                                |
 | `accent-ink`               | Text on an accent-filled surface                                  |
+| `approve-action`           | Pastel ground of the available Approve control                    |
+| `approve-action-edge`      | Sage edge of that control                                         |
+| `approve-action-ink`       | Forest ink on that ground                                         |
 
 Rules:
 

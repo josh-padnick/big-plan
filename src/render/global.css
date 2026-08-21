@@ -379,6 +379,11 @@ its light counterpart so the three-deep ladder keeps the same separation.
   --decision-con-c: light-dark(var(--danger-700), var(--danger-300));
   --decision-con-bg: light-dark(var(--danger-50), var(--danger-900));
   --decision-con-ink: light-dark(var(--danger-900), var(--danger-100));
+  /* The available Approve control. A pastel success fill that is quieter than
+     the primary CTA and more noticeable than a neutral toolbar button. */
+  --approve-action-bg: light-dark(var(--success-100), var(--success-900));
+  --approve-action-edge: light-dark(var(--success-200), var(--success-700));
+  --approve-action-ink: light-dark(var(--success-700), var(--success-100));
   --annotation-c: light-dark(var(--note-500), var(--note-300));
   --annotation-rail-c: var(--note-400);
   --annotation-bg: light-dark(var(--note-50), var(--note-900));
@@ -512,6 +517,7 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --success-50: #e8f2ee;
   --success-100: #d9e8e0;
+  --success-200: #b4ddc8;
   --success-300: #8fd3b0;
   --success-700: #306f58;
   --success-800: #21453a;
@@ -590,6 +596,7 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --success-50: #edf1e9;
   --success-100: #e0e5dc;
+  --success-200: #c2d2b4;
   --success-300: #a3be8c;
   --success-700: #516b3b;
   --success-800: #38492b;
@@ -668,6 +675,7 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --success-50: #e8f5e5;
   --success-100: #d9ead7;
+  --success-200: #c0e6bc;
   --success-300: #a6e3a1;
   --success-700: #2c741c;
   --success-800: #245822;
@@ -747,6 +755,7 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --success-50: #edf2ed;
   --success-100: #d5ecd9;
+  --success-200: #a3e7ae;
   --success-300: #3ddc57;
   --success-700: #1d741d;
   --success-800: #16491a;
@@ -920,6 +929,9 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-accent-soft: var(--accent-soft-c);
   --color-accent-wash: var(--accent-wash-c);
   --color-accent-ink: var(--accent-ink-c);
+  --color-approve-action: var(--approve-action-bg);
+  --color-approve-action-edge: var(--approve-action-edge);
+  --color-approve-action-ink: var(--approve-action-ink);
   /* The status roles are utilities, not raw custom properties, because status
      is coded by shape and colour together at several call sites and a status
      utility that does not exist fails silently as inherited ink. */

@@ -45,11 +45,11 @@ export const STYLESHEET_BUDGETS = {
   "src/components/_shared/decision-card/decision-card.css": {
     // Bought for the answer composer: its two modes and their controls, the
     // Clear answer exit from the change flow, the narrow-viewport touch floor
-    // those controls keep, and the two notices the review island reveals - a
-    // superseded answer and a read-only review.
+    // those controls keep, and the three notices the review island reveals - a
+    // superseded answer, a read-only review, and an in-force approval.
     // The changed-Decision Confirm gate adds its hazard-marked explanation,
     // keyboard focus treatment, and narrow-viewport width at point of use.
-    declarations: 427,
+    declarations: 429,
   },
   "src/components/_shared/figure-controls/figure-controls.css": {
     declarations: 58,
@@ -71,7 +71,8 @@ export const STYLESHEET_BUDGETS = {
     // per palette. Dark mode reuses the general edge instead of adding shades.
     // The shared tooltip adds four semantic theme tokens and their four utility
     // aliases so dialog-owned tooltips can use one light-and-dark treatment.
-    declarations: 551,
+    // Approve adds three role tokens and one success-scale edge to each palette.
+    declarations: 561,
   },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },

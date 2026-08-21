@@ -3886,6 +3886,8 @@ test("should restore and submit staged comments through the local review runtime
     agentStatus.locator('[data-review-agent-status="working"]'),
   ).toHaveCount(0);
   await expect(feedbackAction).toBeVisible();
+  const approveAction = page.getByRole("button", { name: "Approve plan" });
+  await expect(approveAction).toBeVisible();
   await expect(settingsAction).toBeVisible();
   await expect(
     page.locator('input[type="range"], input[type="color"]'),
@@ -3899,18 +3901,25 @@ test("should restore and submit staged comments through the local review runtime
   await expect(page.getByRole("button", { name: "Dark theme" })).toHaveCount(0);
   await expect(page.getByText("Ring padding", { exact: true })).toHaveCount(0);
   const toolbarGaps = await Promise.all([
-    agentStatus.boundingBox(),
+    approveAction.boundingBox(),
     feedbackAction.boundingBox(),
+    agentStatus.boundingBox(),
     settingsAction.boundingBox(),
-  ]).then(([status, feedback, settings]) => {
-    if (status === null || feedback === null || settings === null)
+  ]).then(([approve, feedback, status, settings]) => {
+    if (
+      status === null ||
+      feedback === null ||
+      approve === null ||
+      settings === null
+    )
       throw new Error("The review toolbar actions were not rendered");
     return [
-      feedback.x - status.x - status.width,
-      settings.x - feedback.x - feedback.width,
+      feedback.x - approve.x - approve.width,
+      status.x - feedback.x - feedback.width,
+      settings.x - status.x - status.width,
     ];
   });
-  expect(toolbarGaps).toEqual([4, 4]);
+  expect(toolbarGaps).toEqual([8, 8, 8]);
   const agentStatusWidth = Math.round(
     (await agentStatus.boundingBox())?.width ?? 0,
   );

@@ -41,6 +41,10 @@ Every region sees the change together.
     expect(html).toContain(">Risk<");
     expect(html).toContain('data-decision-definition="criterion"');
     expect(html).toContain('data-decision-layout="rows"');
+    expect(html).toContain("data-decision-approved-note");
+    expect(html).toContain(
+      "This plan is approved. To choose an option, revoke the approval first.",
+    );
   });
 
   it("should keep criterion labels plain when no detail is authored", () => {

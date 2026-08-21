@@ -107,7 +107,9 @@ describe("renderDocument affordances", () => {
       fallbackTitle: "Collision",
     });
     expect(collisionHtml).toContain('data-overview-link href="#top-3"');
-    expect(collisionHtml).toContain('<main class="min-w-0" id="top-3">');
+    expect(collisionHtml).toContain(
+      '<main class="relative min-w-0" id="top-3">',
+    );
     expect(collisionHtml.match(/id="top"/g)).toHaveLength(1);
     expect(collisionHtml.match(/id="top-2"/g)).toHaveLength(1);
   });
@@ -180,7 +182,7 @@ The lede.
   it("should name the plan quietly in the bar so a deep reader keeps its title", () => {
     expect(html).toContain("data-plan-title");
     expect(html).toMatch(
-      /<p class="[^"]*truncate[^"]*"><span class="italic" data-plan-title/,
+      /<p class="(?=[^"]*\bhidden\b)(?=[^"]*\bwide:flex\b)[^"]*"><span class="(?=[^"]*\btruncate\b)[^"]*" data-plan-title/,
     );
     // The bar repeats the h1, so it is chrome for the eye only; a screen
     // reader already has the title from the document and the page head.
@@ -216,10 +218,10 @@ The lede.
       /<a [^>]*href="https:\/\/big-plan\.ai" target="_blank" rel="noreferrer">/,
     );
     expect(html).toMatch(
-      /<img class="w-27 h-auto" data-logo-light src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
+      /<img class="h-auto w-27" data-logo-light src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
     );
     expect(html).toMatch(
-      /<img class="w-27 h-auto" data-logo-dark src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
+      /<img class="h-auto w-27" data-logo-dark src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
     );
   });
 });

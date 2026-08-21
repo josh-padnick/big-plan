@@ -260,4 +260,33 @@ here; all values use the document theme's closed token vocabulary.
       transition: none;
     }
   }
+
+  /* Chrome text actions: underline on hover. Clickable controls restore their
+     own surface wash; this rule must not paint a wash on non-clickable text. */
+  :where(
+      header,
+      aside,
+      [role="dialog"],
+      [role="alertdialog"],
+      [data-review-feedback-host],
+      [data-review-approval-details]
+    )
+    a:not([data-authored-prose]),
+  [data-review-chrome-link] {
+    text-underline-offset: 0.16em;
+  }
+
+  :where(
+      header,
+      aside,
+      [role="dialog"],
+      [role="alertdialog"],
+      [data-review-feedback-host],
+      [data-review-approval-details]
+    )
+    a:not([data-authored-prose]):not(:has(img)):hover,
+  [data-review-chrome-link]:hover,
+  :is(button, a):hover > [data-review-chrome-link] {
+    text-decoration-line: underline;
+  }
 }

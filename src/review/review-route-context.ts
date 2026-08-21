@@ -19,10 +19,12 @@ import {
 } from "./shared/comment.js";
 import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
 import {
+  readApprovalRecord,
   readChangeDispositions,
   readComments,
   readResolvedCommentIds,
   readStagedInputs,
+  writeApprovalRecord,
   writeChangeDispositions,
   writeStagedInputs,
 } from "./store.js";
@@ -35,6 +37,8 @@ import { validateStagedInputs } from "./plan-inputs-store.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
 import { validateChangeDispositions } from "./change-dispositions-store.js";
 import type { StoredChangeDispositions } from "./change-dispositions-store.js";
+import { validateApprovalRecord } from "./approval-record.js";
+import type { ApprovalRecord } from "./shared/approval.js";
 import {
   MUTATION_STALL_MS,
   ReviewWriteStalled,
@@ -195,6 +199,12 @@ export type ChangeDispositions = {
   readonly write: (dispositions: StoredChangeDispositions) => Promise<void>;
 };
 
+/** The append-only approval log this review has recorded. */
+export type Approvals = {
+  readonly read: () => Promise<ApprovalRecord>;
+  readonly write: (record: ApprovalRecord) => Promise<void>;
+};
+
 /** The review's one lifetime policy and its current activity. */
 export type ActivityClock = {
   readonly idleTimeoutMs: number;
@@ -214,6 +224,7 @@ export type ReviewRouteContext = {
   readonly planRenderer: PlanRenderer;
   readonly decisionAnswers: DecisionAnswers;
   readonly changeDispositions: ChangeDispositions;
+  readonly approvals: Approvals;
   readonly readerProgress: ReaderProgress;
   readonly writeGate: WriteGate;
   readonly activityClock: ActivityClock;
@@ -417,6 +428,41 @@ export const createChangeDispositions = ({
     writeStored: (dispositions) =>
       writeChangeDispositions({ store, dispositions }),
   });
+};
+
+/**
+ * Owns every read and write of the approval log. Unlike the answer and
+ * disposition records there is no revision token: the log is append-only, the
+ * derived status is computed against the current source digest, and a stale
+ * write is refused by the digest compare-and-swap on approve rather than by
+ * a count.
+ */
+export const createApprovals = ({
+  store,
+  reportDiagnostic,
+}: {
+  readonly store: ReviewStore;
+  readonly reportDiagnostic: ReviewRouteContext["reportDiagnostic"];
+}): Approvals => {
+  let reportedUnreadable = false;
+  return {
+    read: async () => {
+      const { record, unreadable } = await readApprovalRecord({
+        store,
+        validate: validateApprovalRecord,
+      });
+      if (unreadable !== undefined && !reportedUnreadable) {
+        reportedUnreadable = true;
+        reportDiagnostic({
+          message:
+            "Stored approval log could not be read and was treated as empty",
+          error: new Error(unreadable),
+        });
+      }
+      return record;
+    },
+    write: (record) => writeApprovalRecord({ store, record }),
+  };
 };
 
 /**

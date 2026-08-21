@@ -6481,3 +6481,315 @@ describe("review runtime reviewer controls versus an interrupted commit", () => 
     }
   });
 });
+
+describe("review runtime approval", () => {
+  const withApprovalRuntime = async (
+    source: string,
+    work: (context: {
+      readonly target: ReviewRuntime;
+      readonly sessionToken: string;
+      readonly planPath: string;
+      readonly digest: string;
+    }) => Promise<void>,
+  ): Promise<void> => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, source);
+    const target = await startReviewRuntime({ planPath });
+    try {
+      await work({
+        target,
+        sessionToken: await runtimeToken(target),
+        planPath,
+        digest: deriveSnapshotDigest(source),
+      });
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  };
+
+  const approve = (
+    target: ReviewRuntime,
+    sessionToken: string,
+    body: unknown,
+  ) =>
+    callRuntime({
+      target,
+      sessionToken,
+      path: "/api/approve",
+      method: "POST",
+      body,
+    });
+
+  it("writes the approval record, pins the digest, and survives a reread", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        expect(
+          (
+            await callRuntime({
+              target,
+              sessionToken,
+              path: "/api/inputs",
+              method: "POST",
+              body: {
+                op: "stage",
+                answer: {
+                  decisionId: DECISION_ID,
+                  optionId: GRADUAL_OPTION_ID,
+                  optionTitle: "Gradual rollout",
+                  prompt: "Which release path should we use?",
+                  premiseSnapshot: digest,
+                },
+              },
+            })
+          ).status,
+        ).toBe(200);
+
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+          message: "Start on it now.",
+        });
+        expect(response.status).toBe(200);
+        const body: unknown = await response.json();
+        expect(body).toMatchObject({
+          pinnedSnapshot: digest,
+          canceledRequests: 0,
+          approval: { status: "approved", pinnedSnapshot: digest },
+        });
+
+        const stored: unknown = JSON.parse(
+          await readFile(target.store.approvalPath, "utf8"),
+        );
+        expect(stored).toMatchObject({
+          version: 1,
+          entries: [
+            {
+              kind: "approval",
+              pinnedSnapshot: digest,
+              message: "Start on it now.",
+              recordedAnswers: [
+                {
+                  decisionId: DECISION_ID,
+                  optionTitle: "Gradual rollout",
+                },
+              ],
+            },
+          ],
+        });
+
+        const session = await (
+          await callRuntime({ target, sessionToken, path: "/api/session" })
+        ).json();
+        expect(session).toMatchObject({
+          approval: { status: "approved", pinnedSnapshot: digest },
+        });
+      },
+    );
+  });
+
+  it("refuses a digest that no longer matches the source", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken }) => {
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: "ffffffffffffffff",
+          message: "Start on it now.",
+        });
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toMatchObject({
+          code: "plan-changed",
+        });
+      },
+    );
+  });
+
+  it("refuses unanswered critical decisions", async () => {
+    const criticalPlan = DECISION_PLAN.replace(
+      '<Decision question="Which release path should we use?">',
+      '<Decision critical question="Which release path should we use?">',
+    );
+    await withApprovalRuntime(
+      criticalPlan,
+      async ({ target, sessionToken, digest }) => {
+        await writeAgentRequest({
+          store: target.store,
+          request: messageAgentRequest({
+            sessionId: target.sessionId,
+            planId: target.planId,
+            requestId: "cccccccccccccccc",
+            kind: "chat",
+            body: "Keep this request open.",
+            premiseSnapshot: digest,
+            createdAt: "2026-08-19T17:00:00.000Z",
+          }),
+        });
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toMatchObject({
+          code: "critical-unanswered",
+          blockingDecisionIds: [DECISION_ID],
+        });
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests[0]?.canceledAt).toBeUndefined();
+      },
+    );
+  });
+
+  it("refuses a second approve of the same snapshot", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        expect(
+          (await approve(target, sessionToken, { expectedSnapshot: digest }))
+            .status,
+        ).toBe(200);
+        const again = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        expect(again.status).toBe(409);
+        await expect(again.json()).resolves.toMatchObject({
+          code: "already-approved",
+        });
+      },
+    );
+  });
+
+  it("revokes the in-force approval", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        const body = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+        const revoked = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/revoke-approval",
+          method: "POST",
+          body: { approvalId: body.approvalId },
+        });
+        expect(revoked.status).toBe(200);
+        const session = (await (
+          await callRuntime({ target, sessionToken, path: "/api/session" })
+        ).json()) as { readonly approval?: unknown };
+        expect(session.approval).toBeUndefined();
+      },
+    );
+  });
+
+  it("cancels open agent requests on approve", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        await writeAgentRequest({
+          store: target.store,
+          request: messageAgentRequest({
+            sessionId: target.sessionId,
+            planId: target.planId,
+            requestId: "aaaaaaaaaaaaaaaa",
+            kind: "chat",
+            body: "Please look at the retry queue.",
+            premiseSnapshot: digest,
+            createdAt: "2026-08-19T17:00:00.000Z",
+          }),
+        });
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          canceledRequests: 1,
+        });
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests[0]?.canceledAt).toBeDefined();
+        void planPath;
+      },
+    );
+  });
+
+  it("accepts every open change set as part of approval", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        const requestId = "dddddddddddddddd";
+        const request = messageAgentRequest({
+          sessionId: target.sessionId,
+          planId: target.planId,
+          requestId,
+          kind: "chat",
+          body: "Clarify the rollback owner.",
+          premiseSnapshot: digest,
+          createdAt: "2026-08-19T17:00:00.000Z",
+        });
+        await writeAgentRequest({ store: target.store, request });
+        const claimed = await claimAgentRequest({
+          store: target.store,
+          activeSessionId: target.sessionId,
+          requestId,
+          claimedBy: target.sessionId,
+          baselineSnapshot: digest,
+          now: "2026-08-19T17:00:01.000Z",
+        });
+        const published = `${DECISION_PLAN}\nThe rollback owner is the release captain.\n`;
+        const publishedDigest = deriveSnapshotDigest(published);
+        await writeFile(planPath, published);
+        await writeSnapshot({
+          store: target.store,
+          snapshot: publishedDigest,
+          source: published,
+        });
+        await commitRequestTerminal({
+          store: target.store,
+          claimedBy: target.sessionId,
+          response: validateAgentResponseDraft({
+            value: { requestId, message: "Named the rollback owner." },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set(),
+            currentSnapshot: publishedDigest,
+            now: "2026-08-19T17:00:02.000Z",
+          }),
+          now: "2026-08-19T17:00:02.000Z",
+        });
+
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: publishedDigest,
+        });
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          approval: {
+            openItemCounts: {
+              changeSetsAccepted: 1,
+              changeSetsTotal: 1,
+            },
+          },
+        });
+        const dispositions = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/change-dispositions",
+        });
+        await expect(dispositions.json()).resolves.toMatchObject({
+          accepted: [
+            expect.objectContaining({ from: digest, to: publishedDigest }),
+          ],
+        });
+      },
+    );
+  });
+});

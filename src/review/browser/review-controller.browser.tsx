@@ -121,7 +121,7 @@ import {
   type PrimacyAnswer,
 } from "./agent-roster.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
-import { InputsSurface } from "./inputs-surface.browser.js";
+import { InputsSurface, OPEN_INPUTS_EVENT } from "./inputs-surface.browser.js";
 import {
   batchSectionTone,
   CommentsSurface,
@@ -212,6 +212,8 @@ import {
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
 import { applyAnswersRecord } from "./answers-record.browser.js";
+import { ApproveControl } from "./approve-dialog.browser.js";
+import type { ApprovalSummary } from "../shared/approval.js";
 import {
   AlertDialog,
   Badge,
@@ -431,7 +433,7 @@ const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
 // is the toolbar's own rather than the reading surface's, because these sit on
 // the chrome band and a warm hairline reads as a stain against it.
 const TOOLBAR_CONTROL_CLASS =
-  "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border border-review-panel-edge bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:border-review-panel-edge-strong hover:bg-toolbar-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-review-panel-edge-strong aria-expanded:bg-toolbar-surface aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:min-h-8";
+  "inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-review-panel-edge bg-transparent px-1.5 py-1 text-xs text-muted shadow-none hover:border-review-panel-edge-strong hover:bg-toolbar-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-review-panel-edge-strong aria-expanded:bg-toolbar-surface aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:px-2";
 const FEEDBACK_TAB_CLASS =
   "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>span]:min-w-5 [&>span]:justify-center [&>span]:bg-[var(--annotation-bg)] [&>span]:text-2xs [&>span]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
@@ -1901,6 +1903,7 @@ const useFeedbackHost = (): HTMLSpanElement | null => {
     if (legacyControl !== null) legacyControl.hidden = true;
     const next = document.createElement("span");
     next.dataset.reviewFeedbackHost = "";
+    next.className = "inline-flex items-center gap-1.5 wide:gap-2";
     settings.before(next);
     setHost(next);
     return () => {
@@ -4193,6 +4196,7 @@ export const ReviewController = () => {
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
   );
+  const [approval, setApproval] = useState<ApprovalSummary | undefined>();
   const runtimeSessionOrder = useMemo(createRuntimeSessionOrder, []);
   const acceptRuntimeSession = useCallback(
     ({ sequence, session }: { sequence: number; session: RuntimeSession }) => {
@@ -4248,6 +4252,9 @@ export const ReviewController = () => {
     }
   }, [archivedChatRequestIds, planId]);
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
+  useEffect(() => {
+    setApproval(runtimeSession?.approval);
+  }, [runtimeSession?.approval]);
   const pollIsOffline = reviewPollIsOffline(pollHealth);
   const serverGone = reviewRuntimeIsDown(pollHealth);
   // Only a runtime that is answering can report this, so it never competes
@@ -5053,6 +5060,12 @@ export const ReviewController = () => {
     },
     [selectFeedbackBody],
   );
+
+  useEffect(() => {
+    const openInputs = () => openFeedbackSidebar("inputs");
+    document.addEventListener(OPEN_INPUTS_EVENT, openInputs);
+    return () => document.removeEventListener(OPEN_INPUTS_EVENT, openInputs);
+  }, [openFeedbackSidebar]);
   // Each control owns its own view. Pressing the one that is already pressed
   // closes the sidebar; it never hands the slot to the other body, which is
   // what made Agent Status look like it was opening Feedback.
@@ -7132,24 +7145,30 @@ export const ReviewController = () => {
         ? null
         : createPortal(
             <>
-              {identity === null ? null : (
-                <AgentStatusTrigger
-                  status={agentHealth}
-                  className={TOOLBAR_CONTROL_CLASS}
-                  isSelected={isOpen && sidebarView === "agent"}
-                  onToggle={toggleAgentSidebar}
+              {identity === null ||
+              serverGone ||
+              (runtimeSession?.authoritative === false &&
+                approval?.status !== "approved") ? null : (
+                <ApproveControl
+                  identity={identity}
+                  approval={approval}
+                  agent={agent}
+                  currentSnapshot={currentSnapshot}
+                  canWrite={runtimeSession?.authoritative !== false}
+                  onOpenAgent={openAgentSidebar}
+                  onApprovalChange={setApproval}
                 />
               )}
               <button
                 type="button"
                 id={FEEDBACK_TRIGGER_ID}
-                className={`${TOOLBAR_CONTROL_CLASS} [&>svg]:size-4`}
+                className={`${TOOLBAR_CONTROL_CLASS} [&>svg]:size-4${approval?.status === "approved" ? " text-subtle" : ""}`}
                 aria-expanded={isOpen && sidebarView === "feedback"}
                 aria-controls="big-plan-feedback-sidebar"
                 onClick={toggleFeedbackSidebar}
               >
                 <Icon icon={MESSAGE_SQUARE_ICON} />
-                Feedback
+                <span className="sr-only wide:not-sr-only">Feedback</span>
                 {unresolvedDrafts.length > 0 ? (
                   <Badge
                     size="compact"
@@ -7160,6 +7179,14 @@ export const ReviewController = () => {
                   </Badge>
                 ) : null}
               </button>
+              {identity === null ? null : (
+                <AgentStatusTrigger
+                  status={agentHealth}
+                  className={TOOLBAR_CONTROL_CLASS}
+                  isSelected={isOpen && sidebarView === "agent"}
+                  onToggle={toggleAgentSidebar}
+                />
+              )}
             </>,
             feedbackHost,
           )}

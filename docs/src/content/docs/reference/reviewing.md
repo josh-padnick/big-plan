@@ -1,6 +1,6 @@
 ---
 title: Reviewing a plan
-description: Stage block notes, connect a coding agent, and review causal diffs through the local runtime.
+description: Review, revise, and approve a plan through the local runtime.
 ---
 
 `big-plan review` serves one plan on your machine so you can attach notes to its
@@ -156,7 +156,7 @@ server-rendered article without client-rendering or gating the plan.
 
 An open decision card - a `Decision`, a `QuickDecision`, or a `DecisionAnalysis` with `interaction="choose"` - can be answered during a live review.
 A confirmed choice is saved with the review: it survives reload and runtime restarts, so the answer is still there when you come back to the page, and it stays saved until you change or clear it.
-The answer stays inside the review session; Big Plan does not yet deliver it to your agent, so tell the agent your decision through the feedback flow when you want it acted on.
+The answer stays inside the review session until approval records it for the later agent handoff; tell the agent through the feedback flow when you want it acted on before then.
 The card's caption always states what is true right now: saving, saved with this review, or noted for this reading session only.
 If a save fails, the card says the answer is not saved yet and retries automatically; keep the page open until it reports the answer saved.
 
@@ -191,9 +191,27 @@ A decision goes stale under exactly the edits that mask its answer on the card, 
 
 A standalone rendered document has no Inputs tab: the contract is derived by the review runtime, and a document opened without one has nothing to derive it from.
 
+## Approving a plan
+
+**Approve plan** appears in the branding bar only for a live review session that still has authority to write this plan.
+Its confirmation dialog reports accepted and open change sets, answered and unanswered decisions, in-flight agent work, and the covering message from **Settings**.
+Choose a listed item to inspect it before approving, or choose **Edit in Settings** to close the confirmation and open the **Approval message** page.
+
+Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message for the later agent handoff.
+Every critical decision must be answered first; non-critical decisions may remain unanswered and are recorded that way.
+The approval is refused if the plan changes while the confirmation is open, so the record never silently covers a different revision.
+
+After approval, the branding-bar control reads **Plan approved**, and an approval stamp appears just above the document title in the reading column.
+Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
+Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.
+If the plan source changes while an approval remains in force, the bar reports **Changed since approval** and offers **Re-approve** for the plan as it now reads.
+
+A review session that has become read-only continues to show an approval already in force, but does not offer approval or revocation actions.
+A standalone rendered document shows no approval control.
+
 ## Persistence
 
-Runtime-backed staged comments, recorded decision answers, and recorded change acceptances live under `.big-plan/review/<plan-id>/` beside the plan.
+Runtime-backed staged comments, recorded decision answers, recorded change acceptances, and the append-only approval log live under `.big-plan/review/<plan-id>/` beside the plan.
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
 Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
 Each tab keeps exactly one record, written and cleared only by the tab that owns it, and read once when the page loads.

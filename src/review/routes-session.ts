@@ -3,12 +3,15 @@
 // because this is the only route the page polls that the runtime answers about
 // itself, whether that runtime has stopped accepting changes.
 
+import { readFile } from "node:fs/promises";
 import { jsonResponse } from "./review-route-context.js";
 import type {
   ReviewRouteContext,
   ReviewRouteResponse,
 } from "./review-route-context.js";
 import { reviewSessionView } from "./session-authority.js";
+import { deriveSnapshotDigest } from "./agent-exchange.js";
+import { approvalSummary } from "./shared/approval.js";
 import { encodeRuntimeSession } from "./shared/review-wire.js";
 
 export const readRuntimeSession = async (
@@ -22,6 +25,11 @@ export const readRuntimeSession = async (
   });
   const writesStalledMs = context.writeGate.stalledForMs();
   const expiresAtMs = context.activityClock.expiresAtMs();
+  const source = await readFile(context.resolvedPlanPath, "utf8");
+  const approval = approvalSummary({
+    record: await context.approvals.read(),
+    currentSnapshot: deriveSnapshotDigest(source),
+  });
   return jsonResponse({
     status: 200,
     value: encodeRuntimeSession({
@@ -36,6 +44,7 @@ export const readRuntimeSession = async (
       restartCommand: context.restartCommand,
       idleTimeoutMs: context.activityClock.idleTimeoutMs,
       ...(expiresAtMs === undefined ? {} : { expiresAtMs }),
+      ...(approval === undefined ? {} : { approval }),
     }),
   });
 };

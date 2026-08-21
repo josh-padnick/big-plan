@@ -59,6 +59,26 @@ describe("bulk collapse controls", () => {
   });
 });
 
+describe("approval chrome", () => {
+  it("should leave the approved stamp to the review island's toolbar slot", () => {
+    const html = shellFor("<p>Plan.</p>");
+    expect(html).not.toContain("data-review-approval-brand-slot");
+    expect(html).not.toContain("data-review-approval-slot");
+  });
+
+  it("should omit review-only approval chrome from standalone pages", () => {
+    const html = standaloneShellFor("<p>Welcome to Big Plan.</p>");
+    expect(html).not.toContain("data-review-approval-brand-slot");
+  });
+
+  it("should start the contents list at the top of the sidebar", () => {
+    const html = shellFor("<p>Plan.</p>");
+    expect(html).toMatch(
+      /aria-label="Contents">\s*<p class="[^"]*" data-toc-header>/,
+    );
+  });
+});
+
 describe("scripts-disabled notice", () => {
   it("should ship the readable-content notice in every rendered document", () => {
     const html = shellFor("<p>Readable plan content.</p>");

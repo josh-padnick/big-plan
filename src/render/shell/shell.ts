@@ -195,7 +195,7 @@ const renderCommentDraftControl = (): string =>
 // readable without exposing a control that cannot open its dialog.
 const renderPreferencesControl = (): string =>
   `<span data-preferences-control hidden>
-<button class="inline-flex size-11 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-toolbar-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:size-8" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
+<button class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-toolbar-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
 </span>`;
 
 const renderPreferenceOption = ({
@@ -316,7 +316,8 @@ const renderApprovalMessageControls = (): string =>
   `<div class="mt-3 min-w-0 wide:mt-4">
 <label class="mb-1 block text-xs font-medium text-muted" for="big-plan-approval-message">Message</label>
 <textarea class="block min-h-32 w-full resize-y rounded-md border border-edge-strong bg-input px-3 py-2 text-sm leading-normal text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-approval-message" data-approval-message-input maxlength="${APPROVAL_MESSAGE_LIMIT}" aria-describedby="big-plan-approval-message-hint">${escapeHtml(DEFAULT_APPROVAL_MESSAGE)}</textarea>
-<p class="mt-2 text-xs leading-normal text-muted" id="big-plan-approval-message-hint">One note covers every plan. It starts from a standard wording you can rewrite, and Reset to default puts that wording back.</p>
+<p class="mt-2 text-xs leading-normal text-muted" id="big-plan-approval-message-hint">Your recorded answers are always attached. This text is saved with the approval record for the agent handoff.</p>
+<p class="mt-2 text-xs leading-normal text-[var(--callout-warning-c)]" id="big-plan-approval-message-error" data-approval-message-error hidden>This note could not be saved. It is still here, but it will be lost if you close this page.</p>
 <div class="mt-3">
 <button class="-ml-2 inline-flex min-h-9 cursor-pointer items-center rounded-md border-0 bg-transparent px-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-approval-message-reset>Reset to default</button>
 </div>
@@ -386,7 +387,7 @@ ${PALETTE_OPTIONS.map(renderPaletteOption).join("\n")}
 ${renderPreferencesPanel({
   section: "approval-message",
   title: "Approval message",
-  description: "The covering note that goes with a plan approval.",
+  description: "Saved for your agent each time you approve a plan.",
   selected: false,
   controls: renderApprovalMessageControls(),
 })}
@@ -396,7 +397,8 @@ ${renderPreferencesPanel({
 </div>`;
 
 // The right side of the branding bar keeps status, Feedback, and Settings as
-// separate peer actions with one closed spacing-scale step between them.
+// separate peer actions. A full step on a phone and a tight related-line
+// step on a wide screen keep the cluster readable without hugging.
 // Feedback belongs to a document under review; a surface with no plan in it
 // omits it and keeps Settings, which still applies everywhere.
 const renderHeaderActions = ({
@@ -404,7 +406,7 @@ const renderHeaderActions = ({
 }: {
   readonly feedback: boolean;
 }): string =>
-  `<div class="ml-auto flex items-center gap-1">
+  `<div class="relative z-10 col-start-3 ml-auto flex items-center gap-1.5 wide:gap-2">
 ${feedback ? renderCommentDraftControl() : ""}
 ${renderPreferencesControl()}
 </div>`;
@@ -507,8 +509,11 @@ export const renderShell = ({
   chrome = "document",
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
-  // The plan's own title, shown quietly in the bar so a reader deep in a long
-  // document can still see which plan they are in.
+  // The plan's own title, shown quietly in the wide bar so a reader deep in a
+  // long document can still see which plan they are in. It is centered on the
+  // full bar, not the gap between the wordmark and the actions. Below the wide
+  // breakpoint the bar drops it: chrome buttons need the width more than a
+  // truncated echo.
   readonly title: string;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
@@ -525,20 +530,23 @@ export const renderShell = ({
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
-<div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-6">
-<a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
-<img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
-<img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
+<div class="relative grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
+<div class="relative z-10 flex min-w-0 items-center gap-0.5">
+<a class="shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
+<img class="h-auto w-27" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
+<img class="h-auto w-27" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
-${standalone ? "<p></p>" : `<p class="truncate text-center text-sm text-muted"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
+</div>
 ${renderHeaderActions({ feedback: !standalone })}
+${standalone ? "" : `<p class="pointer-events-none absolute inset-x-0 top-0 z-0 hidden h-11 items-center justify-center overflow-hidden wide:flex"><span class="max-w-[min(40rem,70%)] truncate italic text-sm text-muted" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 </div>
   </header>
   ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
 ${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
-<main class="min-w-0" id="${overviewId}">
+<main class="relative min-w-0" id="${overviewId}">
+<span class="pointer-events-none absolute -top-8 left-0 -rotate-2" data-review-approval-page-stamp hidden></span>
 <article>
 ${contentHtml}
 </article>

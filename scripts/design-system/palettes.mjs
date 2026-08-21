@@ -199,6 +199,7 @@ const requiredPairings = () => {
   }
   add("--annotation-c", "--annotation-bg");
   add("--annotation-ink", "--annotation-bg");
+  add("--approve-action-ink", "--approve-action-bg");
   add("--diff-hunk-c", "--diff-hunk-bg");
   for (const token of SYNTAX_TOKENS) {
     for (const ground of CODE_GROUNDS) add(token, ground);

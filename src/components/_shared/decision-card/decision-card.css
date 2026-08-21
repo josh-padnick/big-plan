@@ -934,6 +934,12 @@
   article .decision-locked-note:not([hidden]) {
     display: flex;
   }
+  article .decision-approved-note:not([hidden]) {
+    display: flex;
+  }
+  article .decision[data-decision-approval-locked] .decision-fieldset {
+    pointer-events: none;
+  }
   article .decision-footer {
     background: color-mix(in srgb, var(--surface-c) 50%, var(--bg));
   }

@@ -1059,12 +1059,52 @@ test("should keep a note the browser refused to store rather than replacing it",
   await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
 });
 
+test("should say when a write fails and keep the typed note", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  // Reads still work, so reopening the sheet would otherwise replace the
+  // typed note with the default. Increment 5 is where that note is sent, so
+  // a failed write has to say so and keep the text.
+  await page.addInitScript(() => {
+    const store = Storage.prototype;
+    store.setItem = () => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    };
+    store.removeItem = () => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    };
+  });
+  await page.goto(sampleViewerUrl);
+  const settings = page.getByRole("button", { name: "Open settings" });
+  const message = page.getByRole("textbox", { name: "Message", exact: true });
+  const written = "Ship the worker rewrite before the queue cutover.";
+
+  await settings.click();
+  await openSection(page, "Approval message");
+  await message.fill(written);
+  await expect(
+    page.getByText(
+      "This note could not be saved. It is still here, but it will be lost if you close this page.",
+    ),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await settings.click();
+  await openSection(page, "Approval message");
+  await expect(message).toHaveValue(written);
+  await expect(
+    page.getByText(
+      "This note could not be saved. It is still here, but it will be lost if you close this page.",
+    ),
+  ).toBeVisible();
+});
+
 test("should open settings on the page an approve dialog asks for", async ({
   page,
   sampleViewerUrl,
 }) => {
-  // The review island's "Edit message" dispatches this event so the reviewer
-  // lands on the field instead of hunting the sidebar for it.
+  // The review island's "Edit in Settings" control dispatches this event so
+  // the reviewer lands on the field instead of hunting the sidebar for it.
   await page.goto(sampleViewerUrl);
   await page.evaluate(
     (key) => localStorage.removeItem(key),
@@ -1100,5 +1140,25 @@ test("should open settings on the page an approve dialog asks for", async ({
     );
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toBeHidden();
+  });
+
+  await test.step("closing returns focus to the control that asked", async () => {
+    await page.evaluate(() => {
+      const trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.textContent = "Edit message";
+      trigger.id = "approve-edit-message-standin";
+      document.body.append(trigger);
+      trigger.focus();
+      document.dispatchEvent(
+        new CustomEvent("bigplan:open-settings", {
+          detail: { category: "approval-message" },
+        }),
+      );
+    });
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
+    await expect(page.locator("#approve-edit-message-standin")).toBeFocused();
   });
 });
