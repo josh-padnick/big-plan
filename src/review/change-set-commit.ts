@@ -5,8 +5,9 @@
 //
 // One durable record per committed request answers two questions. Read in
 // commit order it is the revision log the reader's current snapshot advances
-// from; folded by change-set id it is each thread's stable baseline, its
-// provenance, and its latest committed result across every later reply.
+// from. Folded by change-set id, ordinary comment threads share a stable
+// baseline across later replies, while every pushed-thread transaction keeps
+// the immutable request-keyed identity it was committed with.
 //
 // When the full change-set aggregate lands it implements this contract without
 // adopting attempt files as domain state.
@@ -69,9 +70,9 @@ const revisionPath = ({
 };
 
 /**
- * A thread owns its change set, so every later reply advances the same one. A
- * plan-wide question owns a change set of its own, because no thread contains
- * it.
+ * Ordinary comment threads share one change set across replies. Plan-wide
+ * questions, pushes, and replies in pushed threads are immutable transactions
+ * addressed by their request ids.
  */
 export const changeSetIdsFor = ({
   response,

@@ -615,13 +615,21 @@ describe("agent exchange filesystem", () => {
     }
   });
 
-  it("should read a hand-written push as a projected thread and ignore an unknown request kind", async () => {
+  it("should read a hand-written push as a projected thread and ignore unknown stored kinds", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-push-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, before);
     const store = reviewStoreFor({ planPath, planId });
     await prepareStore(store);
-    const push = pushRequest();
+    const push = validateAgentRequest({
+      ...pushRequest({ threadId: "7777777777777777" }),
+      baselineSnapshot: deriveSnapshotDigest(before),
+      claimedAt: "2026-08-02T12:00:30.000Z",
+      claimedBy: agentSessionId,
+      claimExpiresAtMs: 1_775_000_000_000,
+      claimGeneration: 1,
+      answeredAt: "2026-08-02T12:01:00.000Z",
+    });
     await writeFile(
       join(store.agentRequestDirectory, `${push.requestId}.json`),
       JSON.stringify(push),
@@ -634,10 +642,25 @@ describe("agent exchange filesystem", () => {
         kind: "future",
       }),
     );
+    await writeFile(
+      join(store.agentResponseDirectory, `${push.requestId}.json`),
+      JSON.stringify({
+        version: 3,
+        requestId: push.requestId,
+        sessionId: push.sessionId,
+        planId: push.planId,
+        claimGeneration: push.claimGeneration,
+        resultSnapshot: push.baselineSnapshot,
+        createdAt: "2026-08-02T12:01:00.000Z",
+        kind: "future",
+        outcomes: [],
+      }),
+    );
 
     try {
       const exchange = await readAgentExchange({ store, sessionId, planId });
       expect(exchange.requests).toEqual([push]);
+      expect(exchange.responses).toEqual([]);
       const opener = commentsFromExchange(exchange).get(push.threadId);
       expect(opener).toEqual({
         id: push.threadId,
@@ -649,18 +672,19 @@ describe("agent exchange filesystem", () => {
       if (opener === undefined) {
         throw new Error("The push opener did not project as a comment");
       }
-      expect(
-        projectCommentThread({
-          comment: opener,
-          requests: exchange.requests,
-          responses: exchange.responses,
-          progressEvents: [],
-          presence: { connected: false, state: "waiting" },
-          runtime: "online",
-          nowMs: Date.parse(push.createdAt),
-          cancelPendingRequestIds: new Set(),
-        }).comment,
-      ).toEqual(opener);
+      const thread = projectCommentThread({
+        comment: opener,
+        requests: exchange.requests,
+        responses: exchange.responses,
+        progressEvents: [],
+        presence: { connected: false, state: "waiting" },
+        runtime: "online",
+        nowMs: Date.parse(push.createdAt),
+        cancelPendingRequestIds: new Set(),
+      });
+      expect(thread.comment).toEqual(opener);
+      expect(thread.exchanges).toHaveLength(1);
+      expect(thread.latestExchange?.request).toEqual(push);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
