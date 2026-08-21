@@ -4361,6 +4361,10 @@ test("should restore and submit staged comments through the local review runtime
   const reply = selectedThread.getByPlaceholder("Reply to the agent…");
   await expect(reply).toBeVisible();
   const selectedToolbar = selectedThread.locator(".review-thread-meta");
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(() => selectedToolbar.evaluate((node) => node.matches(":hover")))
+    .toBe(false);
   const restingToolbarBackground = await selectedToolbar.evaluate(
     (node) => getComputedStyle(node).backgroundColor,
   );

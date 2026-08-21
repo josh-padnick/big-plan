@@ -84,6 +84,7 @@ const MessageBody = ({
 /** Renders one exact legacy speaker turn on either feedback surface. */
 export const MessageTurn = ({
   role,
+  speakerLabel,
   surface,
   body,
   createdAt,
@@ -91,6 +92,7 @@ export const MessageTurn = ({
   children,
 }: {
   readonly role: "user" | "agent";
+  readonly speakerLabel?: string;
   readonly surface: MessageSurface;
   readonly body: string;
   readonly createdAt: string;
@@ -109,7 +111,7 @@ export const MessageTurn = ({
     >
       <div className="flex items-center gap-1.5 text-2xs text-muted">
         <strong className="text-2xs text-ink">
-          {role === "user" ? "You" : "Agent"}
+          {speakerLabel ?? (role === "user" ? "You" : "Agent")}
         </strong>
         <time className="ml-auto" dateTime={createdAt}>
           {role === "user" && delivery !== undefined
@@ -127,9 +129,13 @@ export const MessageTurn = ({
 export const ReviewerMessagePreview = ({
   body,
   onExpand,
+  role = "user",
+  label,
 }: {
   readonly body: string;
   readonly onExpand: () => void;
+  readonly role?: "user" | "agent";
+  readonly label?: string;
 }) => {
   const previewRef = useRef<HTMLSpanElement>(null);
   const [isTruncated, setIsTruncated] = useState(false);
@@ -146,8 +152,8 @@ export const ReviewerMessagePreview = ({
   return (
     <button
       type="button"
-      className={`${THREAD_BASE} ${ROLE_CLASSES.user} review-sent-summary block cursor-pointer text-left text-xs text-ink [line-height:1.45] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
-      aria-label={`Expand thread: ${body}`}
+      className={`${THREAD_BASE} ${ROLE_CLASSES[role]} review-sent-summary block cursor-pointer text-left text-xs text-ink [line-height:1.45] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+      aria-label={label ?? `Expand thread: ${body}`}
       aria-expanded="false"
       onClick={onExpand}
     >

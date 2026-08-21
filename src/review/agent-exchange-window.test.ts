@@ -40,6 +40,7 @@ const {
   outstandingAgentRequests,
   readAgentCommentHistory,
   readAgentExchange,
+  validateAgentRequest,
   validateAgentResponseDraft,
   writeAgentRequest,
 } = await import("./agent-exchange.js");
@@ -208,6 +209,101 @@ const answeredChat = async ({
   return id;
 };
 
+const canceledPush = async ({
+  store,
+  index,
+  threadId,
+  origin,
+  body,
+}: {
+  readonly store: Awaited<ReturnType<typeof temporaryStore>>;
+  readonly index: number;
+  readonly threadId: string;
+  readonly origin: "prompt" | "about";
+  readonly body: string;
+}): Promise<string> => {
+  const id = requestId(index);
+  const createdAt = new Date(1_800_000_000_000 + index * 1_000).toISOString();
+  await writeAgentRequest({
+    store,
+    request: validateAgentRequest({
+      version: 3,
+      requestId: id,
+      sessionId: SESSION,
+      planId: PLAN_ID,
+      premiseSnapshot: SNAPSHOT,
+      createdAt,
+      attachmentManifest: [],
+      attachments: [],
+      kind: "push",
+      origin,
+      body,
+      threadId,
+      canceledAt: createdAt,
+    }),
+  });
+  return id;
+};
+
+const answeredPush = async ({
+  store,
+  index,
+}: {
+  readonly store: Awaited<ReturnType<typeof temporaryStore>>;
+  readonly index: number;
+}): Promise<string> => {
+  const id = requestId(index);
+  const createdAtMs = 1_800_000_000_000 + index * 1_000;
+  const createdAt = new Date(createdAtMs).toISOString();
+  const answeredAt = new Date(createdAtMs + 1_000).toISOString();
+  const request = validateAgentRequest({
+    version: 3,
+    requestId: id,
+    sessionId: SESSION,
+    planId: PLAN_ID,
+    premiseSnapshot: SNAPSHOT,
+    createdAt,
+    attachmentManifest: [],
+    attachments: [],
+    kind: "push",
+    origin: "about",
+    body: `Thread ${index}`,
+    threadId: id,
+    baselineSnapshot: SNAPSHOT,
+    claimedAt: createdAt,
+    claimedBy: SESSION,
+    claimExpiresAtMs: createdAtMs + AGENT_CLAIM_LEASE_MS,
+    claimGeneration: 1,
+    answeredAt,
+  });
+  await writeAgentResponseValue({
+    store,
+    requestId: id,
+    value: validateAgentResponseDraft({
+      value: {
+        requestId: id,
+        outcomes: [
+          {
+            commentId: id,
+            state: "declined",
+            message: `No change for thread ${index}`,
+          },
+        ],
+      },
+      request,
+      commentsById: commentsFromExchange({
+        requests: [request],
+        responses: [],
+      }),
+      changedBlocks: new Set(),
+      currentSnapshot: SNAPSHOT,
+      now: answeredAt,
+    }),
+  });
+  await writeAgentRequest({ store, request });
+  return id;
+};
+
 describe("the agent exchange read window", () => {
   it("should read only the responses of the comment it was asked about", async () => {
     const store = await temporaryStore();
@@ -315,6 +411,72 @@ describe("the agent exchange read window", () => {
 
     expect(snapshot.responses).toHaveLength(1);
     expect(counters.responseReads).toHaveLength(1);
+  });
+
+  it("should retain a pushed thread opener outside the terminal window", async () => {
+    const store = await temporaryStore();
+    const threadId = requestId(1);
+    const opener = await canceledPush({
+      store,
+      index: 1,
+      threadId,
+      origin: "about",
+      body: "Canonical opener",
+    });
+    for (let index = 2; index <= 401; index += 1) {
+      await answeredChat({ store, index });
+    }
+    const continuation = await canceledPush({
+      store,
+      index: 402,
+      threadId,
+      origin: "prompt",
+      body: "Retained continuation",
+    });
+
+    const snapshot = await readAgentExchange({
+      store,
+      sessionId: SESSION,
+      planId: PLAN_ID,
+    });
+
+    expect(snapshot.requests[0]?.requestId).toBe(opener);
+    expect(snapshot.requests.at(-1)?.requestId).toBe(continuation);
+    expect(
+      snapshot.requests.filter(
+        (request) => request.kind === "push" && request.threadId === threadId,
+      ),
+    ).toMatchObject([
+      { requestId: opener, origin: "about", body: "Canonical opener" },
+      {
+        requestId: continuation,
+        origin: "prompt",
+        body: "Retained continuation",
+      },
+    ]);
+  });
+
+  it("should bound response reads while retaining every pushed opener", async () => {
+    const store = await temporaryStore();
+    const openerIds: Array<string> = [];
+    for (let index = 1; index <= 401; index += 1) {
+      openerIds.push(await answeredPush({ store, index }));
+    }
+
+    counters.responseReads = [];
+    const snapshot = await readAgentExchange({
+      store,
+      sessionId: SESSION,
+      planId: PLAN_ID,
+    });
+
+    expect(snapshot.requests.map((request) => request.requestId)).toEqual(
+      openerIds,
+    );
+    expect(snapshot.responses.map((response) => response.requestId)).toEqual(
+      openerIds.slice(-400),
+    );
+    expect(counters.responseReads).toHaveLength(400);
   });
 });
 

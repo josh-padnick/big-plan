@@ -26,6 +26,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { BOT_ICON } from "../../icons/lucide/bot.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
@@ -59,6 +60,7 @@ import {
   selectPrimaryAgent,
 } from "../shared/agent-primacy.js";
 import { selectAgentModelIdentity } from "../shared/agent-model.js";
+import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
 import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
@@ -77,6 +79,7 @@ import {
 } from "../shared/thread-open-state.js";
 import {
   projectCommentThreads,
+  projectPushedThreadOpeners,
   projectLatestAgentStatus,
   projectRequestActivity,
   projectRequestDelivery,
@@ -182,7 +185,7 @@ import {
   mergeLiveReviewRecovery,
   mergeReviewStateAfterHydration,
   refreshReviewRecoveryConflicts,
-  repliesForSentComments,
+  repliesForKnownComments,
   resolveReviewRecoveryConflict,
   resumeLiveReviewRecovery,
   reviewRecoveryBase,
@@ -2458,6 +2461,9 @@ const CommentComposer = ({
 
 const CommentCardHeader = ({
   target,
+  targetLabelOverride,
+  targetTitleOverride,
+  targetIcon,
   surface,
   metaClassName,
   targetClassName,
@@ -2468,6 +2474,9 @@ const CommentCardHeader = ({
   children,
 }: {
   readonly target: CommentTarget;
+  readonly targetLabelOverride?: string;
+  readonly targetTitleOverride?: string;
+  readonly targetIcon?: LucideIcon;
   readonly surface: StagedCardSurface;
   readonly metaClassName: string;
   readonly targetClassName: string;
@@ -2478,24 +2487,32 @@ const CommentCardHeader = ({
   readonly children: ReactNode;
 }) => (
   <div
-    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar"} ${onHeaderClick === undefined ? "" : "cursor-pointer transition-colors hover:bg-[color-mix(in_srgb,var(--comment-toolbar-c)_94%,var(--ink-c))]!"}`}
+    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar"} ${onHeaderClick === undefined ? "" : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--comment-toolbar-c)_94%,var(--ink-c))]!"}`}
     style={{ padding: "3px 5px" }}
     onClick={onHeaderClick}
   >
     <button
       type="button"
-      className={`${targetClassName} min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 pl-0.5 text-left leading-normal focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${onHeaderClick === undefined ? "hover:underline" : ""} ${surface === "thread" ? "text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
+      className={`${targetClassName} inline-flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-0 bg-transparent p-0 pl-0.5 text-left leading-normal focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${onHeaderClick === undefined ? "hover:underline" : ""} ${surface === "thread" ? "text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
       onClick={(event) => {
         event.stopPropagation();
         (onTargetClick ?? onHeaderClick ?? onJump)();
       }}
       title={
-        onTargetClick === undefined && onHeaderClick !== undefined
+        targetTitleOverride ??
+        (onTargetClick === undefined && onHeaderClick !== undefined
           ? "Minimize comment"
-          : `Go to ${targetLabel(target, true)}`
+          : `Go to ${targetLabel(target, true)}`)
       }
     >
-      {targetLabel(target, true)}
+      {targetIcon === undefined ? null : (
+        <span className="shrink-0 [&>svg]:size-3.5" aria-hidden="true">
+          <Icon icon={targetIcon} />
+        </span>
+      )}
+      <span className="truncate">
+        {targetLabelOverride ?? targetLabel(target, true)}
+      </span>
     </button>
     <div
       className={`${actionsClassName} ml-auto flex shrink-0 items-center gap-1`}
@@ -3313,6 +3330,7 @@ const SentThread = ({
   compact = false,
   queuePosition,
   suppressPendingStatus = false,
+  pushedOrigin,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -3346,6 +3364,7 @@ const SentThread = ({
   readonly compact?: boolean;
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
+  readonly pushedOrigin?: "prompt" | "about";
 }) => {
   const {
     exchanges,
@@ -3416,7 +3435,8 @@ const SentThread = ({
       ? "Response reverted"
       : "Revert unavailable - the plan changed again";
   const canDeleteComment =
-    canDeleteQueued || canDeleteCanceled || latestChangeWasReverted;
+    pushedOrigin === undefined &&
+    (canDeleteQueued || canDeleteCanceled || latestChangeWasReverted);
   // An affordance a pickup had taken away says why it is back, wherever it
   // appears. The rail and the summary card have room for the label alone, so
   // the label carries the reason and the expanded card explains it in full.
@@ -3429,6 +3449,8 @@ const SentThread = ({
         : deleteKind === "abandoned"
           ? "Delete comment - the agent that picked it up stopped reporting"
           : "Delete queued comment";
+  const pushedOriginLabel =
+    pushedOrigin === "about" ? "Agent-opened · About" : null;
 
   // Every control in this thread that writes - replying, deleting, reverting,
   // and canceling - is held back by the same answer, so a reviewer is told the
@@ -3587,16 +3609,28 @@ const SentThread = ({
         data-review-comment-ui=""
         data-review-associated={associated ? "true" : undefined}
         data-review-selected={selected ? "true" : undefined}
+        {...(pushedOrigin === undefined
+          ? {}
+          : { "data-review-pushed-thread": comment.id })}
       >
         <CommentCardHeader
           target={comment.target}
+          targetLabelOverride={
+            pushedOrigin === undefined ? undefined : "Added by agent"
+          }
+          targetTitleOverride={
+            pushedOrigin === undefined
+              ? undefined
+              : "This thread was added by the agent"
+          }
+          targetIcon={pushedOrigin === undefined ? undefined : BOT_ICON}
           surface={surface}
           metaClassName="review-thread-meta"
           targetClassName="review-sent-target"
           actionsClassName="review-thread-actions"
           onJump={onJump}
           onHeaderClick={onToggle}
-          onTargetClick={onJump}
+          onTargetClick={pushedOrigin === undefined ? onJump : onToggle}
         >
           <ThreadIconButton
             label="Expand thread"
@@ -3632,7 +3666,21 @@ const SentThread = ({
           />
         </CommentCardHeader>
         <div className="p-3">
-          <ReviewerMessagePreview body={comment.body} onExpand={onToggle} />
+          {pushedOriginLabel === null ? null : (
+            <Badge tone="secondary" size="status" className="mb-2">
+              {pushedOriginLabel}
+            </Badge>
+          )}
+          <ReviewerMessagePreview
+            body={comment.body}
+            onExpand={onToggle}
+            role={pushedOrigin === "about" ? "agent" : "user"}
+            label={
+              pushedOrigin === undefined
+                ? undefined
+                : `Expand pushed thread: ${comment.body}`
+            }
+          />
           <div className="review-sent-metadata mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-edge pt-2 text-xs text-muted">
             <span className="flex min-w-0 items-baseline gap-1.5 truncate">
               <span className="font-medium">{railState}</span>
@@ -3696,16 +3744,34 @@ const SentThread = ({
       data-review-comment-ui=""
       data-review-associated={associated ? "true" : undefined}
       data-review-selected={selected ? "true" : undefined}
+      {...(pushedOrigin === undefined
+        ? {}
+        : { "data-review-pushed-thread": comment.id })}
     >
       <CommentCardHeader
         target={comment.target}
+        targetLabelOverride={
+          pushedOrigin === undefined ? undefined : "Added by agent"
+        }
+        targetTitleOverride={
+          pushedOrigin === undefined
+            ? undefined
+            : "This thread was added by the agent"
+        }
+        targetIcon={pushedOrigin === undefined ? undefined : BOT_ICON}
         surface={surface}
         metaClassName="review-thread-meta"
         targetClassName="review-sent-target"
         actionsClassName="review-thread-actions"
         onJump={onJump}
         onHeaderClick={onToggle}
-        onTargetClick={surface === "rail" ? onJump : undefined}
+        onTargetClick={
+          pushedOrigin === undefined
+            ? surface === "rail"
+              ? onJump
+              : undefined
+            : onToggle
+        }
       >
         <ThreadIconButton
           label="Minimize thread"
@@ -3741,6 +3807,11 @@ const SentThread = ({
         />
       </CommentCardHeader>
       <div className={surface === "rail" ? "min-w-0 p-3" : ""}>
+        {pushedOriginLabel === null ? null : (
+          <Badge tone="secondary" size="status" className="mt-2">
+            {pushedOriginLabel}
+          </Badge>
+        )}
         {!targetPresent ? (
           <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)] [overflow-wrap:anywhere]">
             The part of the plan you commented on has since been changed. You
@@ -3784,7 +3855,19 @@ const SentThread = ({
                 return (
                   <div key={request.requestId}>
                     <MessageTurn
-                      role="user"
+                      role={
+                        request.kind === "push" && request.origin === "about"
+                          ? "agent"
+                          : "user"
+                      }
+                      speakerLabel={
+                        request.kind === "push" && request.origin === "prompt"
+                          ? "You said"
+                          : request.kind === "push" &&
+                              request.origin === "about"
+                            ? (request.claimedModel?.name ?? "Agent")
+                            : undefined
+                      }
                       surface="thread"
                       body={
                         request.kind === "feedback"
@@ -3792,7 +3875,11 @@ const SentThread = ({
                           : (request.body ?? "")
                       }
                       createdAt={request.createdAt}
-                      delivery={delivery}
+                      delivery={
+                        request.kind === "push" && request.origin === "about"
+                          ? undefined
+                          : delivery
+                      }
                     >
                       {response === undefined ? (
                         <StalePremiseNotice
@@ -3831,6 +3918,12 @@ const SentThread = ({
                     ) : (
                       <MessageTurn
                         role="agent"
+                        speakerLabel={
+                          pushedOrigin === undefined ||
+                          request.claimedModel?.name === undefined
+                            ? undefined
+                            : agentModelDisplayName(request.claimedModel.name)
+                        }
                         surface="thread"
                         body={requestOutcome.message}
                         createdAt={response.createdAt}
@@ -4255,6 +4348,14 @@ export const ReviewController = () => {
   useEffect(() => {
     setApproval(runtimeSession?.approval);
   }, [runtimeSession?.approval]);
+  const pushedThreadOpeners = useMemo(
+    () => projectPushedThreadOpeners(agent.requests),
+    [agent.requests],
+  );
+  const pushedThreadComments = useMemo(
+    () => pushedThreadOpeners.map((opener) => opener.comment),
+    [pushedThreadOpeners],
+  );
   const pollIsOffline = reviewPollIsOffline(pollHealth);
   const serverGone = reviewRuntimeIsDown(pollHealth);
   // Only a runtime that is answering can report this, so it never competes
@@ -4542,9 +4643,9 @@ export const ReviewController = () => {
         );
       });
       replaceReplyDrafts(
-        repliesForSentComments({
+        repliesForKnownComments({
           replies: replyDraftsRef.current,
-          sent: snapshot.sent,
+          comments: [...snapshot.sent, ...pushedThreadComments],
         }),
       );
       if (merged.conflicts.length > 0) {
@@ -4569,6 +4670,7 @@ export const ReviewController = () => {
       applyReviewState,
       markPersistedReviewState,
       observeRuntimeReviewState,
+      pushedThreadComments,
       replaceRecoveryReconciliation,
       replaceReplyDrafts,
     ],
@@ -5461,13 +5563,7 @@ export const ReviewController = () => {
           const composerAfterHydration = mergeRecoveredComposerAfterHydration({
             before: composerBeforeHydration,
             current: composerRecoveryRef.current,
-            recovered: {
-              ...recoveredComposer,
-              replies: repliesForSentComments({
-                replies: recoveredComposer.replies,
-                sent: snapshot.sent,
-              }),
-            },
+            recovered: recoveredComposer,
           });
           const detached =
             restoreComposer(composerAfterHydration) === "detached";
@@ -5547,6 +5643,21 @@ export const ReviewController = () => {
     replaceRecoveryReconciliation,
     restoreComposer,
     runtimeSessionOrder,
+  ]);
+
+  useEffect(() => {
+    if (!hasObservedAgentSnapshot) return;
+    replaceReplyDrafts(
+      repliesForKnownComments({
+        replies: replyDraftsRef.current,
+        comments: [...sent, ...pushedThreadComments],
+      }),
+    );
+  }, [
+    hasObservedAgentSnapshot,
+    pushedThreadComments,
+    replaceReplyDrafts,
+    sent,
   ]);
 
   useEffect(() => {
@@ -6591,8 +6702,15 @@ export const ReviewController = () => {
       ? {}
       : { presenceRequestId: agent.presence.requestId }),
   });
+  const pushedThreadOriginById = new Map(
+    pushedThreadOpeners.map((opener) => [opener.comment.id, opener.origin]),
+  );
+  const sentIds = new Set(sent.map((comment) => comment.id));
   const threadProjections = projectCommentThreads({
-    comments: sent,
+    comments: [
+      ...sent,
+      ...pushedThreadComments.filter((comment) => !sentIds.has(comment.id)),
+    ],
     requests: agent.requests,
     responses: agent.responses,
     progressEvents: progress,
@@ -6680,6 +6798,61 @@ export const ReviewController = () => {
         onCancelRequest={(requestId) => void cancelRequest(requestId)}
         currentSnapshot={currentSnapshot}
       />
+    );
+  };
+  const unresolvedPushedThreadComments = pushedThreadComments.filter(
+    (comment) => !resolvedCommentIds.has(comment.id),
+  );
+  const resolvedPushedThreadComments = pushedThreadComments.filter((comment) =>
+    resolvedCommentIds.has(comment.id),
+  );
+  const renderPushedThread = (comment: ReviewComment) => {
+    if (identity === null) return null;
+    const thread = threadProjections.get(comment.id);
+    const pushedOrigin = pushedThreadOriginById.get(comment.id);
+    if (thread === undefined || pushedOrigin === undefined) return null;
+    const resolved = resolvedCommentIds.has(comment.id);
+    return (
+      <li key={comment.id} className="min-w-0">
+        <SentThread
+          comment={comment}
+          surface="rail"
+          associated={false}
+          selected={false}
+          identity={identity}
+          thread={thread}
+          expanded={threadIsOpen({
+            commentId: comment.id,
+            kind: "sent",
+            surface: "rail",
+          })}
+          resolved={resolved}
+          onToggle={() =>
+            toggleCommentThread({
+              commentId: comment.id,
+              kind: "sent",
+              surface: "rail",
+            })
+          }
+          onResolve={() => toggleResolvedComment(comment.id)}
+          onJump={() => undefined}
+          onAssociate={() => undefined}
+          onReplySent={setStatus}
+          onShowAgent={openAgentSidebar}
+          onCancelRequest={(requestId) => void cancelRequest(requestId)}
+          onDelete={() => undefined}
+          onRevert={(requestId, commentId) =>
+            setPendingRevert({ requestId, commentId })
+          }
+          currentSnapshot={currentSnapshot}
+          reply={replyDrafts.get(comment.id) ?? ""}
+          onReplyChange={(body) => changeReplyDraft(comment.id, body)}
+          isReplying={replyPendingCommentIds.has(comment.id)}
+          onReply={(body) => void sendThreadReply(comment.id, body)}
+          writeAvailability={writeAvailability}
+          pushedOrigin={pushedOrigin}
+        />
+      </li>
     );
   };
   const unresolvedSent = sent.filter(
@@ -6841,6 +7014,25 @@ export const ReviewController = () => {
     const request = agent.requests.find(
       (candidate) => candidate.requestId === requestId,
     );
+    if (
+      kind === "push" &&
+      request?.kind === "push" &&
+      request.threadId !== undefined
+    ) {
+      const threadId = request.threadId;
+      setThreadOpenState((current) =>
+        setThreadOpen({
+          state: current,
+          commentId: threadId,
+          kind: "sent",
+          surface: "rail",
+          isRailOpen: isOpen,
+          open: true,
+        }),
+      );
+      openFeedbackSidebar("chat");
+      return;
+    }
     const commentId =
       request === undefined ? undefined : requestCommentIds(request)[0];
     if (commentId === undefined) return;
@@ -7480,6 +7672,12 @@ export const ReviewController = () => {
                 isSending: isSendingChat,
                 hasExchanges: activeChatRequests.length > 0,
                 exchanges: activeChatRequests.map(renderChatExchange),
+                pushedThreadCount: unresolvedPushedThreadComments.length,
+                pushedThreads:
+                  unresolvedPushedThreadComments.map(renderPushedThread),
+                resolvedPushedThreadCount: resolvedPushedThreadComments.length,
+                resolvedPushedThreads:
+                  resolvedPushedThreadComments.map(renderPushedThread),
                 archivedCount: archivedChatRequests.length,
                 archivedExchanges: archivedChatRequests.map(renderChatExchange),
                 onBodyChange: setChatBody,
