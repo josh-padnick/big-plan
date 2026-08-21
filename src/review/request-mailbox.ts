@@ -3,9 +3,11 @@
 // new reply or feedback cannot interleave into a resolved thread that holds
 // outstanding work.
 
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   AgentExchangeRejected,
+  deriveSnapshotDigest,
   outstandingAgentRequests,
   readAgentCommentHistory,
   readValidatedAgentRequests,
@@ -16,6 +18,7 @@ import {
 import type {
   AgentChatRequest,
   AgentFeedbackRequest,
+  AgentPushRequest,
   AgentReplyRequest,
   AgentRequest,
   AgentResponse,
@@ -44,6 +47,7 @@ import {
   withReviewStoreLock,
   writeAgentRequestValue,
   writeAgentResponseValue,
+  writeSnapshot,
 } from "./store.js";
 import {
   changeSetIdsFor,
@@ -62,6 +66,7 @@ import type {
   ProgressEvent,
   ReviewStore,
 } from "./store.js";
+import type { MutationStage } from "./staged-plan-mutation.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 
@@ -549,12 +554,14 @@ const assertPlanIsFree = async ({
   activeSessionId,
   planId,
   requestId,
+  claimedBy,
   nowMs,
 }: {
   readonly store: ReviewStore;
   readonly activeSessionId: string;
   readonly planId: string;
   readonly requestId: string;
+  readonly claimedBy?: string;
   readonly nowMs: number;
 }): Promise<void> => {
   const requests = await readValidatedAgentRequests({
@@ -562,17 +569,222 @@ const assertPlanIsFree = async ({
     sessionId: activeSessionId,
     planId,
   });
-  if (
-    requests.some(
-      (candidate) =>
-        candidate.requestId !== requestId &&
-        requestBlocksPlanPickup({ request: candidate, nowMs }),
-    )
-  ) {
+  const blockingRequest = requests.find(
+    (candidate) =>
+      candidate.requestId !== requestId &&
+      requestBlocksPlanPickup({ request: candidate, nowMs }),
+  );
+  if (claimedBy !== undefined && blockingRequest?.claimedBy === claimedBy) {
+    throw new AgentClaimContended(
+      "This agent is mid-answer on another request; respond to it first, or ask the reviewer to cancel it, so the two publishes stay separate revisions",
+    );
+  }
+  if (blockingRequest !== undefined) {
     throw new AgentClaimContended(
       "Another agent session is working on this plan",
     );
   }
+};
+
+export type MintAgentPushResult = {
+  readonly request: AgentPushRequest;
+  readonly stage: MutationStage;
+  readonly threadOpened: boolean;
+  readonly queuedReviewerMessages: number;
+};
+
+/**
+ * Opens and claims one agent-initiated request against a frozen plan snapshot.
+ *
+ * The plan claim lock comes before the new request lock, matching ordinary
+ * pickup. The snapshot is durable before either the request or its stage can
+ * refer to it, and the request is visible only after every plan-wide refusal
+ * has passed.
+ */
+export const mintAgentPush = async ({
+  store,
+  planPath,
+  activeSessionId,
+  planId,
+  requestId,
+  claimedBy,
+  connectionToken,
+  model,
+  origin,
+  body,
+  threadId,
+  now,
+  clock = Date.now,
+}: {
+  readonly store: ReviewStore;
+  readonly planPath: string;
+  readonly activeSessionId: string;
+  readonly planId: string;
+  readonly requestId: string;
+  readonly claimedBy: string;
+  readonly connectionToken?: string;
+  readonly model?: AgentModelIdentity;
+  readonly origin: AgentPushRequest["origin"];
+  readonly body: string;
+  readonly threadId?: string;
+  readonly now: string;
+  readonly clock?: Clock;
+}): Promise<MintAgentPushResult> => {
+  if (Number.isNaN(Date.parse(now))) {
+    throw new AgentExchangeRejected("A claim time must be an ISO timestamp");
+  }
+  const minted = await withPlanClaimLock({
+    store,
+    change: (planStore) =>
+      withRequestLock({
+        store: planStore,
+        requestId,
+        change: async (lockedStore) => {
+          const nowMs = readClock(clock);
+          const requests = await readValidatedAgentRequests({
+            store: lockedStore,
+            sessionId: activeSessionId,
+            planId,
+          });
+          await assertPlanIsFree({
+            store: lockedStore,
+            activeSessionId,
+            planId,
+            requestId,
+            claimedBy,
+            nowMs,
+          });
+          const openPush = requests.find(
+            (candidate): candidate is AgentPushRequest =>
+              candidate.kind === "push" &&
+              candidate.answeredAt === undefined &&
+              candidate.canceledAt === undefined,
+          );
+          if (openPush !== undefined) {
+            throw new AgentExchangeRejected(
+              `This agent already holds an open push (thread ${openPush.threadId}); respond to it, or ask the reviewer to cancel it`,
+            );
+          }
+          const continuedThread =
+            threadId === undefined
+              ? undefined
+              : requests.find(
+                  (candidate) =>
+                    candidate.kind === "push" &&
+                    candidate.requestId === threadId &&
+                    candidate.threadId === threadId,
+                );
+          if (threadId !== undefined && continuedThread === undefined) {
+            throw new AgentExchangeRejected(
+              `No pushed thread ${threadId} exists on this plan`,
+            );
+          }
+          return withResolvedCommentLock({
+            store: lockedStore,
+            change: async () => {
+              if (threadId !== undefined) {
+                await assertCommentsAreUnresolved({
+                  store: lockedStore,
+                  commentIds: [threadId],
+                });
+              }
+              const source = await readFile(planPath, "utf8");
+              const premiseSnapshot = deriveSnapshotDigest(source);
+              await writeSnapshot({
+                store: lockedStore,
+                snapshot: premiseSnapshot,
+                source,
+              });
+              const actualThreadId = threadId ?? requestId;
+              const unclaimed = validateAgentRequest({
+                version: 3,
+                kind: "push",
+                requestId,
+                sessionId: activeSessionId,
+                planId,
+                premiseSnapshot,
+                createdAt: now,
+                origin,
+                body,
+                threadId: actualThreadId,
+                attachmentManifest: [],
+                attachments: [],
+              });
+              if (unclaimed.kind !== "push") {
+                throw new AgentExchangeRejected(
+                  "The push request could not be created",
+                );
+              }
+              await writeAgentRequestValue({
+                store: lockedStore,
+                requestId,
+                value: unclaimed,
+              });
+              const request = validateAgentRequest({
+                ...unclaimed,
+                baselineSnapshot: premiseSnapshot,
+                claimedAt: now,
+                claimedBy,
+                claimedByConnection: connectionToken,
+                claimedModel: model,
+                claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
+                claimGeneration: 1,
+              });
+              if (request.kind !== "push") {
+                throw new AgentExchangeRejected(
+                  "The push request could not be claimed",
+                );
+              }
+              await writeAgentRequestValue({
+                store: lockedStore,
+                requestId,
+                value: request,
+              });
+              // The publication module imports the mailbox commit boundary, so
+              // this late import keeps stage creation on the mint path without
+              // introducing an eager module cycle during review startup.
+              const { openMutationStage } =
+                await import("./staged-plan-mutation.js");
+              const stage = await openMutationStage({
+                store: lockedStore,
+                requestId,
+                generation: 1,
+                claimedBy,
+                baseSnapshot: premiseSnapshot,
+                baseSource: source,
+                now,
+              });
+              return {
+                request,
+                stage,
+                threadOpened: threadId === undefined,
+                queuedReviewerMessages: requests.filter(
+                  (candidate) =>
+                    candidate.kind !== "push" &&
+                    candidate.answeredAt === undefined &&
+                    candidate.canceledAt === undefined,
+                ).length,
+              };
+            },
+          });
+        },
+      }),
+  });
+  await appendProgressEvent({
+    store,
+    event: {
+      sessionId: activeSessionId,
+      requestId,
+      atMs: readClock(clock),
+      stepCode: "push-opened",
+      step: "Agent opened a plan push",
+      state: "live",
+      detail: minted.threadOpened
+        ? "New pushed thread"
+        : `Continued pushed thread ${minted.request.threadId}`,
+    },
+  }).catch(() => undefined);
+  return minted;
 };
 
 /**
@@ -922,17 +1134,23 @@ const committedRevisionOf = async ({
   readonly request: AgentRequest;
   readonly response: AgentResponse;
   readonly at: string;
-}): Promise<CommittedPlanRevision> => ({
-  requestId: response.requestId,
-  changeSetIds: changeSetIdsFor({
-    response,
-    isPushedThread: await requestTargetsPushedThread({ store, request }),
-  }),
-  baseSnapshot: requestBaselineSnapshot(request),
-  resultSnapshot: response.resultSnapshot,
-  provenance: response.kind,
-  committedAt: at,
-});
+}): Promise<CommittedPlanRevision | undefined> => {
+  const baseSnapshot = requestBaselineSnapshot(request);
+  if (request.kind === "push" && response.resultSnapshot === baseSnapshot) {
+    return undefined;
+  }
+  return {
+    requestId: response.requestId,
+    changeSetIds: changeSetIdsFor({
+      response,
+      isPushedThread: await requestTargetsPushedThread({ store, request }),
+    }),
+    baseSnapshot,
+    resultSnapshot: response.resultSnapshot,
+    provenance: response.kind,
+    committedAt: at,
+  };
+};
 
 export class AgentClaimGenerationStale extends AgentExchangeRejected {
   constructor() {
@@ -1035,15 +1253,15 @@ export const commitRequestTerminal = async ({
       });
       // The Change Engine learns about a revision here and nowhere else, so a
       // change set can only ever describe work that crossed this boundary.
-      await recordCommittedRevision({
+      const revision = await committedRevisionOf({
         store: lockedStore,
-        revision: await committedRevisionOf({
-          store: lockedStore,
-          request,
-          response,
-          at: now,
-        }),
+        request,
+        response,
+        at: now,
       });
+      if (revision !== undefined) {
+        await recordCommittedRevision({ store: lockedStore, revision });
+      }
       await writeAgentRequestValue({
         store: lockedStore,
         requestId: response.requestId,
@@ -1111,15 +1329,15 @@ export const completeRequestTerminal = async ({
         requestId: response.requestId,
         value: response,
       });
-      await recordCommittedRevision({
+      const revision = await committedRevisionOf({
         store: lockedStore,
-        revision: await committedRevisionOf({
-          store: lockedStore,
-          request: answered,
-          response,
-          at: now,
-        }),
+        request: answered,
+        response,
+        at: now,
       });
+      if (revision !== undefined) {
+        await recordCommittedRevision({ store: lockedStore, revision });
+      }
       await writeAgentRequestValue({
         store: lockedStore,
         requestId: response.requestId,

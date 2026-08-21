@@ -13,6 +13,7 @@ const USAGE = [
   "Usage:",
   "  big-plan agent <input.mdx>",
   "  big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]",
+  '  big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]',
   '  big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]',
   "  big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]",
   "",
@@ -32,7 +33,7 @@ const invalidArguments = (): never => {
 const executablePath = (): string =>
   resolve(process.argv[1] ?? "bin/big-plan.mjs");
 
-const RESERVED_ACTIONS = new Set(["next", "note", "respond"]);
+const RESERVED_ACTIONS = new Set(["next", "push", "note", "respond"]);
 const AGENT_TOKEN = /^[a-f0-9]{16}$/;
 
 // The connector's own report of which model is running it, e.g. "Grok 4.6".
@@ -98,6 +99,43 @@ const takeTokenFlag = (
   };
 };
 
+/** Reads the mutually exclusive push wording and optional thread id. */
+const parsePushFlags = (
+  args: ReadonlyArray<string>,
+): {
+  readonly origin: "prompt" | "about";
+  readonly body: string;
+  readonly threadId?: string;
+} => {
+  const values = new Map<string, string>();
+  for (let index = 0; index < args.length; index += 2) {
+    const flag = args[index];
+    const value = args[index + 1];
+    if (
+      (flag !== "--prompt" && flag !== "--about" && flag !== "--thread") ||
+      value === undefined ||
+      values.has(flag)
+    ) {
+      return invalidArguments();
+    }
+    values.set(flag, value);
+  }
+  const prompt = values.get("--prompt");
+  const about = values.get("--about");
+  if ((prompt === undefined) === (about === undefined)) {
+    return invalidArguments();
+  }
+  const threadId = values.get("--thread");
+  if (threadId !== undefined && !AGENT_TOKEN.test(threadId)) {
+    return invalidArguments();
+  }
+  return {
+    origin: prompt === undefined ? "about" : "prompt",
+    body: prompt ?? about ?? "",
+    ...(threadId === undefined ? {} : { threadId }),
+  };
+};
+
 /** Parses one public command into the review-owned work-loop action. */
 const parseAction = (
   args: ReadonlyArray<string>,
@@ -130,6 +168,27 @@ const parseAction = (
       planPath: args[1] ?? "",
       shouldWait: args[2] === "--wait",
       executablePath: executablePath(),
+      ...(agentToken === undefined ? {} : { agentToken }),
+      ...(connectionToken === undefined ? {} : { connectionToken }),
+      ...(modelName === undefined ? {} : { modelName }),
+      ...(modelEffort === undefined ? {} : { modelEffort }),
+      ...(modelClient === undefined ? {} : { modelClient }),
+      ...(sessionUrl === undefined ? {} : { sessionUrl }),
+      ...(sessionId === undefined ? {} : { sessionId }),
+    };
+  }
+  if (args[0] === "push" && args.length >= 4) {
+    const push = parsePushFlags(args.slice(2));
+    const modelName = connectorModelName();
+    const modelEffort = connectorModelEffort();
+    const modelClient = connectorClient();
+    const sessionUrl = connectorSessionUrl();
+    const sessionId = connectorSessionId();
+    return {
+      kind: "push",
+      planPath: args[1] ?? "",
+      executablePath: executablePath(),
+      ...push,
       ...(agentToken === undefined ? {} : { agentToken }),
       ...(connectionToken === undefined ? {} : { connectionToken }),
       ...(modelName === undefined ? {} : { modelName }),
@@ -200,9 +259,11 @@ export const agentCommand = async (
     const code =
       error.code === "validation-error"
         ? "VALIDATION_ERROR"
-        : error.code === "agent-disconnected"
-          ? "AGENT_DISCONNECTED"
-          : "INVALID_INPUT";
+        : error.code === "source-moved"
+          ? "SOURCE_MOVED"
+          : error.code === "agent-disconnected"
+            ? "AGENT_DISCONNECTED"
+            : "INVALID_INPUT";
     throw new AxiError(
       error.message,
       code,
