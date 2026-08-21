@@ -130,6 +130,7 @@ export type ReviewStore = {
   readonly inputsPath: string;
   readonly changeDispositionsPath: string;
   readonly approvalPath: string;
+  readonly approvalFinalizationPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
   readonly agentConnectionDirectory: string;
@@ -516,6 +517,10 @@ export const reviewStoreFor = ({
       leaf: "dispositions.json",
     }),
     approvalPath: inside({ base: reviewDirectory, leaf: "approval.json" }),
+    approvalFinalizationPath: inside({
+      base: reviewDirectory,
+      leaf: "approval-finalization.json",
+    }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
     agentConnectionDirectory: inside({

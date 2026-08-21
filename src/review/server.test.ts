@@ -6613,6 +6613,18 @@ describe("review runtime approval", () => {
     await withApprovalRuntime(
       criticalPlan,
       async ({ target, sessionToken, digest }) => {
+        await writeAgentRequest({
+          store: target.store,
+          request: messageAgentRequest({
+            sessionId: target.sessionId,
+            planId: target.planId,
+            requestId: "cccccccccccccccc",
+            kind: "chat",
+            body: "Keep this request open.",
+            premiseSnapshot: digest,
+            createdAt: "2026-08-19T17:00:00.000Z",
+          }),
+        });
         const response = await approve(target, sessionToken, {
           expectedSnapshot: digest,
         });
@@ -6621,6 +6633,12 @@ describe("review runtime approval", () => {
           code: "critical-unanswered",
           blockingDecisionIds: [DECISION_ID],
         });
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests[0]?.canceledAt).toBeUndefined();
       },
     );
   });
@@ -6700,6 +6718,77 @@ describe("review runtime approval", () => {
         });
         expect(exchange.requests[0]?.canceledAt).toBeDefined();
         void planPath;
+      },
+    );
+  });
+
+  it("accepts every open change set as part of approval", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        const requestId = "dddddddddddddddd";
+        const request = messageAgentRequest({
+          sessionId: target.sessionId,
+          planId: target.planId,
+          requestId,
+          kind: "chat",
+          body: "Clarify the rollback owner.",
+          premiseSnapshot: digest,
+          createdAt: "2026-08-19T17:00:00.000Z",
+        });
+        await writeAgentRequest({ store: target.store, request });
+        const claimed = await claimAgentRequest({
+          store: target.store,
+          activeSessionId: target.sessionId,
+          requestId,
+          claimedBy: target.sessionId,
+          baselineSnapshot: digest,
+          now: "2026-08-19T17:00:01.000Z",
+        });
+        const published = `${DECISION_PLAN}\nThe rollback owner is the release captain.\n`;
+        const publishedDigest = deriveSnapshotDigest(published);
+        await writeFile(planPath, published);
+        await writeSnapshot({
+          store: target.store,
+          snapshot: publishedDigest,
+          source: published,
+        });
+        await commitRequestTerminal({
+          store: target.store,
+          claimedBy: target.sessionId,
+          response: validateAgentResponseDraft({
+            value: { requestId, message: "Named the rollback owner." },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set(),
+            currentSnapshot: publishedDigest,
+            now: "2026-08-19T17:00:02.000Z",
+          }),
+          now: "2026-08-19T17:00:02.000Z",
+        });
+
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: publishedDigest,
+        });
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          approval: {
+            openItemCounts: {
+              changeSetsAccepted: 1,
+              changeSetsTotal: 1,
+            },
+          },
+        });
+        const dispositions = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/change-dispositions",
+        });
+        await expect(dispositions.json()).resolves.toMatchObject({
+          accepted: [
+            expect.objectContaining({ from: digest, to: publishedDigest }),
+          ],
+        });
       },
     );
   });

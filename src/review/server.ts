@@ -66,6 +66,7 @@ import {
   recordAgentConnectionState,
 } from "./request-mailbox.js";
 import { recoverStagedPlanMutations } from "./staged-plan-mutation.js";
+import { recoverApprovalFinalization } from "./approval-finalization.js";
 import { readCommittedRevisions } from "./change-set-commit.js";
 import {
   deriveReviewPlanId,
@@ -866,6 +867,18 @@ export const startReviewRuntime = async ({
       await drainAndCloseServer(server);
       throw error;
     });
+  await recoverApprovalFinalization({
+    store,
+    planPath: resolvedPlanPath,
+  }).catch(async (error: unknown) => {
+    clearInterval(heartbeatTimer);
+    await queueHeartbeat(
+      false,
+      "The review runtime could not settle an interrupted approval.",
+    );
+    await drainAndCloseServer(server);
+    throw error;
+  });
   await initializeOwnedReviewState({
     store,
     planId,

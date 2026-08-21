@@ -665,12 +665,6 @@ export const AlertDialog = ({
       return;
     }
     const update = () => {
-      // Below the reading breakpoint a hanging panel collides with the
-      // mobile sections bar and is too narrow for the disclosures.
-      if (window.innerWidth < 80 * 16) {
-        setAnchorPosition(null);
-        return;
-      }
       setAnchorPosition(
         placeAnchoredDialog({
           anchor: anchor.getBoundingClientRect(),
@@ -803,7 +797,7 @@ export const AlertDialog = ({
             footerAlign === "split"
               ? "flex-col-reverse items-stretch wide:flex-row wide:items-center wide:justify-between"
               : "justify-end",
-            )}
+          )}
         >
           <Button variant="outline" size="md" onClick={onCancel}>
             {cancelLabel}

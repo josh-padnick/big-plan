@@ -396,10 +396,35 @@ const RequestRow = ({
 
 const useApprovalMessage = (open: boolean): string => {
   const [message, setMessage] = useState(readStoredMessage);
+  const unsaved = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const changed = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail: unknown = event.detail;
+      if (
+        typeof detail !== "object" ||
+        detail === null ||
+        !("message" in detail) ||
+        typeof detail.message !== "string" ||
+        !("persisted" in detail) ||
+        typeof detail.persisted !== "boolean"
+      ) {
+        return;
+      }
+      unsaved.current = detail.persisted ? undefined : detail.message;
+      setMessage(detail.message);
+    };
+    document.addEventListener("bigplan:approval-message-changed", changed);
+    return () =>
+      document.removeEventListener("bigplan:approval-message-changed", changed);
+  }, []);
   useEffect(() => {
     if (!open) return;
-    setMessage(readStoredMessage());
-    const refresh = () => setMessage(readStoredMessage());
+    if (unsaved.current !== undefined) setMessage(unsaved.current);
+    else setMessage(readStoredMessage());
+    const refresh = () => {
+      if (unsaved.current === undefined) setMessage(readStoredMessage());
+    };
     document.addEventListener("bigplan:settings-closed", refresh);
     window.addEventListener("storage", refresh);
     return () => {
@@ -538,8 +563,8 @@ export const ApproveDialog = ({
       title={stale ? "Re-approve this plan?" : "Approve this plan?"}
       description={
         stale
-          ? "The plan has changed since you approved it. Approving again sends your approval message to the agent so it can start the work."
-          : "Approving sends your approval message to the agent so it can start the work."
+          ? "The plan has changed since you approved it. Approving again records the plan and message for the agent handoff."
+          : "Approving records the plan and your message for the agent handoff."
       }
       cancelLabel="Keep reviewing"
       actionLabel={stale ? "Re-approve" : "Approve plan"}
@@ -905,10 +930,10 @@ const ApprovalDetails = ({
             <QuietCheck />
             <div className="min-w-0 flex-1">
               <p className="m-0 text-sm font-semibold text-ink">
-                Sent to your agent
+                Saved for your agent
               </p>
               <p className="mt-1 mb-0 text-xs leading-normal text-muted">
-                This message was sent so work can begin.
+                This message is recorded for the agent handoff.
               </p>
               <blockquote className="mx-0 mt-2 mb-0 rounded-md border-l-2 border-edge bg-paper px-3 py-2 text-sm leading-normal text-ink not-italic">
                 {approval.message}

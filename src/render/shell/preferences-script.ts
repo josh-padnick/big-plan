@@ -61,6 +61,20 @@ export const PREFERENCES_SCRIPT = `<script>
   let lastWriteFailed = false;
   let returnFocusElement = null;
 
+  const announceMessage = () => {
+    document.dispatchEvent(
+      new CustomEvent("bigplan:approval-message-changed", {
+        detail: {
+          message:
+            messageInput.value.trim() === ""
+              ? defaultMessage
+              : messageInput.value,
+          persisted: !lastWriteFailed,
+        },
+      }),
+    );
+  };
+
   // The record is written whole from what the document is showing, so the two
   // fields can never disagree with each other or with the page.
   const save = () => {
@@ -123,6 +137,7 @@ export const PREFERENCES_SCRIPT = `<script>
         ? "big-plan-approval-message-hint big-plan-approval-message-error"
         : "big-plan-approval-message-hint",
     );
+    announceMessage();
   };
 
   const normalizeMessageField = () => {
@@ -414,6 +429,7 @@ export const PREFERENCES_SCRIPT = `<script>
       showSaveFailure(true);
     }
     messageInput.value = defaultMessage;
+    announceMessage();
     messageInput.focus();
   });
 

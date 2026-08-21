@@ -7146,14 +7146,15 @@ export const ReviewController = () => {
         : createPortal(
             <>
               {identity === null ||
-              runtimeSession?.authoritative === false ||
-              serverGone ? null : (
+              serverGone ||
+              (runtimeSession?.authoritative === false &&
+                approval?.status !== "approved") ? null : (
                 <ApproveControl
                   identity={identity}
                   approval={approval}
                   agent={agent}
                   currentSnapshot={currentSnapshot}
-                  canWrite={true}
+                  canWrite={runtimeSession?.authoritative !== false}
                   onOpenAgent={openAgentSidebar}
                   onApprovalChange={setApproval}
                 />
