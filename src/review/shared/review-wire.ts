@@ -443,6 +443,82 @@ export const decodeChangeDispositions = (
   };
 };
 
+/** What caused the change set a committed revision belongs to. */
+export type ChangeSetProvenance = "feedback" | "reply" | "chat" | "push";
+
+/**
+ * One change set as the committed revision log folds it: the baseline and
+ * provenance stay where the set's first committed revision put them, while the
+ * result and commit time advance with every later revision.
+ */
+export type CommittedChangeSet = {
+  readonly changeSetId: string;
+  readonly provenance: ChangeSetProvenance;
+  readonly baseSnapshot: string;
+  readonly resultSnapshot: string;
+  readonly committedAt: string;
+};
+
+/** The change sets one plan's committed revision log describes. */
+export type CommittedChangeSetState = {
+  readonly changeSets: ReadonlyArray<CommittedChangeSet>;
+};
+
+// A change set is keyed by an ordinary comment thread's short id or by an
+// immutable transaction's request id, so the wire accepts both widths.
+const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/;
+
+const CHANGE_SET_PROVENANCE: ReadonlySet<string> = new Set<ChangeSetProvenance>(
+  ["feedback", "reply", "chat", "push"],
+);
+
+/** Encodes the committed change sets a review has folded. */
+export const encodeCommittedChangeSets = (
+  value: CommittedChangeSetState,
+): CommittedChangeSetState => value;
+
+/**
+ * Decodes the committed change sets, or says it could not.
+ *
+ * A body this build cannot read is reported as unreadable rather than as an
+ * empty list, because the two mean opposite things to a reader: one says the
+ * fold could not be fetched, the other says no thread has changed the plan.
+ * Within a readable body, an entry this build cannot place is dropped alone,
+ * so one malformed set never hides the sets beside it.
+ */
+export const decodeCommittedChangeSets = (
+  value: unknown,
+): CommittedChangeSetState | undefined => {
+  if (!isReviewWireRecord(value) || !Array.isArray(value.changeSets)) {
+    return undefined;
+  }
+  return {
+    changeSets: value.changeSets.flatMap(
+      (entry): ReadonlyArray<CommittedChangeSet> =>
+        isReviewWireRecord(entry) &&
+        typeof entry.changeSetId === "string" &&
+        CHANGE_SET_ID.test(entry.changeSetId) &&
+        typeof entry.provenance === "string" &&
+        CHANGE_SET_PROVENANCE.has(entry.provenance) &&
+        typeof entry.baseSnapshot === "string" &&
+        SNAPSHOT_DIGEST.test(entry.baseSnapshot) &&
+        typeof entry.resultSnapshot === "string" &&
+        SNAPSHOT_DIGEST.test(entry.resultSnapshot) &&
+        isWireTimestamp(entry.committedAt)
+          ? [
+              {
+                changeSetId: entry.changeSetId,
+                provenance: entry.provenance as ChangeSetProvenance,
+                baseSnapshot: entry.baseSnapshot,
+                resultSnapshot: entry.resultSnapshot,
+                committedAt: entry.committedAt,
+              },
+            ]
+          : [],
+    ),
+  };
+};
+
 /** Encodes the review's derived input contract for transport. */
 export const encodeReviewInputContract = (
   value: ReviewInputContract,

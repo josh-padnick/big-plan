@@ -20,7 +20,7 @@ You cannot change diff semantics without changing thread semantics, so both live
 The session runtime is a different subsystem from either.
 `src/review/server.ts`, `src/review/review-route-context.ts`, the sibling `src/review/routes-*.ts` modules, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, and `src/review/agent-work-loop.ts` render and serve the document, authorize requests, and keep the browser, server, and agent connected.
 Those are Session Reliability responsibilities, distinct from thread and diff semantics.
-`src/review/server.ts` owns request security, the route allow-list, dispatch, and the runtime lifecycle; `src/review/review-route-context.ts` owns the named state shared across handlers, and the sibling route modules own every API and asset route handler, grouped as session, review-state, agent-exchange, snapshot-diff, and assets.
+`src/review/server.ts` owns request security, the route allow-list, dispatch, and the runtime lifecycle; `src/review/review-route-context.ts` owns the named state shared across handlers, and the sibling route modules own every API and asset route handler, grouped as session, review-state, agent-exchange, change-set, snapshot-diff, and assets.
 These runtime-boundary modules delegate semantic decisions to their owning subsystems rather than define them at the delivery boundary.
 Session Reliability's own failure modes are lifecycle and atomicity: disconnects, hangs, and lost or double-processed messages, not conversation or diff correctness.
 
@@ -48,7 +48,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   That is a component contract rather than an engine-owned rendering choice - see [Captain amendments](#captain-amendments).
 - A change set describes committed revisions only.
   `src/review/change-set-commit.ts` is the seam: a revision is recorded inside the terminal commit and nowhere else, the reader's current snapshot advances from that log rather than from response files, and folding the log keeps an ordinary comment thread's baseline and provenance stable across later replies while pushes and replies in pushed threads remain immutable request-keyed transactions.
-  When the full aggregate lands it implements that contract without adopting claim stages as domain state.
+  `GET /api/change-sets` serves that fold on demand through the browser-safe contract in `src/review/shared/review-wire.ts`; the route exposes the aggregate without creating a second one or making claim stages domain state.
 - A change set's disposition is a review fact, not a browser preference.
   `src/review/change-dispositions-store.ts` owns the record and `src/review/shared/change-disposition.ts` owns the one selector that turns it into a count, so every surface showing how much of a set is still open reads the same number and a reload never reopens closed work.
 - What a review is waiting for is one derived contract, never a per-surface tally.
@@ -182,7 +182,7 @@ Three conceptual refinements constrain how the subsystems above implement their 
 **Change-set primacy (Change Engine).**
 The change set, baseline plus current plus acceptance plus provenance plus an optional conversation, is the primary entity.
 The thread is one container for it, not the reverse.
-Provenance is modeled as an attribute of the change set (reviewer comment, plan-wide chat, or agent-push) so a future agent-push origin fits without remodeling.
+Provenance is modeled as an attribute of the change set (reviewer comment, plan-wide chat, or agent-push), so each origin fits without remodeling the set.
 
 **Diff mode as a component contract (Change Engine, applied by component slices).**
 Every component accepts a discriminated `ComponentDiffInput` for an added, removed, or changed instance and can render its own diff.

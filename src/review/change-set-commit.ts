@@ -8,9 +8,6 @@
 // from. Folded by change-set id, ordinary comment threads share a stable
 // baseline across later replies, while every pushed-thread transaction keeps
 // the immutable request-keyed identity it was committed with.
-//
-// When the full change-set aggregate lands it implements this contract without
-// adopting attempt files as domain state.
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";

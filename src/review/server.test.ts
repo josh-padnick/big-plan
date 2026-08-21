@@ -36,6 +36,11 @@ import {
   commitRequestTerminal,
   withResolvedCommentLock,
 } from "./request-mailbox.js";
+import { recordCommittedRevision } from "./change-set-commit.js";
+import {
+  decodeCommittedChangeSets,
+  type CommittedChangeSetState,
+} from "./shared/review-wire.js";
 import {
   agentMutationJournalPath,
   readAgentConnectionEvents,
@@ -1126,6 +1131,118 @@ describe("review runtime input contract", () => {
       ).toEqual([
         ["Which release path should we use?", "answered"],
         ["Do we rename the endpoint?", "stale"],
+      ]);
+    });
+  });
+});
+
+describe("review runtime committed change sets", () => {
+  const THREAD = "4444444444444444";
+  const BASE = "1".repeat(16);
+  const FIRST = "2".repeat(16);
+  const SECOND = "3".repeat(16);
+  const PUSH_REQUEST = "ffffffffffffffff";
+
+  const withChangeSetRuntime = async (
+    work: (context: {
+      readonly target: ReviewRuntime;
+      readonly sessionToken: string;
+    }) => Promise<void>,
+  ): Promise<void> => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-change-sets-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const target = await startReviewRuntime({ planPath });
+    try {
+      await work({ target, sessionToken: await runtimeToken(target) });
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  };
+
+  const changeSetsOf = async (
+    target: ReviewRuntime,
+    sessionToken: string,
+  ): Promise<CommittedChangeSetState> => {
+    const response = await callRuntime({
+      target,
+      sessionToken,
+      path: "/api/change-sets",
+    });
+    expect(response.status).toBe(200);
+    // Decoding through the browser's own decoder proves the served body is
+    // one the browser contract can read, not merely valid JSON.
+    const decoded = decodeCommittedChangeSets(await response.json());
+    if (decoded === undefined) {
+      throw new Error("The change-set body did not decode");
+    }
+    return decoded;
+  };
+
+  it("should serve an empty fold before any revision commits", async () => {
+    await withChangeSetRuntime(async ({ target, sessionToken }) => {
+      await expect(changeSetsOf(target, sessionToken)).resolves.toEqual({
+        changeSets: [],
+      });
+    });
+  });
+
+  it("should serve a thread's fold with its start kept and its result advanced", async () => {
+    await withChangeSetRuntime(async ({ target, sessionToken }) => {
+      await recordCommittedRevision({
+        store: target.store,
+        revision: {
+          requestId: "aaaaaaaaaaaaaaaa",
+          changeSetIds: [THREAD],
+          baseSnapshot: BASE,
+          resultSnapshot: FIRST,
+          provenance: "feedback",
+          committedAt: "2026-08-21T12:00:00.000Z",
+        },
+      });
+      await recordCommittedRevision({
+        store: target.store,
+        revision: {
+          requestId: "bbbbbbbbbbbbbbbb",
+          changeSetIds: [THREAD],
+          baseSnapshot: FIRST,
+          resultSnapshot: SECOND,
+          provenance: "reply",
+          committedAt: "2026-08-21T12:05:00.000Z",
+        },
+      });
+      await recordCommittedRevision({
+        store: target.store,
+        revision: {
+          requestId: PUSH_REQUEST,
+          changeSetIds: [PUSH_REQUEST],
+          baseSnapshot: SECOND,
+          resultSnapshot: BASE,
+          provenance: "push",
+          committedAt: "2026-08-21T12:10:00.000Z",
+        },
+      });
+
+      const { changeSets } = await changeSetsOf(target, sessionToken);
+      // The thread's set keeps the baseline and provenance its first commit
+      // recorded while its result advances; the push stays its own
+      // request-keyed transaction with its provenance intact.
+      expect(changeSets).toEqual([
+        {
+          changeSetId: THREAD,
+          provenance: "feedback",
+          baseSnapshot: BASE,
+          resultSnapshot: SECOND,
+          committedAt: "2026-08-21T12:05:00.000Z",
+        },
+        {
+          changeSetId: PUSH_REQUEST,
+          provenance: "push",
+          baseSnapshot: SECOND,
+          resultSnapshot: BASE,
+          committedAt: "2026-08-21T12:10:00.000Z",
+        },
       ]);
     });
   });
