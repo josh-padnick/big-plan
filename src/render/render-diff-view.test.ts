@@ -2,7 +2,7 @@
 // baseline identifier, and keeps the component's real interactive markup.
 
 import { fromHtml } from "hast-util-from-html";
-import type { Element, Root, RootContent } from "hast";
+import type { Element, Root } from "hast";
 import { describe, expect, it } from "vitest";
 import { compileMarkdown } from "./markdown/compile-markdown.js";
 import { renderDiffView } from "./render-diff-view.js";
