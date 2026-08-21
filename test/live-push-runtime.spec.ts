@@ -281,6 +281,8 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     ]);
     const requestId = agentIdOf(opened.stdout, "requestId");
     const threadId = agentIdOf(opened.stdout, "threadId");
+    const agentToken = agentIdOf(opened.stdout, "agent_token");
+    const connectionToken = agentIdOf(opened.stdout, "connection_token");
     const candidatePath = candidatePlanOf(opened.stdout);
     const revised = PLAN.replace(
       "The reviewer keeps reading while an agent prepares a revision.",
@@ -313,7 +315,9 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       planPath,
       responseDraftOf(opened.stdout),
       "--agent",
-      agentIdOf(opened.stdout, "agent_token"),
+      agentToken,
+      "--connection",
+      connectionToken,
     ]);
 
     await expect(page.locator("article")).toContainText(
@@ -358,8 +362,17 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       })
       .toMatchObject({ kind: "reply", commentId: threadId });
 
-    const reply = await runAgentCli(["next", planPath, "--wait"]);
+    const reply = await runAgentCli([
+      "next",
+      planPath,
+      "--wait",
+      "--agent",
+      agentToken,
+      "--connection",
+      connectionToken,
+    ]);
     const replyRequestId = agentIdOf(reply.stdout, "requestId");
+    const replyAgentToken = agentIdOf(reply.stdout, "agent_token");
     await writeFile(
       responseDraftOf(reply.stdout),
       JSON.stringify({
@@ -379,7 +392,9 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       planPath,
       responseDraftOf(reply.stdout),
       "--agent",
-      agentIdOf(reply.stdout, "agent_token"),
+      replyAgentToken,
+      "--connection",
+      connectionToken,
     ]);
     await expect(thread).toContainText(
       "The explanation now stays on that boundary.",
@@ -401,8 +416,13 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       threadId,
       "--prompt",
       "Clarify the follow-up publication step.",
+      "--agent",
+      replyAgentToken,
+      "--connection",
+      connectionToken,
     ]);
     const continuedRequestId = agentIdOf(continuedPush.stdout, "requestId");
+    const continuedAgentToken = agentIdOf(continuedPush.stdout, "agent_token");
     const continuedRevision = revised.replace(
       "The reviewer keeps reading while an agent safely prepares a revision.",
       "The reviewer keeps reading while an agent safely prepares a follow-up revision.",
@@ -432,7 +452,9 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       planPath,
       responseDraftOf(continuedPush.stdout),
       "--agent",
-      agentIdOf(continuedPush.stdout, "agent_token"),
+      continuedAgentToken,
+      "--connection",
+      connectionToken,
     ]);
     await expect(page.locator("article")).toContainText(
       "safely prepares a follow-up revision",
@@ -442,8 +464,13 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     const historicalChange = thread
       .locator('[data-review-message="agent"]')
       .filter({ hasText: "Clarified the safe publication flow." });
+    await expect(
+      historicalChange.getByText("Accepted", { exact: true }),
+    ).toBeVisible();
     await historicalChange
-      .getByRole("button", { name: /Review changes \(2\)/u })
+      .getByRole("button", {
+        name: /2 changes across 2 slides Accepted/u,
+      })
       .click();
     await expect(
       stepper.getByRole("button", { name: "Resolve thread" }),
@@ -497,6 +524,10 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       planPath,
       "--about",
       "I found a related wording concern.",
+      "--agent",
+      continuedAgentToken,
+      "--connection",
+      connectionToken,
     ]);
     await settlePushWithoutChanges({ planPath, stdout: about.stdout });
     const aboutThreadId = agentIdOf(about.stdout, "threadId");
@@ -515,6 +546,10 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       aboutThreadId,
       "--prompt",
       "Keep that concern in this conversation.",
+      "--agent",
+      agentIdOf(about.stdout, "agent_token"),
+      "--connection",
+      connectionToken,
     ]);
     await settlePushWithoutChanges({ planPath, stdout: continued.stdout });
     await expect(rail.locator(`[data-review-pushed-thread]`)).toHaveCount(2);
