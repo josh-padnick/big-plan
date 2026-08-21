@@ -107,7 +107,9 @@ describe("renderDocument affordances", () => {
       fallbackTitle: "Collision",
     });
     expect(collisionHtml).toContain('data-overview-link href="#top-3"');
-    expect(collisionHtml).toContain('<main class="min-w-0" id="top-3">');
+    expect(collisionHtml).toContain(
+      '<main class="relative min-w-0" id="top-3">',
+    );
     expect(collisionHtml.match(/id="top"/g)).toHaveLength(1);
     expect(collisionHtml.match(/id="top-2"/g)).toHaveLength(1);
   });

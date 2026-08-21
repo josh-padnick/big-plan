@@ -17,6 +17,8 @@ const EXPECTED_OWNERS = {
   "queued-message-revised": "reviewer",
   "queued-message-deleted": "reviewer",
   "request-canceled": "reviewer",
+  "plan-approved": "reviewer",
+  "approval-revoked": "reviewer",
   "claim-released": "reviewer",
   "agent-disconnect-requested": "reviewer",
   "agent-primacy-answered": "reviewer",
