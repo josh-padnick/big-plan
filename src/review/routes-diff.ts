@@ -21,7 +21,10 @@ import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
 
 // Honest rollout scaffolding. Every definition has compileDiff once the
 // contract exists, so presence cannot say which kinds have completed the
-// browser migration. The set leaves with the last migration wave.
+// browser migration. This set now names every component root that is not
+// answered by a text-level treatment, so the two together cover the registry
+// and no component root reaches the engine's rendered path. The set leaves
+// with the last migration wave.
 const MIGRATED_DIFF_KINDS: ReadonlySet<string> = new Set([
   "decision",
   "decision-analysis",
@@ -31,7 +34,6 @@ const MIGRATED_DIFF_KINDS: ReadonlySet<string> = new Set([
   "mermaid-diagram",
   "part",
   "quick-decision",
-  "table-of-contents",
   "wireframe",
 ]);
 
