@@ -96,6 +96,7 @@ export const ChatSurface = ({
               <Button
                 variant="outline"
                 size="sm"
+                transition="nonColor"
                 disabled={!canSend}
                 data-tooltip={block?.cause ?? `Send · ${model.shortcutLabel}`}
                 data-tooltip-delay="1s"

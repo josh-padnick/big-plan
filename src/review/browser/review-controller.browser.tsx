@@ -26,6 +26,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { ARROW_UP_ICON } from "../../icons/lucide/arrow-up.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
@@ -2460,6 +2461,9 @@ const CommentComposer = ({
 
 const CommentCardHeader = ({
   target,
+  targetLabelOverride,
+  targetTitleOverride,
+  targetIcon,
   surface,
   metaClassName,
   targetClassName,
@@ -2470,6 +2474,9 @@ const CommentCardHeader = ({
   children,
 }: {
   readonly target: CommentTarget;
+  readonly targetLabelOverride?: string;
+  readonly targetTitleOverride?: string;
+  readonly targetIcon?: LucideIcon;
   readonly surface: StagedCardSurface;
   readonly metaClassName: string;
   readonly targetClassName: string;
@@ -2480,24 +2487,32 @@ const CommentCardHeader = ({
   readonly children: ReactNode;
 }) => (
   <div
-    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar"} ${onHeaderClick === undefined ? "" : "cursor-pointer transition-colors hover:bg-[color-mix(in_srgb,var(--comment-toolbar-c)_94%,var(--ink-c))]!"}`}
+    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar"} ${onHeaderClick === undefined ? "" : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--comment-toolbar-c)_94%,var(--ink-c))]!"}`}
     style={{ padding: "3px 5px" }}
     onClick={onHeaderClick}
   >
     <button
       type="button"
-      className={`${targetClassName} min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 pl-0.5 text-left leading-normal focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${onHeaderClick === undefined ? "hover:underline" : ""} ${surface === "thread" ? "text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
+      className={`${targetClassName} inline-flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-0 bg-transparent p-0 pl-0.5 text-left leading-normal focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${onHeaderClick === undefined ? "hover:underline" : ""} ${surface === "thread" ? "text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
       onClick={(event) => {
         event.stopPropagation();
         (onTargetClick ?? onHeaderClick ?? onJump)();
       }}
       title={
-        onTargetClick === undefined && onHeaderClick !== undefined
+        targetTitleOverride ??
+        (onTargetClick === undefined && onHeaderClick !== undefined
           ? "Minimize comment"
-          : `Go to ${targetLabel(target, true)}`
+          : `Go to ${targetLabel(target, true)}`)
       }
     >
-      {targetLabel(target, true)}
+      {targetIcon === undefined ? null : (
+        <span className="shrink-0 [&>svg]:size-3.5" aria-hidden="true">
+          <Icon icon={targetIcon} />
+        </span>
+      )}
+      <span className="truncate">
+        {targetLabelOverride ?? targetLabel(target, true)}
+      </span>
     </button>
     <div
       className={`${actionsClassName} ml-auto flex shrink-0 items-center gap-1`}
@@ -3434,11 +3449,7 @@ const SentThread = ({
           ? "Delete comment - the agent that picked it up stopped reporting"
           : "Delete queued comment";
   const pushedOriginLabel =
-    pushedOrigin === "prompt"
-      ? "Reviewer-opened · Prompt"
-      : pushedOrigin === "about"
-        ? "Agent-opened · About"
-        : null;
+    pushedOrigin === "about" ? "Agent-opened · About" : null;
 
   // Every control in this thread that writes - replying, deleting, reverting,
   // and canceling - is held back by the same answer, so a reviewer is told the
@@ -3603,13 +3614,22 @@ const SentThread = ({
       >
         <CommentCardHeader
           target={comment.target}
+          targetLabelOverride={
+            pushedOrigin === undefined ? undefined : "Added by agent"
+          }
+          targetTitleOverride={
+            pushedOrigin === undefined
+              ? undefined
+              : "This thread was added by the agent"
+          }
+          targetIcon={pushedOrigin === undefined ? undefined : ARROW_UP_ICON}
           surface={surface}
           metaClassName="review-thread-meta"
           targetClassName="review-sent-target"
           actionsClassName="review-thread-actions"
           onJump={onJump}
           onHeaderClick={onToggle}
-          onTargetClick={onJump}
+          onTargetClick={pushedOrigin === undefined ? onJump : onToggle}
         >
           <ThreadIconButton
             label="Expand thread"
@@ -3729,13 +3749,28 @@ const SentThread = ({
     >
       <CommentCardHeader
         target={comment.target}
+        targetLabelOverride={
+          pushedOrigin === undefined ? undefined : "Added by agent"
+        }
+        targetTitleOverride={
+          pushedOrigin === undefined
+            ? undefined
+            : "This thread was added by the agent"
+        }
+        targetIcon={pushedOrigin === undefined ? undefined : ARROW_UP_ICON}
         surface={surface}
         metaClassName="review-thread-meta"
         targetClassName="review-sent-target"
         actionsClassName="review-thread-actions"
         onJump={onJump}
         onHeaderClick={onToggle}
-        onTargetClick={surface === "rail" ? onJump : undefined}
+        onTargetClick={
+          pushedOrigin === undefined
+            ? surface === "rail"
+              ? onJump
+              : undefined
+            : onToggle
+        }
       >
         <ThreadIconButton
           label="Minimize thread"

@@ -119,6 +119,7 @@ const BUTTON_SIZES: Readonly<Record<ButtonSize, string>> = {
 type ButtonProps = ComponentPropsWithRef<"button"> & {
   readonly variant?: ButtonVariant;
   readonly size?: ButtonSize;
+  readonly transition?: "default" | "nonColor";
 };
 
 /** Token-themed shadcn Button primitive. */
@@ -126,6 +127,7 @@ export const Button = ({
   className,
   variant = "default",
   size = "default",
+  transition = "default",
   type = "button",
   ref,
   ...props
@@ -134,7 +136,10 @@ export const Button = ({
     ref={ref}
     type={type}
     className={joinClasses(
-      "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 transition hover:brightness-95 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:border-edge disabled:bg-surface disabled:text-subtle disabled:opacity-100 disabled:shadow-none motion-reduce:transition-none",
+      "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 hover:brightness-95 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:border-edge disabled:bg-surface disabled:text-subtle disabled:opacity-100 disabled:shadow-none motion-reduce:transition-none",
+      transition === "default"
+        ? "transition"
+        : "transition-[filter,box-shadow]",
       BUTTON_VARIANTS[variant],
       BUTTON_SIZES[size],
       className,

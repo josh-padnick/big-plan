@@ -324,8 +324,12 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     const rail = page.getByRole("complementary", { name: "Feedback" });
     await rail.getByRole("tab", { name: "Chat" }).click();
     const thread = rail.locator(`[data-review-pushed-thread="${threadId}"]`);
-    await expect(thread).toContainText("Reviewer-opened");
-    await expect(thread).toContainText("Prompt");
+    const pushedHeader = thread.getByRole("button", {
+      name: "Added by agent",
+    });
+    await expect(pushedHeader).toBeVisible();
+    await expect(pushedHeader.locator("svg")).toBeVisible();
+    await expect(thread).not.toContainText("Reviewer-opened");
     await thread.getByRole("button", { name: /Expand pushed thread/u }).click();
     await expect(thread.getByText("You said", { exact: true })).toBeVisible();
     await expect(thread).toContainText(
