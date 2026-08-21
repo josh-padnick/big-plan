@@ -4,7 +4,7 @@ import {
   mergeLiveReviewRecovery,
   mergeReviewStateAfterHydration,
   refreshReviewRecoveryConflicts,
-  repliesForSentComments,
+  repliesForKnownComments,
   resolveReviewRecoveryConflict,
   resumeLiveReviewRecovery,
   reviewRecoveryBase,
@@ -540,16 +540,25 @@ describe("live review recovery merge", () => {
     expect([...resolved.resolvedCommentIds]).toEqual(["c1"]);
   });
 
-  it("should remove reply text when its sent thread is deleted", () => {
+  it("should remove reply text when its thread is no longer known", () => {
     expect(
-      repliesForSentComments({
+      repliesForKnownComments({
         replies: new Map([
           ["c1", "reply to deleted thread"],
           ["c2", "reply to retained thread"],
+          ["c3", "reply to pushed thread"],
         ]),
-        sent: [comment("c2", "retained thread")],
+        comments: [
+          comment("c2", "retained thread"),
+          comment("c3", "pushed thread"),
+        ],
       }),
-    ).toEqual(new Map([["c2", "reply to retained thread"]]));
+    ).toEqual(
+      new Map([
+        ["c2", "reply to retained thread"],
+        ["c3", "reply to pushed thread"],
+      ]),
+    );
   });
 
   it("should report a conflict when one side edited what the other removed", () => {

@@ -392,15 +392,41 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await stepper.getByRole("button", { name: "Accept this change" }).click();
     await expect(stepper).toContainText("2 of 2");
     await stepper.getByRole("button", { name: "Accept this change" }).click();
+    await page.keyboard.press("Escape");
+
+    await thread
+      .getByRole("button", { name: "Revert response" })
+      .first()
+      .click();
+    await page
+      .getByRole("alertdialog", { name: "Revert response?" })
+      .getByRole("button", { name: "Revert response" })
+      .click();
+    await expect(page.locator("article")).toContainText(
+      "The terminal response publishes the candidate atomically.",
+      { timeout: 15_000 },
+    );
     await expect(
-      stepper.getByRole("button", { name: "Resolve thread" }),
+      thread.getByRole("button", { name: "Delete comment" }),
+    ).toHaveCount(0);
+    await expect(
+      thread.getByRole("button", { name: "Resolve thread" }).first(),
     ).toBeVisible();
-    await stepper.getByRole("button", { name: "Resolve thread" }).click();
+
+    const retainedReply = "Keep this draft while I archive the thread.";
+    await thread.getByPlaceholder("Reply to the agent…").fill(retainedReply);
+    await thread
+      .getByRole("button", { name: "Resolve thread" })
+      .first()
+      .click();
 
     await rail.getByText("Resolved (1)").click();
     await expect(
       thread.getByRole("button", { name: "Unresolve thread" }).first(),
     ).toBeVisible();
+    await expect(thread.getByPlaceholder("Reply to the agent…")).toHaveValue(
+      retainedReply,
+    );
 
     const about = await runAgentCli([
       "push",

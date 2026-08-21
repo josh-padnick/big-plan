@@ -185,7 +185,7 @@ import {
   mergeLiveReviewRecovery,
   mergeReviewStateAfterHydration,
   refreshReviewRecoveryConflicts,
-  repliesForSentComments,
+  repliesForKnownComments,
   resolveReviewRecoveryConflict,
   resumeLiveReviewRecovery,
   reviewRecoveryBase,
@@ -3435,7 +3435,8 @@ const SentThread = ({
       ? "Response reverted"
       : "Revert unavailable - the plan changed again";
   const canDeleteComment =
-    canDeleteQueued || canDeleteCanceled || latestChangeWasReverted;
+    pushedOrigin === undefined &&
+    (canDeleteQueued || canDeleteCanceled || latestChangeWasReverted);
   // An affordance a pickup had taken away says why it is back, wherever it
   // appears. The rail and the summary card have room for the label alone, so
   // the label carries the reason and the expanded card explains it in full.
@@ -4348,6 +4349,14 @@ export const ReviewController = () => {
   useEffect(() => {
     setApproval(runtimeSession?.approval);
   }, [runtimeSession?.approval]);
+  const pushedThreadOpeners = useMemo(
+    () => projectPushedThreadOpeners(agent.requests),
+    [agent.requests],
+  );
+  const pushedThreadComments = useMemo(
+    () => pushedThreadOpeners.map((opener) => opener.comment),
+    [pushedThreadOpeners],
+  );
   const pollIsOffline = reviewPollIsOffline(pollHealth);
   const serverGone = reviewRuntimeIsDown(pollHealth);
   // Only a runtime that is answering can report this, so it never competes
@@ -4635,9 +4644,9 @@ export const ReviewController = () => {
         );
       });
       replaceReplyDrafts(
-        repliesForSentComments({
+        repliesForKnownComments({
           replies: replyDraftsRef.current,
-          sent: snapshot.sent,
+          comments: [...snapshot.sent, ...pushedThreadComments],
         }),
       );
       if (merged.conflicts.length > 0) {
@@ -4662,6 +4671,7 @@ export const ReviewController = () => {
       applyReviewState,
       markPersistedReviewState,
       observeRuntimeReviewState,
+      pushedThreadComments,
       replaceRecoveryReconciliation,
       replaceReplyDrafts,
     ],
@@ -5554,13 +5564,7 @@ export const ReviewController = () => {
           const composerAfterHydration = mergeRecoveredComposerAfterHydration({
             before: composerBeforeHydration,
             current: composerRecoveryRef.current,
-            recovered: {
-              ...recoveredComposer,
-              replies: repliesForSentComments({
-                replies: recoveredComposer.replies,
-                sent: snapshot.sent,
-              }),
-            },
+            recovered: recoveredComposer,
           });
           const detached =
             restoreComposer(composerAfterHydration) === "detached";
@@ -5640,6 +5644,21 @@ export const ReviewController = () => {
     replaceRecoveryReconciliation,
     restoreComposer,
     runtimeSessionOrder,
+  ]);
+
+  useEffect(() => {
+    if (!hasObservedAgentSnapshot) return;
+    replaceReplyDrafts(
+      repliesForKnownComments({
+        replies: replyDraftsRef.current,
+        comments: [...sent, ...pushedThreadComments],
+      }),
+    );
+  }, [
+    hasObservedAgentSnapshot,
+    pushedThreadComments,
+    replaceReplyDrafts,
+    sent,
   ]);
 
   useEffect(() => {
@@ -6684,10 +6703,6 @@ export const ReviewController = () => {
       ? {}
       : { presenceRequestId: agent.presence.requestId }),
   });
-  const pushedThreadOpeners = projectPushedThreadOpeners(agent.requests);
-  const pushedThreadComments = pushedThreadOpeners.map(
-    (opener) => opener.comment,
-  );
   const pushedThreadOriginById = new Map(
     pushedThreadOpeners.map((opener) => [opener.comment.id, opener.origin]),
   );

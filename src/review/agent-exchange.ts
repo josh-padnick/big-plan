@@ -110,6 +110,9 @@ export type AgentRequest =
   | AgentChatRequest
   | AgentPushRequest;
 
+const isPushedThreadOpener = (request: AgentRequest): boolean =>
+  request.kind === "push" && request.requestId === request.threadId;
+
 export type AgentOutcome = {
   readonly commentId: string;
   readonly state: AgentOutcomeState;
@@ -1284,10 +1287,14 @@ export const readAgentExchange = async ({
       const pickupBlockers = requests.filter((request) =>
         requestBlocksPlanPickup({ request, nowMs }),
       );
+      const pushedThreadOpeners = requests.filter(isPushedThreadOpener);
       return new Set(
-        [...pending, ...terminal, ...pickupBlockers].map(
-          (request) => request.requestId,
-        ),
+        [
+          ...pending,
+          ...terminal,
+          ...pickupBlockers,
+          ...pushedThreadOpeners,
+        ].map((request) => request.requestId),
       );
     },
   });
@@ -1301,8 +1308,9 @@ export const readAgentExchange = async ({
   const pickupBlockers = complete.requests.filter((request) =>
     requestBlocksPlanPickup({ request, nowMs }),
   );
+  const pushedThreadOpeners = complete.requests.filter(isPushedThreadOpener);
   const retainedRequestIds = new Set(
-    [...pending, ...terminal, ...pickupBlockers].map(
+    [...pending, ...terminal, ...pickupBlockers, ...pushedThreadOpeners].map(
       (request) => request.requestId,
     ),
   );

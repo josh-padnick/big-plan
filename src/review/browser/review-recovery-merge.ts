@@ -139,15 +139,17 @@ export const reviewRecoveryBase = (
   resolvedCommentIds: new Set(state.resolvedCommentIds),
 });
 
-export const repliesForSentComments = ({
+export const repliesForKnownComments = ({
   replies,
-  sent,
+  comments,
 }: {
   readonly replies: ReadonlyMap<string, string>;
-  readonly sent: ReadonlyArray<ReviewComment>;
+  readonly comments: ReadonlyArray<ReviewComment>;
 }): ReadonlyMap<string, string> => {
-  const sentIds = new Set(sent.map((comment) => comment.id));
-  return new Map([...replies].filter(([commentId]) => sentIds.has(commentId)));
+  const commentIds = new Set(comments.map((comment) => comment.id));
+  return new Map(
+    [...replies].filter(([commentId]) => commentIds.has(commentId)),
+  );
 };
 
 /** Keeps pending conflict evidence aligned with the current local state. */
