@@ -6,18 +6,14 @@
 // pipeline here, the same way every committed example does, rather than being
 // read for shape.
 
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { guidanceCommand } from "../cli/guidance/command.js";
 import {
   compileMarkdown,
   MarkdownDiagnosticsError,
 } from "./markdown/compile-markdown.js";
 
-const GUIDANCE = readFileSync(
-  new URL("../components/wireframe/wireframe.guidance.md", import.meta.url)
-    .pathname,
-  "utf8",
-);
+const GUIDANCE = await guidanceCommand(["Wireframe"]);
 
 const PATTERNS_HEADING = "## Eight paste-ready patterns";
 
@@ -79,7 +75,7 @@ const planFor = ({
   ].join("\n");
 
 describe("wireframe guidance patterns", () => {
-  it("should find every pattern the section promises", () => {
+  it("should deliver every promised pattern", () => {
     expect(PATTERNS.length).toBe(8);
   });
 
