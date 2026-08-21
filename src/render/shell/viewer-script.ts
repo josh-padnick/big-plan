@@ -621,6 +621,7 @@ const wireInfoPopovers = () => {
     // Tracking that distinction prevents a pointerenter immediately before a
     // click from opening and then closing the popover in one gesture.
     let pinned = false;
+    let deferredOpen = null;
     const open = () => {
       info.open = true;
       const anchor = summary.getBoundingClientRect();
@@ -643,6 +644,10 @@ const wireInfoPopovers = () => {
       body.style.top = top + "px";
     };
     const close = () => {
+      if (deferredOpen !== null) {
+        clearTimeout(deferredOpen);
+        deferredOpen = null;
+      }
       info.open = false;
     };
     const closeOnEscape = (event) => {
@@ -674,7 +679,8 @@ const wireInfoPopovers = () => {
       // Chrome's trusted Summary activation may apply its native toggle
       // after this listener when hover already opened the Details. Reassert
       // the intended pinned state after that default-action phase.
-      setTimeout(() => {
+      deferredOpen = setTimeout(() => {
+        deferredOpen = null;
         open();
       }, 0);
     });
