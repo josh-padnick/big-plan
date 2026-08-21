@@ -518,7 +518,7 @@ test("should say what connecting a second agent does while one is attached", asy
       "joining",
     );
     await joiningRecovery.click();
-    await expect(recoveryPanel).toContainText("joins as an observer");
+    await expect(recoveryPanel).toContainText("join as an observer agent");
     /*
     The consequence has to be stated as the code behaves. Connecting displaces
     nobody: the attached agent keeps answering until the reviewer moves the
@@ -526,7 +526,17 @@ test("should say what connecting a second agent does while one is attached", asy
     (BIG-171).
     */
     await expect(recoveryPanel).toContainText(
-      "unless you make the new agent the primary",
+      "unless you make it the primary agent",
+    );
+    /*
+    And an observer is not promised the conversation. `agent next` hands one the
+    plan path and the review URL and nothing else, so a reviewer told it can
+    read the discussion was told something the protocol never delivers
+    (BIG-171 round 5).
+    */
+    await expect(recoveryPanel).toContainText("it can read the plan, but it");
+    await expect(recoveryPanel).not.toContainText(
+      "the plan and the conversation",
     );
 
     await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS - 60_000);
