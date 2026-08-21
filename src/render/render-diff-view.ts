@@ -58,6 +58,33 @@ const elementByBlockId = ({
   return null;
 };
 
+/**
+ * Renders one engine-owned block as inert evidence for a diff side.
+ *
+ * A picture is the only block left on this path: it carries no words, so the
+ * lens can evidence its change only by replaying the compiled picture itself.
+ * Both replayed sides go through the side-isolation module because the lens
+ * hides the plan's own block while it shows them, so neither replay is the
+ * plan - which is exactly what that module means by a baseline side, and what
+ * supersedes the route's own scrub and id-namespacing pass.
+ */
+export const renderIsolatedBlockView = ({
+  document,
+  blockId,
+  key,
+}: {
+  readonly document: CompiledMarkdown;
+  readonly blockId: string | undefined;
+  readonly key: string;
+}): string | undefined => {
+  if (blockId === undefined) return undefined;
+  const block = elementByBlockId({ node: document.root, blockId });
+  if (block === null) return undefined;
+  const isolated = structuredClone(block);
+  isolateBaselineSide({ subtree: isolated, key });
+  return toHtml(isolated, { allowDangerousHtml: false });
+};
+
 /** Finds a descendant carrying one exact string-valued data attribute. */
 const elementByDataValue = ({
   node,

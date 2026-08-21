@@ -377,13 +377,12 @@ happen.
 validated result snapshot. Each changed answer carries its own attributed
 places; plan-wide chat carries a grouped digest.
 The in-place lens shows word-level edits for close rewrites and stacked **Was**/**Now** bands for larger rewrites, additions, removals, tables, and code.
-Decision changes use the component diff contract: **Was** and **Now** each render the compiled Decision presentation instead of flattening it into prose.
-When a **Now** side exists, it is the one live, commentable Decision, while **Was** is inert evidence and carries no live plan identity.
+Every built-in component change uses the component diff contract: **Was** and **Now** each render the component's own compiled presentation instead of flattening it into prose, and the change takes the place of the component in the plan rather than sitting beside a hidden copy of it.
+When a **Now** side exists, it is the one live, commentable component - keeping its own comment entry, maximize control, and controls - while **Was** is inert evidence and carries no live plan identity.
 Until the reviewer accepts an answerable **Now** Decision, a banner at the top of its card asks them to accept the change before answering.
 Its disabled **Confirm choice** control shows the same guidance in a hazard-icon tooltip.
-Diagram and file-tree changes continue to retain their compiled component presentation behind **Was**/**Now** switches.
-When either revision contains multiple screens, wireframe changes add a per-screen selector for **Added**, **Removed**, **Updated**, **Moved**, and **Initial screen** changes.
-They keep the full device frame visible behind interactive **Was**/**Now** controls and carry the shared maximize control into the diff lens.
+A diagram, file tree, or wireframe change is therefore maximized by the component's own control, under the component's own name, and its diagram, tree, and screen controls work inside the change exactly as they do in the plan.
+A change whose block the plan no longer holds is replayed at the end of the document as inert evidence.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,

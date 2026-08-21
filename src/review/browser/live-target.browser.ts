@@ -82,9 +82,12 @@ export const lensMissReason = (
   return "unknown-id";
 };
 
-// A legacy lens renders a scrubbed copy of plan content. A component-owned
-// diff root is the live plan block itself, so its lens frame is deliberately
-// excluded until the legacy copy vocabulary leaves with the remaining waves.
+// A lens still shows content that is not the plan: a picture replayed as
+// evidence, and, in the historical archive, a component card whose block the
+// plan no longer holds. A component-owned diff root that replaced a live block
+// is the plan, so its own frame is deliberately excluded from this selector;
+// the archive's host carries the host marker instead, which is what keeps a
+// dead change out of every identity answer.
 const LENS_COPY_SELECTOR =
   "[data-review-diff-lens]:not([data-component-diff]), [data-review-diff-lens-host]";
 
@@ -156,9 +159,9 @@ export const displayedStandIn = (element: HTMLElement): HTMLElement | null => {
 };
 
 /**
- * Lists the pictures the reader is reading. A lens now replays a changed
- * picture as a scrubbed copy, so decorating every match in the document would
- * hang a comment affordance on a snapshot of the plan rather than the plan.
+ * Lists the pictures the reader is reading. A lens replays a changed picture
+ * as an isolated, identity-free rendering, so decorating every match in the
+ * document would hang a comment affordance on evidence rather than the plan.
  */
 export const livePictures = (): ReadonlyArray<HTMLElement> => {
   const article = liveArticle();
@@ -177,8 +180,8 @@ export const liveBlock = (blockId: string): LiveTargetResult => {
 
 /**
  * Resolves a diagram flow anchor to the element the reader can actually see.
- * Snapshot scrubbing removes block ids from a lens copy but keeps its flow
- * anchors, so the clone exclusion is load-bearing here rather than defensive.
+ * A diagram ships one copy per theme variant with only one shown, so the
+ * visible-copy preference is load-bearing here rather than defensive.
  */
 export const liveFlowAnchor = (anchor: string): LiveTargetResult => {
   const article = liveArticle();

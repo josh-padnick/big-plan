@@ -2842,66 +2842,74 @@ Restores the selected snapshot as a new current plan.
     const value = (await response.json()) as {
       readonly locations: ReadonlyArray<{
         readonly kind: string;
-        readonly oldHtml?: string;
-        readonly newHtml?: string;
+        readonly isComponentRoot: boolean;
+        readonly status: string;
+        readonly oldView?: string;
+        readonly newView?: string;
+        readonly view?: string;
       }>;
     };
-    const decision = value.locations.find(
-      (location) => location.kind === "decision",
-    );
-    const flow = value.locations.find(
-      (location) => location.kind === "flow-diagram",
-    );
-    const fileTree = value.locations.find(
-      (location) => location.kind === "file-tree",
-    );
-    const mermaid = value.locations.find(
-      (location) => location.kind === "mermaid-diagram",
-    );
-    const fileTreeDiff = value.locations.find(
-      (location) => location.kind === "file-tree-diff",
-    );
-    const httpEndpoint = value.locations.find(
-      (location) => location.kind === "http-endpoint",
-    );
-    const quickSummary = value.locations.find(
-      (location) => location.kind === "quick-summary",
-    );
-    const quickSummaryFacet = value.locations.find(
-      (location) => location.kind === "quick-summary-facet",
-    );
-    expect(decision?.oldHtml).toContain("Which path?");
-    expect(decision?.newHtml).toContain("Which rollout path?");
-    expect(flow?.oldHtml).toContain("Review service");
-    expect(flow?.newHtml).toContain("Local review service");
-    expect(fileTree?.oldHtml).toContain("service.ts");
-    expect(fileTree?.newHtml).toContain("repository.ts");
-    expect(fileTree?.oldHtml).not.toContain("data-block-id");
-    expect(fileTree?.newHtml).not.toContain("data-block-id");
-    expect(mermaid?.oldHtml).toContain("Review");
-    expect(mermaid?.newHtml).toContain("Plan review");
-    expect(fileTreeDiff?.oldHtml).toContain("Coordinates review");
-    expect(fileTreeDiff?.newHtml).toContain("Coordinates plan review");
-    expect(mermaid?.oldHtml).toContain(`review-diff-was-${from}`);
-    expect(mermaid?.newHtml).toContain(`review-diff-now-${to}`);
-    // A component root without a dedicated text treatment defaults to the
-    // rendered evidence; components with one keep the text path so the lens
-    // can diff their declared sub-targets instead.
-    expect(httpEndpoint).toBeDefined();
-    expect(httpEndpoint?.oldHtml).toBeUndefined();
-    expect(httpEndpoint?.newHtml).toBeUndefined();
-    const httpEndpointField = value.locations.find(
-      (location) => location.kind === "http-endpoint-field",
-    );
-    expect(httpEndpointField).toBeDefined();
-    expect(httpEndpointField?.oldHtml).toBeUndefined();
-    expect(httpEndpointField?.newHtml).toBeUndefined();
-    expect(quickSummary).toBeDefined();
-    expect(quickSummary?.oldHtml).toBeUndefined();
-    expect(quickSummary?.newHtml).toBeUndefined();
-    expect(quickSummaryFacet).toBeDefined();
-    expect(quickSummaryFacet?.oldHtml).toBeUndefined();
-    expect(quickSummaryFacet?.newHtml).toBeUndefined();
+    const byKind = (kind: string) =>
+      value.locations.find((location) => location.kind === kind);
+    const decision = byKind("decision");
+    const flow = byKind("flow-diagram");
+    const fileTree = byKind("file-tree");
+    const mermaid = byKind("mermaid-diagram");
+    const fileTreeDiff = byKind("file-tree-diff");
+    const httpEndpoint = byKind("http-endpoint");
+    const quickSummary = byKind("quick-summary");
+    const quickSummaryFacet = byKind("quick-summary-facet");
+    // No component is shown as a scrubbed copy any more: the whole payload
+    // carries neither side of the retired copy path.
+    expect(
+      value.locations.filter(
+        (location) =>
+          location.oldView !== undefined || location.newView !== undefined,
+      ),
+    ).toEqual([]);
+    // Every migrated component root answers with exactly one component-owned
+    // diff view holding both sides.
+    for (const location of [
+      decision,
+      flow,
+      fileTree,
+      mermaid,
+      fileTreeDiff,
+    ] as const) {
+      expect(location?.view).toBeTypeOf("string");
+    }
+    expect(decision?.view).toContain("Which path?");
+    expect(decision?.view).toContain("Which rollout path?");
+    expect(flow?.view).toContain("Review service");
+    expect(flow?.view).toContain("Local review service");
+    expect(fileTree?.view).toContain("service.ts");
+    expect(fileTree?.view).toContain("repository.ts");
+    expect(mermaid?.view).toContain("Review");
+    expect(mermaid?.view).toContain("Plan review");
+    expect(fileTreeDiff?.view).toContain("Coordinates review");
+    expect(fileTreeDiff?.view).toContain("Coordinates plan review");
+    // Only the proposed side keeps the plan's own address, so opening a diff
+    // can never publish a second copy of an address a comment resolves.
+    expect([
+      ...(mermaid?.view ?? "").matchAll(/data-block-id=/gu),
+    ]).toHaveLength(1);
+    expect(mermaid?.view).toContain('data-diff-side="baseline"');
+    // A component with a dedicated text treatment keeps the text path so the
+    // lens can diff its declared sub-targets instead of stacking two cards.
+    for (const location of [
+      httpEndpoint,
+      quickSummary,
+      quickSummaryFacet,
+    ] as const) {
+      expect(location).toBeDefined();
+      expect(location?.view).toBeUndefined();
+    }
+    // The payload-size tripwire. Shipping a scrubbed copy per side, or
+    // putting a component's compiled diff model on the wire beside the view
+    // that already shows it, is what made this response large enough to be
+    // worth measuring; both would roughly double it. The ceiling is generous
+    // against the measured 228 KB so ordinary content growth never trips it.
+    expect(JSON.stringify(value).length).toBeLessThan(300_000);
     // This case compiles both snapshots through every first-class component,
     // including the Mermaid renderer, so it needs the same headroom the
     // renderer's own suites take rather than the default per-test timeout.
@@ -2937,8 +2945,8 @@ The dashboard shows the retry backlog.
     const value = (await response.json()) as {
       readonly locations: ReadonlyArray<{
         readonly kind: string;
-        readonly oldHtml?: string;
-        readonly newHtml?: string;
+        readonly oldView?: string;
+        readonly newView?: string;
       }>;
       readonly places: ReadonlyArray<{ readonly note: string }>;
     };
@@ -2947,9 +2955,10 @@ The dashboard shows the retry backlog.
     );
     // A picture carries no words, so its compiled markup is the only evidence
     // the lens can show the reviewer.
-    expect(picture?.oldHtml).toContain("./assets/before.png");
-    expect(picture?.newHtml).toContain("./assets/after.png");
-    expect(picture?.oldHtml).not.toContain("data-block-id");
+    expect(picture?.oldView).toContain("./assets/before.png");
+    expect(picture?.newView).toContain("./assets/after.png");
+    expect(picture?.oldView).not.toContain("data-block-id");
+    expect(picture?.newView).not.toContain("data-block-id");
     expect(value.places.map((place) => place.note)).toContain("replaced");
   });
 

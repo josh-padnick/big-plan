@@ -5,8 +5,10 @@ import type { ComponentType } from "react";
 import type { DefaultComponentDiffModel } from "../../_model/component-diff/contract.js";
 import { ComponentDiffSide } from "./component-diff-context.js";
 
+// The phone-sized touch target the repository requires of every control,
+// relaxed once the viewport is wide enough for a pointer.
 const TOGGLE_OPTION_CLASSES =
-  "relative z-10 min-h-8 cursor-pointer rounded-full border-0 bg-transparent px-4 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "relative z-10 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent px-4 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-8 wide:min-w-0";
 
 /** Renders the real component view on each side of the free comparison. */
 export const DefaultComponentDiffView = <TModel,>({

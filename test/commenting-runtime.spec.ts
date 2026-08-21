@@ -5851,10 +5851,16 @@ The release gets a full soak.
         .last()
         .click();
       const archive = page.locator("[data-review-historical-changes]");
-      const historical = archive.locator("[data-review-diff-lens]");
+      const historical = archive.getByRole("region", { name: "Updated" });
       await expect(historical).toBeVisible();
+      // The archive replays the Decision's own card rather than a scrubbed
+      // stand-in, carrying neither its address nor any way to answer it: a
+      // change the plan no longer holds is evidence, not a live question.
+      await expect(historical.locator("[data-component-diff]")).toHaveCount(1);
       await expect(historical.locator("[data-block-id]")).toHaveCount(0);
-      await expect(historical.locator("input").first()).toBeDisabled();
+      await expect(
+        historical.locator("[inert] [data-component-diff]"),
+      ).toHaveCount(1);
       await expect(
         page.getByRole("button", {
           name: "Comment on How should we ship this release?",
@@ -6171,37 +6177,67 @@ test("should colour the default component switch as a diff", async ({
   }
 });
 
-test("should show each initial screen when another wireframe screen changes", async ({
+test("should render a changed wireframe as its own component diff", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
-  const directory = await mkdtemp(
-    join(tmpdir(), "big-plan-wireframe-root-diff-"),
-  );
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-wireframe-diff-"));
   const planPath = join(directory, "wireframe.mdx");
-  const before = `# Wireframe root diff preview
-
-<Wireframe id="queue-root" title="Review queue" initialScreen="queue">
+  const triageScreen = `<Screen id="triage" name="Triage" device="desktop">
+<Panel title="Triage queue">
+<Text text="Unchanged triage content" />
+</Panel>
+</Screen>`;
+  const archiveScreen = `<Screen id="archive" name="Archive" device="desktop">
+<Panel title="Archive queue">
+<Text text="Unchanged archive content" />
+</Panel>
+</Screen>`;
+  const workspace = (
+    headline: string,
+  ) => `<Wireframe id="queue-diff" title="Review queue">
 <Screen id="queue" name="Queue" device="desktop">
-<Panel title="Queue screen">
-<Text text="The old initial screen remains visible in Was." />
+<AppShell>
+<Sidebar brand="Big Plan" mode="Review" />
+<AppContent>
+<PageHeader title="Plan review" />
+<Panel title="Threads">
+<List>
+<ListItem label="${headline}" selected />
+</List>
+</Panel>
+</AppContent>
+</AppShell>
+</Screen>
+${triageScreen}
+${archiveScreen}
+</Wireframe>`;
+  // A second wireframe deliberately reuses the authored id, because a diff
+  // that resolved by authored id rather than by block address would take this
+  // one over instead of the block that actually changed.
+  const unrelatedWorkspace = `<Wireframe id="queue-diff" title="Unrelated prototype">
+<Screen id="unrelated" name="Unrelated" device="desktop">
+<Panel title="Unrelated prototype remains visible">
+<Text text="This wireframe deliberately reuses the authored id." />
 </Panel>
 </Screen>
-<Screen id="detail" name="Detail" device="desktop">
-<Panel title="Detail screen">
-<Text text="The new initial screen remains visible in Now." />
-</Panel>
-</Screen>
-<Screen id="audit" name="Audit" device="desktop">
-<Panel title="Audit screen">
-<Text text="Audit before" />
-</Panel>
-</Screen>
-</Wireframe>
+</Wireframe>`;
+  const before = `# Wireframe diff preview
+
+## Workspace
+
+${workspace("Keep the retry budget visible")}
+
+${unrelatedWorkspace}
 `;
-  const after = before
-    .replace('initialScreen="queue"', 'initialScreen="detail"')
-    .replace("Audit before", "Audit after");
+  const after = `# Wireframe diff preview
+
+## Workspace
+
+${workspace("Keep the rollback owner explicit")}
+
+${unrelatedWorkspace}
+`;
   await writeFile(planPath, after);
   const { startReviewRuntime: startCompiledReviewRuntime } =
     await import("../dist/review/server.js");
@@ -6209,38 +6245,104 @@ test("should show each initial screen when another wireframe screen changes", as
     planPath,
     diffPreviewSource: before,
   });
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const componentDiff = page.locator("[data-component-diff]");
+  const baseline = componentDiff.locator(
+    '[data-component-diff-side="baseline"]',
+  );
+  const proposed = componentDiff.locator(
+    '[data-component-diff-side="proposed"]',
+  );
+  const was = componentDiff.locator('[data-component-diff-label="baseline"]');
+  const now = componentDiff.locator('[data-component-diff-label="proposed"]');
+  const unrelatedWireframe = page
+    .locator('article [data-wireframe="queue-diff"]')
+    .filter({ hasText: "Unrelated prototype remains visible" });
   try {
     await page.goto(runtime.url);
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-    const rail = page.getByRole("complementary", { name: "Feedback" });
     await rail
       .getByRole("button", { name: /Expand thread:/u })
       .first()
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
-    const screenNavigation = page.getByRole("navigation", {
-      name: "Prototype screens",
+
+    await test.step("replace the changed wireframe, not the one sharing its authored id", async () => {
+      await expect(componentDiff).toHaveCount(1);
+      await expect(componentDiff).toContainText(
+        "Keep the rollback owner explicit",
+      );
+      await expect(componentDiff).toContainText(
+        "Keep the retry budget visible",
+      );
+      await expect(unrelatedWireframe).toBeVisible();
     });
-    await expect(
-      screenNavigation.getByRole("button", {
-        name: "Queue → Detail Initial screen",
-      }),
-    ).toBeVisible();
-    const snapshot = page.locator("[data-review-component-snapshot]");
-    const queueScreen = snapshot.locator('[data-wireframe-screen="queue"]');
-    const detailScreen = snapshot.locator('[data-wireframe-screen="detail"]');
-    await expect(detailScreen).toBeVisible();
-    await expect(queueScreen).toBeHidden();
-    await page.getByRole("button", { name: "Was" }).click();
-    await expect(queueScreen).toBeVisible();
-    await expect(detailScreen).toBeHidden();
+
+    await test.step("show the proposed wireframe first and the baseline on request", async () => {
+      await expect(proposed).toBeVisible();
+      await expect(baseline).toBeHidden();
+      const proposedEdge = await proposed.evaluate(
+        (node) => getComputedStyle(node).borderTopColor,
+      );
+      await was.click();
+      await expect(baseline).toBeVisible();
+      await expect(proposed).toBeHidden();
+      const baselineEdge = await baseline.evaluate(
+        (node) => getComputedStyle(node).borderTopColor,
+      );
+      // The pastel edge is what says which side the reader is looking at, so
+      // the two sides must not paint the same one.
+      expect(baselineEdge).not.toBe(proposedEdge);
+      await now.click();
+      await expect(proposed).toBeVisible();
+    });
+
+    await test.step("keep the wireframe's own screen switcher, and only the live side's", async () => {
+      const switcher = proposed.getByRole("navigation", {
+        name: "Prototype screens",
+      });
+      await expect(switcher).toBeVisible();
+      await expect(
+        switcher.getByRole("button", { name: "Triage" }),
+      ).toBeVisible();
+      // The baseline side is evidence, not a second live prototype: it keeps
+      // its markup but none of its affordances.
+      expect(await baseline.evaluate((node) => node.inert)).toBe(true);
+      await switcher.getByRole("button", { name: "Archive" }).click();
+      await expect(proposed).toContainText("Unchanged archive content");
+    });
+
+    await test.step("maximize under the component's own noun", async () => {
+      const maximize = componentDiff.getByRole("button", {
+        name: "Maximize wireframe",
+      });
+      // Exactly one live trigger: the isolated baseline side must not offer a
+      // second one that would fight the first for the same frame.
+      await expect(maximize).toHaveCount(1);
+      await maximize.click();
+      await expect(proposed.locator("[data-figure-maximized]")).toHaveCount(1);
+      await page.keyboard.press("Escape");
+      await expect(proposed.locator("[data-figure-maximized]")).toHaveCount(0);
+      await expect(componentDiff).toHaveCount(1);
+    });
+
+    await test.step("keep both toggle options touchable on a phone-sized screen", async () => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      for (const option of [was, now]) {
+        const box = await option.boundingBox();
+        if (box === null) throw new Error("toggle option must be measurable");
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+      await page.setViewportSize({ width: 1600, height: 1000 });
+    });
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
 
-test("should keep a surviving wireframe visible beside a removed snapshot", async ({
+test("should show a removed wireframe in place without hiding the one that survived", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -6291,531 +6393,20 @@ ${survivingWireframe}
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
 
-    await expect(
-      page.locator("[data-review-component-snapshot]"),
-    ).toContainText("This snapshot belongs only in Was.");
-    await expect(survivor).toBeVisible();
-  } finally {
-    await closeReviewRuntime({ page, runtime });
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
-test("should not grow a screen switcher for a single-screen wireframe diff, and should match the non-diff switcher for a multi-screen one", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1600, height: 1000 });
-  const directory = await mkdtemp(
-    join(tmpdir(), "big-plan-wireframe-switcher-"),
-  );
-  const planPath = join(directory, "wireframe.mdx");
-  const singleScreen = (
-    copy: string,
-    screenId: string,
-  ) => `<Wireframe id="queue" title="Review queue">
-<Screen id="${screenId}" name="Failed payments" device="desktop">
-<Panel title="Failed payments">
-<Text text="${copy}" />
-</Panel>
-</Screen>
-</Wireframe>`;
-  const multiScreen = (
-    copy: string,
-  ) => `<Wireframe id="workspace" title="Plan review">
-<Screen id="triage" name="Triage" device="desktop">
-<Panel title="Triage queue">
-<Text text="${copy}" />
-</Panel>
-</Screen>
-<Screen id="archive" name="Archive" device="desktop">
-<Panel title="Archive queue">
-<Text text="Unchanged archive content" />
-</Panel>
-</Screen>
-</Wireframe>`;
-  const before = `# Wireframe switcher parity
-
-## Single screen
-
-${singleScreen("Original copy", "failed-payments")}
-
-## Multiple screens
-
-${multiScreen("Original triage copy")}
-`;
-  const after = `# Wireframe switcher parity
-
-## Single screen
-
-${singleScreen("Revised copy", "payment-failures")}
-
-## Multiple screens
-
-${multiScreen("Revised triage copy")}
-`;
-  await writeFile(planPath, after);
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
-  const runtime = await startCompiledReviewRuntime({
-    planPath,
-    diffPreviewSource: before,
-  });
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  try {
-    await page.goto(runtime.url);
-    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-    await rail
-      .getByRole("button", { name: /Expand thread:/u })
-      .first()
-      .click();
-    await rail.getByRole("button", { name: "Review changes" }).click();
-
-    await test.step("a single-screen wireframe diff shows no screen switcher", async () => {
-      const diffs = page.locator("[data-review-component-diff]");
-      const singleDiff = diffs.filter({ hasText: "Failed payments" });
-      await expect(singleDiff).toHaveCount(1);
-      await expect(
-        singleDiff.getByRole("navigation", { name: "Prototype screens" }),
-      ).toHaveCount(0);
-    });
-
-    await test.step("a multi-screen wireframe diff's switcher matches the non-diff one", async () => {
-      await rail.getByText("Triage queue").click();
-      const diffs = page.locator("[data-review-component-diff]");
-      const multiDiff = diffs.filter({ hasText: "Triage queue" });
-      const switcher = multiDiff.getByRole("navigation", {
-        name: "Prototype screens",
-      });
-      await expect(switcher).toBeVisible();
-      const entry = switcher.getByRole("button", { name: /Triage/u });
-      await expect(entry).toHaveClass(/wireframe-switch/);
-      const style = await entry.evaluate((node) => {
-        const cs = getComputedStyle(node);
-        return {
-          borderWidth: cs.borderWidth,
-          borderRadius: cs.borderRadius,
-          boxShadow: cs.boxShadow,
-        };
-      });
-      // The non-diff switcher's own resting chrome, asserted directly rather
-      // than duplicated as a second literal, so the two can never drift
-      // silently apart.
-      expect(style.borderWidth).toBe("2px");
-      expect(style.borderRadius).toBe("6px");
-      expect(style.boxShadow).not.toBe("none");
-    });
-  } finally {
-    await closeReviewRuntime({ page, runtime });
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
-test("should fit a wireframe component snapshot and keep its pastel diff edge", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1600, height: 1000 });
-  const directory = await mkdtemp(join(tmpdir(), "big-plan-wireframe-diff-"));
-  const planPath = join(directory, "wireframe.mdx");
-  const overflowItems = Array.from(
-    { length: 40 },
-    (_, index) => `<ListItem label="Queue item ${index + 1}" />`,
-  ).join("\n");
-  const triageScreen = `<Screen id="triage" name="Triage" device="desktop">
-<Panel title="Triage queue">
-<Text text="Unchanged triage content" />
-</Panel>
-</Screen>`;
-  const archiveScreen = `<Screen id="archive" name="Archive" device="desktop">
-<Panel title="Archive queue">
-<Text text="Unchanged archive content" />
-</Panel>
-</Screen>`;
-  const changedWorkspace = `<Wireframe id="queue-diff" title="Review queue">
-<Screen id="queue" name="Queue" device="desktop">
-<AppShell>
-<Sidebar brand="Big Plan" mode="Review" />
-<AppContent>
-<PageHeader title="Plan review" />
-<Select label="Queue view" value="All threads" />
-<Checkbox label="Include resolved threads" checked />
-<Panel title="Threads">
-<List>
-<ListItem label="Keep the retry budget visible" selected />
-${overflowItems}
-</List>
-</Panel>
-</AppContent>
-</AppShell>
-</Screen>
-<Screen id="retired" name="Retired" device="desktop">
-<Panel title="Retired queue">
-<Text text="Legacy queue content" />
-</Panel>
-</Screen>
-${triageScreen}
-${archiveScreen}
-</Wireframe>`;
-  const unrelatedWorkspace = `<Wireframe id="queue-diff" title="Unrelated prototype">
-<Screen id="unrelated" name="Unrelated" device="desktop">
-<Panel title="Unrelated prototype remains visible">
-<Text text="This wireframe deliberately reuses the authored id." />
-</Panel>
-</Screen>
-</Wireframe>`;
-  const before = `# Wireframe diff preview
-
-Review the queue change in context.
-
-## Workspace
-
-${changedWorkspace}
-
-${unrelatedWorkspace}
-`;
-  const revisedWorkspace = changedWorkspace
-    .replace(
-      "Keep the retry budget visible",
-      "Keep the rollback owner explicit",
-    )
-    .replace(
-      `<Screen id="retired" name="Retired" device="desktop">
-<Panel title="Retired queue">
-<Text text="Legacy queue content" />
-</Panel>
-</Screen>`,
-      `<Screen id="escalations" name="Escalations" device="desktop">
-<Panel title="Escalation queue">
-<Text text="New escalation queue content" />
-</Panel>
-</Screen>`,
+    // A removed component still renders as its own card, in the place it was
+    // removed from, carrying only the side that has anything to show. It is
+    // authored history rather than plan content, so it publishes no address
+    // the reader's stored comments could resolve against.
+    const componentDiff = page.locator("[data-component-diff]");
+    await expect(componentDiff).toHaveCount(1);
+    await expect(componentDiff).toContainText(
+      "This snapshot belongs only in Was.",
     );
-  const reorderedWorkspace = revisedWorkspace.replace(
-    `${triageScreen}\n${archiveScreen}`,
-    `${archiveScreen}\n${triageScreen}`,
-  );
-  const after = `# Wireframe diff preview
-
-Review the queue change in context.
-
-## Workspace
-
-${unrelatedWorkspace}
-
-${reorderedWorkspace}
-`;
-  await writeFile(planPath, after);
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
-  const runtime = await startCompiledReviewRuntime({
-    planPath,
-    diffPreviewSource: before,
-  });
-  const wireframes = page.locator('article [data-wireframe="queue-diff"]');
-  const isLiveWireframeVisible = async (): Promise<boolean> =>
-    wireframes.evaluateAll((elements) => {
-      const live = elements.find(
-        (element) =>
-          element.closest("[data-review-diff-lens-host]") === null &&
-          element.textContent?.includes("Keep the rollback owner explicit"),
-      );
-      if (!(live instanceof HTMLElement)) return false;
-      return getComputedStyle(live).display !== "none";
-    });
-  const unrelatedWireframe = wireframes.filter({
-    hasText: "Unrelated prototype remains visible",
-  });
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  const componentDiff = page.locator("[data-review-component-diff]");
-  const snapshot = componentDiff.locator("[data-review-component-snapshot]");
-  const now = componentDiff.getByRole("button", { name: "Now" });
-  const was = componentDiff.getByRole("button", { name: "Was" });
-  const screenNavigation = componentDiff.getByRole("navigation", {
-    name: "Prototype screens",
-  });
-  const maximize = snapshot.getByRole("button", {
-    name: "Maximize wireframe diff",
-  });
-  const snapshotBody = snapshot.locator(":scope > [data-figure-body]");
-  // The pastel red/green diff edge belongs to the highlighted screen itself,
-  // matching the non-diff view's own frame chrome at the outer snapshot
-  // level: a second, thicker border there would compete with this one for
-  // the reader's attention instead of carrying it.
-  const highlightedScreen = snapshot.locator("[data-wireframe-screen]:visible");
-  try {
-    await test.step("open the changed wireframe without hiding its duplicate", async () => {
-      await page.goto(runtime.url);
-      await expect.poll(isLiveWireframeVisible).toBe(true);
-      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-      await rail
-        .getByRole("button", { name: /Expand thread:/u })
-        .first()
-        .click();
-      await rail.getByRole("button", { name: "Review change" }).click();
-      await expect.poll(isLiveWireframeVisible).toBe(false);
-      await expect(unrelatedWireframe).toBeVisible();
-      await expect(snapshot).toHaveAttribute(
-        "data-review-component-snapshot",
-        "new",
-      );
-      await expect(
-        screenNavigation.getByRole("button", {
-          name: "Archive Moved 4 → 3",
-        }),
-      ).toBeVisible();
-      await expect(
-        screenNavigation.getByRole("button", {
-          name: "Triage Moved 3 → 4",
-        }),
-      ).toBeVisible();
-    });
-
-    await test.step("keep every diff control touchable on a narrow screen", async () => {
-      await page.setViewportSize({ width: 390, height: 844 });
-      const touchTargets = [
-        {
-          name: "prototype screen",
-          locator: screenNavigation.getByRole("button").first(),
-        },
-        { name: "Was", locator: was },
-        { name: "Now", locator: now },
-        { name: "maximize", locator: maximize },
-      ];
-      for (const target of touchTargets) {
-        const box = await target.locator.boundingBox();
-        if (box === null) {
-          throw new Error(`${target.name} touch target must be measurable`);
-        }
-        expect(
-          box.width,
-          `${target.name} touch target width`,
-        ).toBeGreaterThanOrEqual(44);
-        expect(
-          box.height,
-          `${target.name} touch target height`,
-        ).toBeGreaterThanOrEqual(44);
-      }
-      await page.setViewportSize({ width: 1600, height: 1000 });
-    });
-
-    await test.step("show hover feedback on both toggle options in every state and theme", async () => {
-      const visualState = async (button: typeof was) =>
-        button.evaluate((node) => {
-          const style = getComputedStyle(node);
-          return {
-            backgroundColor: style.backgroundColor,
-            color: style.color,
-          };
-        });
-      const options = [was, now];
-      for (const theme of ["light", "dark"] as const) {
-        await page.evaluate((nextTheme) => {
-          document.documentElement.setAttribute("data-theme", nextTheme);
-        }, theme);
-        for (const selected of options) {
-          await selected.click();
-          await page.mouse.move(0, 0);
-          await expect(selected).toHaveAttribute("aria-pressed", "true");
-          for (const option of options) {
-            const resting = await visualState(option);
-            await option.hover();
-            await expect
-              .poll(async () => {
-                const hovered = await visualState(option);
-                return (
-                  hovered.backgroundColor !== resting.backgroundColor &&
-                  hovered.color !== resting.color
-                );
-              })
-              .toBe(true);
-            await page.mouse.move(0, 0);
-          }
-        }
-      }
-    });
-
-    await test.step("navigate added and removed prototype screens", async () => {
-      await screenNavigation
-        .getByRole("button", { name: "Escalations Added" })
-        .click();
-      await expect(was).toBeDisabled();
-      await expect(now).toBeEnabled();
-      await expect(now).toHaveAttribute("aria-pressed", "true");
-      await expect(snapshot).toContainText("New escalation queue content");
-      await expect(snapshot).not.toContainText("Legacy queue content");
-
-      await screenNavigation
-        .getByRole("button", { name: "Retired Removed" })
-        .click();
-      await expect(now).toBeDisabled();
-      await expect(was).toBeEnabled();
-      await expect(was).toHaveAttribute("aria-pressed", "true");
-      await expect(snapshot).toHaveAttribute(
-        "data-review-component-snapshot",
-        "old",
-      );
-      await expect(snapshot).toContainText("Legacy queue content");
-      await expect(snapshot).not.toContainText("New escalation queue content");
-    });
-
-    await test.step("maximize an accessible, fitted snapshot", async () => {
-      await screenNavigation
-        .getByRole("button", { name: "Queue Updated" })
-        .click();
-      await now.click();
-      await expect(snapshot).toHaveCSS("border-top-width", "1px");
-      await expect(highlightedScreen).toHaveCSS("border-top-width", "10px");
-      await expect(maximize).toBeVisible();
-      await page.setViewportSize({ width: 1600, height: 600 });
-      await maximize.click();
-      await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
-      await expect(snapshotBody).toHaveAttribute("tabindex", "0");
-      expect(await snapshotBody.evaluate((node) => node.inert)).toBe(false);
-      await expect(snapshotBody).toHaveCSS("pointer-events", "auto");
-      const embeddedControl = snapshotBody.locator("button").first();
-      await expect(embeddedControl).toHaveAttribute("tabindex", "-1");
-      await expect(embeddedControl).toHaveAttribute("aria-disabled", "true");
-      expect(
-        await snapshotBody.getByLabel("Queue view").evaluate((control) => {
-          return control instanceof HTMLSelectElement && control.disabled;
-        }),
-      ).toBe(true);
-      expect(
-        await snapshotBody
-          .getByLabel("Include resolved threads")
-          .evaluate((control) => {
-            return control instanceof HTMLInputElement && control.disabled;
-          }),
-      ).toBe(true);
-      // A maximized wireframe screen fits both axes by shrinking the whole
-      // device frame - the reader opened it to see all of it at once - so a
-      // 40-item list no longer forces the panel itself to scroll the way a
-      // width-only fit once did; it shrinks the frame instead.
-      await expect
-        .poll(() =>
-          highlightedScreen.evaluate(
-            (node) => node.scrollHeight - node.clientHeight,
-          ),
-        )
-        .toBeLessThanOrEqual(2);
-      await expect(
-        snapshot.getByRole("button", { name: "Restore wireframe diff size" }),
-      ).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
-      await expect(componentDiff).toHaveCount(1);
-      await maximize.click();
-      await snapshot
-        .getByRole("button", { name: "Restore wireframe diff size" })
-        .click();
-      await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
-    });
-
-    // A width-only fit passes a wide-and-tall viewport by coincidence - there
-    // is room to spare on both axes, so nothing exposes a missing height
-    // term. Wide-and-short is the shape that catches it: shrinking only the
-    // viewport height must shrink the frame further, the same fit
-    // test/wireframe.spec.ts already requires of the non-diff surface. This
-    // once regressed silently because the diff lens fit only the width.
-    await test.step("shrink the maximized frame by height, not just width", async () => {
-      await maximize.click();
-      await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
-      // The fit answers a size change from a ResizeObserver, which delivers
-      // after the frame that lays the new size out, while maximizing and
-      // setViewportSize both resolve as soon as the new size is applied. A
-      // zoom sampled straight afterwards is therefore still the answer to
-      // the previous geometry - which is how this comparison once read the
-      // earlier 1600x600 step's zoom as the tall viewport's own and then
-      // asked the short viewport to shrink below it. Reading across two
-      // rendering frames puts the observer's answer in front of the sample.
-      const readZoom = () =>
-        highlightedScreen.evaluate(async (node) => {
-          const nextFrame = (): Promise<void> =>
-            new Promise((resolve) => {
-              requestAnimationFrame(() => {
-                resolve();
-              });
-            });
-          await nextFrame();
-          await nextFrame();
-          const frame = node.querySelector<HTMLElement>(".wireframe-frame");
-          return Number.parseFloat(frame?.style.zoom || "1");
-        });
-      // A sample is taken only once two of those reads agree, the way
-      // test/wireframe.spec.ts settles the non-diff fit: the fit pins the
-      // card to the width the frame paints at, and that write resizes an
-      // observed element in turn, so one delivery can still schedule
-      // another. Like that helper this waits for the value to stop moving
-      // rather than for it to change, so a fit that wrongly answers both
-      // viewports with the same zoom fails the comparison below instead of
-      // timing out here.
-      const readSettledZoom = async (): Promise<number> => {
-        let lastZoom = Number.NaN;
-        await expect
-          .poll(async () => {
-            const zoom = await readZoom();
-            const settled = zoom > 0 && zoom === lastZoom;
-            lastZoom = zoom;
-            return settled;
-          })
-          .toBe(true);
-        return lastZoom;
-      };
-      await page.setViewportSize({ width: 1855, height: 1200 });
-      const tallZoom = await readSettledZoom();
-      await page.setViewportSize({ width: 1855, height: 700 });
-      const shortZoom = await readSettledZoom();
-      expect(shortZoom).toBeLessThan(tallZoom);
-      await expect
-        .poll(() =>
-          highlightedScreen.evaluate(
-            (node) => node.scrollHeight - node.clientHeight,
-          ),
-        )
-        .toBeLessThanOrEqual(2);
-      expect(shortZoom).toBeGreaterThan(0);
-      await page.keyboard.press("Escape");
-      await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
-    });
-
-    await test.step("preserve fitted pastel framing across sides and themes", async () => {
-      const geometry = await snapshot.evaluate((node) => {
-        const frame = node.querySelector<HTMLElement>(".wireframe-frame");
-        const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
-        if (frame === null || card === null) return null;
-        return {
-          frameRight: frame.getBoundingClientRect().right,
-          cardRight: card.getBoundingClientRect().right,
-          scrollWidth: node.scrollWidth,
-          clientWidth: node.clientWidth,
-        };
-      });
-      expect(geometry).not.toBeNull();
-      expect(geometry?.frameRight).toBeLessThanOrEqual(
-        (geometry?.cardRight ?? 0) + 0.5,
-      );
-      expect(geometry?.scrollWidth).toBe(geometry?.clientWidth);
-
-      await was.click();
-      await expect(snapshot).toHaveAttribute(
-        "data-review-component-snapshot",
-        "old",
-      );
-      await expect(snapshot).toHaveCSS("border-top-width", "1px");
-      await expect(highlightedScreen).toHaveCSS("border-top-width", "10px");
-      await page.evaluate(() => {
-        document.documentElement.setAttribute("data-theme", "dark");
-      });
-      await expect(snapshot).toHaveCSS("border-top-width", "1px");
-      await expect(highlightedScreen).toHaveCSS("border-top-width", "10px");
-      expect(
-        await snapshot.evaluate(
-          (node) => node.scrollWidth === node.clientWidth,
-        ),
-      ).toBe(true);
-      await rail.getByRole("button", { name: "Exit review" }).click();
-      await expect(componentDiff).toHaveCount(0);
-      await expect.poll(isLiveWireframeVisible).toBe(true);
-    });
+    await expect(
+      componentDiff.locator('[data-component-diff-side="proposed"]'),
+    ).toHaveCount(0);
+    await expect(componentDiff.locator("[data-block-id]")).toHaveCount(0);
+    await expect(survivor).toBeVisible();
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
@@ -7706,7 +7297,7 @@ Reviewers confirm the output by hand.
   }
 });
 
-test("should maximize a historical component when the current plan has no slides", async ({
+test("should archive a historical component inside an article that has no slides", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -7902,20 +7493,22 @@ The current plan contains no slides.
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
     const archive = page.locator("[data-review-historical-changes]");
-    const snapshot = archive.locator("[data-review-component-snapshot]");
     await expect(archive).toHaveCount(1);
-    await expect(snapshot).toContainText("Automated queue");
+    // A plan with no slides still has an article, which is where the archive
+    // must land: appended after the last slide when there is one, and to the
+    // article itself when there is not.
     expect(
       await archive.evaluate((element) => element.closest("article") !== null),
     ).toBe(true);
-    await snapshot
-      .getByRole("button", { name: "Maximize wireframe diff" })
-      .click();
-    await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
-    await expect(snapshot).toHaveCSS("position", "fixed");
-    await snapshot
-      .getByRole("button", { name: "Restore wireframe diff size" })
-      .click();
+    // The archived change is the wireframe's own card, replayed as evidence:
+    // it shows what changed, publishes no address, and offers nothing to act
+    // on, because the block it describes is no longer in the plan.
+    const archived = archive.locator("[data-component-diff]");
+    await expect(archived).toContainText("Automated queue");
+    await expect(archive.locator("[data-block-id]")).toHaveCount(0);
+    await expect(archive.locator("[inert] [data-component-diff]")).toHaveCount(
+      1,
+    );
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
