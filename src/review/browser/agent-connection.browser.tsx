@@ -815,10 +815,7 @@ const AgentPresenceLoadingCard = () => (
 // exist, so this is a line of advice with a mark beside it and nothing to press.
 const AgentActivityTip = () => (
   <p className="m-0 flex min-w-0 gap-1.5 text-xs text-muted [&>span>svg]:size-3.5">
-    <span
-      className="mt-px inline-flex shrink-0 items-center"
-      aria-hidden="true"
-    >
+    <span data-leading-icon="" aria-hidden="true">
       <Icon icon={LIGHTBULB_ICON} />
     </span>
     <span className="min-w-0 [overflow-wrap:anywhere]">

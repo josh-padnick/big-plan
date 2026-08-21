@@ -5596,6 +5596,264 @@ test("should preview stale, historical, and multi-place causal diffs through the
   }
 });
 
+test("should keep a Decision live and addressed while reviewing its change", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-decision-diff-"));
+  const planPath = join(directory, "decision.mdx");
+  const before = `# Release plan
+
+## Delivery choice
+
+<Decision question="How should we ship this release?">
+
+<Option title="Ship immediately" recommended>
+
+<Consideration label="Safety" verdict="Risky" tone="bad">
+
+There is no soak time.
+
+</Consideration>
+
+</Option>
+
+<Option title="Wait one week">
+
+<Consideration label="Safety" verdict="Strong" tone="good">
+
+The release gets a full soak.
+
+</Consideration>
+
+</Option>
+
+</Decision>`;
+  const after = before.replace(
+    "Ship immediately",
+    "Ship after a one-day canary",
+  );
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const originalDecision = await page
+      .locator('[data-block-kind="decision"]')
+      .elementHandle();
+    expect(originalDecision).not.toBeNull();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+
+    await test.step("open the Decision change in place", async () => {
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await rail.getByRole("tab", { name: "Chat" }).click();
+      await rail
+        .getByRole("button", { name: /changes? across/u })
+        .first()
+        .click();
+      await rail
+        .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
+        .last()
+        .click();
+
+      const diff = page.locator("[data-component-diff]");
+      await expect(diff).toBeVisible();
+      await expect(diff).toContainText("How should we ship this release?");
+      await expect(page.locator('[data-block-kind="decision"]')).toHaveCount(1);
+      await expect(
+        page.getByRole("button", {
+          name: "Comment on How should we ship this release?",
+        }),
+      ).toBeVisible();
+    });
+
+    await test.step("use the real Decision controls without answering early", async () => {
+      const diff = page.locator("[data-component-diff]");
+      const proposed = diff.locator('[data-component-diff-side="proposed"]');
+      const changeNote = proposed.locator("[data-decision-change-note]");
+      await expect(changeNote).toBeVisible();
+      expect(
+        await changeNote.evaluate(
+          (node) =>
+            node.parentElement?.tagName === "FIGCAPTION" &&
+            node.parentElement.parentElement?.firstElementChild ===
+              node.parentElement &&
+            node === node.parentElement.firstElementChild,
+        ),
+      ).toBe(true);
+      const disclosure = proposed.locator("details").first();
+      const disclosureTrigger = disclosure.locator("summary");
+      await disclosureTrigger.click();
+      await expect(disclosure).toHaveAttribute("open", "");
+      await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+      await page.keyboard.press("Escape");
+      await expect(disclosure).not.toHaveAttribute("open", "");
+      await expect(diff).toBeVisible();
+
+      await proposed
+        .getByRole("radio", { name: /Ship after a one-day canary/u })
+        .check();
+      const confirm = proposed.getByRole("button", { name: "Confirm choice" });
+      await expect(confirm).toBeDisabled();
+      await expect(proposed).toContainText(
+        "Accept this change before answering this decision.",
+      );
+      const confirmGate = proposed.locator("[data-decision-confirm-gate]");
+      const confirmTooltip = proposed.getByRole("tooltip");
+      await expect(confirmTooltip).toBeHidden();
+      await confirmGate.hover();
+      await expect(confirmTooltip).toBeVisible();
+      await expect(confirmTooltip).toHaveText(
+        "You're viewing a proposed change to this component. Accept the change and then confirm your choice.",
+      );
+      await expect(
+        confirmTooltip.locator('[data-lucide="triangle-alert"]'),
+      ).toBeVisible();
+      const centers = await confirmTooltip.evaluate((tooltip) => {
+        const icon = tooltip.querySelector('[data-lucide="triangle-alert"]');
+        const copy = tooltip.querySelector(":scope > span:last-child");
+        if (!(icon instanceof SVGElement) || copy === null) {
+          throw new Error("Expected the Decision tooltip icon and copy.");
+        }
+        const range = document.createRange();
+        range.selectNodeContents(copy);
+        const firstLine = range.getClientRects()[0];
+        if (firstLine === undefined) {
+          throw new Error("Expected the Decision tooltip's first line box.");
+        }
+        const iconRect = icon.getBoundingClientRect();
+        return {
+          icon: (iconRect.top + iconRect.bottom) / 2,
+          firstLine: (firstLine.top + firstLine.bottom) / 2,
+        };
+      });
+      expect(Math.abs(centers.icon - centers.firstLine)).toBeLessThanOrEqual(1);
+      for (let index = 0; index < 20; index += 1) {
+        const isConfirmGateFocused = await confirmGate.evaluate(
+          (node) => node === document.activeElement,
+        );
+        if (isConfirmGateFocused) break;
+        await page.keyboard.press("Tab");
+      }
+      await expect(confirmGate).toBeFocused();
+      await expect(confirmGate).not.toHaveCSS("box-shadow", "none");
+
+      const sideToggle = diff.locator("[data-component-diff-toggle]");
+      await diff.locator('[data-component-diff-choice="proposed"]').focus();
+      await page.keyboard.press("ArrowLeft");
+      await expect(
+        diff.locator('[data-component-diff-choice="baseline"]'),
+      ).toBeChecked();
+      const sharedFocusShadow = await page.evaluate(() => {
+        const reference = document.createElement("span");
+        reference.style.boxShadow = "var(--elevation-focus)";
+        document.body.append(reference);
+        const shadow = getComputedStyle(reference).boxShadow;
+        reference.remove();
+        return shadow;
+      });
+      await expect(sideToggle).toHaveCSS("box-shadow", sharedFocusShadow);
+      await page.emulateMedia({ forcedColors: "active" });
+      await expect(sideToggle).toHaveCSS("outline-style", "solid");
+      await page.emulateMedia({ forcedColors: "none" });
+      await page.keyboard.press("ArrowRight");
+
+      await page.evaluate((original) => {
+        const article = document.querySelector("article");
+        if (article === null) throw new Error("Review article is missing");
+        const refreshedArticle = article.cloneNode(true);
+        const refreshedDecision = original.cloneNode(true);
+        if (
+          !(refreshedArticle instanceof HTMLElement) ||
+          !(refreshedDecision instanceof HTMLElement)
+        ) {
+          throw new Error("Review article refresh could not be cloned");
+        }
+        refreshedDecision.dataset.refreshProof = "";
+        const currentDiff = refreshedArticle.querySelector(
+          "[data-component-diff]",
+        );
+        if (currentDiff === null) {
+          throw new Error("Component diff is missing from refreshed article");
+        }
+        currentDiff.replaceWith(refreshedDecision);
+        article.replaceWith(refreshedArticle);
+        document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+      }, originalDecision);
+      const reinstalled = page.locator('[data-component-diff-side="proposed"]');
+      await expect(
+        reinstalled.getByRole("button", { name: "Confirm choice" }),
+      ).toBeDisabled();
+      await reinstalled
+        .getByRole("radio", { name: /Ship after a one-day canary/u })
+        .check();
+
+      await page.getByRole("button", { name: "Accept this change" }).click();
+      await expect(
+        reinstalled.getByRole("button", { name: "Confirm choice" }),
+      ).toBeEnabled();
+      await expect(
+        reinstalled.getByText(
+          "Accept this change before answering this decision.",
+          { exact: true },
+        ),
+      ).toBeHidden();
+      await expect(
+        reinstalled.locator("[data-decision-confirm-gate]"),
+      ).toHaveAttribute("tabindex", "-1");
+      await expect(reinstalled.getByRole("tooltip")).toBeHidden();
+
+      await diff.getByText("Was", { exact: true }).click();
+      await expect(
+        diff.locator('[data-component-diff-side="baseline"]'),
+      ).toBeVisible();
+      await diff.getByText("Now", { exact: true }).click();
+      await expect(proposed).toBeVisible();
+    });
+
+    await test.step("restore the refreshed article root when review exits", async () => {
+      await page.getByRole("button", { name: "Exit review" }).first().click();
+      await expect(page.locator("[data-component-diff]")).toHaveCount(0);
+      expect(await originalDecision?.evaluate((node) => node.isConnected)).toBe(
+        false,
+      );
+      await expect(
+        page.locator('[data-block-kind="decision"][data-refresh-proof]'),
+      ).toHaveCount(1);
+    });
+
+    await test.step("archive a missing Decision without publishing its identity", async () => {
+      await page
+        .locator("article [data-block-id]")
+        .evaluateAll((nodes) => nodes.forEach((node) => node.remove()));
+      await rail
+        .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
+        .last()
+        .click();
+      const archive = page.locator("[data-review-historical-changes]");
+      const historical = archive.locator("[data-review-diff-lens]");
+      await expect(historical).toBeVisible();
+      await expect(historical.locator("[data-block-id]")).toHaveCount(0);
+      await expect(historical.locator("input").first()).toBeDisabled();
+      await expect(
+        page.getByRole("button", {
+          name: "Comment on How should we ship this release?",
+        }),
+      ).toHaveCount(0);
+    });
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should keep component replacements inside their slide and preserve Callout presentation", async ({
   page,
 }, testInfo) => {
@@ -5813,7 +6071,7 @@ The runbook stays inline for the first rollout.
   }
 });
 
-test("should colour a component snapshot switch as a diff", async ({
+test("should colour the default component switch as a diff", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -5845,49 +6103,43 @@ test("should colour a component snapshot switch as a diff", async ({
       .first()
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
-    const componentDiff = page.locator("[data-review-component-diff]");
+    const componentDiff = page.locator("[data-component-diff]");
     await expect(componentDiff).toHaveCount(1);
-    const snapshot = componentDiff.locator("[data-review-component-snapshot]");
-    const now = componentDiff.getByRole("button", { name: "Now" });
-    const was = componentDiff.getByRole("button", { name: "Was" });
+    const baseline = componentDiff.locator(
+      '[data-component-diff-side="baseline"]',
+    );
+    const proposed = componentDiff.locator(
+      '[data-component-diff-side="proposed"]',
+    );
+    const now = componentDiff.getByText("Now", { exact: true });
+    const was = componentDiff.getByText("Was", { exact: true });
     const toggleThumb = componentDiff.locator(
-      "[data-review-diff-toggle-thumb]",
+      "[data-component-diff-toggle-thumb]",
     );
 
-    await expect(
-      snapshot.getByRole("button", { name: "Maximize component diff" }),
-    ).toBeVisible();
-    await expect(
-      snapshot.getByRole("button", { name: "Maximize wireframe diff" }),
-    ).toHaveCount(0);
-
-    await expect(snapshot).toHaveAttribute(
-      "data-review-component-snapshot",
-      "new",
-    );
+    await expect(proposed).toBeVisible();
+    await expect(baseline).toBeHidden();
     const added = await now.evaluate((node) => ({
       color: getComputedStyle(node).color,
     }));
     const addedThumbBackground = await toggleThumb.evaluate(
       (node) => getComputedStyle(node).backgroundColor,
     );
-    const addedBorder = await snapshot.evaluate(
+    const addedBorder = await proposed.evaluate(
       (node) => getComputedStyle(node).borderTopColor,
     );
     expect(addedBorder).not.toBe(added.color);
 
     await was.click();
-    await expect(snapshot).toHaveAttribute(
-      "data-review-component-snapshot",
-      "old",
-    );
+    await expect(baseline).toBeVisible();
+    await expect(proposed).toBeHidden();
     const removed = await was.evaluate((node) => ({
       color: getComputedStyle(node).color,
     }));
     const removedThumbBackground = await toggleThumb.evaluate(
       (node) => getComputedStyle(node).backgroundColor,
     );
-    const removedBorder = await snapshot.evaluate(
+    const removedBorder = await baseline.evaluate(
       (node) => getComputedStyle(node).borderTopColor,
     );
     expect(removedBorder).not.toBe(removed.color);

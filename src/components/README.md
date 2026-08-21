@@ -19,12 +19,13 @@ Keep the parts of that concept together:
 | ------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Interpret authored MDX               | `compile.ts`                                | Validates attributes and children, reports authoring errors, and produces plain validated data without using React.                                                                                                                       |
 | Present the validated data           | `view.tsx`                                  | Turns the validated data into the React view both deliveries render. It does not re-parse authored MDX.                                                                                                                                   |
-| Connect compilation and presentation | `definition.ts`                             | Pairs the compilation function with its view and declares any allowed nested components.                                                                                                                                                  |
+| Connect compilation and presentation | `definition.ts`                             | Pairs the compilation function with its ordinary view, optionally pairs a bespoke diff derivation with its diff view, and declares any allowed nested components.                                                                         |
 | Style the view                       | `view.tsx`, rarely `styles.css`             | Tailwind utilities on the markup the view renders. A `styles.css` file is the bounded escape hatch [_internal/ENGINEERING_PRACTICES.md](../../_internal/ENGINEERING_PRACTICES.md) defines, not the default home for a component's styles. |
 | Prove behavior                       | Colocated `*.test.ts` or `*.test.tsx` files | Tests the authoring rule or view beside the code that owns it.                                                                                                                                                                            |
 
 The exact set of files can vary with the component.
 The important boundary is that authoring rules do not depend on React, presentation consumes the resulting validated data, and component-specific behavior remains in the component's folder.
+Every definition receives the shared compiled **Was**/**Now** diff presentation unless it supplies both a bespoke model derivation and its paired view.
 
 ## When code is shared
 
@@ -32,9 +33,9 @@ Folders beginning with `_` are internal support code.
 Plan authors cannot use their names as MDX components.
 
 - Use `_authoring/` for parsing, validation, diagnostics, or authored-body behavior that genuinely belongs to multiple component compilers and does not depend on React.
-- Use `_model/` for framework-free model types, grammars, and pure derivations, such as the document outline or the tree-text grammar, that genuinely belong to multiple component slices.
+- Use `_model/` for framework-free model types, grammars, and pure derivations, such as the component diff contract, document outline, or tree-text grammar, that genuinely belong to multiple component slices.
 - Use `_registration/` for the registry that maps allowed MDX names to component definitions and for the small adapter that pairs compilation with a React view.
-- Use `_shared/` for reusable visual building blocks, such as an internal badge or annotation card, that authors must never write directly in a plan.
+- Use `_shared/` for reusable visual building blocks, such as the default component diff presentation, an internal badge, or an annotation card, that authors must never write directly in a plan.
 
 Do not move code into an underscore folder merely because it might become reusable.
 Keep it with the component that owns it until another real consumer demonstrates that the behavior is shared.

@@ -53,7 +53,9 @@ export const Toaster = ({
         content: "min-w-0 flex-1",
         title: "text-sm font-semibold text-ink",
         description: "mt-1 text-sm text-muted",
-        icon: "mt-0.5 shrink-0 text-danger",
+        // Sonner owns this wrapper, so mirror the shared data-leading-icon
+        // line-box contract with utilities it can accept.
+        icon: "inline-flex h-[1lh] shrink-0 items-center text-danger",
         closeButton:
           "ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:size-6",
         ...toastOptions?.classNames,

@@ -218,6 +218,7 @@ export const DiffTourProvider = ({
             place={active}
             isVisible
             isSuperseded={tour.isSuperseded === true}
+            isAccepted={isActiveAccepted}
           />
           <div
             // The bar floats clear of the viewport edge rather than hugging

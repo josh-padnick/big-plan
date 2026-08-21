@@ -255,7 +255,11 @@ const ReadOnlyNote = ({ className = "" }: { readonly className?: string }) => (
     data-decision-locked-note=""
     hidden
   >
-    <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+    <span
+      className="w-4 [&>svg]:size-4"
+      data-leading-icon=""
+      aria-hidden="true"
+    >
       {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
     </span>
     <span>{"This review is read-only, so no answer can be recorded."}</span>
@@ -272,7 +276,11 @@ const SupersededNotice = () => (
     role="status"
     hidden
   >
-    <span className="mt-0.5 inline-flex size-4 shrink-0" aria-hidden="true">
+    <span
+      className="w-4 [&>svg]:size-4"
+      data-leading-icon=""
+      aria-hidden="true"
+    >
       {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
     </span>
     <span>
@@ -287,7 +295,16 @@ const SupersededNotice = () => (
 // end of the document, so the action is never screens away from the choice.
 // The whole card is about one screen now, which is why this is close rather
 // than sticky: pinning it would add chrome without shortening the reach.
-const AnswerControls = () => (
+const CHANGE_CONFIRM_HELP =
+  "You're viewing a proposed change to this component. Accept the change and then confirm your choice.";
+
+const AnswerControls = ({
+  changeOpen,
+  confirmHelpId,
+}: {
+  readonly changeOpen: boolean;
+  readonly confirmHelpId: string;
+}) => (
   <>
     <div
       className="decision-footer flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-6 py-4"
@@ -321,14 +338,48 @@ const AnswerControls = () => (
       >
         {"Clear answer"}
       </button>
-      <button
-        className="decision-confirm"
-        type="button"
-        data-decision-confirm=""
-        disabled
+      <span
+        className="decision-confirm-gate"
+        data-decision-confirm-gate=""
+        {...(changeOpen
+          ? {
+              "aria-describedby": confirmHelpId,
+              "aria-label": "Why Confirm choice is unavailable",
+              "data-decision-confirm-help-active": "",
+              role: "group",
+              tabIndex: 0,
+            }
+          : {})}
       >
-        {"Confirm choice"}
-      </button>
+        <button
+          className="decision-confirm"
+          type="button"
+          data-decision-confirm=""
+          disabled
+        >
+          {"Confirm choice"}
+        </button>
+        {changeOpen ? (
+          <span
+            id={confirmHelpId}
+            className="decision-confirm-tooltip"
+            data-decision-confirm-tooltip=""
+            role="tooltip"
+          >
+            <span
+              className="w-4 [&>svg]:size-4"
+              data-leading-icon=""
+              aria-hidden="true"
+            >
+              {lucideIconToReact({
+                icon: TRIANGLE_ALERT_ICON,
+                hidden: false,
+              })}
+            </span>
+            <span>{CHANGE_CONFIRM_HELP}</span>
+          </span>
+        ) : null}
+      </span>
     </div>
     <div
       className="decision-answer group gap-3 px-6 py-4 data-[decision-persistence-failed]:bg-[var(--callout-danger-bg)]!"
@@ -431,8 +482,10 @@ const Details = ({ model }: { readonly model: CompiledDecisionCard }) =>
 
 export const DecisionCard = ({
   model,
+  isChangeOpen = false,
 }: {
   readonly model: CompiledDecisionCard;
+  readonly isChangeOpen?: boolean;
 }) => {
   const answerable = isAnswerableDecisionCard(model);
   const critical = isCriticalDecisionCard(model);
@@ -440,7 +493,7 @@ export const DecisionCard = ({
   return (
     <figure
       id={model.id}
-      className="decision mb-6 min-w-0 overflow-hidden rounded-xl border border-edge bg-paper shadow-raised"
+      className="decision group/decision mb-6 min-w-0 overflow-hidden rounded-xl border border-edge bg-paper shadow-raised"
       data-decision=""
       data-decision-status={model.status}
       data-decision-layout={model.layout}
@@ -448,46 +501,65 @@ export const DecisionCard = ({
       data-decision-interaction={model.interaction}
       {...(answerable ? { "data-decision-selector": "" } : {})}
       {...(critical ? { "data-decision-critical": "" } : {})}
+      {...(isChangeOpen ? { "data-decision-change-open": "" } : {})}
     >
-      <figcaption className="decision-zone-question bg-header px-6 py-4">
-        {model.layout === "rows" ? (
-          <p className="decision-eyebrow m-0 text-xs font-semibold tracking-caps text-subtle uppercase">
-            {"Decision"}
+      <figcaption>
+        {answerable && isChangeOpen ? (
+          <p
+            className="m-0 hidden items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)] group-data-[decision-change-open]/decision:flex"
+            data-decision-change-note=""
+            role="status"
+          >
+            <span
+              className="w-4 [&>svg]:size-4"
+              data-leading-icon=""
+              aria-hidden="true"
+            >
+              {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
+            </span>
+            <span>{"Accept this change before answering this decision."}</span>
           </p>
         ) : null}
-        {answerable ? null : (
-          <BadgePill
-            label={statusLabel(model)}
-            classNames={[
-              "decision-status-pill",
-              `decision-status-${model.status}`,
-              STATUS_CLASSES[model.status],
-            ]}
-          />
-        )}
-        {/* The word carries the meaning, so the tint is reinforcement rather
-            than the signal a reader has to see colour to receive. */}
-        {critical ? (
-          <BadgePill
-            label={"Critical"}
-            classNames={[
-              "decision-critical-pill",
-              "bg-[var(--callout-warning-bg)]",
-              "text-[var(--callout-warning-c)]",
-            ]}
-          />
-        ) : null}
-        <p
-          id={model.questionId}
-          className={`mt-2 mb-0 font-semibold text-ink first:mt-0 ${
-            model.layout === "rows"
-              ? "text-2xl leading-tight"
-              : "text-lg leading-7"
-          }`}
-          data-decision-question=""
-        >
-          {model.question}
-        </p>
+        <div className="decision-zone-question bg-header px-6 py-4">
+          {model.layout === "rows" ? (
+            <p className="decision-eyebrow m-0 text-xs font-semibold tracking-caps text-subtle uppercase">
+              {"Decision"}
+            </p>
+          ) : null}
+          {answerable ? null : (
+            <BadgePill
+              label={statusLabel(model)}
+              classNames={[
+                "decision-status-pill",
+                `decision-status-${model.status}`,
+                STATUS_CLASSES[model.status],
+              ]}
+            />
+          )}
+          {/* The word carries the meaning, so the tint is reinforcement rather
+              than the signal a reader has to see colour to receive. */}
+          {critical ? (
+            <BadgePill
+              label={"Critical"}
+              classNames={[
+                "decision-critical-pill",
+                "bg-[var(--callout-warning-bg)]",
+                "text-[var(--callout-warning-c)]",
+              ]}
+            />
+          ) : null}
+          <p
+            id={model.questionId}
+            className={`mt-2 mb-0 font-semibold text-ink first:mt-0 ${
+              model.layout === "rows"
+                ? "text-2xl leading-tight"
+                : "text-lg leading-7"
+            }`}
+            data-decision-question=""
+          >
+            {model.question}
+          </p>
+        </div>
       </figcaption>
       {model.context.length === 0 ? null : (
         <div className="decision-zone-question bg-header px-6 pb-4 text-base [&>:last-child]:mb-0">
@@ -541,7 +613,12 @@ export const DecisionCard = ({
       </fieldset>
       <Reversibility model={model} />
       <Details model={model} />
-      {answerable ? <AnswerControls /> : null}
+      {answerable ? (
+        <AnswerControls
+          changeOpen={isChangeOpen}
+          confirmHelpId={`${model.id}-change-confirm-help`}
+        />
+      ) : null}
     </figure>
   );
 };

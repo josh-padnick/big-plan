@@ -3,11 +3,12 @@
 // the same name can sit on a snapshot copy inside a What-changed lens, on the
 // hidden theme variant of a diagram, or on a block whose content drifted since
 // the id was minted. Resolving those names in one place keeps the discipline
-// mandatory - scoped to the live article, never a lens copy, visible copy
-// preferred - and makes a miss say why it missed instead of degrading to a
-// plausible default. Where a lens belongs relative to the blocks it finds
-// stays pure in diff-anchor.ts; this module is the DOM half of that decision,
-// which is why it carries the browser-only suffix.
+// mandatory - scoped to the live article, never an inert snapshot copy,
+// visible copy preferred - and makes a miss say why it missed instead of
+// degrading to a plausible default. A compiler-addressed component diff root
+// is live plan DOM, not a snapshot copy. Where a lens belongs relative to the
+// blocks it finds stays pure in diff-anchor.ts; this module is the DOM half of
+// that decision, which is why it carries the browser-only suffix.
 
 import type { DiffLocation } from "../shared/review-wire.js";
 import {
@@ -81,10 +82,11 @@ export const lensMissReason = (
   return "unknown-id";
 };
 
-// A lens renders a scrubbed copy of plan content. Both the host the island
-// creates and the lens itself are marked, so either marker proves a copy.
+// A legacy lens renders a scrubbed copy of plan content. A component-owned
+// diff root is the live plan block itself, so its lens frame is deliberately
+// excluded until the legacy copy vocabulary leaves with the remaining waves.
 const LENS_COPY_SELECTOR =
-  "[data-review-diff-lens], [data-review-diff-lens-host]";
+  "[data-review-diff-lens]:not([data-component-diff]), [data-review-diff-lens-host]";
 
 /** True when the element is a snapshot copy inside a What-changed lens. */
 export const isLensCopy = (element: Element): boolean =>
@@ -216,7 +218,7 @@ export const candidateMatchesLivePicture = ({
     candidate.expectedPicture.source === livePicture.source &&
     candidate.expectedPicture.alt === livePicture.alt);
 
-/** Resolves a decision id to its card in the live article, never a lens copy. */
+/** Resolves a decision id to its live card, never an inert snapshot copy. */
 export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };
@@ -277,6 +279,23 @@ export const liveLensAnchor = (
     return { found: resolved.found, placement: candidate.placement };
   }
   return { missing: lensMissReason(misses) };
+};
+
+/** The component-owned diff root currently carrying a compiled block. */
+export const liveComponentDiff = (
+  location: DiffLocation,
+): HTMLElement | null => {
+  const article = liveArticle();
+  if (article === null) return null;
+  for (const candidate of lensAnchorCandidates(location, {
+    isSuperseded: false,
+  })) {
+    const resolved = resolveWithin(article, blockSelector(candidate.blockId));
+    if ("missing" in resolved) continue;
+    const root = resolved.found.closest<HTMLElement>("[data-component-diff]");
+    if (root !== null) return root;
+  }
+  return null;
 };
 
 /**

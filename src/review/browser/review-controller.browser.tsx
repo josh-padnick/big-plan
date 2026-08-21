@@ -223,6 +223,7 @@ import {
   toast,
   WorkingMark,
 } from "./ui.browser.js";
+import { replacePlanDom } from "./plan-dom.browser.js";
 
 const BODY_LIMIT = 4000;
 const LONG_COMMENT = 180;
@@ -866,7 +867,9 @@ const RuntimeAlertBanner = ({
     aria-live="assertive"
     {...{ [scope]: "" }}
   >
-    <Icon icon={CIRCLE_X_ICON} />
+    <span data-leading-icon="" aria-hidden="true">
+      <Icon icon={CIRCLE_X_ICON} />
+    </span>
     <div className="min-w-0 flex-1">
       <strong className="block text-ink">{heading}</strong>
       <p className="m-0 mt-1 text-xs text-ink [overflow-wrap:anywhere]">
@@ -1501,18 +1504,19 @@ const parseDecisionAnsweredDetail = (
       }
     : null;
 
-// The only place plan DOM is replaced. Swapping the article detaches every
-// node the shell scripts wired at load, so the swap and its announcement stay
-// one ritual: replace the reading surface, then dispatch
-// "bigplan:article-replaced" so each shell script re-wires the live article.
+// Adapts a full article refresh to the shared plan-DOM replacement boundary.
+// Swapping the article detaches every node the shell scripts wired at load, so
+// the replacement and its announcement remain one operation.
 const replacePlanArticle = (nextDocument: Document): void => {
   const nextArticle = nextDocument.querySelector("article");
   const currentArticle = document.querySelector("article");
   if (nextArticle === null || currentArticle === null) {
     throw new Error("The revised plan did not contain its reading surface");
   }
-  currentArticle.replaceWith(document.importNode(nextArticle, true));
-  document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+  replacePlanDom({
+    target: currentArticle,
+    replacement: document.importNode(nextArticle, true),
+  });
 };
 
 const MarkdownBody = ({
@@ -1529,12 +1533,21 @@ const MarkdownBody = ({
   </div>
 );
 
-/** Finds chrome owned by one block without borrowing controls from a nested block. */
-const ownedDescendant = (
+/** The live presentation inside one addressed block, excluding its baseline. */
+const commentPresentation = (block: HTMLElement): HTMLElement =>
+  block.matches("[data-component-diff]")
+    ? (block.querySelector<HTMLElement>(
+        '[data-component-diff-side="proposed"]',
+      ) ?? block)
+    : block;
+
+const ownedPresentationDescendant = (
   block: HTMLElement,
   selector: string,
 ): HTMLElement | null =>
-  Array.from(block.querySelectorAll<HTMLElement>(selector)).find(
+  Array.from(
+    commentPresentation(block).querySelectorAll<HTMLElement>(selector),
+  ).find(
     (element) => element.closest<HTMLElement>("[data-block-id]") === block,
   ) ?? null;
 
@@ -1555,117 +1568,156 @@ const useBlockHosts = () => {
     }>
   >([]);
   useEffect(() => {
-    const mount = () =>
-      Array.from(
-        document.querySelectorAll<HTMLElement>(
+    // The rendered block address is the browser edge of the compiler's block
+    // inventory. Re-read those addressed roots when plan DOM changes instead
+    // of treating the article element itself as identity: a component diff
+    // replaces one compiled root while deliberately keeping the article.
+    const commentableBlocks = (): ReadonlyArray<HTMLElement> => {
+      const article = document.querySelector("article");
+      if (article === null) return [];
+      return Array.from(
+        article.querySelectorAll<HTMLElement>(
           '[data-block-id]:not([data-block-kind="part"])',
         ),
-      )
-        .filter(
-          (block) =>
-            block.dataset.blockKind !== "image" &&
-            !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
-            !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
-            !DERIVED_KINDS.has(block.dataset.blockKind ?? "") &&
-            block.closest("[data-quick-summary]") === null &&
-            // A figure that already offers its own whole-figure comment owns
-            // that affordance, and its notes join the batch the reader submits
-            // from the figure. Portaling a second control here would put two
-            // comment icons in one toolbar and split one figure's feedback
-            // across two mechanisms.
-            ownedDescendant(block, "[data-flow-figure-comment]") === null,
-        )
-        .map((block) => {
-          const host = document.createElement("span");
-          if (
-            block.dataset.blockKind === "data-table" ||
-            block.dataset.blockKind === "table"
-          ) {
-            const tableActions = ownedDescendant(block, ".figure-action-group");
-            if (tableActions === null) {
-              host.dataset.reviewAnchorHost = "";
-              block.append(host);
-            } else {
-              host.dataset.reviewToolbarHost = "";
-              // An action group with no other control leaves the comment
-              // standing alone rather than joining a control bar.
-              if (tableActions.childElementCount === 0) {
-                host.dataset.reviewToolbarInline = "";
-              }
-              tableActions.prepend(host);
-            }
+      ).filter(
+        (block) =>
+          block.dataset.blockKind !== "image" &&
+          !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
+          !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
+          !DERIVED_KINDS.has(block.dataset.blockKind ?? "") &&
+          block.closest("[data-quick-summary]") === null &&
+          // A figure that already offers its own whole-figure comment owns
+          // that affordance, and its notes join the batch the reader submits
+          // from the figure. Portaling a second control here would put two
+          // comment icons in one toolbar and split one figure's feedback
+          // across two mechanisms.
+          ownedPresentationDescendant(block, "[data-flow-figure-comment]") ===
+            null,
+      );
+    };
+    const mount = (blocks: ReadonlyArray<HTMLElement>) =>
+      blocks.map((block) => {
+        const host = document.createElement("span");
+        if (
+          block.dataset.blockKind === "data-table" ||
+          block.dataset.blockKind === "table"
+        ) {
+          const tableActions = ownedPresentationDescendant(
+            block,
+            ".figure-action-group",
+          );
+          if (tableActions === null) {
+            host.dataset.reviewAnchorHost = "";
+            block.append(host);
           } else {
-            const plainCodeFigure = block.parentElement?.matches(".code-figure")
-              ? block.parentElement
-              : null;
-            const plainCodeActions =
-              plainCodeFigure?.querySelector<HTMLElement>(
-                ".figure-control-bar",
-              );
-            const plainCodeCopy =
-              plainCodeActions?.querySelector<HTMLElement>("[data-copy-code]");
-            const copyControl = ownedDescendant(
-              block,
-              "[data-copy-source], [data-copy-code]",
-            );
-            const actionGroup = ownedDescendant(
-              block,
-              ".figure-action-group, .figure-control-bar",
-            );
-            const inlineHeader = ownedDescendant(
-              block,
-              ".file-tree-header, .callout-header",
-            );
-            const overlayHeader = ownedDescendant(
-              block,
-              ".decision-zone-question",
-            );
-            if (plainCodeActions !== undefined && plainCodeActions !== null) {
-              host.dataset.reviewToolbarHost = "";
-              if (plainCodeCopy === undefined || plainCodeCopy === null) {
-                plainCodeActions.prepend(host);
-              } else {
-                plainCodeCopy.after(host);
-              }
-            } else if (copyControl !== null) {
-              host.dataset.reviewToolbarHost = "";
-              copyControl.before(host);
-            } else if (actionGroup !== null) {
-              host.dataset.reviewToolbarHost = "";
-              // An action group with no other control leaves the comment
-              // standing alone rather than joining a control bar.
-              if (actionGroup.childElementCount === 0) {
-                host.dataset.reviewToolbarInline = "";
-              }
-              actionGroup.prepend(host);
-            } else if (inlineHeader !== null) {
-              host.dataset.reviewToolbarHost = "";
+            host.dataset.reviewToolbarHost = "";
+            // An action group with no other control leaves the comment
+            // standing alone rather than joining a control bar.
+            if (tableActions.childElementCount === 0) {
               host.dataset.reviewToolbarInline = "";
-              inlineHeader.append(host);
-            } else if (overlayHeader !== null) {
-              host.dataset.reviewToolbarHost = "";
-              host.dataset.reviewToolbarOverlay = "";
-              overlayHeader.append(host);
-            } else {
-              host.dataset.reviewAnchorHost = "";
-              block.append(host);
             }
+            tableActions.prepend(host);
           }
-          return { block, host };
-        });
-    let article = document.querySelector("article");
-    let mounted = mount();
+        } else {
+          const plainCodeFigure = block.parentElement?.matches(".code-figure")
+            ? block.parentElement
+            : null;
+          const plainCodeActions = plainCodeFigure?.querySelector<HTMLElement>(
+            ".figure-control-bar",
+          );
+          const plainCodeCopy =
+            plainCodeActions?.querySelector<HTMLElement>("[data-copy-code]");
+          const copyControl = ownedPresentationDescendant(
+            block,
+            "[data-copy-source], [data-copy-code]",
+          );
+          const actionGroup = ownedPresentationDescendant(
+            block,
+            ".figure-action-group, .figure-control-bar",
+          );
+          const inlineHeader = ownedPresentationDescendant(
+            block,
+            ".file-tree-header, .callout-header",
+          );
+          const overlayHeader = ownedPresentationDescendant(
+            block,
+            ".decision-zone-question",
+          );
+          if (plainCodeActions !== undefined && plainCodeActions !== null) {
+            host.dataset.reviewToolbarHost = "";
+            if (plainCodeCopy === undefined || plainCodeCopy === null) {
+              plainCodeActions.prepend(host);
+            } else {
+              plainCodeCopy.after(host);
+            }
+          } else if (copyControl !== null) {
+            host.dataset.reviewToolbarHost = "";
+            copyControl.before(host);
+          } else if (actionGroup !== null) {
+            host.dataset.reviewToolbarHost = "";
+            // An action group with no other control leaves the comment
+            // standing alone rather than joining a control bar.
+            if (actionGroup.childElementCount === 0) {
+              host.dataset.reviewToolbarInline = "";
+            }
+            actionGroup.prepend(host);
+          } else if (inlineHeader !== null) {
+            host.dataset.reviewToolbarHost = "";
+            host.dataset.reviewToolbarInline = "";
+            inlineHeader.append(host);
+          } else if (overlayHeader !== null) {
+            host.dataset.reviewToolbarHost = "";
+            host.dataset.reviewToolbarOverlay = "";
+            overlayHeader.append(host);
+          } else {
+            host.dataset.reviewAnchorHost = "";
+            block.append(host);
+          }
+        }
+        return { block, host };
+      });
+    let mounted = mount(commentableBlocks());
     setHosts(mounted);
-    const observer = new MutationObserver(() => {
-      const nextArticle = document.querySelector("article");
-      if (nextArticle === article) return;
-      mounted.forEach(({ host }) => host.remove());
-      article = nextArticle;
-      mounted = mount();
+    const reconcile = () => {
+      const nextBlocks = commentableBlocks();
+      const nextBlockSet = new Set(nextBlocks);
+      const byBlock = new Map(mounted.map((entry) => [entry.block, entry]));
+      let changed = false;
+      for (const entry of mounted) {
+        if (nextBlockSet.has(entry.block) && entry.host.isConnected) continue;
+        entry.host.remove();
+        byBlock.delete(entry.block);
+        changed = true;
+      }
+      for (const block of nextBlocks) {
+        if (byBlock.has(block)) continue;
+        const entry = mount([block])[0];
+        if (entry === undefined) continue;
+        byBlock.set(block, entry);
+        changed = true;
+      }
+      const nextMounted = nextBlocks.flatMap((block) => {
+        const entry = byBlock.get(block);
+        return entry === undefined ? [] : [entry];
+      });
+      const orderChanged = nextMounted.some(
+        (entry, index) => entry !== mounted[index],
+      );
+      if (!changed && !orderChanged) return;
+      mounted = nextMounted;
       setHosts(mounted);
+    };
+    let scheduled = 0;
+    const observer = new MutationObserver(() => {
+      if (scheduled !== 0) return;
+      scheduled = requestAnimationFrame(() => {
+        scheduled = 0;
+        reconcile();
+      });
     });
     observer.observe(document.body, { childList: true, subtree: true });
     return () => {
+      if (scheduled !== 0) cancelAnimationFrame(scheduled);
       observer.disconnect();
       mounted.forEach(({ host }) => host.remove());
     };

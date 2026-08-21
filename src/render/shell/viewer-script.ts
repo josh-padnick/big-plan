@@ -592,6 +592,9 @@ const infoPopoverRegistry = [];
 document.addEventListener("pointerdown", (event) => {
   for (const entry of infoPopoverRegistry) entry.onOutsidePointerDown(event);
 });
+document.addEventListener("keydown", (event) => {
+  for (const entry of infoPopoverRegistry) entry.onDocumentKeydown(event);
+});
 document.addEventListener(
   "scroll",
   () => {
@@ -618,6 +621,7 @@ const wireInfoPopovers = () => {
     // Tracking that distinction prevents a pointerenter immediately before a
     // click from opening and then closing the popover in one gesture.
     let pinned = false;
+    let deferredOpen = null;
     const open = () => {
       info.open = true;
       const anchor = summary.getBoundingClientRect();
@@ -640,7 +644,17 @@ const wireInfoPopovers = () => {
       body.style.top = top + "px";
     };
     const close = () => {
+      if (deferredOpen !== null) {
+        clearTimeout(deferredOpen);
+        deferredOpen = null;
+      }
       info.open = false;
+    };
+    const closeOnEscape = (event) => {
+      if (event.key !== "Escape" || !info.open) return;
+      pinned = false;
+      event.bigPlanEscapeHandled = true;
+      close();
     };
     info.addEventListener("pointerenter", (event) => {
       if (event.pointerType !== "touch") open();
@@ -665,18 +679,14 @@ const wireInfoPopovers = () => {
       // Chrome's trusted Summary activation may apply its native toggle
       // after this listener when hover already opened the Details. Reassert
       // the intended pinned state after that default-action phase.
-      setTimeout(() => {
+      deferredOpen = setTimeout(() => {
+        deferredOpen = null;
         open();
       }, 0);
     });
-    summary.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || !info.open) return;
-      pinned = false;
-      event.bigPlanEscapeHandled = true;
-      close();
-    });
     infoPopoverRegistry.push({
       info,
+      onDocumentKeydown: closeOnEscape,
       onOutsidePointerDown: (event) => {
         if (
           pinned &&
@@ -2562,6 +2572,7 @@ const wireDecisions = () => {
     const own = (selector) => ownAll(selector)[0] || null;
 
     const confirm = own("[data-decision-confirm]");
+    const confirmGate = own("[data-decision-confirm-gate]");
     const change = own("[data-decision-change]");
     const clear = own("[data-decision-clear]");
     const footer = own("[data-decision-footer]");
@@ -2847,6 +2858,11 @@ const wireDecisions = () => {
     // article replacement starts out locked too.
     const readOnlyReview = () =>
       document.documentElement.hasAttribute("data-review-read-only");
+    // Decision owns this ordering rule: a changed decision is finalized first
+    // and answered second. The review layer only removes the overlay once its
+    // disposition says the change is accepted.
+    const changeIsOpen = () =>
+      decision.hasAttribute("data-decision-change-open");
 
     const showPanel = (index) => {
       for (const panel of panels) {
@@ -2887,7 +2903,18 @@ const wireDecisions = () => {
       // option uses. Neither borrows the other's chrome.
       confirm.hidden = proposing && !decisionMode;
       confirm.disabled =
-        locked || choice === null || (proposing && proposalValue() === "");
+        locked ||
+        changeIsOpen() ||
+        choice === null ||
+        (proposing && proposalValue() === "");
+      if (confirmGate !== null) {
+        const confirmHelpActive = changeIsOpen();
+        confirmGate.toggleAttribute(
+          "data-decision-confirm-help-active",
+          confirmHelpActive,
+        );
+        confirmGate.tabIndex = confirmHelpActive ? 0 : -1;
+      }
       change.disabled = locked;
       for (const candidate of choices) candidate.disabled = locked;
       if (proposalText !== null) proposalText.disabled = locked;

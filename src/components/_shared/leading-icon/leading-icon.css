@@ -1,0 +1,14 @@
+/*
+CSS escape hatch: this shared visual primitive gives server React, browser React, and
+raw HTML the same sentence-leading icon alignment contract. Its wrapper follows
+the caller's first line box while the caller continues to own glyph size and
+colour.
+*/
+@layer components {
+  [data-leading-icon] {
+    display: inline-flex;
+    flex: none;
+    height: 1lh;
+    align-items: center;
+  }
+}

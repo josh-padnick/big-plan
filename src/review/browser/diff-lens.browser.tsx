@@ -5,6 +5,7 @@
 import { createPortal } from "react-dom";
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -36,9 +37,11 @@ import {
   LENS_STAND_IN_ATTRIBUTE,
   liveArticle,
   liveBlock,
+  liveComponentDiff,
   liveLensAnchor,
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
+import { replacePlanDom } from "./plan-dom.browser.js";
 import {
   compareWireframeScreens,
   wireframeScreenIdForSide,
@@ -1089,7 +1092,7 @@ const firstLiveAnchor = (
   return null;
 };
 
-export const DiffLensPortal = ({
+const LegacyDiffLensPortal = ({
   diff,
   place,
   isVisible,
@@ -1253,4 +1256,188 @@ export const DiffLensPortal = ({
         />,
         host,
       );
+};
+
+/** Parses one trusted server-rendered component diff into a live DOM root. */
+const componentDiffRoot = (view: string): HTMLElement | null => {
+  const parsed = new DOMParser().parseFromString(view, "text/html");
+  const root = parsed.body.firstElementChild;
+  return root instanceof HTMLElement ? document.importNode(root, true) : null;
+};
+
+const applyDecisionReviewAuthority = ({
+  root,
+  isAccepted,
+}: {
+  readonly root: HTMLElement;
+  readonly isAccepted: boolean;
+}): void => {
+  const decision = root.querySelector<HTMLElement>(
+    '[data-component-diff-side="proposed"] [data-decision]',
+  );
+  if (decision === null) return;
+  decision.toggleAttribute("data-decision-change-open", !isAccepted);
+};
+
+/**
+ * Replaces the real component root for a migrated diff and restores the exact
+ * node that was there when the tour leaves. A full article refresh detaches
+ * both nodes, so the replacement is resolved and installed again.
+ */
+const ComponentDiffReplacement = ({
+  location,
+  isAccepted,
+}: {
+  readonly location: DiffLocation;
+  readonly isAccepted: boolean;
+}) => {
+  const replacementRef = useRef<HTMLElement | null>(null);
+  const locationRef = useRef(location);
+  const acceptedRef = useRef(isAccepted);
+  useLayoutEffect(() => {
+    locationRef.current = location;
+    acceptedRef.current = isAccepted;
+  }, [isAccepted, location]);
+  useEffect(() => {
+    if (location.view === undefined) return;
+    let original: HTMLElement | null = null;
+    let replacement: HTMLElement | null = null;
+
+    const install = (): void => {
+      const next = componentDiffRoot(location.view ?? "");
+      if (next === null) return;
+      const anchor = liveLensAnchor(locationRef.current, {
+        isSuperseded: false,
+      });
+      if ("missing" in anchor) return;
+      replacement = next;
+      replacementRef.current = next;
+      applyDecisionReviewAuthority({
+        root: next,
+        isAccepted: acceptedRef.current,
+      });
+      if (anchor.placement === "replace") {
+        original = anchor.found;
+        replacePlanDom({ target: anchor.found, replacement: next });
+      } else {
+        if (anchor.placement === "before") anchor.found.before(next);
+        else anchor.found.after(next);
+        document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+      }
+      document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
+      next.scrollIntoView({ behavior: lensScrollBehavior(), block: "center" });
+    };
+
+    const reinstallAfterArticleRefresh = (): void => {
+      if (replacement?.isConnected === true) return;
+      const refreshed = liveComponentDiff(locationRef.current);
+      if (refreshed !== null) {
+        replacement = refreshed;
+        replacementRef.current = refreshed;
+        applyDecisionReviewAuthority({
+          root: refreshed,
+          isAccepted: acceptedRef.current,
+        });
+        document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
+        return;
+      }
+      install();
+    };
+    install();
+    document.addEventListener(
+      "bigplan:article-replaced",
+      reinstallAfterArticleRefresh,
+    );
+    return () => {
+      document.removeEventListener(
+        "bigplan:article-replaced",
+        reinstallAfterArticleRefresh,
+      );
+      replacementRef.current = null;
+      const liveReplacement =
+        liveComponentDiff(locationRef.current) ??
+        (replacement?.isConnected === true ? replacement : null);
+      if (liveReplacement !== null && original !== null) {
+        replacePlanDom({ target: liveReplacement, replacement: original });
+      } else if (liveReplacement !== null) {
+        liveReplacement.remove();
+        document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+      }
+    };
+  }, [
+    location.afterBlockId,
+    location.beforeBlockId,
+    location.newBlockId,
+    location.oldBlockId,
+    location.view,
+  ]);
+
+  useEffect(() => {
+    const replacement = replacementRef.current;
+    if (replacement === null) return;
+    applyDecisionReviewAuthority({ root: replacement, isAccepted });
+    document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
+  }, [isAccepted, location.view]);
+
+  return null;
+};
+
+/** Chooses the component-owned replacement only for a migrated root. */
+export const DiffLensPortal = ({
+  diff,
+  place,
+  isVisible,
+  isSuperseded,
+  isAccepted,
+}: {
+  readonly diff: SnapshotDiff;
+  readonly place: DiffPlace;
+  readonly isVisible: boolean;
+  readonly isSuperseded: boolean;
+  readonly isAccepted: boolean;
+}) => {
+  const componentLocation = useMemo(
+    () =>
+      placeLocations({ diff, place }).find(
+        (location) => location.view !== undefined,
+      ),
+    [diff, place],
+  );
+  const articleVersion = useArticleVersion();
+  const [componentAvailable, setComponentAvailable] = useState<boolean>();
+  useEffect(() => {
+    if (componentLocation === undefined) return;
+    setComponentAvailable(
+      "found" in liveLensAnchor(componentLocation, { isSuperseded: false }),
+    );
+  }, [articleVersion, componentLocation]);
+  // A superseded or unanchored change can land only in the historical archive,
+  // whose one surviving copy must carry no plan identity. Increment 3 keeps
+  // that exception on the legacy scrubbed rendering while live Decision
+  // changes replace their real root; the final copy-migration wave removes
+  // both the exception and its oldHtml/newHtml payload together.
+  if (componentLocation === undefined || !isVisible || isSuperseded) {
+    return (
+      <LegacyDiffLensPortal
+        diff={diff}
+        place={place}
+        isVisible={isVisible}
+        isSuperseded={isSuperseded}
+      />
+    );
+  }
+  if (componentAvailable === undefined) return null;
+  return !componentAvailable ? (
+    <LegacyDiffLensPortal
+      diff={diff}
+      place={place}
+      isVisible={isVisible}
+      isSuperseded={isSuperseded}
+    />
+  ) : (
+    <ComponentDiffReplacement
+      location={componentLocation}
+      isAccepted={isAccepted}
+    />
+  );
 };
