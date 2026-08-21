@@ -36,6 +36,7 @@ import {
   LENS_STAND_IN_ATTRIBUTE,
   liveArticle,
   liveBlock,
+  liveComponentDiff,
   liveLensAnchor,
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
@@ -1263,6 +1264,20 @@ const componentDiffRoot = (view: string): HTMLElement | null => {
   return root instanceof HTMLElement ? document.importNode(root, true) : null;
 };
 
+const applyDecisionReviewAuthority = ({
+  root,
+  isAccepted,
+}: {
+  readonly root: HTMLElement;
+  readonly isAccepted: boolean;
+}): void => {
+  const decision = root.querySelector<HTMLElement>(
+    '[data-component-diff-side="proposed"] [data-decision]',
+  );
+  if (decision === null) return;
+  decision.toggleAttribute("data-decision-change-open", !isAccepted);
+};
+
 /**
  * Replaces the real component root for a migrated diff and restores the exact
  * node that was there when the tour leaves. A full article refresh detaches
@@ -1276,6 +1291,10 @@ const ComponentDiffReplacement = ({
   readonly isAccepted: boolean;
 }) => {
   const replacementRef = useRef<HTMLElement | null>(null);
+  const locationRef = useRef(location);
+  locationRef.current = location;
+  const acceptedRef = useRef(isAccepted);
+  acceptedRef.current = isAccepted;
   useEffect(() => {
     if (location.view === undefined) return;
     let original: HTMLElement | null = null;
@@ -1284,24 +1303,41 @@ const ComponentDiffReplacement = ({
     const install = (): void => {
       const next = componentDiffRoot(location.view ?? "");
       if (next === null) return;
-      original = null;
-      const anchor = liveLensAnchor(location, { isSuperseded: false });
+      const anchor = liveLensAnchor(locationRef.current, {
+        isSuperseded: false,
+      });
       if ("missing" in anchor) return;
       replacement = next;
       replacementRef.current = next;
+      applyDecisionReviewAuthority({
+        root: next,
+        isAccepted: acceptedRef.current,
+      });
       if (anchor.placement === "replace") {
-        original = anchor.found;
-        replacePlanDom({ target: original, replacement: next });
+        original ??= anchor.found;
+        replacePlanDom({ target: anchor.found, replacement: next });
       } else {
         if (anchor.placement === "before") anchor.found.before(next);
         else anchor.found.after(next);
         document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
       }
+      document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
       next.scrollIntoView({ behavior: lensScrollBehavior(), block: "center" });
     };
 
     const reinstallAfterArticleRefresh = (): void => {
       if (replacement?.isConnected === true) return;
+      const refreshed = liveComponentDiff(locationRef.current);
+      if (refreshed !== null) {
+        replacement = refreshed;
+        replacementRef.current = refreshed;
+        applyDecisionReviewAuthority({
+          root: refreshed,
+          isAccepted: acceptedRef.current,
+        });
+        document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
+        return;
+      }
       install();
     };
     install();
@@ -1315,21 +1351,28 @@ const ComponentDiffReplacement = ({
         reinstallAfterArticleRefresh,
       );
       replacementRef.current = null;
-      if (replacement?.isConnected === true && original !== null) {
-        replacePlanDom({ target: replacement, replacement: original });
-      } else if (replacement?.isConnected === true) {
-        replacement?.remove();
+      const liveReplacement =
+        liveComponentDiff(locationRef.current) ??
+        (replacement?.isConnected === true ? replacement : null);
+      if (liveReplacement !== null && original !== null) {
+        replacePlanDom({ target: liveReplacement, replacement: original });
+      } else if (liveReplacement !== null) {
+        liveReplacement.remove();
         document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
       }
     };
-  }, [location, location.view]);
+  }, [
+    location.afterBlockId,
+    location.beforeBlockId,
+    location.newBlockId,
+    location.oldBlockId,
+    location.view,
+  ]);
 
   useEffect(() => {
-    const decision = replacementRef.current?.querySelector<HTMLElement>(
-      '[data-component-diff-side="proposed"] [data-decision]',
-    );
-    if (decision === null || decision === undefined) return;
-    decision.toggleAttribute("data-decision-change-open", !isAccepted);
+    const replacement = replacementRef.current;
+    if (replacement === null) return;
+    applyDecisionReviewAuthority({ root: replacement, isAccepted });
     document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
   }, [isAccepted, location.view]);
 
@@ -1350,22 +1393,38 @@ export const DiffLensPortal = ({
   readonly isSuperseded: boolean;
   readonly isAccepted: boolean;
 }) => {
-  const componentLocation = placeLocations({ diff, place }).find(
-    (location) => location.view !== undefined,
+  const componentLocation = useMemo(
+    () =>
+      placeLocations({ diff, place }).find(
+        (location) => location.view !== undefined,
+      ),
+    [diff, place],
   );
-  useArticleVersion();
-  const componentAvailable =
-    componentLocation === undefined ||
-    "found" in liveLensAnchor(componentLocation, { isSuperseded: false });
+  const articleVersion = useArticleVersion();
+  const [componentAvailable, setComponentAvailable] = useState<boolean>();
+  useEffect(() => {
+    if (componentLocation === undefined) return;
+    setComponentAvailable(
+      "found" in liveLensAnchor(componentLocation, { isSuperseded: false }),
+    );
+  }, [articleVersion, componentLocation]);
   // A superseded or unanchored change can land only in the historical archive,
   // whose one surviving copy must carry no plan identity. Increment 3 keeps
   // that exception on the legacy scrubbed rendering while live Decision
   // changes replace their real root; the final copy-migration wave removes
   // both the exception and its oldHtml/newHtml payload together.
-  return componentLocation === undefined ||
-    !isVisible ||
-    isSuperseded ||
-    !componentAvailable ? (
+  if (componentLocation === undefined || !isVisible || isSuperseded) {
+    return (
+      <LegacyDiffLensPortal
+        diff={diff}
+        place={place}
+        isVisible={isVisible}
+        isSuperseded={isSuperseded}
+      />
+    );
+  }
+  if (componentAvailable === undefined) return null;
+  return !componentAvailable ? (
     <LegacyDiffLensPortal
       diff={diff}
       place={place}

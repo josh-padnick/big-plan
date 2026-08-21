@@ -280,6 +280,23 @@ export const liveLensAnchor = (
   return { missing: lensMissReason(misses) };
 };
 
+/** The component-owned diff root currently carrying a compiled block. */
+export const liveComponentDiff = (
+  location: DiffLocation,
+): HTMLElement | null => {
+  const article = liveArticle();
+  if (article === null) return null;
+  for (const candidate of lensAnchorCandidates(location, {
+    isSuperseded: false,
+  })) {
+    const resolved = resolveWithin(article, blockSelector(candidate.blockId));
+    if ("missing" in resolved) continue;
+    const root = resolved.found.closest<HTMLElement>("[data-component-diff]");
+    if (root !== null) return root;
+  }
+  return null;
+};
+
 /**
  * The explicit opt-out for decoration and geometry callers, where a target
  * that is not on screen is a legitimate no-op rather than a state to render.

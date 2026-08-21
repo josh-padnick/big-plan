@@ -3287,62 +3287,6 @@ const wireDecisions = () => {
     sync();
   }
 };
-// The default component diff is server-rendered so it stays readable without
-// scripts. This enhancement makes its Was/Now selector a real two-state
-// control while leaving the proposed side as the authored default.
-const wiredComponentDiffs = new WeakSet();
-const wireComponentDiffs = () => {
-  for (const diff of document.querySelectorAll("[data-component-diff]")) {
-    if (wiredComponentDiffs.has(diff)) continue;
-    wiredComponentDiffs.add(diff);
-    const controls = Array.from(
-      diff.querySelectorAll("[data-component-diff-show]"),
-    );
-    const sides = Array.from(
-      diff.querySelectorAll("[data-component-diff-side]"),
-    );
-    const thumb = diff.querySelector("[data-component-diff-toggle-thumb]");
-    const show = (side) => {
-      for (const candidate of sides) {
-        candidate.hidden =
-          candidate.getAttribute("data-component-diff-side") !== side;
-      }
-      for (const control of controls) {
-        const selected =
-          control.getAttribute("data-component-diff-show") === side;
-        control.setAttribute("aria-pressed", String(selected));
-        control.classList.toggle("text-muted", !selected);
-        control.classList.toggle(
-          side === "baseline"
-            ? "text-[var(--diff-remove-c)]"
-            : "text-[var(--diff-add-c)]",
-          selected,
-        );
-      }
-      if (thumb !== null) {
-        thumb.classList.toggle("translate-x-0", side === "baseline");
-        thumb.classList.toggle(
-          "translate-x-[calc(100%+2px)]",
-          side === "proposed",
-        );
-        thumb.classList.toggle(
-          "bg-[var(--diff-remove-bg)]",
-          side === "baseline",
-        );
-        thumb.classList.toggle(
-          "bg-[var(--diff-add-bg)]",
-          side === "proposed",
-        );
-      }
-    };
-    for (const control of controls) {
-      control.addEventListener("click", () => {
-        const side = control.getAttribute("data-component-diff-show");
-        if (side === "baseline" || side === "proposed") show(side);
-      });
-    }
-  }
-};
 // focusVisible is not honoured everywhere; the attribute is the fallback and
 // is spent the moment the reader does anything else.
 for (const type of ["keydown", "pointerdown", "blur"]) {
@@ -3376,7 +3320,6 @@ const wireViewer = () => {
   wireCollapse();
   wireDataTables();
   wireFigureMaximize();
-  wireComponentDiffs();
   wireDecisions();
 };
 wireViewer();

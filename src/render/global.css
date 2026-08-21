@@ -23,6 +23,7 @@ palette in inert exports.
 @import "../review/browser/review.css";
 @import "../components/_shared/comparison-matrix/comparison-matrix.css";
 @import "../components/_shared/column-reorder/styles.css";
+@import "../components/_shared/component-diff/styles.css";
 @import "../components/_shared/figure-controls/figure-controls.css";
 @import "../components/_shared/tooltip/tooltip.css";
 @import "../components/_shared/tree-hierarchy/tree-hierarchy.css";

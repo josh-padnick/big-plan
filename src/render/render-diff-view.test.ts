@@ -54,8 +54,8 @@ describe("render diff view", () => {
     const proposedMarkdown = decision("Ship safely");
     const blockId = decisionBlockId(proposedMarkdown);
     const rendered = renderDiffView({
-      baselineMarkdown,
-      proposedMarkdown,
+      baselineDocument: compileMarkdown({ markdown: baselineMarkdown }),
+      proposedDocument: compileMarkdown({ markdown: proposedMarkdown }),
       baselineBlockId: decisionBlockId(baselineMarkdown),
       proposedBlockId: blockId,
       status: "changed",

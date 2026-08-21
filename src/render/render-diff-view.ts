@@ -9,7 +9,10 @@ import {
   definitionFor,
 } from "../components/_registration/registry.js";
 import type { BlockDescriptor } from "./markdown/block-identity.js";
-import { compileMarkdown } from "./markdown/compile-markdown.js";
+import {
+  compileMarkdown,
+  type CompiledMarkdown,
+} from "./markdown/compile-markdown.js";
 import { reactToHast } from "./markdown/component-pipeline/react-hast-adapter.js";
 import { isolateBaselineSide } from "./markdown/side-isolation.js";
 
@@ -17,6 +20,23 @@ export type RenderedComponentDiff = {
   readonly model: unknown;
   readonly view: string;
 };
+
+export type CompiledDiffDocuments = {
+  readonly baseline: CompiledMarkdown;
+  readonly proposed: CompiledMarkdown;
+};
+
+/** Compiles the two snapshots once for every component location in one diff. */
+export const compileDiffDocuments = ({
+  baselineMarkdown,
+  proposedMarkdown,
+}: {
+  readonly baselineMarkdown: string;
+  readonly proposedMarkdown: string;
+}): CompiledDiffDocuments => ({
+  baseline: compileMarkdown({ markdown: baselineMarkdown }),
+  proposed: compileMarkdown({ markdown: proposedMarkdown }),
+});
 
 const isElement = (node: RootContent): node is Element =>
   node.type === "element";
@@ -123,22 +143,20 @@ const inheritProposedRootIdentity = ({
 
 /** Compiles and renders one component-root location through its diff contract. */
 export const renderDiffView = ({
-  baselineMarkdown,
-  proposedMarkdown,
+  baselineDocument,
+  proposedDocument,
   baselineBlockId,
   proposedBlockId,
   status,
   runs,
 }: {
-  readonly baselineMarkdown: string;
-  readonly proposedMarkdown: string;
+  readonly baselineDocument: CompiledMarkdown;
+  readonly proposedDocument: CompiledMarkdown;
   readonly baselineBlockId: string | undefined;
   readonly proposedBlockId: string | undefined;
   readonly status: "added" | "removed" | "changed";
   readonly runs: ComponentDiffInput<unknown>["runs"];
 }): RenderedComponentDiff | null => {
-  const baselineDocument = compileMarkdown({ markdown: baselineMarkdown });
-  const proposedDocument = compileMarkdown({ markdown: proposedMarkdown });
   const baseline = blockById({
     blocks: baselineDocument.blocks,
     blockId: baselineBlockId,
@@ -156,7 +174,11 @@ export const renderDiffView = ({
   if (definition === undefined || input === null) return null;
 
   const compiled = definition.compileDiff(input);
-  const diffRoot = reactToHast(compiled.presentation());
+  const diffRoot = reactToHast(
+    compiled.presentation(
+      `${baselineBlockId ?? "removed"}:${proposedBlockId ?? "historical"}`,
+    ),
+  );
   if (diffRoot === undefined) return null;
   const baselineSide = elementByDataValue({
     node: diffRoot,

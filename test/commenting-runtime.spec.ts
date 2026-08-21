@@ -5696,11 +5696,36 @@ The release gets a full soak.
         "Accept this change before answering this decision.",
       );
 
-      await diff.getByRole("button", { name: "Was" }).click();
+      await page.evaluate(() => {
+        const article = document.querySelector("article");
+        if (article === null) throw new Error("Review article is missing");
+        article.replaceWith(article.cloneNode(true));
+        document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+      });
+      const reinstalled = page.locator('[data-component-diff-side="proposed"]');
+      await expect(
+        reinstalled.getByRole("button", { name: "Confirm choice" }),
+      ).toBeDisabled();
+      await reinstalled
+        .getByRole("radio", { name: /Ship after a one-day canary/u })
+        .check();
+
+      await page.getByRole("button", { name: "Accept this change" }).click();
+      await expect(
+        reinstalled.getByRole("button", { name: "Confirm choice" }),
+      ).toBeEnabled();
+      await expect(
+        reinstalled.getByText(
+          "Accept this change before answering this decision.",
+          { exact: true },
+        ),
+      ).toBeHidden();
+
+      await diff.getByText("Was", { exact: true }).click();
       await expect(
         diff.locator('[data-component-diff-side="baseline"]'),
       ).toBeVisible();
-      await diff.getByRole("button", { name: "Now" }).click();
+      await diff.getByText("Now", { exact: true }).click();
       await expect(proposed).toBeVisible();
     });
 
@@ -5998,8 +6023,8 @@ test("should colour the default component switch as a diff", async ({
     const proposed = componentDiff.locator(
       '[data-component-diff-side="proposed"]',
     );
-    const now = componentDiff.getByRole("button", { name: "Now" });
-    const was = componentDiff.getByRole("button", { name: "Was" });
+    const now = componentDiff.getByText("Now", { exact: true });
+    const was = componentDiff.getByText("Was", { exact: true });
     const toggleThumb = componentDiff.locator(
       "[data-component-diff-toggle-thumb]",
     );

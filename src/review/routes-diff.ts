@@ -7,7 +7,10 @@ import { fromHtml } from "hast-util-from-html";
 import { toHtml } from "hast-util-to-html";
 import type { Element, Root, RootContent, ElementContent } from "hast";
 import { renderDocument } from "../render/render-document.js";
-import { renderDiffView } from "../render/render-diff-view.js";
+import {
+  compileDiffDocuments,
+  renderDiffView,
+} from "../render/render-diff-view.js";
 import { jsonResponse, refusal } from "./review-route-context.js";
 import type {
   ReviewRouteContext,
@@ -159,6 +162,18 @@ export const readSnapshotDiff = async (
     before: before.blocks,
     after: after.blocks,
   });
+  // Component diff locations share their two completed compilations. A plan
+  // with no migrated roots pays no extra compile, while one with many roots
+  // still compiles each snapshot only once.
+  const compiledDocuments = snapshotDiff.locations.some(
+    (location) =>
+      location.isComponentRoot && MIGRATED_DIFF_KINDS.has(location.kind),
+  )
+    ? compileDiffDocuments({
+        baselineMarkdown: beforeSource,
+        proposedMarkdown: afterSource,
+      })
+    : null;
   return jsonResponse({
     status: 200,
     value: encodeSnapshotDiff({
@@ -166,9 +181,10 @@ export const readSnapshotDiff = async (
       locations: snapshotDiff.locations.map((location) =>
         location.isComponentRoot && MIGRATED_DIFF_KINDS.has(location.kind)
           ? (() => {
+              if (compiledDocuments === null) return location;
               const rendered = renderDiffView({
-                baselineMarkdown: beforeSource,
-                proposedMarkdown: afterSource,
+                baselineDocument: compiledDocuments.baseline,
+                proposedDocument: compiledDocuments.proposed,
                 baselineBlockId: location.oldBlockId,
                 proposedBlockId: location.newBlockId,
                 status: location.status,

@@ -442,7 +442,7 @@ export const DecisionCard = ({
   return (
     <figure
       id={model.id}
-      className="decision group mb-6 min-w-0 overflow-hidden rounded-xl border border-edge bg-paper shadow-raised"
+      className="decision group/decision mb-6 min-w-0 overflow-hidden rounded-xl border border-edge bg-paper shadow-raised"
       data-decision=""
       data-decision-status={model.status}
       data-decision-layout={model.layout}
@@ -546,12 +546,12 @@ export const DecisionCard = ({
       <Details model={model} />
       {answerable && isChangeOpen ? (
         <p
-          className="m-0 hidden items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)] group-data-[decision-change-open]:flex"
+          className="m-0 hidden items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)] group-data-[decision-change-open]/decision:flex"
           data-decision-change-note=""
           role="status"
         >
           <span className="inline-flex size-4 shrink-0" aria-hidden="true">
-            {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: true })}
+            {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
           </span>
           <span>{"Accept this change before answering this decision."}</span>
         </p>

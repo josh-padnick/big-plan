@@ -1,0 +1,38 @@
+/* The default diff is a complete inert document control: authored radios own
+   side visibility, so Was remains reachable before the viewer script runs. */
+[data-component-diff-choice="baseline"]:checked
+  ~ [data-component-diff-controls]
+  [data-component-diff-toggle]
+  [data-component-diff-toggle-thumb] {
+  translate: 0;
+  background: var(--diff-remove-bg);
+}
+
+[data-component-diff-choice="baseline"]:checked
+  ~ [data-component-diff-controls]
+  [data-component-diff-toggle]
+  [data-component-diff-label="baseline"] {
+  color: var(--diff-remove-c);
+}
+
+[data-component-diff-choice="baseline"]:checked
+  ~ [data-component-diff-controls]
+  [data-component-diff-toggle]
+  [data-component-diff-label="proposed"] {
+  color: var(--muted-c);
+}
+
+[data-component-diff-choice="proposed"]:checked
+  ~ [data-component-diff-controls]
+  [data-component-diff-toggle]
+  [data-component-diff-toggle-thumb] {
+  translate: calc(100% + 2px);
+  background: var(--diff-add-bg);
+}
+
+[data-component-diff-choice="baseline"]:not(:checked)
+  ~ [data-component-diff-side="baseline"],
+[data-component-diff-choice="baseline"]:checked
+  ~ [data-component-diff-side="proposed"] {
+  display: none;
+}

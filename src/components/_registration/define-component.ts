@@ -48,7 +48,7 @@ export type CompiledComponent = {
 
 export type CompiledComponentDiff = {
   readonly model: ComponentDiffModel;
-  readonly presentation: () => ReactNode;
+  readonly presentation: (instanceKey: string) => ReactNode;
 };
 
 export type ComponentDefinition = {
@@ -64,6 +64,26 @@ export type ComponentDefinition = {
   readonly topLevelOnly?: string;
 };
 
+type ComponentDiffOptions<Model, DiffModel> =
+  | {
+      readonly diff?: undefined;
+      readonly diffView?: undefined;
+    }
+  | {
+      readonly diff: (input: ComponentDiffInput<Model>) => DiffModel;
+      readonly diffView: ComponentType<{ readonly model: DiffModel }>;
+    };
+
+type ComponentOptions<Model, DiffModel> = ComponentDiffOptions<
+  Model,
+  DiffModel
+> & {
+  readonly compile: ComponentModelCompiler<Model>;
+  readonly view: ComponentType<{ readonly model: Model }>;
+  readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
+  readonly topLevelOnly?: string;
+};
+
 /** Pairs one concrete model compiler with the React view that consumes it. */
 export const defineComponent = <
   Model,
@@ -75,14 +95,7 @@ export const defineComponent = <
   diffView,
   scopedChildren,
   topLevelOnly,
-}: {
-  readonly compile: ComponentModelCompiler<Model>;
-  readonly view: ComponentType<{ readonly model: Model }>;
-  readonly diff?: (input: ComponentDiffInput<Model>) => DiffModel;
-  readonly diffView?: ComponentType<{ readonly model: DiffModel }>;
-  readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
-  readonly topLevelOnly?: string;
-}): ComponentDefinition => ({
+}: ComponentOptions<Model, DiffModel>): ComponentDefinition => ({
   compile: (input) => {
     const model = compile(input);
     return {
@@ -95,11 +108,12 @@ export const defineComponent = <
     const model = diff === undefined ? typedInput : diff(typedInput);
     return {
       model,
-      presentation: () =>
+      presentation: (instanceKey) =>
         diffView === undefined
           ? createElement(DefaultComponentDiffView<Model>, {
               model: typedInput,
               view,
+              controlId: `component-diff-${instanceKey}`,
             })
           : createElement(diffView, { model: model as DiffModel }),
     };
@@ -125,49 +139,50 @@ export const defineOutlineComponent = <
   marker,
   scopedChildren,
   topLevelOnly,
-}: {
+}: ComponentDiffOptions<Model, DiffModel> & {
   readonly compile: ComponentModelCompiler<Model>;
   readonly view: ComponentType<{
     readonly model: Model;
     readonly outline: DocumentOutline;
   }>;
-  readonly diff?: (input: ComponentDiffInput<Model>) => DiffModel;
-  readonly diffView?: ComponentType<{ readonly model: DiffModel }>;
   readonly marker: (model: Model) => OutlineMarker;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
-}): ComponentDefinition => ({
-  compile: (input) => {
-    const model = compile(input);
-    return {
+}): ComponentDefinition => {
+  const OutlineView = ({ model }: { readonly model: Model }) =>
+    createElement(view, {
       model,
-      presentation: () =>
-        createElement(view, { model, outline: EMPTY_DOCUMENT_OUTLINE }),
-      outline: {
-        marker: marker(model),
-        present: (outline) => createElement(view, { model, outline }),
-      },
-    };
-  },
-  compileDiff: (input) => {
-    const typedInput = input as ComponentDiffInput<Model>;
-    const model = diff === undefined ? typedInput : diff(typedInput);
-    const OutlineView = ({ model: sideModel }: { readonly model: Model }) =>
-      createElement(view, {
-        model: sideModel,
-        outline: EMPTY_DOCUMENT_OUTLINE,
-      });
-    return {
-      model,
-      presentation: () =>
-        diffView === undefined
-          ? createElement(DefaultComponentDiffView<Model>, {
-              model: typedInput,
-              view: OutlineView,
-            })
-          : createElement(diffView, { model: model as DiffModel }),
-    };
-  },
-  ...(scopedChildren === undefined ? {} : { scopedChildren }),
-  ...(topLevelOnly === undefined ? {} : { topLevelOnly }),
-});
+      outline: EMPTY_DOCUMENT_OUTLINE,
+    });
+  return {
+    compile: (input) => {
+      const model = compile(input);
+      return {
+        model,
+        presentation: () =>
+          createElement(view, { model, outline: EMPTY_DOCUMENT_OUTLINE }),
+        outline: {
+          marker: marker(model),
+          present: (outline) => createElement(view, { model, outline }),
+        },
+      };
+    },
+    compileDiff: (input) => {
+      const typedInput = input as ComponentDiffInput<Model>;
+      const model = diff === undefined ? typedInput : diff(typedInput);
+      return {
+        model,
+        presentation: (instanceKey) =>
+          diffView === undefined
+            ? createElement(DefaultComponentDiffView<Model>, {
+                model: typedInput,
+                view: OutlineView,
+                controlId: `component-diff-${instanceKey}`,
+              })
+            : createElement(diffView, { model: model as DiffModel }),
+      };
+    },
+    ...(scopedChildren === undefined ? {} : { scopedChildren }),
+    ...(topLevelOnly === undefined ? {} : { topLevelOnly }),
+  };
+};

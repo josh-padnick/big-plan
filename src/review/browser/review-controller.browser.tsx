@@ -1679,19 +1679,44 @@ const useBlockHosts = () => {
     setHosts(mounted);
     const reconcile = () => {
       const nextBlocks = commentableBlocks();
-      if (
-        nextBlocks.length === mounted.length &&
-        nextBlocks.every((block, index) => block === mounted[index]?.block)
-      ) {
-        return;
+      const nextBlockSet = new Set(nextBlocks);
+      const byBlock = new Map(mounted.map((entry) => [entry.block, entry]));
+      let changed = false;
+      for (const entry of mounted) {
+        if (nextBlockSet.has(entry.block) && entry.host.isConnected) continue;
+        entry.host.remove();
+        byBlock.delete(entry.block);
+        changed = true;
       }
-      mounted.forEach(({ host }) => host.remove());
-      mounted = mount(nextBlocks);
+      for (const block of nextBlocks) {
+        if (byBlock.has(block)) continue;
+        const entry = mount([block])[0];
+        if (entry === undefined) continue;
+        byBlock.set(block, entry);
+        changed = true;
+      }
+      const nextMounted = nextBlocks.flatMap((block) => {
+        const entry = byBlock.get(block);
+        return entry === undefined ? [] : [entry];
+      });
+      const orderChanged = nextMounted.some(
+        (entry, index) => entry !== mounted[index],
+      );
+      if (!changed && !orderChanged) return;
+      mounted = nextMounted;
       setHosts(mounted);
     };
-    const observer = new MutationObserver(reconcile);
+    let scheduled = 0;
+    const observer = new MutationObserver(() => {
+      if (scheduled !== 0) return;
+      scheduled = requestAnimationFrame(() => {
+        scheduled = 0;
+        reconcile();
+      });
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     return () => {
+      if (scheduled !== 0) cancelAnimationFrame(scheduled);
       observer.disconnect();
       mounted.forEach(({ host }) => host.remove());
     };

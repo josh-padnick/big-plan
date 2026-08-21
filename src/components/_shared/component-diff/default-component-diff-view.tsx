@@ -12,12 +12,16 @@ const TOGGLE_OPTION_CLASSES =
 export const DefaultComponentDiffView = <TModel,>({
   model,
   view: View,
+  controlId,
 }: {
   readonly model: DefaultComponentDiffModel<TModel>;
   readonly view: ComponentType<{ readonly model: TModel }>;
+  readonly controlId: string;
 }) => {
   const hasBaseline = model.status !== "added";
   const hasProposed = model.status !== "removed";
+  const baselineId = `${controlId}-baseline`;
+  const proposedId = `${controlId}-proposed`;
   return (
     <figure
       className="my-4 grid w-full min-w-0 max-w-[var(--measure)] grid-cols-[minmax(0,1fr)] gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
@@ -30,7 +34,29 @@ export const DefaultComponentDiffView = <TModel,>({
         </strong>
         <em className="text-2xs text-muted">{model.status}</em>
       </figcaption>
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
+      {hasBaseline && hasProposed ? (
+        <>
+          <input
+            className="sr-only"
+            id={baselineId}
+            name={controlId}
+            type="radio"
+            data-component-diff-choice="baseline"
+          />
+          <input
+            className="sr-only"
+            id={proposedId}
+            name={controlId}
+            type="radio"
+            data-component-diff-choice="proposed"
+            defaultChecked
+          />
+        </>
+      ) : null}
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-3"
+        data-component-diff-controls=""
+      >
         {hasBaseline && hasProposed ? (
           <div
             className="relative inline-grid grid-cols-2 rounded-full border border-edge bg-surface p-0.5"
@@ -40,25 +66,23 @@ export const DefaultComponentDiffView = <TModel,>({
           >
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] translate-x-[calc(100%+2px)] rounded-full bg-[var(--diff-add-bg)] transition-transform duration-150 ease-out"
+              className="pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full bg-[var(--diff-add-bg)] transition-[translate] duration-150 ease-out"
               data-component-diff-toggle-thumb=""
             />
-            <button
-              type="button"
+            <label
+              htmlFor={baselineId}
               className={`${TOGGLE_OPTION_CLASSES} text-muted`}
-              aria-pressed="false"
-              data-component-diff-show="baseline"
+              data-component-diff-label="baseline"
             >
               {"Was"}
-            </button>
-            <button
-              type="button"
+            </label>
+            <label
+              htmlFor={proposedId}
               className={`${TOGGLE_OPTION_CLASSES} text-[var(--diff-add-c)]`}
-              aria-pressed="true"
-              data-component-diff-show="proposed"
+              data-component-diff-label="proposed"
             >
               {"Now"}
-            </button>
+            </label>
           </div>
         ) : (
           <span className="rounded-full border border-edge bg-surface px-4 py-1.5 text-xs font-semibold text-ink">
@@ -70,7 +94,6 @@ export const DefaultComponentDiffView = <TModel,>({
         <div
           className="min-w-0 rounded-lg border-[10px] bg-surface p-3 text-ink inset-shadow-well [border-color:color-mix(in_srgb,var(--diff-remove-c)_30%,var(--diff-remove-bg))]"
           data-component-diff-side="baseline"
-          {...(hasProposed ? { hidden: true } : {})}
         >
           <ComponentDiffSide side="baseline" status={model.status}>
             <View model={model.baseline} />
