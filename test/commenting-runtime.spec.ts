@@ -5751,7 +5751,15 @@ The release gets a full soak.
       await expect(
         diff.locator('[data-component-diff-choice="baseline"]'),
       ).toBeChecked();
-      await expect(sideToggle).not.toHaveCSS("box-shadow", "none");
+      const sharedFocusShadow = await page.evaluate(() => {
+        const reference = document.createElement("span");
+        reference.style.boxShadow = "var(--elevation-focus)";
+        document.body.append(reference);
+        const shadow = getComputedStyle(reference).boxShadow;
+        reference.remove();
+        return shadow;
+      });
+      await expect(sideToggle).toHaveCSS("box-shadow", sharedFocusShadow);
       await page.emulateMedia({ forcedColors: "active" });
       await expect(sideToggle).toHaveCSS("outline-style", "solid");
       await page.emulateMedia({ forcedColors: "none" });
