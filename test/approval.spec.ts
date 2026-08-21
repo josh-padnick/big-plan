@@ -681,7 +681,7 @@ test("should approve a plan, stamp the page, and keep the record across reload",
       Math.abs(
         dialogBox.x + dialogBox.width - (triggerBox.x + triggerBox.width),
       ),
-    ).toBeLessThan(24);
+    ).toBeLessThan(2);
     const keepReviewing = dialog.getByRole("button", {
       name: "Keep reviewing",
     });
@@ -718,6 +718,9 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     await expect(
       page.getByRole("button", { name: "Approve plan" }),
     ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Plan approved" }),
+    ).toBeVisible();
     const stamp = page
       .locator("[data-review-approval-stamp]")
       .filter({ visible: true });
@@ -751,6 +754,9 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     await openWritableReview(page, runtime.url);
     await expect(
       page.locator("[data-review-approval-stamp]").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Plan approved" }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Approve plan" }),
@@ -814,7 +820,7 @@ test("should open Inputs and flash standing from leftover review decisions", asy
     );
     await dialog.getByRole("button", { name: "Approve plan" }).click();
     expect((await approved).ok()).toBe(true);
-    await page.getByRole("button", { name: "Approval details" }).click();
+    await page.getByRole("button", { name: "Plan approved" }).click();
     await page.getByRole("button", { name: "Review decisions →" }).click();
     const inputsTab = page.getByRole("tab", { name: "Inputs" });
     await expect(inputsTab).toHaveAttribute("aria-selected", "true");

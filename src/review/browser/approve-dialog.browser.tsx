@@ -1,6 +1,6 @@
 // Owns the approve moment in the review island: the toolbar control, the
-// confirmation dialog, the approved stamp that replaces that control, and the
-// details popover that can revoke. The record itself is written by the
+// confirmation dialog, the approved control that replaces that trigger, and
+// the details popover that can revoke. The record itself is written by the
 // runtime; this file only asks and paints what comes back.
 
 import {
@@ -34,7 +34,6 @@ import type { ApprovalSummary } from "../shared/approval.js";
 import {
   approveChangeSetCaveat,
   approveDecisionCaveat,
-  approveIsPrimary,
   changeSetsFromExchange,
   deriveOpenItems,
   openRequestsFromExchange,
@@ -77,7 +76,9 @@ const VIEW_ALL_LIMIT = 3;
 const APPROVE_IN_FLIGHT_CAVEAT = "Approving now cancels all in-flight work.";
 
 const APPROVE_ITEM_ROW_CLASS =
-  "flex min-h-11 w-full cursor-pointer gap-2 rounded-md border border-edge bg-paper px-3 py-2 text-left hover:bg-surface focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "flex min-h-11 w-full cursor-pointer gap-2 rounded-md border border-edge bg-raised px-3 py-2 text-left focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+const APPROVE_ITEM_ACTION_CLASS = "shrink-0 text-xs font-medium text-accent";
 
 const showLiveElement = (element: HTMLElement): void => {
   (displayedStandIn(element) ?? element).scrollIntoView({
@@ -110,31 +111,12 @@ const readStoredMessage = (): string => {
   }
 };
 
-const STAMP_FRAME = "inline-flex rounded-md border-2 border-accent p-0.5";
+const APPROVE_CONTROL_BASE =
+  "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium shadow-none focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed wide:px-2 [&>svg]:size-3.5";
 
-const STAMP_INNER =
-  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5 group-hover:bg-accent-wash";
+const APPROVE_TRIGGER_CLASS = `${APPROVE_CONTROL_BASE} border border-approve-action-edge bg-approve-action text-approve-action-ink hover:brightness-95 hover:shadow-raised aria-expanded:shadow-raised`;
 
-const STAMP_TYPE =
-  "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase";
-
-const STAMP_BUTTON_CLASS =
-  "group inline-flex h-8 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 -rotate-2 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:rotate-0";
-
-const APPROVE_TRIGGER_BASE =
-  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md px-1.5 text-2xs focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:px-2 wide:text-xs";
-
-const APPROVE_TRIGGER_PRIMARY = `${APPROVE_TRIGGER_BASE} border border-transparent bg-accent font-semibold text-accent-ink shadow-raised hover:shadow-lifted hover:brightness-95 active:inset-shadow-pressed`;
-
-const APPROVE_TRIGGER_SECONDARY = `${APPROVE_TRIGGER_BASE} border border-transparent bg-surface font-medium text-ink shadow-raised hover:bg-raised hover:shadow-lifted active:inset-shadow-pressed`;
-
-const ApproveStampMark = ({ label }: { readonly label: string }) => (
-  <span className={STAMP_FRAME} aria-hidden="true">
-    <span className={STAMP_INNER}>
-      <span className={STAMP_TYPE}>{label}</span>
-    </span>
-  </span>
-);
+const APPROVE_APPROVED_CLASS = `${APPROVE_CONTROL_BASE} border border-review-panel-edge bg-transparent text-ink hover:border-review-panel-edge-strong hover:bg-toolbar-surface aria-expanded:border-review-panel-edge-strong aria-expanded:bg-toolbar-surface aria-expanded:inset-shadow-pressed`;
 
 const QuietCheck = () => (
   <span
@@ -285,7 +267,9 @@ const DecisionRow = ({
           Critical
         </Badge>
       ) : null}
-      <span className="shrink-0 text-xs font-medium text-accent">{action}</span>
+      <span data-review-chrome-link="" className={APPROVE_ITEM_ACTION_CLASS}>
+        {action}
+      </span>
     </button>
   </li>
 );
@@ -312,7 +296,7 @@ const ChangeSetRow = ({
           <SectionKicker sectionId={sectionId} />
           <span className="min-w-0 text-sm text-ink">{title}</span>
         </span>
-        <span className="shrink-0 text-xs font-medium text-accent">
+        <span data-review-chrome-link="" className={APPROVE_ITEM_ACTION_CLASS}>
           Jump to change
         </span>
       </button>
@@ -339,7 +323,7 @@ const RequestRow = ({
           <SectionKicker sectionId={request.sectionId} />
           <span className="min-w-0 text-sm text-ink">{title}</span>
         </span>
-        <span className="shrink-0 text-xs font-medium text-accent">
+        <span data-review-chrome-link="" className={APPROVE_ITEM_ACTION_CLASS}>
           View the work
         </span>
       </button>
@@ -573,7 +557,7 @@ export const ApproveDialog = ({
                   {items.decisions.recorded.map((decision) => (
                     <li
                       key={decision.inputId}
-                      className="rounded-md border border-edge bg-paper px-3 py-2 text-sm text-ink"
+                      className="rounded-md border border-edge bg-raised px-3 py-2 text-sm text-ink"
                     >
                       <span className="block">{decision.label}</span>
                       <span className="text-xs text-muted">
@@ -655,9 +639,10 @@ export const ApproveDialog = ({
             </p>
             <button
               type="button"
-              className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-xs font-medium text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
+              className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-xs font-medium text-accent focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
               onClick={openApprovalMessageSettings}
               data-review-approve-edit-message=""
+              data-review-chrome-link=""
             >
               <span className="inline-flex size-3" aria-hidden="true">
                 <Icon icon={PENCIL_ICON} />
@@ -845,7 +830,8 @@ const ApprovalDetails = ({
               </p>
               <button
                 type="button"
-                className="col-start-2 min-h-11 cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-sm font-normal text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
+                className="col-start-2 min-h-11 cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-sm font-normal text-accent underline underline-offset-2 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
+                data-review-chrome-link=""
                 onClick={() => {
                   onClose();
                   requestOpenInputs();
@@ -950,7 +936,6 @@ export const ApproveControl = ({
       }),
     [agent.requests, changeSets, contract.inputs, dispositions.accepted],
   );
-  const primary = approveIsPrimary(items);
   const status = approval?.status;
 
   useEffect(() => {
@@ -1065,15 +1050,17 @@ export const ApproveControl = ({
       >
         <button
           type="button"
-          className={STAMP_BUTTON_CLASS}
-          aria-label={DETAILS_HEADING}
+          className={APPROVE_APPROVED_CLASS}
+          aria-label="Plan approved"
           aria-haspopup="dialog"
           aria-expanded={detailsOpen}
           aria-controls={detailsOpen ? detailsId : undefined}
           onClick={() => setDetailsOpen((current) => !current)}
           data-review-approve-status="approved"
         >
-          <ApproveStampMark label="Approved" />
+          <Icon icon={CHECK_ICON} />
+          Plan approved
+          <Icon icon={CHEVRON_DOWN_ICON} />
         </button>
         <ApprovalDetails
           id={detailsId}
@@ -1101,20 +1088,17 @@ export const ApproveControl = ({
       <button
         ref={triggerRef}
         type="button"
-        className={
-          primary ? APPROVE_TRIGGER_PRIMARY : APPROVE_TRIGGER_SECONDARY
-        }
+        className={APPROVE_TRIGGER_CLASS}
         aria-label={status === "stale" ? "Re-approve" : "Approve plan"}
         aria-haspopup="dialog"
         aria-expanded={dialogOpen}
         onClick={() => setDialogOpen(true)}
         data-review-approve-trigger=""
-        data-review-approve-emphasis={primary ? "primary" : "secondary"}
+        data-review-approve-emphasis="secondary"
       >
-        {status === "stale" ? "Re-approve" : "Approve"}
-        <span className="inline-flex size-3 shrink-0" aria-hidden="true">
-          <Icon icon={CHEVRON_DOWN_ICON} />
-        </span>
+        <Icon icon={CHECK_ICON} />
+        {status === "stale" ? "Re-approve" : "Approve plan"}
+        <Icon icon={CHEVRON_DOWN_ICON} />
       </button>
       <ApproveDialog
         open={dialogOpen}

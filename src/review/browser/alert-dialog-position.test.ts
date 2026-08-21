@@ -12,9 +12,9 @@ describe("placeAnchoredDialog", () => {
         preferredWidth: 672,
       }),
     ).toEqual({
-      top: 48,
+      top: 44,
       right: 20,
-      maxHeight: 740,
+      maxHeight: 744,
       maxWidth: 672,
     });
   });
@@ -27,9 +27,9 @@ describe("placeAnchoredDialog", () => {
         preferredWidth: 672,
       }),
     ).toEqual({
-      top: 48,
+      top: 44,
       right: 12,
-      maxHeight: 784,
+      maxHeight: 788,
       maxWidth: 366,
     });
   });

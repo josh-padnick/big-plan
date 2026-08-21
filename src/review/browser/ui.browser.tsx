@@ -756,17 +756,18 @@ export const AlertDialog = ({
         // colour first, before its shadow. The danger tone belongs to the
         // destructive action alone, never to the whole dialog.
         className={joinClasses(
-          "flex w-full flex-col rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating",
+          "flex flex-col rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating",
           anchored
             ? "absolute min-h-0 overflow-y-auto overscroll-contain"
-            : "max-h-[calc(100dvh-1.5rem)]",
-          width === "wide" ? "max-w-2xl" : "max-w-lg",
+            : "w-full max-h-[calc(100dvh-1.5rem)]",
+          anchored ? undefined : width === "wide" ? "max-w-2xl" : "max-w-lg",
         )}
         style={
           anchored
             ? {
                 top: anchorPosition.top,
                 right: anchorPosition.right,
+                width: anchorPosition.maxWidth,
                 maxHeight: anchorPosition.maxHeight,
                 maxWidth: anchorPosition.maxWidth,
               }

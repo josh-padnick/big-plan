@@ -1,7 +1,7 @@
 // Owns viewport-aware placement for an alert that hangs from a control
 // instead of sitting in the middle of the page.
 
-const DEFAULT_GAP = 8;
+const DEFAULT_GAP = 4;
 const DEFAULT_INSET = 12;
 
 export type AnchoredDialogPosition = {
