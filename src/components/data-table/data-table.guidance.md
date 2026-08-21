@@ -13,6 +13,7 @@ A dataset the reviewer queries - sortable columns, an optional filter, selectabl
   Big Plan pins it below the data and excludes it from sorting, filtering, grouping, and the row count.
   Its cells follow the visible column order when the reader hides or reorders columns.
   Its authored values always summarize the complete dataset and do not recalculate when the reader filters rows.
+  When the reader copies the table, the summary follows the visible data rows in the tab-separated text.
   Use at most one; combine related aggregates across its cells.
   Keep a row in the main grid when a reader should sort, filter, or group it like any other record.
 - Leave `fit` alone unless you mean it. Wrapping is the default because horizontal scrollbars hide content the reviewer cannot tell is there, and the reader can change it from the Text fit control anyway. Use `fit="truncate"` when cells are long identifiers - paths, URLs, ids - that wrap into unreadable stacks, and `fit="scroll"` only when side-by-side adjacency is itself the information.

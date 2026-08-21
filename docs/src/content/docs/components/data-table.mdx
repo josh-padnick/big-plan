@@ -1,6 +1,6 @@
 ---
 title: DataTable
-description: A component for a dataset the reviewer queries in place - sortable columns, optional search, selectable columns, group-by, and a text-fit choice instead of a horizontal scrollbar.
+description: A component for a dataset the reviewer queries in place - sortable columns, optional search, selectable columns, group-by, a table-wide summary, and a text-fit choice instead of a horizontal scrollbar.
 ---
 
 `DataTable` renders tabular data a reviewer needs to work with rather than read through: it sorts by any column, narrows to matching rows, hides columns that are not part of the current question, bands rows under a grouping column, and lets the reader choose how cells meet the available width - so a reference grid stays useful instead of becoming a wall the reviewer scrolls past.
@@ -101,6 +101,7 @@ To report several aggregates, place them in the relevant cells of that row.
 The summary row stays at the bottom and never participates in sorting, filtering, grouping, or the row count.
 Its cells follow the visible column order when a reader hides or reorders columns.
 Its values summarize the complete authored dataset and do not recalculate when a reader filters the table.
+When the reader copies the table as tab-separated text, the summary follows the visible data rows.
 A summary row is also valid when the table does not declare an opening sort.
 
 ## Text fit
