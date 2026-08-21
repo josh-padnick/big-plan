@@ -84,10 +84,12 @@ export type AgentRequest = TerminalAgentRequest & {
   readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat";
+  readonly kind: "feedback" | "reply" | "chat" | "push";
   readonly body?: string;
   readonly commentId?: string;
   readonly commentIds: ReadonlyArray<string>;
+  readonly origin?: "prompt" | "about";
+  readonly threadId?: string;
   readonly targetLabel?: string;
 };
 
@@ -95,7 +97,7 @@ export type AgentResponse = {
   readonly requestId: string;
   readonly resultSnapshot: string;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat";
+  readonly kind: "feedback" | "reply" | "chat" | "push";
   readonly outcomes: ReadonlyArray<AgentOutcome>;
   readonly message?: string;
 };
@@ -545,7 +547,15 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           typeof request.createdAt !== "string" ||
           (request.kind !== "feedback" &&
             request.kind !== "reply" &&
-            request.kind !== "chat")
+            request.kind !== "chat" &&
+            request.kind !== "push") ||
+          (request.kind === "push" &&
+            ((request.origin !== "prompt" && request.origin !== "about") ||
+              typeof request.body !== "string" ||
+              request.body.trim() === "" ||
+              request.body.length > 4000 ||
+              typeof request.threadId !== "string" ||
+              !/^[a-f0-9]{16}$/u.test(request.threadId)))
         ) {
           return [];
         }
@@ -583,6 +593,12 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
         ) {
           return [];
         }
+        const pushOrigin =
+          request.origin === "prompt" || request.origin === "about"
+            ? request.origin
+            : undefined;
+        const pushThreadId =
+          typeof request.threadId === "string" ? request.threadId : undefined;
         return [
           {
             requestId: request.requestId,
@@ -604,13 +620,23 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
             ...(typeof request.commentId === "string"
               ? { commentId: request.commentId }
               : {}),
-            commentIds: Array.isArray(request.comments)
-              ? request.comments.flatMap((comment): ReadonlyArray<string> =>
-                  isReviewWireRecord(comment) && typeof comment.id === "string"
-                    ? [comment.id]
-                    : [],
-                )
-              : [],
+            ...(request.kind === "push" &&
+            pushOrigin !== undefined &&
+            pushThreadId !== undefined
+              ? { origin: pushOrigin, threadId: pushThreadId }
+              : {}),
+            commentIds:
+              request.kind === "push" && pushThreadId !== undefined
+                ? [pushThreadId]
+                : Array.isArray(request.comments)
+                  ? request.comments.flatMap(
+                      (comment): ReadonlyArray<string> =>
+                        isReviewWireRecord(comment) &&
+                        typeof comment.id === "string"
+                          ? [comment.id]
+                          : [],
+                    )
+                  : [],
             ...(Array.isArray(request.comments) &&
             isReviewWireRecord(request.comments[0]) &&
             isReviewWireRecord(request.comments[0].target)
@@ -636,7 +662,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           typeof response.createdAt !== "string" ||
           (response.kind !== "feedback" &&
             response.kind !== "reply" &&
-            response.kind !== "chat")
+            response.kind !== "chat" &&
+            response.kind !== "push")
         ) {
           return [];
         }

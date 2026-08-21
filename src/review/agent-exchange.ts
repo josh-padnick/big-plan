@@ -97,8 +97,18 @@ export type AgentChatRequest = AgentRequestBase & {
   readonly body: string;
 };
 
+export type AgentPushRequest = AgentRequestBase & {
+  readonly kind: "push";
+  readonly origin: "prompt" | "about";
+  readonly body: string;
+  readonly threadId: string;
+};
+
 export type AgentRequest =
-  AgentFeedbackRequest | AgentReplyRequest | AgentChatRequest;
+  | AgentFeedbackRequest
+  | AgentReplyRequest
+  | AgentChatRequest
+  | AgentPushRequest;
 
 export type AgentOutcome = {
   readonly commentId: string;
@@ -126,7 +136,7 @@ type AgentResponseBase = {
 };
 
 export type AgentThreadResponse = AgentResponseBase & {
-  readonly kind: "feedback" | "reply";
+  readonly kind: "feedback" | "reply" | "push";
   readonly outcomes: ReadonlyArray<AgentOutcome>;
 };
 
@@ -624,6 +634,26 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
       attachments: base.attachments,
     };
   }
+  if (value.kind === "push") {
+    if (value.origin !== "prompt" && value.origin !== "about") {
+      throw new AgentExchangeRejected(
+        '"origin" must be either "prompt" or "about"',
+      );
+    }
+    if (base.attachmentManifest.length !== 0 || base.attachments.length !== 0) {
+      throw new AgentExchangeRejected(
+        "A push request cannot contain attachments",
+      );
+    }
+    return {
+      ...base,
+      kind: "push",
+      origin: value.origin,
+      body: text({ value: value.body, field: "body" }),
+      threadId: id(value.threadId, "threadId"),
+      attachments: [],
+    };
+  }
   throw new AgentExchangeRejected("Unsupported agent request kind");
 };
 
@@ -649,12 +679,13 @@ const expectedCommentIds = ({
   request,
   commentsById,
 }: {
-  readonly request: AgentFeedbackRequest | AgentReplyRequest;
+  readonly request: AgentFeedbackRequest | AgentReplyRequest | AgentPushRequest;
   readonly commentsById: ReadonlyMap<string, ReviewComment>;
 }): ReadonlyArray<string> => {
   if (request.kind === "feedback") {
     return request.comments.map((entry) => entry.id);
   }
+  if (request.kind === "push") return [request.threadId];
   if (!commentsById.has(request.commentId)) {
     throw new AgentExchangeRejected(
       "The reply points at a comment this session does not contain",
@@ -690,7 +721,7 @@ const outcome = ({
   currentSnapshot,
 }: {
   readonly value: unknown;
-  readonly request: AgentFeedbackRequest | AgentReplyRequest;
+  readonly request: AgentFeedbackRequest | AgentReplyRequest | AgentPushRequest;
   readonly changedBlocks: ReadonlySet<string>;
   readonly currentSnapshot: string;
 }): AgentOutcome => {
@@ -860,7 +891,11 @@ export const validateAgentResponse = (value: unknown): AgentResponse => {
       message: text({ value: value.message, field: "message" }),
     };
   }
-  if (value.kind !== "feedback" && value.kind !== "reply") {
+  if (
+    value.kind !== "feedback" &&
+    value.kind !== "reply" &&
+    value.kind !== "push"
+  ) {
     throw new AgentExchangeRejected("A stored agent response is invalid");
   }
   if (!Array.isArray(value.outcomes)) {
@@ -966,6 +1001,15 @@ const commentsFromRequests = (
       for (const entry of request.comments) {
         comments.set(entry.id, entry);
       }
+    }
+    if (request.kind === "push" && request.threadId === request.requestId) {
+      comments.set(request.threadId, {
+        id: request.threadId,
+        body: request.body,
+        createdAt: request.createdAt,
+        premiseSnapshot: request.premiseSnapshot,
+        target: { type: "document" },
+      });
     }
   }
   return comments;
@@ -1277,7 +1321,8 @@ export const readAgentCommentHistory = async ({
   const forComment = (request: AgentRequest): boolean =>
     (request.kind === "feedback" &&
       request.comments.some((comment) => comment.id === commentId)) ||
-    (request.kind === "reply" && request.commentId === commentId);
+    (request.kind === "reply" && request.commentId === commentId) ||
+    (request.kind === "push" && request.threadId === commentId);
   const complete = await readCompleteAgentExchange({
     store,
     sessionId,
@@ -1367,7 +1412,9 @@ export const responseTemplateFor = (
   const commentIds =
     request.kind === "feedback"
       ? request.comments.map((entry) => entry.id)
-      : [request.commentId];
+      : request.kind === "push"
+        ? [request.threadId]
+        : [request.commentId];
   return {
     requestId: request.requestId,
     outcomes: commentIds.map((commentId) => ({

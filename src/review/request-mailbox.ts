@@ -70,7 +70,9 @@ const namedCommentIds = (request: AgentRequest): ReadonlyArray<string> =>
     ? request.comments.map((comment) => comment.id)
     : request.kind === "reply"
       ? [request.commentId]
-      : [];
+      : request.kind === "push"
+        ? [request.threadId]
+        : [];
 
 export class ResolvedThreadWorkRejected extends AgentExchangeRejected {
   constructor() {
@@ -888,18 +890,43 @@ export const cancelAgentRequest = async ({
     },
   });
 
+/** Recognizes a reply whose thread was opened by an agent push. */
+const requestTargetsPushedThread = async ({
+  store,
+  request,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+}): Promise<boolean> => {
+  if (request.kind === "push") return true;
+  if (request.kind !== "reply") return false;
+  try {
+    const opener = validateAgentRequest(
+      await readAgentRequestValue({ store, requestId: request.commentId }),
+    );
+    return opener.kind === "push" && opener.threadId === request.commentId;
+  } catch {
+    return false;
+  }
+};
+
 /** Describes one committed revision to the Change Engine's change sets. */
-const committedRevisionOf = ({
+const committedRevisionOf = async ({
+  store,
   request,
   response,
   at,
 }: {
+  readonly store: ReviewStore;
   readonly request: AgentRequest;
   readonly response: AgentResponse;
   readonly at: string;
-}): CommittedPlanRevision => ({
+}): Promise<CommittedPlanRevision> => ({
   requestId: response.requestId,
-  changeSetIds: changeSetIdsFor(response),
+  changeSetIds: changeSetIdsFor({
+    response,
+    isPushedThread: await requestTargetsPushedThread({ store, request }),
+  }),
   baseSnapshot: requestBaselineSnapshot(request),
   resultSnapshot: response.resultSnapshot,
   provenance: response.kind,
@@ -1009,7 +1036,12 @@ export const commitRequestTerminal = async ({
       // change set can only ever describe work that crossed this boundary.
       await recordCommittedRevision({
         store: lockedStore,
-        revision: committedRevisionOf({ request, response, at: now }),
+        revision: await committedRevisionOf({
+          store: lockedStore,
+          request,
+          response,
+          at: now,
+        }),
       });
       await writeAgentRequestValue({
         store: lockedStore,
@@ -1080,7 +1112,12 @@ export const completeRequestTerminal = async ({
       });
       await recordCommittedRevision({
         store: lockedStore,
-        revision: committedRevisionOf({ request: answered, response, at: now }),
+        revision: await committedRevisionOf({
+          store: lockedStore,
+          request: answered,
+          response,
+          at: now,
+        }),
       });
       await writeAgentRequestValue({
         store: lockedStore,
@@ -1114,7 +1151,7 @@ const readQueuedMessage = async ({
   readonly nowMs: number;
 }): Promise<AgentReplyRequest | AgentChatRequest> => {
   const request = await readCurrentRequest({ store, requestId });
-  if (request.kind === "feedback") {
+  if (request.kind === "feedback" || request.kind === "push") {
     throw new AgentExchangeRejected(
       `Only a reply or plan question can be ${verb} while it waits`,
     );
@@ -1193,7 +1230,7 @@ export const reviseQueuedRequest = async ({
         body,
         attachments,
       });
-      if (revised.kind === "feedback") {
+      if (revised.kind === "feedback" || revised.kind === "push") {
         throw new AgentExchangeRejected(
           "Revising this message changed the request kind",
         );

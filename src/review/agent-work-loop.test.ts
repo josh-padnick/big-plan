@@ -23,6 +23,7 @@ import {
   feedbackAgentRequest,
   messageAgentRequest,
   readAgentExchange,
+  validateAgentRequest,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
@@ -200,6 +201,67 @@ afterAll(async () => {
 });
 
 describe("agent work loop", () => {
+  it("should pick up push vocabulary with its owned progress and response contract", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-push-pickup-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Push pickup\n\nThe plan is ready for a push.\n";
+    await writeFile(planPath, source);
+    const pushRuntime = await startReviewRuntime({ planPath });
+    const requestId = "dddddddddddddddd";
+    await writeAgentRequest({
+      store: pushRuntime.store,
+      request: validateAgentRequest({
+        version: 3,
+        requestId,
+        sessionId: pushRuntime.sessionId,
+        planId: pushRuntime.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-02T12:00:00.000Z",
+        attachmentManifest: [],
+        attachments: [],
+        kind: "push",
+        origin: "about",
+        body: "Tightened the retry boundary.",
+        threadId: requestId,
+      }),
+    });
+
+    try {
+      const result = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        executablePath,
+        shouldWait: false,
+      });
+      expect(result).toMatchObject({
+        pending: true,
+        work: { kind: "push", threadId: requestId },
+        response_template: {
+          requestId,
+          outcomes: [{ commentId: requestId, state: "changed" }],
+        },
+      });
+      await expect(
+        readProgress({
+          store: pushRuntime.store,
+          sessionId: pushRuntime.sessionId,
+        }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId,
+            stepCode: "request-picked-up",
+            step: "Preparing pushed plan change",
+            state: "live",
+          }),
+        ]),
+      );
+    } finally {
+      await pushRuntime.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should tolerate a heartbeat file being replaced while the review server is live", async () => {
     const readHeartbeat = vi
       .spyOn(reviewStore, "readSessionHeartbeatValue")

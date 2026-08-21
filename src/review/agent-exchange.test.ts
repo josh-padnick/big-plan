@@ -2,7 +2,7 @@
 // replies become pending work, and only complete source-consistent responses
 // can become viewer state.
 
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -18,12 +18,14 @@ import {
   nextPendingAgentRequest,
   readAgentExchange,
   requestBaselineSnapshot,
+  responseTemplateFor,
   validateAgentResponseDraft,
   validateAgentRequest,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import type { AgentExchangeSnapshot } from "./agent-exchange.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
+import { readCommittedRevision } from "./change-set-commit.js";
 import {
   cancelAgentRequest,
   claimAgentRequest,
@@ -85,7 +87,124 @@ const snapshot = (): AgentExchangeSnapshot => ({
   responses: [],
 });
 
+const pushRequest = ({
+  requestId = "5555555555555555",
+  threadId = "5555555555555555",
+  origin = "about",
+  body = "Tightened the retry boundary.",
+}: {
+  readonly requestId?: string;
+  readonly threadId?: string;
+  readonly origin?: "prompt" | "about";
+  readonly body?: string;
+} = {}) =>
+  validateAgentRequest({
+    version: 3,
+    requestId,
+    sessionId,
+    planId,
+    premiseSnapshot: deriveSnapshotDigest(before),
+    createdAt: "2026-08-02T12:00:00.000Z",
+    attachmentManifest: [],
+    attachments: [],
+    kind: "push",
+    origin,
+    body,
+    threadId,
+  });
+
 describe("agent exchange response contract", () => {
+  it.each(["prompt", "about"] as const)(
+    "should validate a push opened with %s origin",
+    (origin) => {
+      expect(pushRequest({ origin })).toMatchObject({
+        kind: "push",
+        origin,
+        threadId: "5555555555555555",
+      });
+    },
+  );
+
+  it.each([
+    ["unknown origin", { origin: "invented" }, /origin/],
+    ["empty body", { body: "   " }, /body.*empty/],
+    ["malformed thread id", { threadId: "thread" }, /threadId/],
+    [
+      "attachments",
+      {
+        attachmentManifest: [
+          {
+            id: "a".repeat(64),
+            sha256: "a".repeat(64),
+            mimeType: "image/png",
+            byteLength: 1,
+            width: 1,
+            height: 1,
+            path: "/tmp/.big-plan/review/plan/agent/attachments/image.png",
+            alt: "Evidence",
+          },
+        ],
+        attachments: [
+          {
+            id: "a".repeat(64),
+            sha256: "a".repeat(64),
+            mimeType: "image/png",
+            byteLength: 1,
+            width: 1,
+            height: 1,
+            path: "/tmp/.big-plan/review/plan/agent/attachments/image.png",
+            alt: "Evidence",
+          },
+        ],
+      },
+      /cannot contain attachments/,
+    ],
+  ])("should reject a push with %s", (_name, override, message) => {
+    expect(() =>
+      validateAgentRequest({ ...pushRequest(), ...override }),
+    ).toThrow(message);
+  });
+
+  it("should validate one thread outcome and prefill its response template for a push", () => {
+    const claimed = validateAgentRequest({
+      ...pushRequest(),
+      baselineSnapshot: deriveSnapshotDigest(before),
+      claimedAt: "2026-08-02T12:00:30.000Z",
+      claimedBy: "cccc0000cccc0000",
+      claimExpiresAtMs: 1_775_000_000_000,
+      claimGeneration: 1,
+    });
+    expect(responseTemplateFor(claimed)).toMatchObject({
+      requestId: claimed.requestId,
+      outcomes: [{ commentId: claimed.threadId, state: "changed" }],
+    });
+    expect(
+      validateAgentResponseDraft({
+        value: {
+          requestId: claimed.requestId,
+          outcomes: [
+            {
+              commentId: claimed.threadId,
+              state: "answered",
+              message: "No plan revision remained to publish.",
+            },
+          ],
+        },
+        request: claimed,
+        commentsById: commentsFromExchange({
+          requests: [claimed],
+          responses: [],
+        }),
+        changedBlocks: new Set(),
+        currentSnapshot: claimed.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toMatchObject({
+      kind: "push",
+      outcomes: [{ commentId: claimed.threadId, state: "answered" }],
+    });
+  });
+
   it("should require one outcome for every comment in a feedback request", () => {
     expect(() =>
       validateAgentResponseDraft({
@@ -417,6 +536,134 @@ describe("agent exchange response contract", () => {
 });
 
 describe("agent exchange filesystem", () => {
+  it("should commit a reply in a pushed thread as its own transaction", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-pushed-thread-reply-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, before);
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    const opener = validateAgentRequest({
+      ...pushRequest(),
+      baselineSnapshot: deriveSnapshotDigest(before),
+      claimedAt: "2026-08-02T12:00:01.000Z",
+      claimedBy: agentSessionId,
+      claimExpiresAtMs: 1_775_000_000_000,
+      claimGeneration: 1,
+      answeredAt: "2026-08-02T12:00:02.000Z",
+    });
+    await writeAgentRequest({ store, request: opener });
+    const reply = messageAgentRequest({
+      kind: "reply",
+      requestId: "6666666666666666",
+      sessionId,
+      planId,
+      premiseSnapshot: opener.premiseSnapshot,
+      createdAt: "2026-08-02T12:01:00.000Z",
+      body: "Also clarify why the publish is atomic.",
+      commentId: opener.threadId,
+    });
+    await writeAgentRequest({ store, request: reply });
+
+    try {
+      const claimed = await claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: reply.requestId,
+        claimedBy: agentSessionId,
+        baselineSnapshot: reply.premiseSnapshot,
+        now: "2026-08-02T12:01:01.000Z",
+      });
+      const response = validateAgentResponseDraft({
+        value: {
+          requestId: claimed.requestId,
+          outcomes: [
+            {
+              commentId: opener.threadId,
+              state: "answered",
+              message: "The guarded rename is the publication point.",
+            },
+          ],
+        },
+        request: claimed,
+        commentsById: commentsFromExchange({
+          requests: [opener, claimed],
+          responses: [],
+        }),
+        changedBlocks: new Set(),
+        currentSnapshot: claimed.premiseSnapshot,
+        now: "2026-08-02T12:01:02.000Z",
+      });
+      await commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentSessionId,
+        now: "2026-08-02T12:01:03.000Z",
+      });
+      await expect(
+        readCommittedRevision({ store, requestId: reply.requestId }),
+      ).resolves.toMatchObject({
+        requestId: reply.requestId,
+        changeSetIds: [reply.requestId],
+        provenance: "reply",
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should read a hand-written push as a projected thread and ignore an unknown request kind", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-push-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, before);
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    const push = pushRequest();
+    await writeFile(
+      join(store.agentRequestDirectory, `${push.requestId}.json`),
+      JSON.stringify(push),
+    );
+    await writeFile(
+      join(store.agentRequestDirectory, "6666666666666666.json"),
+      JSON.stringify({
+        ...push,
+        requestId: "6666666666666666",
+        kind: "future",
+      }),
+    );
+
+    try {
+      const exchange = await readAgentExchange({ store, sessionId, planId });
+      expect(exchange.requests).toEqual([push]);
+      const opener = commentsFromExchange(exchange).get(push.threadId);
+      expect(opener).toEqual({
+        id: push.threadId,
+        body: push.body,
+        createdAt: push.createdAt,
+        premiseSnapshot: push.premiseSnapshot,
+        target: { type: "document" },
+      });
+      if (opener === undefined) {
+        throw new Error("The push opener did not project as a comment");
+      }
+      expect(
+        projectCommentThread({
+          comment: opener,
+          requests: exchange.requests,
+          responses: exchange.responses,
+          progressEvents: [],
+          presence: { connected: false, state: "waiting" },
+          runtime: "online",
+          nowMs: Date.parse(push.createdAt),
+          cancelPendingRequestIds: new Set(),
+        }).comment,
+      ).toEqual(opener);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("freezes the first claim revision when work is picked up again", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-claim-"));
     const planPath = join(directory, "plan.mdx");

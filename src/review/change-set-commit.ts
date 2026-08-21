@@ -25,7 +25,7 @@ const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/;
 const COMMITTED_REVISION_VERSION = 1;
 
 /** What caused the change set the committed revision belongs to. */
-export type ChangeSetProvenance = "feedback" | "reply" | "chat";
+export type ChangeSetProvenance = "feedback" | "reply" | "chat" | "push";
 
 /** One published revision, addressed to the change sets it advances. */
 export type CommittedPlanRevision = {
@@ -73,10 +73,16 @@ const revisionPath = ({
  * plan-wide question owns a change set of its own, because no thread contains
  * it.
  */
-export const changeSetIdsFor = (
-  response: AgentResponse,
-): ReadonlyArray<string> =>
-  response.kind === "chat"
+export const changeSetIdsFor = ({
+  response,
+  isPushedThread = false,
+}: {
+  readonly response: AgentResponse;
+  readonly isPushedThread?: boolean;
+}): ReadonlyArray<string> =>
+  response.kind === "chat" ||
+  response.kind === "push" ||
+  (response.kind === "reply" && isPushedThread)
     ? [response.requestId]
     : [...new Set(response.outcomes.map((outcome) => outcome.commentId))];
 
@@ -124,7 +130,8 @@ const validateRevision = (value: unknown): CommittedPlanRevision => {
   if (
     provenance !== "feedback" &&
     provenance !== "reply" &&
-    provenance !== "chat"
+    provenance !== "chat" &&
+    provenance !== "push"
   ) {
     throw new CommittedRevisionRejected(
       "A committed revision needs a known provenance",

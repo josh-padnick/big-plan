@@ -229,6 +229,7 @@ const pickupProgress = (
 ): { readonly step: string; readonly detail?: string } => {
   if (request.kind === "chat") return { step: "Reviewing plan question" };
   if (request.kind === "reply") return { step: "Reviewing thread reply" };
+  if (request.kind === "push") return { step: "Preparing pushed plan change" };
   const comment = request.comments[0];
   if (request.comments.length !== 1) {
     const section =
@@ -685,12 +686,13 @@ const nextWork = async ({
     const selectedRequestId = request.requestId;
     let verifiedAttachments = request.attachments;
     const historySnapshot =
-      request.kind === "reply"
+      request.kind === "reply" || request.kind === "push"
         ? await readAgentCommentHistory({
             store: session.store,
             sessionId: session.sessionId,
             planId: session.planId,
-            commentId: request.commentId,
+            commentId:
+              request.kind === "push" ? request.threadId : request.commentId,
           })
         : snapshot;
     const history = projectConversationHistory({
