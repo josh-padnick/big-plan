@@ -26,7 +26,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { ARROW_UP_ICON } from "../../icons/lucide/arrow-up.js";
+import { BOT_ICON } from "../../icons/lucide/bot.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
@@ -3622,7 +3622,7 @@ const SentThread = ({
               ? undefined
               : "This thread was added by the agent"
           }
-          targetIcon={pushedOrigin === undefined ? undefined : ARROW_UP_ICON}
+          targetIcon={pushedOrigin === undefined ? undefined : BOT_ICON}
           surface={surface}
           metaClassName="review-thread-meta"
           targetClassName="review-sent-target"
@@ -3757,7 +3757,7 @@ const SentThread = ({
             ? undefined
             : "This thread was added by the agent"
         }
-        targetIcon={pushedOrigin === undefined ? undefined : ARROW_UP_ICON}
+        targetIcon={pushedOrigin === undefined ? undefined : BOT_ICON}
         surface={surface}
         metaClassName="review-thread-meta"
         targetClassName="review-sent-target"
