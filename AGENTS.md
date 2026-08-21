@@ -100,8 +100,9 @@ Three runtime contracts hold that browser layer together, and each exists
 because breaking it fails silently rather than loudly.
 The review island may replace plan DOM only through `src/review/browser/plan-dom.browser.ts`, which announces the swap as `bigplan:article-replaced`.
 Every shell script and every island effect that holds a node re-resolves on that event, because a replaced article or component root detaches everything wired beneath it and a dead handler throws nothing.
-Plan identity is resolved in exactly one module, `src/review/browser/live-target.browser.ts`,
-which scopes lookups to the live article, excludes the evidence a lens replays beside or after the plan, treats a compiler-addressed component diff replacement as live, and answers with an element or a reason it is missing.
+`src/review/browser/live-target.browser.ts` resolves plan identity in one place.
+It scopes lookups to the live article and excludes evidence that a lens replays beside or after the plan.
+It treats a compiler-addressed component diff replacement as live and returns either an element or the reason it is missing.
 A lint rule keeps it the only such place, because a raw selector silently returns a plausible wrong node instead of failing.
 Identity is deliberately not geometry: that resolver rightly answers with
 elements the browser never laid out, such as a block inside a collapsed slide,

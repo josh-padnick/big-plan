@@ -1,12 +1,12 @@
 // Owns every "which live element is this semantic target?" question the review
 // island asks of plan DOM. A block id or diagram anchor is a name, not a node:
-// the same name can sit on a snapshot copy inside a What-changed lens, on the
+// the same name can sit on replayed evidence inside a What-changed lens, on the
 // hidden theme variant of a diagram, or on a block whose content drifted since
 // the id was minted. Resolving those names in one place keeps the discipline
-// mandatory - scoped to the live article, never an inert snapshot copy,
+// mandatory - scoped to the live article, never inert replayed evidence,
 // visible copy preferred - and makes a miss say why it missed instead of
 // degrading to a plausible default. A compiler-addressed component diff root
-// is live plan DOM, not a snapshot copy. Where a lens belongs relative to the
+// is live plan DOM, not replayed evidence. Where a lens belongs relative to the
 // blocks it finds stays pure in diff-anchor.ts; this module is the DOM half of
 // that decision, which is why it carries the browser-only suffix.
 
@@ -23,10 +23,10 @@ export type LiveTargetMissReason =
   // Nothing in the live article carries the name: the block was removed, or an
   // id minted for an older revision no longer exists.
   | "unknown-id"
-  // The only matches sit inside a lens snapshot, which is a copy of the plan
-  // rather than the plan. Anchoring there would nest a lens inside a lens or
-  // attach a comment to a snapshot, and an identity attribute surviving into a
-  // clone is an internal defect rather than something the author changed.
+  // The only matches sit inside replayed lens evidence rather than the plan.
+  // Anchoring there would nest a lens inside a lens or attach a comment to
+  // evidence. An identity attribute surviving into a replay is an internal
+  // defect rather than something the author changed.
   | "clone-only"
   // A name resolved but the block no longer holds the content the diff
   // recorded, so a structural path now points at different words.
@@ -91,7 +91,7 @@ export const lensMissReason = (
 const LENS_COPY_SELECTOR =
   "[data-review-diff-lens]:not([data-component-diff]), [data-review-diff-lens-host]";
 
-/** True when the element is a snapshot copy inside a What-changed lens. */
+/** True when the element is replayed evidence inside a What-changed lens. */
 export const isLensCopy = (element: Element): boolean =>
   element.closest(LENS_COPY_SELECTOR) !== null;
 
@@ -221,7 +221,7 @@ export const candidateMatchesLivePicture = ({
     candidate.expectedPicture.source === livePicture.source &&
     candidate.expectedPicture.alt === livePicture.alt);
 
-/** Resolves a decision id to its live card, never an inert snapshot copy. */
+/** Resolves a decision id to its live card, never inert replayed evidence. */
 export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };

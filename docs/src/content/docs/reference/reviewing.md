@@ -377,13 +377,18 @@ happen.
 validated result snapshot. Each changed answer carries its own attributed
 places; plan-wide chat carries a grouped digest.
 The in-place lens shows word-level edits for close rewrites and stacked **Was**/**Now** bands for larger rewrites, additions, removals, tables, and code.
-For component kinds migrated to the component diff contract, **Was** and **Now** each render the component's own compiled presentation instead of flattening it into prose, and the change takes the place of the component in the plan rather than sitting beside a hidden copy of it.
-When a **Now** side exists, it is the one live, commentable component - keeping its own comment entry, maximize control, and controls - while **Was** is inert evidence and carries no live plan identity.
+Component changes that use the component diff contract render the component's compiled presentation on both **Was** and **Now** sides.
+The change replaces the component in the plan instead of sitting beside a hidden copy.
+When a **Now** side exists, it is the live, commentable component.
+It keeps its comment entry and any controls, including maximize.
+The **Was** side is inert evidence and carries no live plan identity.
 Until the reviewer accepts an answerable **Now** Decision, a banner at the top of its card asks them to accept the change before answering.
 Its disabled **Confirm choice** control shows the same guidance in a hazard-icon tooltip.
-A diagram, file tree, or wireframe change is therefore maximized by the component's own control, under the component's own name, and the component's own controls - a diagram's theme and flow controls, a tree's copy control, a wireframe's screen switcher - work inside the change.
-A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle; it does not yet mark which individual screens were added, removed, moved, or updated.
-A change the plan no longer holds, and a change a later revision has already moved past, are both replayed as inert evidence rather than as something to answer.
+Diagram, file tree, and wireframe changes use the component's own maximize control and name.
+Their controls work inside the change: diagram theme and flow controls, tree copy controls, and wireframe screen switchers.
+A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle.
+The wireframe diff does not mark individual screens as added, removed, moved, or updated.
+A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,
