@@ -81,8 +81,12 @@ export const STYLESHEET_BUDGETS = {
     // ramp it is drawn at so it never competes with the value beside it. Two
     // more for the choice card whose art the author left off, which drops to
     // two columns on both its device scales rather than leading with an empty
-    // one.
-    declarations: 1084,
+    // one. Raised last for the reference: one bordered object carrying the
+    // mark that names a verbatim string, the string itself truncating rather
+    // than wrapping, and the control that copies it drawn inside that border
+    // at the same mark size, keeping the touch floor only where a finger is
+    // the input.
+    declarations: 1118,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,

@@ -2765,6 +2765,76 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"tagName":"h4"');
     expect(rendered).toContain('"type":"button"');
   });
+  it("should draw a reference as one bordered object holding its copy control", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Reference",
+              attributes: {
+                icon: "terminal",
+                text: "big-plan render plan.mdx review.html",
+                copyLabel: "Copy command",
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-reference");
+    expect(rendered).toContain("big-plan render plan.mdx review.html");
+    expect(rendered).toContain('"data-lucide":"terminal"');
+    // The control that copies the string sits inside the object that holds it,
+    // which is the whole point of drawing a reference rather than a loose row.
+    expect(rendered).toContain("wireframe-reference-copy");
+    expect(rendered).toContain('"data-lucide":"copy"');
+    expect(rendered).toContain("Copy command");
+  });
+
+  it("should leave a reference without a copy label uncopyable", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Reference",
+              attributes: { text: "~/.config/big-plan/config.toml" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("~/.config/big-plan/config.toml");
+    // No copy control, and no leading mark, because the author asked for
+    // neither. A reference draws only what it was given.
+    expect(rendered).not.toContain("wireframe-reference-copy");
+    expect(rendered).not.toContain('"data-lucide":"copy"');
+  });
+
+  it("should refuse a reference with no text to show", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Reference", attributes: { icon: "terminal" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.length).toBeGreaterThan(0);
+    expect(diagnostics.map((entry) => entry.message).join(" ")).toContain(
+      "text",
+    );
+  });
+
   it("should draw a named glyph for a mark and keep its meaning readable", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

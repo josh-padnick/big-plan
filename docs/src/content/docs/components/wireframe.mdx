@@ -181,6 +181,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Text`             | Required `text`; optional `role="body\|helper\|muted\|section"`.                                                      |
 | `Button`           | Required `label`; optional `icon`, `iconOnly`, `emphasis="primary\|secondary\|tertiary\|destructive"`, and `navigateTo`. `iconOnly` draws the glyph alone while `label` stays the accessible name and tooltip, so it needs an `icon` to draw. |
 | `Icon`             | Required `name` and `label`; optional `labelled` and `size="sm\|md\|lg"`. A mark, never a control. `label` always reaches assistive technology; `labelled` also draws those words beside the glyph. |
+| `Reference`        | Required `text`; optional `icon` and `copyLabel`. A verbatim string the reader copies or types exactly, drawn as one bordered object. `copyLabel` draws the copy control inside the border and is its accessible name. Prefer it over a `Text` with a copy `Button` beside it. |
 | `Nav`              | Optional `label`; holds only `NavItem`.                                                                             |
 | `NavItem`          | Required `label`; optional `active` and `navigateTo`; valid only in `Nav`.                                           |
 | `Metric`           | Required `label` and `value`; optional `note`.                                                                      |

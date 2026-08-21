@@ -132,6 +132,12 @@ const ICON_SCHEMA = {
   size: { kind: "enum", values: WIREFRAME_ICON_SIZES },
 } satisfies ComponentAttributeSchema;
 
+const REFERENCE_SCHEMA = {
+  text: { kind: "string", required: true, nonEmpty: true },
+  icon: { kind: "string", nonEmpty: true },
+  copyLabel: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
 // An overlay's exit is often a Button inside a Row of actions rather than a
 // direct child, so the search reaches the whole surface. It counts only the
 // buttons that act: a segmented control's options and a bottom bar's
@@ -527,6 +533,30 @@ const CATALOG = {
         label: validated.label ?? "",
         labelled: validated.labelled === true,
         size: validated.size ?? "md",
+      };
+    },
+  },
+  Reference: {
+    category: "content",
+    acceptsChildren: false,
+    summary: `A verbatim string the reader copies or types exactly - a command, a path, a URL, an identifier - drawn as one bordered object. icon names an optional leading mark, and copyLabel says what copying it does and is what draws the copy control inside the border. Reach for this instead of putting a copy Button loose beside a Text: a loose copy control drifts away from the words it belongs to and sizes itself against nothing around it. Named glyphs: ${ICON_NAME_LIST}.`,
+    example:
+      '<Reference icon="terminal" text="big-plan render plan.mdx review.html" copyLabel="Copy command" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Reference",
+        attributes,
+        position,
+        diagnostics,
+        schema: REFERENCE_SCHEMA,
+      });
+      return {
+        element: "Reference",
+        text: validated.text ?? "",
+        ...(validated.icon === undefined ? {} : { icon: validated.icon }),
+        ...(validated.copyLabel === undefined
+          ? {}
+          : { copyLabel: validated.copyLabel }),
       };
     },
   },

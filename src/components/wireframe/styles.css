@@ -2116,6 +2116,77 @@ marks and a plan diff never jitters.
     align-self: flex-start;
   }
 
+  /* A reference is one drawn object, not a row of three. The border is what
+     makes the mark, the string, and the copy control read as belonging to each
+     other; without it the copy control is just the next thing along the row and
+     sizes itself against the row rather than against the string it copies. */
+  .wireframe-reference {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0.25rem 0.3rem 0.25rem 0.5rem;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: var(--wf-sketch);
+    background: var(--wf-fill);
+    font-size: var(--wf-text-meta);
+  }
+  /* Both marks in one object are drawn at one size. The copy glyph is nested
+     inside its control, so it needs saying separately or it falls back to the
+     default and outweighs the mark naming the reference. */
+  .wireframe-reference > .wireframe-glyph > svg,
+  .wireframe-reference-copy > .wireframe-glyph > svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+  .wireframe-reference-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Sized against the string it copies rather than against a bare touch floor,
+     because inside the border it is a part of this object. The floor still
+     applies where a finger is the input. */
+  .wireframe-reference-copy {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 1.75em;
+    height: 1.75em;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--wf-sketch-alt);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  .wireframe-reference-copy:hover {
+    border-color: var(--wf-stroke-soft);
+  }
+  .wireframe-reference-copy:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="phone"],
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-reference-copy {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  /* A stack aligns its children to its own edge, and one reference in a column
+     is an object, not a full-width band. */
+  .wireframe-stack > .wireframe-reference,
+  .wireframe-panel-body > .wireframe-reference,
+  .wireframe-canvas > .wireframe-reference {
+    align-self: flex-start;
+  }
+
   .wireframe-badge[data-wireframe-tone="info"] {
     border-color: var(--callout-note-c);
     color: var(--callout-note-c);

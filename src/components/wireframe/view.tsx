@@ -512,6 +512,28 @@ const WireframeElement = ({
           )}
         </span>
       );
+    case "Reference": {
+      // One bordered object: the mark that names the reference, the verbatim
+      // string, and the control that copies it. The control sits inside the
+      // border because a copy affordance outside it belongs to the row rather
+      // than to the string, which is the drawing that sent a reviewer looking
+      // for what the mark applied to.
+      return (
+        <span className="wireframe-reference">
+          {node.icon === undefined ? null : <Glyph name={node.icon} />}
+          <span className="wireframe-reference-text">{node.text}</span>
+          {node.copyLabel === undefined ? null : (
+            <button
+              type="button"
+              className="wireframe-reference-copy"
+              aria-label={node.copyLabel}
+            >
+              <Glyph name="copy" />
+            </button>
+          )}
+        </span>
+      );
+    }
     case "Badge":
       return (
         <span className="wireframe-badge" data-wireframe-tone={node.tone}>

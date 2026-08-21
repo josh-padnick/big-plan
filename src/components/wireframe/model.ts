@@ -524,6 +524,22 @@ export type WireframeNode =
       readonly tone: WireframeTone;
     }
   | {
+      // A verbatim string the reader is meant to copy or type exactly: a
+      // command, a path, a URL, an identifier. It is drawn as one bordered
+      // object so the mark that types it, the string itself, and the control
+      // that copies it read as one thing. Loose beside a paragraph, a copy
+      // control floats away from the words it belongs to and sizes itself
+      // against nothing.
+      readonly element: "Reference";
+      readonly text: string;
+      // The optional leading mark, naming what kind of reference this is.
+      readonly icon?: string;
+      // What the copy control means. Its presence is what draws the control,
+      // so a reference is copyable only where the author said what copying it
+      // does, and the control is never drawn without a name.
+      readonly copyLabel?: string;
+    }
+  | {
       // A glyph standing on its own, as a mark rather than a control. Anything
       // a person clicks is a Button carrying the same named glyph, so one
       // drawn affordance never has two ways to be authored.
