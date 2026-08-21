@@ -7,9 +7,11 @@
 // second connector, the reviewer reading a card and clicking through a
 // confirmation, and both agents finding out what they now are.
 
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { startReviewRuntime } from "../src/review/server.js";
 import { readAgentRoster } from "../src/review/store.js";
 import {
@@ -35,6 +37,20 @@ The reviewer decides which attached agent answers them.
 `;
 
 const HALF_WRITTEN = "The first agent had written this much when";
+
+const binPath = fileURLToPath(new URL("../bin/big-plan.mjs", import.meta.url));
+
+/**
+ * Attaches a real agent session that waits and claims nothing.
+ *
+ * It is abandoned rather than awaited: a loop with no work to pick up never
+ * returns, and the caller kills it. That is the point - an agent between turns
+ * is what most of a review looks like from the roster's side.
+ */
+const spawnWaitingAgent = (planPath: string): ChildProcess =>
+  spawn(process.execPath, [binPath, "agent", "next", planPath, "--wait"], {
+    stdio: ["ignore", "ignore", "ignore"],
+  });
 
 test.setTimeout(120_000);
 
@@ -102,6 +118,15 @@ test("should let the reviewer hand primacy to a second agent and tell both", asy
     const confirm = page.getByRole("alertdialog");
     await expect(confirm).toBeVisible();
     await expect(confirm).toContainText("No submitted comments are lost");
+    // Future tense: the reviewer has not committed, and Cancel is still the
+    // answer this dialog most has to stay answerable with.
+    await expect(confirm).toContainText(
+      "will answer the open comment and every comment after it",
+    );
+    /* The toggle is offered because there is something to offer: the first
+       agent is mid answer with a half-written candidate on disk. An idle
+       primary has no draft, and the dialog does not ask about one. */
+    await expect(confirm.getByRole("checkbox")).toBeVisible();
     // The reviewer chooses to carry the outgoing draft across as reference.
     await confirm.getByRole("checkbox").check();
     const answered = page.waitForResponse(
@@ -165,6 +190,65 @@ test("should let the reviewer hand primacy to a second agent and tell both", asy
       agentStatusTrigger(page).locator("[data-review-agent-status]"),
     ).toHaveAttribute("data-review-agent-status", "working");
   } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+/*
+BIG-171. The hand-off the reviewer performs between turns, which is the
+ordinary one.
+
+The journey above hands primacy over a half-written answer, so every sentence
+in the dialog has something to point at. This one has none: two attached
+sessions, both waiting, nothing claimed. The dialog has to stay true anyway -
+no toggle for a draft that does not exist, and no claim that the outgoing agent
+is mid answer when the card behind the dialog says it is waiting.
+*/
+test("should not offer to carry work an idle primary does not have", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-primacy-idle-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  // Two real sessions, neither given anything to do. Both are abandoned at the
+  // end rather than answered: what this test reads is the dialog, and the
+  // reviewer leaves it with Cancel.
+  const first = spawnWaitingAgent(planPath);
+  const second = spawnWaitingAgent(planPath);
+  try {
+    const observer = await untilObserverAttaches(runtime);
+    await page.goto(runtime.url);
+    await agentStatusTrigger(page).click();
+    const requestCard = agentSidebar(page).locator(
+      '[data-review-agent-card="request"]',
+    );
+    await expect(requestCard).toBeVisible({ timeout: 20_000 });
+    await expect(
+      agentSidebar(page).locator(
+        `[data-review-agent-writer="${observer.writerId}"]`,
+      ),
+    ).toBeVisible();
+
+    await requestCard.getByRole("button", { name: "Make it primary" }).click();
+    const confirm = page.getByRole("alertdialog");
+    await expect(confirm).toBeVisible();
+    // No draft exists, so the reviewer is not asked to decide its fate.
+    await expect(confirm.getByRole("checkbox")).toHaveCount(0);
+    // And nothing in it asserts a turn in flight: no open comment to inherit,
+    // and no agent answering right now.
+    await expect(confirm).toContainText(
+      "will answer your comments from now on",
+    );
+    await expect(confirm).not.toContainText("the open comment");
+    await expect(confirm).not.toContainText("is answering you right now");
+    await expect(confirm).toContainText("is the primary for this review");
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(confirm).toBeHidden();
+  } finally {
+    first.kill("SIGTERM");
+    second.kill("SIGTERM");
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }

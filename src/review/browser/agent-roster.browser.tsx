@@ -17,7 +17,7 @@ import { INFO_ICON } from "../../icons/lucide/info.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import {
   agentIsAttached,
-  agentModelLabel,
+  agentLabelResolver,
   orderAttachedAgents,
   pendingPrimacyRequest,
   selectPrimaryAgent,
@@ -57,6 +57,11 @@ export type AgentRosterProps = {
  * exactly the wrong reading in a list where the next card carries a different
  * role. A badge reads as a property of the thing it sits on, and the tint
  * separates the two roles for a reader who is scanning rather than reading.
+ *
+ * "Current primary" and "Observer" are deliberately not parallel. "Current"
+ * earns its place on the primary, where it says the role can move and this is
+ * who holds it now; on the observer it said only that an observer is currently
+ * an observer, which is a word spent on nothing.
  */
 export const AgentRoleBadge = ({
   isPrimary,
@@ -68,7 +73,7 @@ export const AgentRoleBadge = ({
     tone={isPrimary ? "statusAccent" : "statusNeutral"}
     data-review-agent-role={isPrimary ? "primary" : "observer"}
   >
-    {isPrimary ? "Current primary" : "Current observer"}
+    {isPrimary ? "Current primary" : "Observer"}
   </Badge>
 );
 
@@ -148,14 +153,20 @@ const AnswerRow = ({
 );
 
 /** The identity line every agent card carries. */
-const AgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
+const AgentIdentity = ({
+  agent,
+  label,
+}: {
+  readonly agent: RosterAgent;
+  readonly label: string;
+}) => {
   const client = agent.model?.client;
   return (
     <p
       className="m-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]"
       data-review-agent-writer={agent.writerId}
     >
-      {agentModelLabel(agent)}
+      {label}
       {client === undefined ? null : (
         <span className="font-normal text-muted">
           {" · "}
@@ -174,14 +185,16 @@ const AgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
  */
 const AgentCardHeader = ({
   agent,
+  label,
   badge,
 }: {
   readonly agent: RosterAgent;
+  readonly label: string;
   readonly badge: ReactNode;
 }) => (
   <div className="flex min-w-0 items-start gap-2">
     <div className="min-w-0 flex-1">
-      <AgentIdentity agent={agent} />
+      <AgentIdentity agent={agent} label={label} />
     </div>
     {badge}
   </div>
@@ -212,13 +225,13 @@ const AttachedSince = ({
  */
 const PrimacyRequestCard = ({
   agent,
-  primary,
+  label,
   nowMs,
   isReadOnly,
   onAnswer,
 }: {
   readonly agent: RosterAgent;
-  readonly primary: RosterAgent | undefined;
+  readonly label: string;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
   readonly onAnswer: AgentRosterProps["onAnswer"];
@@ -236,7 +249,7 @@ const PrimacyRequestCard = ({
       </span>
       A second agent wants to answer you
     </h3>
-    <AgentIdentity agent={agent} />
+    <AgentIdentity agent={agent} label={label} />
     <AttachedSince agent={agent} nowMs={nowMs} />
     {isReadOnly ? (
       <p className="m-0 text-xs text-muted">
@@ -244,15 +257,17 @@ const PrimacyRequestCard = ({
       </p>
     ) : (
       <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5 pt-0.5">
+        {/*
+        One sentence per answer, each naming the whole consequence rather than
+        this agent's half of it. They are written for a reader who has met none
+        of Big Plan's vocabulary: no writer ids, no "primacy", and no claim on
+        the reviewer to remember what an observer was two lines ago.
+        */}
         <AnswerRow
           label="Make it primary"
           variant="default"
           outcome="this agent becomes the primary"
-          help={
-            primary === undefined
-              ? `${agentModelLabel(agent)} answers your comments from now on.`
-              : `${agentModelLabel(agent)} answers your comments from now on, and ${agentModelLabel(primary)} becomes the observer.`
-          }
+          help="This agent answers your comments from now on, and any other connected agents become observers."
           onClick={() =>
             onAnswer({ writerId: agent.writerId, answer: "primary" })
           }
@@ -261,7 +276,12 @@ const PrimacyRequestCard = ({
           label="Leave as observer"
           variant="secondary"
           outcome="this agent stays an observer"
-          help="It keeps reading this review and cannot answer you."
+          /* What an observer can actually do, which is less than this used to
+             imply. `agent next` hands an observer the plan path and the review
+             URL and nothing else: no comment, no conversation, no request
+             state. "Keeps reading this review" described an affordance the
+             protocol does not have. */
+          help="This agent can read the plan, but it cannot read your comments and cannot answer you."
           onClick={() =>
             onAnswer({ writerId: agent.writerId, answer: "observer" })
           }
@@ -270,7 +290,13 @@ const PrimacyRequestCard = ({
           label="Disconnect this agent"
           variant="toned"
           outcome="this agent is disconnected"
-          help="It is dropped from this review and told at its next command."
+          /* Everything Big Plan granted this agent, and nothing it did not.
+             Disconnecting takes back the comments, the ability to answer, and
+             the claim that lets it publish a revision. It cannot take back a
+             path to a file the agent's own process already holds, so "no read
+             access to this plan" would be a promise Big Plan is in no position
+             to keep. */
+          help="This agent can no longer read your comments, answer them, or publish changes to the plan. It is told at its next command."
           onClick={() =>
             onAnswer({ writerId: agent.writerId, answer: "disconnect" })
           }
@@ -283,12 +309,14 @@ const PrimacyRequestCard = ({
 /** A settled card: this agent owns the plan, or reads it. */
 const AgentCard = ({
   agent,
+  label,
   isPrimary,
   nowMs,
   isReadOnly,
   onAnswer,
 }: {
   readonly agent: RosterAgent;
+  readonly label: string;
   readonly isPrimary: boolean;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
@@ -300,13 +328,17 @@ const AgentCard = ({
   >
     <AgentCardHeader
       agent={agent}
+      label={label}
       badge={<AgentRoleBadge isPrimary={isPrimary} />}
     />
     {isPrimary ? (
       <AttachedSince agent={agent} nowMs={nowMs} />
     ) : (
+      /* The same fact the "Leave as observer" mark states, and for the same
+         reason: an observer is handed the plan and nothing else. */
       <p className="m-0 text-2xs text-muted">
-        Reads this review but cannot answer you until it becomes the primary.
+        Reads the plan. It cannot read your comments or answer them until you
+        make it the primary.
       </p>
     )}
     {isReadOnly ? null : (
@@ -435,11 +467,16 @@ export const AgentRoster = ({
   carriedByActivity,
   onAnswer,
 }: AgentRosterProps) => {
-  const { cards, primary, requesting, isShown } = readAgentRosterFor({
+  const { attached, cards, primary, requesting, isShown } = readAgentRosterFor({
     agents,
     nowMs,
     ...(carriedByActivity === undefined ? {} : { carriedByActivity }),
   });
+  /* Ambiguity is judged over everyone attached, not over the cards this
+     section happens to draw. The agent the activity card carries is one of the
+     names the reviewer is telling these apart from, and leaving it out would
+     drop the id from a pair that genuinely collides. */
+  const labelFor = agentLabelResolver(attached);
   if (!isShown) return null;
   return (
     <section
@@ -449,7 +486,7 @@ export const AgentRoster = ({
       {requesting === undefined ? null : (
         <PrimacyRequestCard
           agent={requesting}
-          primary={primary}
+          label={labelFor(requesting)}
           nowMs={nowMs}
           isReadOnly={isReadOnly}
           onAnswer={onAnswer}
@@ -459,6 +496,7 @@ export const AgentRoster = ({
         <AgentCard
           key={agent.writerId}
           agent={agent}
+          label={labelFor(agent)}
           isPrimary={agent.writerId === primary?.writerId}
           nowMs={nowMs}
           isReadOnly={isReadOnly}
@@ -492,26 +530,49 @@ export const AgentRoster = ({
 export const PrimacyHandoffDialog = ({
   agent,
   primary,
+  agents,
+  hasWorkInProgress,
   onConfirm,
   onCancel,
 }: {
   readonly agent: RosterAgent;
   readonly primary: RosterAgent | undefined;
+  /** Everyone attached, which is what decides whether a name needs its id. */
+  readonly agents: ReadonlyArray<RosterAgent>;
+  /**
+   * Whether the outgoing primary actually has an unfinished answer.
+   *
+   * The toggle used to appear on every hand-off, including the ordinary one
+   * where the primary is sitting idle between turns. Offering to carry over
+   * something that does not exist asks the reviewer to decide the fate of
+   * nothing, and leaves them wondering what they just declined.
+   */
+  readonly hasWorkInProgress: boolean;
   readonly onConfirm: (input: {
     readonly carryWorkInProgress: boolean;
   }) => void;
   readonly onCancel: () => void;
 }) => {
   const [carryWorkInProgress, setCarryWorkInProgress] = useState(false);
+  const labelFor = agentLabelResolver(agents);
+  const incoming = labelFor(agent);
+  const outgoing = primary === undefined ? undefined : labelFor(primary);
   return (
     <AlertDialog
       open
       tone="neutral"
-      title={`Make ${agentModelLabel(agent)} the primary?`}
+      title={`Make ${incoming} the primary?`}
+      /* Never a state the card behind this dialog denies. "Is answering you
+         right now" is true of a primary mid turn and false of one sitting
+         idle between them, and the roster card two lines up says which - it
+         reads "waiting for feedback". The same evidence that decides whether
+         there is a draft to carry decides which sentence is true. */
       description={
-        primary === undefined
-          ? `${agentModelLabel(agent)} answers your comments from now on.`
-          : `${agentModelLabel(primary)} is answering you right now.`
+        outgoing === undefined
+          ? `${incoming} answers your comments from now on.`
+          : hasWorkInProgress
+            ? `${outgoing} is answering you right now.`
+            : `${outgoing} is the primary for this review.`
       }
       actionLabel="Make primary"
       onAction={() => onConfirm({ carryWorkInProgress })}
@@ -521,18 +582,25 @@ export const PrimacyHandoffDialog = ({
         <p className="m-0 text-2xs font-semibold tracking-caps text-muted uppercase">
           What happens
         </p>
+        {/* Future tense, because the reviewer has not committed yet. The
+            present tense read as a report of something already done, in the
+            one dialog whose whole purpose is to be answerable with Cancel. */}
         <ul className="m-0 grid grid-cols-[minmax(0,1fr)] list-disc gap-1 pl-4 text-xs text-ink marker:text-muted">
+          {/* "The open comment" only when one is open. With the primary idle
+              there is no comment in flight to point at, and naming one would
+              have the reviewer looking for it. */}
           <li>
-            {agentModelLabel(agent)} answers the open comment and every comment
-            after it.
+            {hasWorkInProgress
+              ? `${incoming} will answer the open comment and every comment after it.`
+              : `${incoming} will answer your comments from now on.`}
           </li>
-          {primary === undefined ? null : (
-            <li>{agentModelLabel(primary)} becomes the observer.</li>
+          {outgoing === undefined ? null : (
+            <li>{outgoing} will become the observer.</li>
           )}
           <li>No submitted comments are lost.</li>
         </ul>
       </div>
-      {primary === undefined ? null : (
+      {outgoing === undefined || !hasWorkInProgress ? null : (
         /* Its own ground and its own edge, because it is a control rather than
            another statement of fact, and the reviewer has to be able to see
            that this one line is the part they decide. */
@@ -546,11 +614,17 @@ export const PrimacyHandoffDialog = ({
             }
           />
           <span className="min-w-0">
-            Give {agentModelLabel(agent)} the work in progress
+            Let {incoming} see {outgoing}&rsquo;s unfinished answer
+            {/* What the toggle does and does not do, in the order the reviewer
+                asks it. The new primary writes its own answer either way -
+                the draft is handed over as a file to read, never as something
+                that publishes itself - so the choice is only whether it gets
+                to read the old one. */}
             <span className="mt-0.5 block text-2xs text-muted">
-              It arrives as reference to read, never as something that publishes
-              itself. Left off, the draft stays with {agentModelLabel(primary)}{" "}
-              and never reaches the plan.
+              {incoming} writes the answer itself either way, starting from the
+              plan as it stands. Checked, it can read what {outgoing} had
+              drafted; left off, that draft is dropped. Your comments and their
+              replies stay either way.
             </span>
           </span>
         </label>

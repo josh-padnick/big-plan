@@ -361,7 +361,7 @@ the confirmation states the part that depends on what the agent is doing right
 now (BIG-184's pattern).
 */
 const DISCONNECT_HELP =
-  "Tells the agent to end its session so a different agent can attach. Work in flight is dropped; your comments stay.";
+  "Tell the agent to end its session so a different agent can become the primary. Work in flight is dropped; your comments stay.";
 
 /** Explains, on hover or keyboard focus, what disconnecting costs. */
 const DisconnectHelp = () => (
@@ -1258,14 +1258,27 @@ export const AgentConnectionPanel = ({
               */
               <>
                 <p className="m-0">
-                  An agent is already answering this review. A new agent joins
-                  as an observer: it can read the plan and the conversation, and
-                  it cannot answer you until you say so.
+                  An agent is already answering this review. This is the{" "}
+                  <strong className="font-semibold text-ink">primary</strong>{" "}
+                  agent.
+                </p>
+                {/*
+                "Read the plan", and not the conversation. An observer's
+                `agent next` returns the plan path and the review URL and
+                nothing else - no comment, no history, no request state - so a
+                promise of the conversation was one the protocol never kept.
+                */}
+                <p className="m-0">
+                  If you invite a new agent, it will join as an{" "}
+                  <strong className="font-semibold text-ink">observer</strong>{" "}
+                  agent, which means it can read the plan, but it cannot read
+                  your comments or answer you unless you make it the primary
+                  agent.
                 </p>
                 <p className="m-0">
-                  When it arrives you will be asked who answers you from then
-                  on. Nothing the current agent is working on is dropped unless
-                  you make the new agent the primary.
+                  If you make the new agent the primary while the current one is
+                  mid answer, you choose whether that unfinished answer is
+                  passed to it or dropped.
                 </p>
               </>
             ) : null}
