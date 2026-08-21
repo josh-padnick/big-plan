@@ -5677,6 +5677,17 @@ The release gets a full soak.
     await test.step("use the real Decision controls without answering early", async () => {
       const diff = page.locator("[data-component-diff]");
       const proposed = diff.locator('[data-component-diff-side="proposed"]');
+      const changeNote = proposed.locator("[data-decision-change-note]");
+      await expect(changeNote).toBeVisible();
+      expect(
+        await changeNote.evaluate(
+          (node) =>
+            node.parentElement?.tagName === "FIGCAPTION" &&
+            node.parentElement.parentElement?.firstElementChild ===
+              node.parentElement &&
+            node === node.parentElement.firstElementChild,
+        ),
+      ).toBe(true);
       const disclosure = proposed.locator("details").first();
       const disclosureTrigger = disclosure.locator("summary");
       await disclosureTrigger.click();

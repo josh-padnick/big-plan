@@ -452,45 +452,59 @@ export const DecisionCard = ({
       {...(critical ? { "data-decision-critical": "" } : {})}
       {...(isChangeOpen ? { "data-decision-change-open": "" } : {})}
     >
-      <figcaption className="decision-zone-question bg-header px-6 py-4">
-        {model.layout === "rows" ? (
-          <p className="decision-eyebrow m-0 text-xs font-semibold tracking-caps text-subtle uppercase">
-            {"Decision"}
+      <figcaption>
+        {answerable && isChangeOpen ? (
+          <p
+            className="m-0 hidden items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)] group-data-[decision-change-open]/decision:flex"
+            data-decision-change-note=""
+            role="status"
+          >
+            <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+              {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
+            </span>
+            <span>{"Accept this change before answering this decision."}</span>
           </p>
         ) : null}
-        {answerable ? null : (
-          <BadgePill
-            label={statusLabel(model)}
-            classNames={[
-              "decision-status-pill",
-              `decision-status-${model.status}`,
-              STATUS_CLASSES[model.status],
-            ]}
-          />
-        )}
-        {/* The word carries the meaning, so the tint is reinforcement rather
-            than the signal a reader has to see colour to receive. */}
-        {critical ? (
-          <BadgePill
-            label={"Critical"}
-            classNames={[
-              "decision-critical-pill",
-              "bg-[var(--callout-warning-bg)]",
-              "text-[var(--callout-warning-c)]",
-            ]}
-          />
-        ) : null}
-        <p
-          id={model.questionId}
-          className={`mt-2 mb-0 font-semibold text-ink first:mt-0 ${
-            model.layout === "rows"
-              ? "text-2xl leading-tight"
-              : "text-lg leading-7"
-          }`}
-          data-decision-question=""
-        >
-          {model.question}
-        </p>
+        <div className="decision-zone-question bg-header px-6 py-4">
+          {model.layout === "rows" ? (
+            <p className="decision-eyebrow m-0 text-xs font-semibold tracking-caps text-subtle uppercase">
+              {"Decision"}
+            </p>
+          ) : null}
+          {answerable ? null : (
+            <BadgePill
+              label={statusLabel(model)}
+              classNames={[
+                "decision-status-pill",
+                `decision-status-${model.status}`,
+                STATUS_CLASSES[model.status],
+              ]}
+            />
+          )}
+          {/* The word carries the meaning, so the tint is reinforcement rather
+              than the signal a reader has to see colour to receive. */}
+          {critical ? (
+            <BadgePill
+              label={"Critical"}
+              classNames={[
+                "decision-critical-pill",
+                "bg-[var(--callout-warning-bg)]",
+                "text-[var(--callout-warning-c)]",
+              ]}
+            />
+          ) : null}
+          <p
+            id={model.questionId}
+            className={`mt-2 mb-0 font-semibold text-ink first:mt-0 ${
+              model.layout === "rows"
+                ? "text-2xl leading-tight"
+                : "text-lg leading-7"
+            }`}
+            data-decision-question=""
+          >
+            {model.question}
+          </p>
+        </div>
       </figcaption>
       {model.context.length === 0 ? null : (
         <div className="decision-zone-question bg-header px-6 pb-4 text-base [&>:last-child]:mb-0">
@@ -544,18 +558,6 @@ export const DecisionCard = ({
       </fieldset>
       <Reversibility model={model} />
       <Details model={model} />
-      {answerable && isChangeOpen ? (
-        <p
-          className="m-0 hidden items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)] group-data-[decision-change-open]/decision:flex"
-          data-decision-change-note=""
-          role="status"
-        >
-          <span className="inline-flex size-4 shrink-0" aria-hidden="true">
-            {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
-          </span>
-          <span>{"Accept this change before answering this decision."}</span>
-        </p>
-      ) : null}
       {answerable ? <AnswerControls /> : null}
     </figure>
   );
