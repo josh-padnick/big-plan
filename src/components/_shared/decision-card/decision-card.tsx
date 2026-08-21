@@ -255,7 +255,11 @@ const ReadOnlyNote = ({ className = "" }: { readonly className?: string }) => (
     data-decision-locked-note=""
     hidden
   >
-    <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+    <span
+      className="w-4 [&>svg]:size-4"
+      data-leading-icon=""
+      aria-hidden="true"
+    >
       {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
     </span>
     <span>{"This review is read-only, so no answer can be recorded."}</span>
@@ -272,7 +276,11 @@ const SupersededNotice = () => (
     role="status"
     hidden
   >
-    <span className="mt-0.5 inline-flex size-4 shrink-0" aria-hidden="true">
+    <span
+      className="w-4 [&>svg]:size-4"
+      data-leading-icon=""
+      aria-hidden="true"
+    >
       {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
     </span>
     <span>
@@ -358,7 +366,11 @@ const AnswerControls = ({
             data-decision-confirm-tooltip=""
             role="tooltip"
           >
-            <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+            <span
+              className="w-4 [&>svg]:size-4"
+              data-leading-icon=""
+              aria-hidden="true"
+            >
               {lucideIconToReact({
                 icon: TRIANGLE_ALERT_ICON,
                 hidden: false,
@@ -498,7 +510,11 @@ export const DecisionCard = ({
             data-decision-change-note=""
             role="status"
           >
-            <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+            <span
+              className="w-4 [&>svg]:size-4"
+              data-leading-icon=""
+              aria-hidden="true"
+            >
               {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
             </span>
             <span>{"Accept this change before answering this decision."}</span>

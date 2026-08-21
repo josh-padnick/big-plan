@@ -848,8 +848,7 @@
       opacity 60ms ease-out,
       visibility 0s linear 60ms;
   }
-  article .decision-confirm-tooltip > :first-child {
-    margin-top: 0.0625rem;
+  article .decision-confirm-tooltip > [data-leading-icon] {
     color: var(--callout-warning-c);
   }
   article

@@ -5716,6 +5716,25 @@ The release gets a full soak.
       await expect(
         confirmTooltip.locator('[data-lucide="triangle-alert"]'),
       ).toBeVisible();
+      const centers = await confirmTooltip.evaluate((tooltip) => {
+        const icon = tooltip.querySelector('[data-lucide="triangle-alert"]');
+        const copy = tooltip.querySelector(":scope > span:last-child");
+        if (!(icon instanceof SVGElement) || copy === null) {
+          throw new Error("Expected the Decision tooltip icon and copy.");
+        }
+        const range = document.createRange();
+        range.selectNodeContents(copy);
+        const firstLine = range.getClientRects()[0];
+        if (firstLine === undefined) {
+          throw new Error("Expected the Decision tooltip's first line box.");
+        }
+        const iconRect = icon.getBoundingClientRect();
+        return {
+          icon: (iconRect.top + iconRect.bottom) / 2,
+          firstLine: (firstLine.top + firstLine.bottom) / 2,
+        };
+      });
+      expect(Math.abs(centers.icon - centers.firstLine)).toBeLessThanOrEqual(1);
       await confirmGate.focus();
       await expect(confirmGate).not.toHaveCSS("box-shadow", "none");
 

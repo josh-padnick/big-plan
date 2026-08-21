@@ -867,7 +867,9 @@ const RuntimeAlertBanner = ({
     aria-live="assertive"
     {...{ [scope]: "" }}
   >
-    <Icon icon={CIRCLE_X_ICON} />
+    <span data-leading-icon="" aria-hidden="true">
+      <Icon icon={CIRCLE_X_ICON} />
+    </span>
     <div className="min-w-0 flex-1">
       <strong className="block text-ink">{heading}</strong>
       <p className="m-0 mt-1 text-xs text-ink [overflow-wrap:anywhere]">

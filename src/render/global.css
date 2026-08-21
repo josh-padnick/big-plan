@@ -25,6 +25,7 @@ palette in inert exports.
 @import "../components/_shared/column-reorder/styles.css";
 @import "../components/_shared/component-diff/styles.css";
 @import "../components/_shared/figure-controls/figure-controls.css";
+@import "../components/_shared/leading-icon/leading-icon.css";
 @import "../components/_shared/tooltip/tooltip.css";
 @import "../components/_shared/tree-hierarchy/tree-hierarchy.css";
 @import "../components/callout/styles.css";
