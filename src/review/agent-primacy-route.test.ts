@@ -24,6 +24,7 @@ import {
   attachAgentToRoster,
   readAgentRoster,
   recordAgentClaimToken,
+  writeAgentHeartbeat,
 } from "./store.js";
 import { selectPrimaryAgent } from "./shared/agent-primacy.js";
 import { AGENT_STALL_MS } from "./shared/agent-timing.js";
@@ -92,6 +93,18 @@ const answerPrimacy = ({
     body: JSON.stringify(body),
   });
 
+const disconnectAgent = ({
+  runtime,
+  token,
+}: {
+  readonly runtime: ReviewRuntime;
+  readonly token: string;
+}): Promise<Response> =>
+  fetch(`${runtime.url.replace(/\/$/u, "")}/api/agent-disconnect`, {
+    method: "POST",
+    headers: { "x-big-plan-review-token": token },
+  });
+
 /** Attaches one agent and hands back the identity the roster gave it. */
 const attach = async ({
   runtime,
@@ -117,6 +130,31 @@ const rosterOf = (
   readAgentRoster({ store: runtime.store, sessionId: runtime.sessionId });
 
 describe("the reviewer's primacy answer over the wire", () => {
+  it("should report a failed durable disconnect and leave every card attached", async () => {
+    const { runtime, token } = await startReview();
+    await attach({ runtime, writerId: "primary0" });
+    await attach({ runtime, writerId: "observer" });
+    await writeAgentHeartbeat({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      state: "waiting",
+      writerId: "primary0",
+    });
+    await writeFile(runtime.store.agentRosterLockPath, "unavailable", "utf8");
+
+    try {
+      const response = await disconnectAgent({ runtime, token });
+
+      expect(response.status).toBe(500);
+      await expect(rosterOf(runtime)).resolves.toEqual([
+        expect.objectContaining({ writerId: "primary0", role: "primary" }),
+        expect.objectContaining({ writerId: "observer", role: "observer" }),
+      ]);
+    } finally {
+      await rm(runtime.store.agentRosterLockPath, { force: true });
+    }
+  });
+
   it("should refuse an answer that names no agent", async () => {
     const { runtime, token } = await startReview();
 

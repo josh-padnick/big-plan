@@ -414,6 +414,204 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should discard an inherited draft when a later handoff leaves it behind", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-draft-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nCarry only the draft the reviewer chose.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await reviewStore.attachAgentToRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "aaaaaaaaaaaaaaaa",
+      });
+      await reviewStore.attachAgentToRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "bbbbbbbbbbbbbbbb",
+      });
+      await reviewStore.grantAgentPrimacy({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "bbbbbbbbbbbbbbbb",
+        inheritedDraftPath: "/stage/old/candidate.mdx",
+      });
+      await reviewStore.grantAgentPrimacy({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "aaaaaaaaaaaaaaaa",
+      });
+      await reviewStore.grantAgentPrimacy({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "bbbbbbbbbbbbbbbb",
+      });
+      await writeAgentRequest({
+        store: review.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId: "abab1212abab1212",
+          sessionId: review.sessionId,
+          planId: review.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-21T12:00:00.000Z",
+          body: "Which draft should inform this answer?",
+        }),
+      });
+
+      const promoted = (
+        await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        })
+      ).find((agent) => agent.writerId === "bbbbbbbbbbbbbbbb");
+      expect(promoted).toMatchObject({
+        writerId: "bbbbbbbbbbbbbbbb",
+        role: "primary",
+      });
+      expect(promoted?.inheritedDraftPath).toBeUndefined();
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        connectionToken: "bbbbbbbbbbbbbbbb",
+      });
+      expect(pickup).toMatchObject({
+        pending: true,
+        work: { requestId: "abab1212abab1212" },
+      });
+      expect(pickup.previous_agent_draft).toBeUndefined();
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should return a raced pickup when its agent loses the primary seat", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-link-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nOnly the recorded primary may keep a claim.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "cdcd1212cdcd1212",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Who is allowed to answer?",
+      }),
+    });
+    const recordClaim = reviewStore.recordAgentClaimToken;
+    const linking = vi
+      .spyOn(reviewStore, "recordAgentClaimToken")
+      .mockImplementationOnce(async (options) => {
+        await reviewStore.attachAgentToRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+          writerId: "successor",
+        });
+        await reviewStore.grantAgentPrimacy({
+          store: review.store,
+          sessionId: review.sessionId,
+          writerId: "successor",
+        });
+        return recordClaim(options);
+      });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({ pending: false, role: "observer" });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.requests[0]?.claimedBy).toBeUndefined();
+    } finally {
+      linking.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse publication when no roster record holds the claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-fence-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAn unlinked claim cannot publish.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const requestId = "efef1212efef1212";
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Can this claim publish?",
+      }),
+    });
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.agent_token !== "string" ||
+        typeof pickup.response_file !== "string"
+      ) {
+        throw new Error("Pickup did not return its response contract");
+      }
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId, message: "This must not publish." }),
+      );
+      await reviewStore.writeStoreJson({
+        path: review.store.agentRosterPath,
+        value: { sessionId: review.sessionId, agents: [] },
+      });
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "primacy-lost",
+      });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.responses).toEqual([]);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should execute the returned note and respond commands", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-commands-"));
     const planPath = join(directory, "plan.mdx");

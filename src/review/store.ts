@@ -67,6 +67,7 @@ import {
   roleForArrivingAgent,
   selectPrimaryAgent,
   type AttachedAgent,
+  type AgentRole,
 } from "./shared/agent-primacy.js";
 import {
   isProgressState,
@@ -3419,24 +3420,34 @@ export const recordAgentClaimToken = async ({
   sessionId,
   writerId,
   claimToken,
+  expectedRole,
   now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly writerId: string;
   readonly claimToken: string;
+  readonly expectedRole?: AgentRole;
   readonly now?: number;
 }): Promise<ReadonlyArray<AttachedAgent>> =>
   withAgentRoster({
     store,
     sessionId,
     now,
-    change: (agents) =>
-      agents.map((agent) => {
+    change: (agents) => {
+      const acting = agents.find((agent) => agent.writerId === writerId);
+      if (acting === undefined) {
+        throw new Error("This agent is no longer attached to the review");
+      }
+      if (expectedRole !== undefined && acting.role !== expectedRole) {
+        throw new Error(`This agent is no longer the review's ${expectedRole}`);
+      }
+      return agents.map((agent) => {
         if (agent.writerId !== writerId) return agent;
         const { claimClosedAtMs: _reopened, ...rest } = agent;
         return { ...rest, claimToken };
-      }),
+      });
+    },
   });
 
 /**

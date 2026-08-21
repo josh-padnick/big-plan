@@ -553,9 +553,7 @@ export const disconnectAgent = async (
       : agentForClaimToken({ agents: attached, claimToken })?.writerId) ??
     attached.find((agent) => agent.writerId === decision.addressee)?.writerId;
   if (detached !== undefined) {
-    await detachAgentFromRoster({ store, sessionId, writerId: detached }).catch(
-      () => undefined,
-    );
+    await detachAgentFromRoster({ store, sessionId, writerId: detached });
   }
   // Released outside the claim gate, in the order `claimAgentRequest`
   // established: that call takes this gate and then each request lock, so

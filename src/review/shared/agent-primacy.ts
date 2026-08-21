@@ -527,6 +527,7 @@ export const applyPrimacyHandoff = ({
     */
     if (agent.writerId === writerId) {
       const {
+        inheritedDraftPath: _previousDraft,
         requestedPrimacyAtMs: _granted,
         unsettledArrivalAtMs: _settled,
         ...rest

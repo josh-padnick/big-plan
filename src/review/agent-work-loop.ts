@@ -431,19 +431,17 @@ const failDisconnected = (): never => {
  * telling it at its next command is the difference between a harness that stops
  * and one that churns (BIG-171).
  *
- * A roster with no live primary at all does not refuse. The reviewer may be
- * mid decision, or every agent may have just been reaped, and stopping the one
- * agent still working on the strength of an empty roster would invent a
- * displacement nobody performed.
  */
 const assertSessionIsPrimary = async ({
   store,
   sessionId,
   claimToken,
+  requireLinkedClaim = false,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly claimToken: string;
+  readonly requireLinkedClaim?: boolean;
 }): Promise<void> => {
   /*
   A disconnected agent is told what actually happened to it.
@@ -470,14 +468,23 @@ const assertSessionIsPrimary = async ({
     );
   }
   const agents = await readAgentRoster({ store, sessionId });
-  const primary = selectPrimaryAgent({ agents, nowMs });
-  if (primary === undefined) return;
   const acting = agentForClaimToken({ agents, claimToken });
-  // A token no registration claims is not evidence of displacement. It is an
-  // older loop, a build that never registered, or a roster this session has
-  // reaped; the claim checks below still fence it, and inventing a primacy
-  // failure here would refuse work nobody took away.
-  if (acting === undefined || acting.writerId === primary.writerId) return;
+  if (acting === undefined) {
+    if (!requireLinkedClaim) return;
+    throw new AgentWorkLoopRejected(
+      "This claim is not linked to the attached primary agent",
+      "primacy-lost",
+      [
+        "Stop this loop; an unlinked claim cannot publish",
+        "Run agent next again to establish current claim ownership",
+      ],
+    );
+  }
+  const primary = selectPrimaryAgent({ agents, nowMs });
+  if (primary !== undefined && acting.writerId === primary.writerId) return;
+  if (primary === undefined) {
+    failPrimacyLost("no agent is currently the primary");
+  }
   failPrimacyLost(agentModelLabel(primary));
 };
 
@@ -1337,14 +1344,48 @@ const nextWork = async ({
           `Cannot open this claim's plan candidate: ${String(error)}`,
         );
       }
-      // The loop and the token it claimed with are linked here, so the separate
-      // `note` and `respond` processes can ask what role they are acting under.
-      await recordAgentClaimToken({
-        store: session.store,
-        sessionId: session.sessionId,
-        writerId: rosterWriterId,
-        claimToken: claimedBy,
-      }).catch(() => undefined);
+      try {
+        await recordAgentClaimToken({
+          store: session.store,
+          sessionId: session.sessionId,
+          writerId: rosterWriterId,
+          claimToken: claimedBy,
+          expectedRole: "primary",
+        });
+      } catch (error: unknown) {
+        let releaseFailure: unknown;
+        try {
+          await releaseClaimsHeldBy({
+            store: session.store,
+            sessionId: session.sessionId,
+            planId: session.planId,
+            claimedBy,
+            step: "Claim released when agent ownership could not be recorded",
+            detail:
+              "The message went back in the queue because this agent no longer held the primary seat",
+          });
+        } catch (releaseError: unknown) {
+          releaseFailure = releaseError;
+        }
+        if (await wasDisconnected()) return disconnectedResult();
+        const acting = (
+          await readAgentRoster({
+            store: session.store,
+            sessionId: session.sessionId,
+          }).catch(() => [])
+        ).find((agent) => agent.writerId === rosterWriterId);
+        if (releaseFailure === undefined && acting?.role === "observer") {
+          return observerResult();
+        }
+        if (acting?.role === "primary") {
+          await markWorkingOn(undefined).catch(() => undefined);
+        }
+        return fail(
+          releaseFailure === undefined
+            ? `Cannot record this agent's claim ownership: ${String(error)}`
+            : `Cannot release a claim whose ownership was not recorded: ${String(releaseFailure)}`,
+        );
+      }
       const respondCommand = agentRespondCommand({
         executablePath: binPath,
         planPath: session.planPath,
@@ -1484,6 +1525,7 @@ const respond = async ({
     store: session.store,
     sessionId: session.sessionId,
     claimToken: agentToken,
+    requireLinkedClaim: true,
   });
   const snapshot = await readAgentExchange({
     store: session.store,
