@@ -112,17 +112,24 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
    the visible primary action; `Escape` cancels.
    Hover or focus the primary action or **Cancel** to see the shortcut for that control, including while the primary action is disabled.
    Hover or focus the information mark beside **Submit right away** to compare immediate submission with staging comments for a later batch.
-3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
-   **Chat** tab asks questions about the plan as a whole, **Inputs** lists what
-   the review is still waiting for, and **Agent Status** - its own control beside
-   **Feedback** - shows the coding-agent connection and current work for a live
-   review session.
+3. Open **Feedback** to inspect staged comments in the **Comments** tab.
+   The **Chat** tab asks questions about the plan as a whole.
+   The **Chat** tab also shows threads that the agent pushed into the review.
+   **Inputs** lists what the review is still waiting for.
+   **Agent Status** - its own control beside **Feedback** - shows the coding-agent connection and current work for a live review session.
    The two controls share the sidebar and toggle independently: choosing one
    swaps the sidebar's body to it, and choosing it again closes the sidebar.
    A review-session outage is reported separately and does not label the agent
    as offline.
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
+
+The **Chat** tab groups unresolved pushed conversations under **Threads** and files resolved ones under **Resolved**.
+Every pushed card uses the bot icon and **Added by agent** heading.
+A push that relays reviewer wording needs no extra origin marker, while an agent-authored opener carries the narrower **Agent-opened · About** context.
+Open the card to reply, review and accept its changes, revert a response, or resolve the thread after its pending work finishes.
+When the agent continues a pushed thread, Big Plan adds another exchange to the same card.
+The card keeps the opener's presentation.
 
 A comment reaches the agent with the scope it was left at.
 Selecting text inside a paragraph, list, or table cell anchors the note to that block alone.
