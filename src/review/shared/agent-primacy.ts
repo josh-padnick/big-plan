@@ -137,13 +137,12 @@ export const agentForClaimToken = ({
 const SHORT_WRITER_ID_LENGTH = 4;
 
 /**
- * Names one attached agent well enough to tell it from another.
+ * Names one attached agent, always carrying the disambiguating id.
  *
- * The model alone is not an identity here. Two connectors running the same
- * model is the ordinary case - a reviewer opening a second terminal - and a
- * card offering "Make GPT-5.6-sol the primary" beside another GPT-5.6-sol asks
- * them to choose between two identical labels. The short writer id is what
- * makes the choice answerable.
+ * This is the answer for a caller that has one agent and no roster to compare
+ * it against. A caller that can see the whole roster should use
+ * `agentLabelResolver` instead, which spends the id only where two agents
+ * would otherwise read as the same name.
  *
  * An agent that declared no model is named by its id alone rather than by an
  * invented word like "Unknown agent": the id is true, and the placeholder
@@ -162,6 +161,41 @@ export const agentModelLabel = (
   return name === undefined
     ? short
     : `${agentModelDisplayName(name)} (${short})`;
+};
+
+/**
+ * Names every agent on one roster, spending an id only where a name repeats.
+ *
+ * The id is a disambiguator and nothing else, so it is drawn only when it has
+ * something to disambiguate. One Claude Opus 5 and one GPT-5.6-sol are told
+ * apart by their names, and printing "(…a38a)" after each of them charges the
+ * reader for a distinction the names already made - across a card, a dialog
+ * title, three bullets and a checkbox, which is where the reviewer met it.
+ * Two connectors running the same model is the case that needs it, and there
+ * both of them get it: showing the id on only one of a matching pair would
+ * read as a difference between the agents rather than between their names.
+ *
+ * An agent with no declared model is always named by its id, because that id
+ * is the only name it has.
+ */
+export const agentLabelResolver = (
+  agents: ReadonlyArray<Pick<AttachedAgent, "writerId" | "model">>,
+): ((agent: Pick<AttachedAgent, "writerId" | "model">) => string) => {
+  const timesNamed = new Map<string, number>();
+  for (const agent of agents) {
+    const name = agent.model?.name;
+    if (name === undefined) continue;
+    const display = agentModelDisplayName(name);
+    timesNamed.set(display, (timesNamed.get(display) ?? 0) + 1);
+  }
+  return (agent) => {
+    const name = agent.model?.name;
+    if (name === undefined) return agentModelLabel(agent);
+    const display = agentModelDisplayName(name);
+    return (timesNamed.get(display) ?? 0) > 1
+      ? agentModelLabel(agent)
+      : display;
+  };
 };
 
 /**

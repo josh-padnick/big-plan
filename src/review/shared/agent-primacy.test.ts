@@ -6,6 +6,7 @@ import { AGENT_RECOVERY_HORIZON_MS, AGENT_STALL_MS } from "./agent-timing.js";
 import {
   agentIsAttached,
   agentIsLive,
+  agentLabelResolver,
   agentModelLabel,
   agentPrimacyHealth,
   applyPrimacyDeclined,
@@ -129,6 +130,47 @@ describe("agentModelLabel", () => {
     // The id is true; an invented word like "Unknown agent" would only look
     // like a name.
     expect(agentModelLabel({ writerId: "0123456789abcdef" })).toBe("…cdef");
+  });
+});
+
+describe("agentLabelResolver", () => {
+  it("should name distinct models without spending an id on them", () => {
+    // The id is a disambiguator, and two different names have nothing left for
+    // it to disambiguate. It appeared in a card, a dialog title, three bullets
+    // and a checkbox, charging the reviewer each time for a distinction the
+    // names had already made.
+    const label = agentLabelResolver([
+      { writerId: "0123456789abcdef", model: { name: "claude-opus-5" } },
+      { writerId: "fedcba9876543210", model: { name: "gpt-5.6-sol" } },
+    ]);
+    expect(
+      label({ writerId: "0123456789abcdef", model: { name: "claude-opus-5" } }),
+    ).toBe("Claude Opus 5");
+  });
+
+  it("should spend the id on both agents when two share a name", () => {
+    // A reviewer with two terminals open on the same model is the case the id
+    // exists for, and both of them need it: marking only one of a matching
+    // pair would read as a difference between the agents themselves.
+    const agents = [
+      { writerId: "0123456789abcdef", model: { name: "claude-opus-5" } },
+      { writerId: "fedcba9876543210", model: { name: "claude-opus-5" } },
+    ];
+    const label = agentLabelResolver(agents);
+    expect(agents.map((agent) => label(agent))).toEqual([
+      "Claude Opus 5 (…cdef)",
+      "Claude Opus 5 (…3210)",
+    ]);
+  });
+
+  it("should keep naming an undeclared model by its id", () => {
+    // That id is the only name it has, so it is drawn whether or not anything
+    // else on the roster collides with it.
+    const label = agentLabelResolver([
+      { writerId: "0123456789abcdef" },
+      { writerId: "fedcba9876543210", model: { name: "gpt-5.6-sol" } },
+    ]);
+    expect(label({ writerId: "0123456789abcdef" })).toBe("…cdef");
   });
 });
 
