@@ -195,7 +195,7 @@ const BoundedList = ({
   const extra = items.length - VIEW_ALL_LIMIT;
   const shown = extra > 0 ? items.slice(0, VIEW_ALL_LIMIT) : items;
   return (
-    <ul className="m-0 grid list-none gap-1 p-0">
+    <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1 p-0">
       {shown}
       {extra > 0 ? (
         <li className="px-1 py-1 text-xs text-muted">{`View all ${items.length}`}</li>
@@ -417,13 +417,16 @@ export const ApproveDialog = ({
       onCancel={onKeepReviewing}
       onAction={handleApprove}
     >
-      <div className="grid gap-3" data-review-approve-dialog="">
+      <div
+        className="grid grid-cols-[minmax(0,1fr)] gap-3"
+        data-review-approve-dialog=""
+      >
         {stale ? (
           <p className="m-0 text-xs text-muted">
             Re-approval covers the plan as it reads now.
           </p>
         ) : null}
-        <div className="grid gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
           <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
             Review status
           </p>
@@ -473,7 +476,7 @@ export const ApproveDialog = ({
                   This plan does not ask any decisions.
                 </p>
               ) : (
-                <ul className="m-0 grid list-none gap-1 p-0">
+                <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1 p-0">
                   {items.decisions.recorded.map((decision) => (
                     <li
                       key={decision.inputId}
@@ -561,7 +564,7 @@ export const ApproveDialog = ({
             </Disclosure>
           )}
         </div>
-        <div className="grid gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
           <div className="flex items-baseline justify-between gap-2">
             <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
               Message to your agent
@@ -733,7 +736,7 @@ const ApprovalDetails = ({
             </span>
           </button>
         </div>
-        <div className="mt-3 grid gap-3">
+        <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3">
           <div className="flex items-start gap-2">
             <QuietCheck />
             <p
