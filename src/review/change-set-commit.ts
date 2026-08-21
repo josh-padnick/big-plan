@@ -20,8 +20,8 @@ import type { ReviewStore } from "./store.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
-// A change set is addressed by the thread it belongs to, and a comment id is a
-// short hexadecimal identifier rather than a request-shaped one.
+// A change-set id names either an ordinary comment thread or an immutable
+// request-keyed transaction, so it accepts short comment ids and request ids.
 const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/;
 const COMMITTED_REVISION_VERSION = 1;
 
