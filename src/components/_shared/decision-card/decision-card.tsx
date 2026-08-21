@@ -534,7 +534,6 @@ export const DecisionCard = ({
       {...(critical ? { "data-decision-critical": "" } : {})}
       {...(isChangeOpen ? { "data-decision-change-open": "" } : {})}
     >
-      {answerable ? <ApprovedNotice /> : null}
       <figcaption>
         {answerable && isChangeOpen ? (
           <p
@@ -552,6 +551,7 @@ export const DecisionCard = ({
             <span>{"Accept this change before answering this decision."}</span>
           </p>
         ) : null}
+        {answerable ? <ApprovedNotice /> : null}
         <div className="decision-zone-question bg-header px-6 py-4">
           {model.layout === "rows" ? (
             <p className="decision-eyebrow m-0 text-xs font-semibold tracking-caps text-subtle uppercase">

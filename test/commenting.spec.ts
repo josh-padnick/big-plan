@@ -65,7 +65,7 @@ test("should keep the desktop toolbar actions compact and distinct", async ({
   await expect(settings).toBeVisible();
   expect(geometry.settingsHeight).toBe(geometry.feedbackHeight);
   expect(geometry.settingsWidth).toBe(geometry.settingsHeight);
-  expect(geometry.gap).toBe(4);
+  expect(geometry.gap).toBe(8);
 });
 
 test("should place a comment action between copy and maximize for plain code", async ({
