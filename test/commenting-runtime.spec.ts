@@ -5735,7 +5735,14 @@ The release gets a full soak.
         };
       });
       expect(Math.abs(centers.icon - centers.firstLine)).toBeLessThanOrEqual(1);
-      await confirmGate.focus();
+      for (let index = 0; index < 20; index += 1) {
+        const isConfirmGateFocused = await confirmGate.evaluate(
+          (node) => node === document.activeElement,
+        );
+        if (isConfirmGateFocused) break;
+        await page.keyboard.press("Tab");
+      }
+      await expect(confirmGate).toBeFocused();
       await expect(confirmGate).not.toHaveCSS("box-shadow", "none");
 
       const sideToggle = diff.locator("[data-component-diff-toggle]");

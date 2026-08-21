@@ -354,7 +354,8 @@ places; plan-wide chat carries a grouped digest.
 The in-place lens shows word-level edits for close rewrites and stacked **Was**/**Now** bands for larger rewrites, additions, removals, tables, and code.
 Decision changes use the component diff contract: **Was** and **Now** each render the compiled Decision presentation instead of flattening it into prose.
 When a **Now** side exists, it is the one live, commentable Decision, while **Was** is inert evidence and carries no live plan identity.
-Until an answerable **Now** Decision is accepted, a banner at the top of its card asks the reviewer to accept the change before answering and its confirmation control remains disabled.
+Until the reviewer accepts an answerable **Now** Decision, a banner at the top of its card asks them to accept the change before answering.
+Its disabled **Confirm choice** control shows the same guidance in a hazard-icon tooltip.
 Diagram and file-tree changes continue to retain their compiled component presentation behind **Was**/**Now** switches.
 When either revision contains multiple screens, wireframe changes add a per-screen selector for **Added**, **Removed**, **Updated**, **Moved**, and **Initial screen** changes.
 They keep the full device frame visible behind interactive **Was**/**Now** controls and carry the shared maximize control into the diff lens.
