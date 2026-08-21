@@ -668,6 +668,13 @@ export const mintAgentPush = async ({
                   `This agent already holds an open push (thread ${openPush.threadId}); respond to it, or ask the reviewer to cancel it`,
                 );
               }
+              if (
+                requests.some((candidate) => candidate.requestId === requestId)
+              ) {
+                throw new AgentExchangeRejected(
+                  "The push request could not be created",
+                );
+              }
               const continuedThread =
                 threadId === undefined
                   ? undefined
@@ -720,51 +727,78 @@ export const mintAgentPush = async ({
                 requestId,
                 value: unclaimed,
               });
-              const request = validateAgentRequest({
-                ...unclaimed,
-                baselineSnapshot: premiseSnapshot,
-                claimedAt: now,
-                claimedBy,
-                claimedByConnection: connectionToken,
-                claimedModel: model,
-                claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
-                claimGeneration: 1,
-              });
-              if (request.kind !== "push") {
-                throw new AgentExchangeRejected(
-                  "The push request could not be claimed",
+              try {
+                const request = validateAgentRequest({
+                  ...unclaimed,
+                  baselineSnapshot: premiseSnapshot,
+                  claimedAt: now,
+                  claimedBy,
+                  claimedByConnection: connectionToken,
+                  claimedModel: model,
+                  claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
+                  claimGeneration: 1,
+                });
+                if (request.kind !== "push") {
+                  throw new AgentExchangeRejected(
+                    "The push request could not be claimed",
+                  );
+                }
+                await writeAgentRequestValue({
+                  store: lockedStore,
+                  requestId,
+                  value: request,
+                });
+                // The publication module imports the mailbox commit boundary, so
+                // this late import keeps stage creation on the mint path without
+                // introducing an eager module cycle during review startup.
+                const { openMutationStage } =
+                  await import("./staged-plan-mutation.js");
+                const stage = await openMutationStage({
+                  store: lockedStore,
+                  requestId,
+                  generation: 1,
+                  claimedBy,
+                  baseSnapshot: premiseSnapshot,
+                  baseSource: source,
+                  now,
+                });
+                return {
+                  request,
+                  stage,
+                  threadOpened: threadId === undefined,
+                  queuedReviewerMessages: requests.filter(
+                    (candidate) =>
+                      candidate.kind !== "push" &&
+                      candidate.answeredAt === undefined &&
+                      candidate.canceledAt === undefined,
+                  ).length,
+                };
+              } catch (error: unknown) {
+                const cleanup = await Promise.allSettled([
+                  deleteAgentRequestValue({
+                    store: lockedStore,
+                    requestId,
+                  }).then((result) => {
+                    if (result.attachmentCleanup === "failed") {
+                      throw result.cleanupError;
+                    }
+                  }),
+                  removeAgentMutationStages({
+                    store: lockedStore,
+                    requestId,
+                  }),
+                ]);
+                const cleanupFailures = cleanup.flatMap((result) =>
+                  result.status === "rejected" ? [result.reason] : [],
                 );
+                if (cleanupFailures.length > 0) {
+                  throw new AggregateError(
+                    [error, ...cleanupFailures],
+                    "The push request failed and could not be rolled back",
+                  );
+                }
+                throw error;
               }
-              await writeAgentRequestValue({
-                store: lockedStore,
-                requestId,
-                value: request,
-              });
-              // The publication module imports the mailbox commit boundary, so
-              // this late import keeps stage creation on the mint path without
-              // introducing an eager module cycle during review startup.
-              const { openMutationStage } =
-                await import("./staged-plan-mutation.js");
-              const stage = await openMutationStage({
-                store: lockedStore,
-                requestId,
-                generation: 1,
-                claimedBy,
-                baseSnapshot: premiseSnapshot,
-                baseSource: source,
-                now,
-              });
-              return {
-                request,
-                stage,
-                threadOpened: threadId === undefined,
-                queuedReviewerMessages: requests.filter(
-                  (candidate) =>
-                    candidate.kind !== "push" &&
-                    candidate.answeredAt === undefined &&
-                    candidate.canceledAt === undefined,
-                ).length,
-              };
             },
           });
         },
