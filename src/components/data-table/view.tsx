@@ -294,7 +294,7 @@ const RowCells = ({
           key={cellIndex}
           className={
             kind === "summary"
-              ? "data-table-cell border-b-0 bg-surface font-semibold data-[table-align=center]:text-center data-[table-align=right]:text-right"
+              ? "data-table-cell border-t border-b-0 border-edge-strong font-semibold data-[table-align=center]:text-center data-[table-align=right]:text-right"
               : "data-table-cell data-[table-align=center]:text-center data-[table-align=right]:text-right"
           }
           data-commentable-kind="table-cell"
@@ -356,7 +356,7 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
         already declares itself a scroll container, so the figure keeps one
         box instead of gaining a second bordered wrapper inside itself. */}
     <div
-      className="data-table-scroll"
+      className="data-table-scroll border-t-2 border-edge-strong"
       data-table-scroll-container=""
       {...{ [BODY_ATTRIBUTE]: "" }}
     >
