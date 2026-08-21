@@ -64,7 +64,7 @@ const BODY_CLASSES = "bg-paper font-sans text-base text-ink antialiased";
 // margin. The sidebar gap in particular places the reading column, so a step
 // off the scale here moved every surface on the page sideways.
 const LAYOUT_CLASSES =
-  "relative grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
+  "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
 const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,54.5rem)]`;
 const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,54.5rem)]`;
 
@@ -544,9 +544,9 @@ ${standalone ? "" : `<p class="pointer-events-none absolute inset-x-0 top-0 z-0 
   ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
 ${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
-<span class="pointer-events-none absolute top-8 left-5 z-50 -rotate-2 wide:top-6 wide:left-6" data-review-approval-page-stamp hidden></span>
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
-<main class="min-w-0" id="${overviewId}">
+<main class="relative min-w-0" id="${overviewId}">
+<span class="pointer-events-none absolute -top-8 left-0 -rotate-2" data-review-approval-page-stamp hidden></span>
 <article>
 ${contentHtml}
 </article>

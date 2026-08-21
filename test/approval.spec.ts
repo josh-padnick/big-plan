@@ -749,28 +749,33 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     ).toBeVisible();
     const stampBox = await stamp.boundingBox();
     const approvedBox = await approvedButton.boundingBox();
-    const toc = page.locator("[data-desktop-toc]");
-    const tocBox = (await toc.isVisible()) ? await toc.boundingBox() : null;
+    const titleBox = await page
+      .getByRole("heading", { level: 1 })
+      .boundingBox();
+    const headerBox = await page
+      .locator("header[data-shell-chrome]")
+      .boundingBox();
     const feedbackBox = await page
       .getByRole("button", { name: "Feedback" })
       .boundingBox();
-    if (stampBox === null || approvedBox === null || feedbackBox === null) {
+    if (
+      stampBox === null ||
+      approvedBox === null ||
+      feedbackBox === null ||
+      titleBox === null ||
+      headerBox === null
+    ) {
       throw new Error(
-        "The approved stamp, Plan approved control, and Feedback were not laid out",
+        "The approved stamp, Plan approved control, title, and Feedback were not laid out",
       );
     }
     expect(approvedBox.x + approvedBox.width).toBeLessThanOrEqual(
       feedbackBox.x,
     );
     expect(stampBox.x).toBeLessThan(approvedBox.x);
-    expect(
-      tocBox,
-      "desktop contents list is visible on a wide review",
-    ).not.toBeNull();
-    if (tocBox !== null) {
-      expect(stampBox.x).toBeLessThan(tocBox.x + tocBox.width);
-      expect(stampBox.y).toBeLessThan(tocBox.y + 48);
-    }
+    expect(Math.abs(stampBox.x - titleBox.x)).toBeLessThan(24);
+    expect(stampBox.y + stampBox.height).toBeLessThanOrEqual(titleBox.y + 4);
+    expect(stampBox.y).toBeGreaterThan(headerBox.y + headerBox.height);
     const stampLayer = await stamp.evaluate((element) => {
       const slot = element.closest("[data-review-approval-page-stamp]");
       if (slot === null) return null;
@@ -781,7 +786,9 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
       };
     });
     expect(stampLayer?.position).toBe("absolute");
-    expect(Number(stampLayer?.zIndex)).toBeGreaterThanOrEqual(50);
+    expect(
+      stampLayer?.zIndex === "auto" || Number(stampLayer?.zIndex) < 40,
+    ).toBe(true);
     const stampTopBefore = stampBox.y;
     const scrolled = await page.evaluate(() => {
       const html = document.documentElement;
@@ -800,6 +807,43 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     expect(Math.abs(stampTopAfter - (stampTopBefore - scrolled))).toBeLessThan(
       2,
     );
+    await page.evaluate(() => {
+      const html = document.documentElement;
+      const previous = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(0, 0);
+      html.style.scrollBehavior = previous;
+    });
+    const overlapScroll = Math.max(
+      8,
+      Math.round(stampTopBefore - headerBox.height / 2),
+    );
+    await page.evaluate((y) => {
+      const html = document.documentElement;
+      const previous = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(0, y);
+      html.style.scrollBehavior = previous;
+    }, overlapScroll);
+    const covered = await page.evaluate(() => {
+      const header = document.querySelector("header[data-shell-chrome]");
+      const mark = document.querySelector("[data-review-approval-stamp]");
+      if (header === null || mark === null) {
+        return { hitHeader: false, stampY: 0, headerBottom: 0 };
+      }
+      const headerRect = header.getBoundingClientRect();
+      const stampRect = mark.getBoundingClientRect();
+      const x = stampRect.x + stampRect.width / 2;
+      const y = headerRect.top + headerRect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      return {
+        hitHeader: hit !== null && header.contains(hit),
+        stampY: stampRect.y,
+        headerBottom: headerRect.bottom,
+      };
+    });
+    expect(covered.stampY).toBeLessThan(covered.headerBottom);
+    expect(covered.hitHeader).toBe(true);
     await page.evaluate(() => {
       const html = document.documentElement;
       const previous = html.style.scrollBehavior;
