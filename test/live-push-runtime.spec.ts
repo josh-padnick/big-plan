@@ -394,6 +394,69 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await stepper.getByRole("button", { name: "Accept this change" }).click();
     await page.keyboard.press("Escape");
 
+    const continuedPush = await runAgentCli([
+      "push",
+      planPath,
+      "--thread",
+      threadId,
+      "--prompt",
+      "Clarify the follow-up publication step.",
+    ]);
+    const continuedRequestId = agentIdOf(continuedPush.stdout, "requestId");
+    const continuedRevision = revised.replace(
+      "The reviewer keeps reading while an agent safely prepares a revision.",
+      "The reviewer keeps reading while an agent safely prepares a follow-up revision.",
+    );
+    await writeFile(
+      candidatePlanOf(continuedPush.stdout),
+      continuedRevision,
+      "utf8",
+    );
+    await writeFile(
+      responseDraftOf(continuedPush.stdout),
+      JSON.stringify({
+        requestId: continuedRequestId,
+        outcomes: [
+          {
+            commentId: threadId,
+            state: "changed",
+            message: "Clarified the follow-up publication flow.",
+            changeTargets: ["document/paragraph-1"],
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await runAgentCli([
+      "respond",
+      planPath,
+      responseDraftOf(continuedPush.stdout),
+      "--agent",
+      agentIdOf(continuedPush.stdout, "agent_token"),
+    ]);
+    await expect(page.locator("article")).toContainText(
+      "safely prepares a follow-up revision",
+      { timeout: 15_000 },
+    );
+
+    const historicalChange = thread
+      .locator('[data-review-message="agent"]')
+      .filter({ hasText: "Clarified the safe publication flow." });
+    await historicalChange
+      .getByRole("button", { name: /Review changes \(2\)/u })
+      .click();
+    await expect(
+      stepper.getByRole("button", { name: "Resolve thread" }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    const latestChange = thread
+      .locator('[data-review-message="agent"]')
+      .filter({ hasText: "Clarified the follow-up publication flow." });
+    await latestChange.getByRole("button", { name: "Review change" }).click();
+    await stepper.getByRole("button", { name: "Accept this change" }).click();
+    await page.keyboard.press("Escape");
+
     await thread
       .getByRole("button", { name: "Revert response" })
       .first()
@@ -403,7 +466,7 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       .getByRole("button", { name: "Revert response" })
       .click();
     await expect(page.locator("article")).toContainText(
-      "The terminal response publishes the candidate atomically.",
+      "The terminal response publishes the reviewed candidate atomically.",
       { timeout: 15_000 },
     );
     await expect(
@@ -415,10 +478,11 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
 
     const retainedReply = "Keep this draft while I archive the thread.";
     await thread.getByPlaceholder("Reply to the agent…").fill(retainedReply);
-    await thread
-      .getByRole("button", { name: "Resolve thread" })
-      .first()
-      .click();
+    await latestChange.getByRole("button", { name: "Review change" }).click();
+    await expect(
+      stepper.getByRole("button", { name: "Resolve thread" }),
+    ).toBeVisible();
+    await stepper.getByRole("button", { name: "Resolve thread" }).click();
 
     await rail.getByText("Resolved (1)").click();
     await expect(

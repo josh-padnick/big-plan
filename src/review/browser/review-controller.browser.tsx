@@ -3999,9 +3999,8 @@ const SentThread = ({
                             currentSnapshot={currentSnapshot}
                             onStatus={onReplySent}
                             onResolve={
-                              request.kind === "push" ||
                               latestChanged?.request.requestId ===
-                                request.requestId
+                              request.requestId
                                 ? onResolve
                                 : undefined
                             }
