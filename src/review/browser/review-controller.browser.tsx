@@ -1502,10 +1502,9 @@ const parseDecisionAnsweredDetail = (
       }
     : null;
 
-// The only place plan DOM is replaced. Swapping the article detaches every
-// node the shell scripts wired at load, so the swap and its announcement stay
-// one ritual: replace the reading surface, then dispatch
-// "bigplan:article-replaced" so each shell script re-wires the live article.
+// Adapts a full article refresh to the shared plan-DOM replacement boundary.
+// Swapping the article detaches every node the shell scripts wired at load, so
+// the replacement and its announcement remain one operation.
 const replacePlanArticle = (nextDocument: Document): void => {
   const nextArticle = nextDocument.querySelector("article");
   const currentArticle = document.querySelector("article");

@@ -3,11 +3,12 @@
 // the same name can sit on a snapshot copy inside a What-changed lens, on the
 // hidden theme variant of a diagram, or on a block whose content drifted since
 // the id was minted. Resolving those names in one place keeps the discipline
-// mandatory - scoped to the live article, never a lens copy, visible copy
-// preferred - and makes a miss say why it missed instead of degrading to a
-// plausible default. Where a lens belongs relative to the blocks it finds
-// stays pure in diff-anchor.ts; this module is the DOM half of that decision,
-// which is why it carries the browser-only suffix.
+// mandatory - scoped to the live article, never an inert snapshot copy,
+// visible copy preferred - and makes a miss say why it missed instead of
+// degrading to a plausible default. A compiler-addressed component diff root
+// is live plan DOM, not a snapshot copy. Where a lens belongs relative to the
+// blocks it finds stays pure in diff-anchor.ts; this module is the DOM half of
+// that decision, which is why it carries the browser-only suffix.
 
 import type { DiffLocation } from "../shared/review-wire.js";
 import {
@@ -217,7 +218,7 @@ export const candidateMatchesLivePicture = ({
     candidate.expectedPicture.source === livePicture.source &&
     candidate.expectedPicture.alt === livePicture.alt);
 
-/** Resolves a decision id to its card in the live article, never a lens copy. */
+/** Resolves a decision id to its live card, never an inert snapshot copy. */
 export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };

@@ -35,15 +35,17 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** The core entity of review is the change set: a baseline snapshot, a current snapshot, acceptance state, provenance, and an optionally attached conversation, diffed from its start, rendered in place of what it changes, and closed by explicit acceptance.
 
-**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/change-dispositions-store.ts`, `src/review/input-contract.ts`, `src/review/shared/change-disposition.ts`, `src/review/shared/input-contract.ts`, `src/review/browser/inputs-surface.browser.tsx`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/review/browser/wireframe-screen-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, snapshots in `src/review/store.ts`.
+**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/change-dispositions-store.ts`, `src/review/input-contract.ts`, `src/review/shared/change-disposition.ts`, `src/review/shared/input-contract.ts`, `src/review/browser/inputs-surface.browser.tsx`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/review/browser/wireframe-screen-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, `src/components/_model/component-diff/contract.ts`, `src/components/_registration/define-component.ts`, `src/render/render-diff-view.ts`, snapshots in `src/review/store.ts`.
 
 **Boundary rules.**
 
 - The thread is the change set's container, not the other way round.
   A change set's provenance (reviewer comment, plan-wide chat, or an unsolicited agent-pushed revision) is an attribute of the change set, not a hard-coded assumption that every change is born from a conversation.
   An inbound push is a new message kind through `src/review/agent-exchange.ts` and rides the same claim-and-atomic-terminal delivery protocol as any other exchange; it does not invent its own delivery path.
-- A component never _finds_ a change. The engine keeps sole ownership of detection, alignment, baseline policy, and attribution, and hands a component the baseline-and-current pair it found.
-- What a component owns is that pair once it has it: its own model-level `(baselineModel, currentModel) -> diffModel`, and whether it has a bespoke diff mode at all or takes the free default. That is a component contract rather than an engine-owned rendering choice - see [Captain amendments](#captain-amendments).
+- A component never _finds_ a change.
+  The engine keeps sole ownership of detection, alignment, baseline policy, and attribution, and hands a component one aligned `ComponentDiffInput` carrying the available compiled models, status, and word runs.
+- What a component owns is that input once it has it: it may derive a bespoke diff model and view or take the free compiled **Was**/**Now** presentation.
+  That is a component contract rather than an engine-owned rendering choice - see [Captain amendments](#captain-amendments).
 - A change set describes committed revisions only.
   `src/review/change-set-commit.ts` is the seam: a revision is recorded inside the terminal commit and nowhere else, the reader's current snapshot advances from that log rather than from response files, and folding the log keeps an ordinary comment thread's baseline and provenance stable across later replies while pushes and replies in pushed threads remain immutable request-keyed transactions.
   When the full aggregate lands it implements that contract without adopting claim stages as domain state.
@@ -183,9 +185,9 @@ The thread is one container for it, not the reverse.
 Provenance is modeled as an attribute of the change set (reviewer comment, plan-wide chat, or agent-push) so a future agent-push origin fits without remodeling.
 
 **Diff mode as a component contract (Change Engine, applied by component slices).**
-Every component can be handed a baseline and a current model and render its own diff.
-Each component owns a model-level function `(baselineModel, currentModel) -> diffModel`, with a free default (side-by-side Was/Now or source word diff) and bespoke overrides where earned.
-The Change Engine keeps sole ownership of detection, alignment, baseline policy, and attribution (`snapshot-diff.ts`, `change-attribution.ts`); components own only honest presentation of the pair.
+Every component accepts a discriminated `ComponentDiffInput` for an added, removed, or changed instance and can render its own diff.
+Each component may own a model-level derivation from that input and a paired diff view; without both, it receives the free compiled **Was**/**Now** presentation.
+The Change Engine keeps sole ownership of detection, alignment, baseline policy, word runs, and attribution (`snapshot-diff.ts`, `change-attribution.ts`); components own only honest presentation of the input.
 This makes a diff a first-class state of the component instead of a lens-wrapped copy, which is what structurally protects functionality retention across a diff.
 
 **Three-tier renderer fidelity (Renderer Fidelity).**
