@@ -691,7 +691,8 @@ describe("agent work loop lifecycle", () => {
   it("should report a failed release even when the agent was disconnected", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-release-"));
     const planPath = join(directory, "plan.mdx");
-    const source = "# Plan\n\nA failed release is not a completed disconnect.\n";
+    const source =
+      "# Plan\n\nA failed release is not a completed disconnect.\n";
     await writeFile(planPath, source);
     const review = await startReviewRuntime({ planPath });
     const requestId = "acac1212acac1212";

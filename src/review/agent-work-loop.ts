@@ -482,7 +482,7 @@ const assertSessionIsPrimary = async ({
   if (acting.role === "primary") return;
   const primary = agents.find((agent) => agent.role === "primary");
   if (primary === undefined) {
-    failPrimacyLost("no agent is currently the primary");
+    return failPrimacyLost("no agent is currently the primary");
   }
   failPrimacyLost(agentModelLabel(primary));
 };
