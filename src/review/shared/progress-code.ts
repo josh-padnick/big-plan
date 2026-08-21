@@ -12,6 +12,7 @@ export const PROGRESS_STEP_CODES = [
   "claim-released",
   "agent-disconnect-requested",
   "push-opened",
+  "agent-primacy-answered",
   "request-picked-up",
   "request-reclaimed",
   "response-ready",
@@ -33,6 +34,9 @@ const PROGRESS_STEP_OWNERS = {
   "claim-released": "reviewer",
   "agent-disconnect-requested": "reviewer",
   "push-opened": "agent",
+  // The reviewer decides who speaks for the plan, so the answer is theirs even
+  // though what it moves is an agent's role.
+  "agent-primacy-answered": "reviewer",
   "request-picked-up": "agent",
   "request-reclaimed": "agent",
   "response-ready": "agent",

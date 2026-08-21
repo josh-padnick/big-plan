@@ -16,8 +16,24 @@ import {
   encodeProgress,
   encodeRuntimeSession,
   encodeSnapshotDiff,
+  type AgentSnapshotSource,
   type SnapshotDiff,
 } from "./review-wire.js";
+
+const WIRE_NOW = 1_775_000_000_000;
+
+/**
+ * One instant, and an empty roster unless a case is about the roster.
+ *
+ * The encoder resolves each agent's membership as it serves the snapshot, so
+ * it needs the moment it is answering at; the exchange cases below are about
+ * requests and presence and say nothing about who is attached.
+ */
+const encodeSnapshot = (
+  value: Omit<AgentSnapshotSource, "agents"> &
+    Partial<Pick<AgentSnapshotSource, "agents">>,
+  nowMs = WIRE_NOW,
+) => encodeAgentSnapshot({ agents: [], ...value }, { nowMs });
 
 describe("review wire contract", () => {
   it("should load reviewer state a runtime of another vintage stored", () => {
@@ -93,7 +109,7 @@ describe("review wire contract", () => {
   });
 
   it("should round-trip a server agent snapshot into the browser projection", () => {
-    const encoded = encodeAgentSnapshot({
+    const encoded = encodeSnapshot({
       currentSnapshot: "a".repeat(16),
       presence: {
         connected: true,
@@ -155,7 +171,7 @@ describe("review wire contract", () => {
 
   it("should round-trip push request and response vocabulary", () => {
     const threadId = "1".repeat(16);
-    const encoded = encodeAgentSnapshot({
+    const encoded = encodeSnapshot({
       currentSnapshot: "b".repeat(16),
       presence: { connected: true, state: "working" },
       requests: [
@@ -296,7 +312,7 @@ describe("review wire contract", () => {
   // Presence still names the attached connector, which is the only source when
   // nothing is claimed at all; the reader prefers the claim wherever both exist.
   it("should keep the claim authoritative over a competing heartbeat", () => {
-    const encoded = encodeAgentSnapshot({
+    const encoded = encodeSnapshot({
       currentSnapshot: "a".repeat(16),
       presence: {
         connected: true,
@@ -334,7 +350,7 @@ describe("review wire contract", () => {
 
   it("should carry a reported session end to the browser", () => {
     const decoded = decodeAgentSnapshot(
-      encodeAgentSnapshot({
+      encodeSnapshot({
         currentSnapshot: "a".repeat(16),
         presence: {
           connected: false,
@@ -360,7 +376,7 @@ describe("review wire contract", () => {
 
   it("should drop a session end that is not a number", () => {
     const decoded = decodeAgentSnapshot(
-      encodeAgentSnapshot({
+      encodeSnapshot({
         currentSnapshot: "a".repeat(16),
         presence: {
           connected: false,
@@ -379,7 +395,7 @@ describe("review wire contract", () => {
   });
 
   it("should reject a malformed model on a claim", () => {
-    const encoded = encodeAgentSnapshot({
+    const encoded = encodeSnapshot({
       currentSnapshot: "a".repeat(16),
       presence: { connected: true, state: "working" },
       requests: [
@@ -409,7 +425,7 @@ describe("review wire contract", () => {
   // carried for the agent's brief would otherwise reach the browser on every
   // poll. The browser projection keeps only comment ids, so none of it is read.
   it("should leave a request's slide copy out of what the browser polls", () => {
-    const encoded = encodeAgentSnapshot({
+    const encoded = encodeSnapshot({
       currentSnapshot: "a".repeat(16),
       presence: { connected: true, state: "working" },
       requests: [
@@ -451,6 +467,66 @@ describe("review wire contract", () => {
     expect(decodeAgentSnapshot(encoded).requests).toMatchObject([
       { commentIds: ["aabbccdd"], targetLabel: "HTTP endpoints" },
     ]);
+  });
+
+  // The pickup token is the capability that fences publication, and the
+  // browser has no use for it. Membership goes the other way: the browser
+  // cannot work it out from what it is allowed to know, so the server answers
+  // it here and the rail reads the answer.
+  it("should withhold an agent's pickup token while carrying its membership", () => {
+    const encoded = encodeSnapshot(
+      {
+        currentSnapshot: "a".repeat(16),
+        presence: { connected: true, state: "working" },
+        agents: [
+          {
+            writerId: "1111111111111111",
+            role: "primary",
+            attachedAtMs: WIRE_NOW - 600_000,
+            // Quiet for far longer than the stall window, because it is mid
+            // turn: `agent next` hands the work over and the process exits.
+            signalAtMs: WIRE_NOW - 300_000,
+            claimToken: "cafebabecafebabe",
+            inheritedDraftPath: "/tmp/stage/candidate.mdx",
+          },
+        ],
+        requests: [],
+        responses: [],
+        connectionLog: [],
+        plan: "/tmp/plan.mdx",
+        agentCommand: "big-plan agent /tmp/plan.mdx",
+        recoveryPrompt: "Reconnect this review",
+      },
+      WIRE_NOW,
+    );
+
+    const serialized = JSON.stringify(encoded);
+    expect(serialized).not.toContain("cafebabecafebabe");
+    expect(serialized).not.toContain("/tmp/stage/candidate.mdx");
+    expect(decodeAgentSnapshot(encoded).agents).toEqual([
+      {
+        writerId: "1111111111111111",
+        role: "primary",
+        attachedAtMs: WIRE_NOW - 600_000,
+        signalAtMs: WIRE_NOW - 300_000,
+        attached: true,
+      },
+    ]);
+  });
+
+  it("should drop an agent whose record cannot say whether it is still here", () => {
+    expect(
+      decodeAgentSnapshot({
+        agents: [
+          {
+            writerId: "1111111111111111",
+            role: "primary",
+            attachedAtMs: WIRE_NOW,
+            signalAtMs: WIRE_NOW,
+          },
+        ],
+      }).agents,
+    ).toEqual([]);
   });
 
   it("should round-trip per-side presentation facts through a snapshot diff", () => {

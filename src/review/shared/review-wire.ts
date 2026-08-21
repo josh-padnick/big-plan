@@ -12,6 +12,11 @@ import {
   decodeAgentModelIdentity,
   type AgentModelIdentity,
 } from "./agent-model.js";
+import {
+  projectRosterForBrowser,
+  type AttachedAgent,
+  type RosterAgent,
+} from "./agent-primacy.js";
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 import {
@@ -108,6 +113,16 @@ export type AgentPresence = {
   readonly requestId?: string;
   /** Which model is running the attached connector, claim or no claim. */
   readonly model?: AgentModelIdentity;
+  /**
+   * Which agent on the roster this record is about.
+   *
+   * The store has always written it; the browser was not given it, so the card
+   * drawn from this record could not say which of two attached agents it was
+   * describing - and the roster below it, drawing from a different record, drew
+   * that agent a second time. Carrying it lets the two surfaces agree on who
+   * they are each talking about, or notice that they do not (BIG-171).
+   */
+  readonly writerId?: string;
   readonly updatedAtMs?: number;
   /** When the agent's own loop reported the session ending, if it did. */
   readonly endedAtMs?: number;
@@ -131,6 +146,8 @@ export type BrowserConnectionEvent = {
 export type AgentSnapshot = {
   readonly currentSnapshot: string;
   readonly presence: AgentPresence;
+  /** Every agent attached to this review, primary first-come order. */
+  readonly agents: ReadonlyArray<RosterAgent>;
   readonly requests: ReadonlyArray<AgentRequest>;
   readonly responses: ReadonlyArray<AgentResponse>;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -236,12 +253,18 @@ export type ChangeDispositionStateSource = ChangeDispositionState;
 export type AgentSnapshotSource = {
   readonly currentSnapshot: string;
   readonly presence: unknown;
+  readonly agents: ReadonlyArray<AttachedAgent>;
   readonly requests: ReadonlyArray<unknown>;
   readonly responses: ReadonlyArray<unknown>;
   readonly connectionLog: ReadonlyArray<unknown>;
   readonly plan: string;
   readonly agentCommand: string;
   readonly recoveryPrompt: string;
+};
+
+/** What the agent snapshot looks like once it is safe to serve. */
+export type AgentSnapshotWire = Omit<AgentSnapshotSource, "agents"> & {
+  readonly agents: ReadonlyArray<RosterAgent>;
 };
 
 export type RuntimeSessionSource = {
@@ -519,6 +542,7 @@ export const decodeReviewState = (value: unknown): ReviewState => {
 export const emptyAgentSnapshot = (): AgentSnapshot => ({
   currentSnapshot: "",
   presence: { connected: false, state: "waiting" },
+  agents: [],
   requests: [],
   responses: [],
   connectionLog: [],
@@ -527,11 +551,20 @@ export const emptyAgentSnapshot = (): AgentSnapshot => ({
   recoveryPrompt: "",
 });
 
-/** Encodes the runtime-owned exchange in the shape consumed by the browser. */
+/**
+ * Encodes the runtime-owned exchange in the shape consumed by the browser.
+ *
+ * The roster is projected rather than passed through. What the browser needs
+ * from a roster record is who an agent is, what it is, and whether it is still
+ * here; what it does not need - and must not be given - is the pickup token
+ * that fences publication, or the fields whose reading is the server's job.
+ */
 export const encodeAgentSnapshot = (
   value: AgentSnapshotSource,
-): AgentSnapshotSource => ({
+  { nowMs }: { readonly nowMs: number },
+): AgentSnapshotWire => ({
   ...value,
+  agents: projectRosterForBrowser({ agents: value.agents, nowMs }),
   requests: encodeAgentRequests(value.requests),
 });
 
@@ -729,6 +762,10 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           const model = decodeAgentModelIdentity(value.presence.model);
           return model === undefined ? {} : { model };
         })(),
+        ...(typeof value.presence.writerId === "string" &&
+        value.presence.writerId !== ""
+          ? { writerId: value.presence.writerId }
+          : {}),
         ...(typeof value.presence.updatedAtMs === "number"
           ? { updatedAtMs: value.presence.updatedAtMs }
           : {}),
@@ -740,10 +777,52 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : {}),
       }
     : { connected: false, state: "waiting" as const };
+  /*
+  An agent whose record does not decode disappears rather than taking the
+  roster with it: a reviewer must still see the agents that are fine. The role
+  is required, because a record that cannot say whether it owns the plan is
+  exactly the ambiguity this surface exists to remove.
+  */
+  const agents = Array.isArray(value.agents)
+    ? value.agents.flatMap((agent): ReadonlyArray<RosterAgent> => {
+        if (
+          !isReviewWireRecord(agent) ||
+          typeof agent.writerId !== "string" ||
+          agent.writerId === "" ||
+          (agent.role !== "primary" && agent.role !== "observer") ||
+          typeof agent.attachedAtMs !== "number" ||
+          !Number.isFinite(agent.attachedAtMs) ||
+          typeof agent.signalAtMs !== "number" ||
+          !Number.isFinite(agent.signalAtMs) ||
+          // Membership is answered by the server or not at all. A record that
+          // cannot say whether its agent is still here would be drawn as one
+          // that is, which is the ambiguity this surface exists to remove.
+          typeof agent.attached !== "boolean"
+        ) {
+          return [];
+        }
+        const model = decodeAgentModelIdentity(agent.model);
+        return [
+          {
+            writerId: agent.writerId,
+            role: agent.role,
+            attachedAtMs: agent.attachedAtMs,
+            signalAtMs: agent.signalAtMs,
+            attached: agent.attached,
+            ...(typeof agent.requestedPrimacyAtMs === "number" &&
+            Number.isFinite(agent.requestedPrimacyAtMs)
+              ? { requestedPrimacyAtMs: agent.requestedPrimacyAtMs }
+              : {}),
+            ...(model === undefined ? {} : { model }),
+          },
+        ];
+      })
+    : [];
   return {
     currentSnapshot:
       typeof value.currentSnapshot === "string" ? value.currentSnapshot : "",
     presence,
+    agents,
     requests,
     responses,
     connectionLog: Array.isArray(value.connectionLog)

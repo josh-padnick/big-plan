@@ -797,6 +797,39 @@ describe("claimed work attribution", () => {
     expect(supporting([])).not.toContain("takes that work over");
   });
 
+  /*
+  BIG-171: an end the reviewer performed is never explained as one Big Plan
+  inferred.
+
+  The threshold sentence, the "may have gone idle" hedge and the invitation to
+  reconnect all exist to account for an absence nobody witnessed. Said to a
+  reviewer who has just disconnected the agent on purpose, they read as the
+  product failing to notice what they did.
+  */
+  it("should state the reviewer's own disconnect rather than a lapsed signal", () => {
+    const activity = deriveCurrentAgentActivity({
+      everConnected: true,
+      requests: [],
+      cancelPendingRequestIds: new Set<string>(),
+      progressEvents: [],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: NOW - AGENT_STALL_MS - 1,
+      endedAtMs: NOW - 1_000,
+      disconnectRequestedAtMs: NOW - 2_000,
+    });
+    expect(activity).toMatchObject({
+      state: "disconnected",
+      headline: "Agent disconnected",
+    });
+    const supporting = "supporting" in activity ? activity.supporting : "";
+    expect(supporting).toContain("You disconnected this agent");
+    expect(supporting).not.toContain("disconnect threshold");
+    expect(supporting).not.toContain("Reconnect the coding agent");
+    expect(supporting).toContain("All comments are safe");
+  });
+
   it("should stop claiming a stall once every claim passes the horizon", () => {
     const activity = deriveCurrentAgentActivity({
       everConnected: true,

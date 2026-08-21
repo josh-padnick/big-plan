@@ -77,8 +77,13 @@ type ButtonSize =
 const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
   default:
     "rounded-md border border-transparent bg-accent font-semibold text-accent-ink shadow-raised hover:shadow-lifted active:inset-shadow-pressed",
+  // Bordered, at the captain's instruction: a secondary that carried only a
+  // ground read as less of a control than the bordered tertiary beside it, so
+  // the weakest button in a row looked like the strongest. The hairline is what
+  // keeps the three ranks in order - accent fill, bordered ground, bordered
+  // nothing - and it is the edge every other bordered control uses.
   secondary:
-    "rounded-md border border-transparent bg-surface font-medium text-ink shadow-raised hover:bg-raised hover:shadow-lifted active:inset-shadow-pressed",
+    "rounded-md border border-edge bg-surface font-medium text-ink shadow-raised hover:bg-raised hover:shadow-lifted active:inset-shadow-pressed",
   outline:
     "rounded-md border border-edge bg-transparent font-normal text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised active:inset-shadow-pressed",
   accentOutline:
@@ -685,7 +690,16 @@ export const AlertDialog = ({
         <p id={descriptionId} className="mt-3 text-base text-muted">
           {description}
         </p>
-        {children}
+        {/* The evidence slot's own space, owned here rather than by each
+            dialog that fills it. Set at the call site it was set once and
+            forgotten once: the hand-off dialog's "What happens" label sat
+            flush against the sentence above it and read as that sentence's
+            caption rather than as the heading of the list under it. */}
+        {children === undefined ? null : (
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3">
+            {children}
+          </div>
+        )}
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" size="md" onClick={onCancel}>
             {cancelLabel}

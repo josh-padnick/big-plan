@@ -45,15 +45,19 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   AGENT_STALL_MS,
+  agentDisconnectDropsWork,
   agentHasEverConnected,
   deriveAgentHealth,
   deriveCurrentAgentActivity,
   type CurrentAgentActivity,
-  heldWorkQuiet,
   projectAgentConnectionState,
   selectClaimedAgentRequest,
   type AgentStatus,
 } from "../shared/agent-status.js";
+import {
+  agentPrimacyHealth,
+  selectPrimaryAgent,
+} from "../shared/agent-primacy.js";
 import { selectAgentModelIdentity } from "../shared/agent-model.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
@@ -111,6 +115,11 @@ import {
   AgentStatusTrigger,
 } from "./agent-status.browser.js";
 import { AgentSurface } from "./agent-surface.browser.js";
+import {
+  PrimacyHandoffDialog,
+  type AgentRosterProps,
+  type PrimacyAnswer,
+} from "./agent-roster.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
 import { InputsSurface } from "./inputs-surface.browser.js";
 import {
@@ -797,33 +806,31 @@ const RecoveryConflictDialog = ({
       onAction={() => onKeep("runtime")}
       onDismiss={onDismiss}
     >
-      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3">
-        <div>
-          <p className="m-0 text-2xs font-semibold text-subtle uppercase">
-            Yours
-          </p>
-          <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
-            {conflict.kind === "resolution"
-              ? conflict.localResolved
-                ? "Resolved"
-                : "Unresolved"
-              : (conflict.localBody ?? "Deleted here.")}
-          </p>
-        </div>
-        <div>
-          <p className="m-0 text-2xs font-semibold text-subtle uppercase">
-            {conflict.kind === "sent"
-              ? "Submitted in the review session"
-              : "In the review session"}
-          </p>
-          <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
-            {conflict.kind === "resolution"
-              ? conflict.runtimeResolved
-                ? "Resolved"
-                : "Unresolved"
-              : (conflict.runtimeBody ?? "Deleted there.")}
-          </p>
-        </div>
+      <div>
+        <p className="m-0 text-2xs font-semibold text-subtle uppercase">
+          Yours
+        </p>
+        <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
+          {conflict.kind === "resolution"
+            ? conflict.localResolved
+              ? "Resolved"
+              : "Unresolved"
+            : (conflict.localBody ?? "Deleted here.")}
+        </p>
+      </div>
+      <div>
+        <p className="m-0 text-2xs font-semibold text-subtle uppercase">
+          {conflict.kind === "sent"
+            ? "Submitted in the review session"
+            : "In the review session"}
+        </p>
+        <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
+          {conflict.kind === "resolution"
+            ? conflict.runtimeResolved
+              ? "Resolved"
+              : "Unresolved"
+            : (conflict.runtimeBody ?? "Deleted there.")}
+        </p>
       </div>
     </AlertDialog>
   );
@@ -6338,6 +6345,75 @@ export const ReviewController = () => {
     }
   };
 
+  /*
+  Applies the reviewer's answer about which agent speaks for this plan.
+
+  A confirmation stands between the intent and the request for the one answer
+  that stops an agent mid-turn; the other two are reversible from the same
+  cards and ask for nothing. The snapshot is re-read straight afterwards rather
+  than waited for, so the rail and the toolbar mark settle together instead of
+  a poll apart.
+  */
+  const [pendingHandoff, setPendingHandoff] = useState<string | null>(null);
+  const submitPrimacyAnswer = async ({
+    writerId,
+    answer,
+    carryWorkInProgress = false,
+  }: {
+    readonly writerId: string;
+    readonly answer: PrimacyAnswer;
+    readonly carryWorkInProgress?: boolean;
+  }) => {
+    const refusal = reviewWriteRefusal({
+      path: "agent-primacy",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      setStatus(refusal);
+      return;
+    }
+    if (identity === null) return;
+    try {
+      await requestJson({
+        path: "/api/agent-primacy",
+        identity,
+        method: "POST",
+        body: { writerId, answer, carryWorkInProgress },
+      });
+      acceptAgentSnapshot(
+        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
+      );
+      setStatus(
+        answer === "primary"
+          ? "That agent is now the primary."
+          : answer === "observer"
+            ? "That agent stays an observer."
+            : "That agent was disconnected.",
+      );
+    } catch (error) {
+      setStatus(errorMessage(error));
+    }
+  };
+
+  const answerAgentPrimacy: AgentRosterProps["onAnswer"] = ({
+    writerId,
+    answer,
+  }) => {
+    // Promotion is the consequential answer, so it is confirmed. The dialog is
+    // skipped when nobody is being displaced: there is no work to interrupt and
+    // no second agent for the reviewer to weigh.
+    const displaces =
+      selectPrimaryAgent({
+        agents: agent.agents,
+        nowMs: agentProjectionNowMs,
+      }) !== undefined;
+    if (answer === "primary" && displaces) {
+      setPendingHandoff(writerId);
+      return;
+    }
+    void submitPrimacyAnswer({ writerId, answer });
+  };
+
   const cancelRequest = async (requestId: string) => {
     const refusal = reviewWriteRefusal({
       path: "cancel-request",
@@ -6494,14 +6570,6 @@ export const ReviewController = () => {
         cancelPendingRequestIds,
       }),
     });
-  // Activity and queue input only. It explains a silence; it is never evidence
-  // that an agent is attached, so it must not reach agentConnected or anything
-  // the connection card reads (BIG-147).
-  const agentHeldWork = heldWorkQuiet({
-    requests: agent.requests,
-    cancelPendingRequestIds,
-    now: agentProjectionNowMs,
-  });
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
     cancelPendingRequestIds,
@@ -6511,6 +6579,11 @@ export const ReviewController = () => {
     now: agentProjectionNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
     ...(agentEndedAtMs === undefined ? {} : { endedAtMs: agentEndedAtMs }),
+    /* The directive rides on the presence record it addresses, so a card that
+       has one is describing the very agent the reviewer disconnected. */
+    ...(agent.presence.disconnectRequestedAtMs === undefined
+      ? {}
+      : { disconnectRequestedAtMs: agent.presence.disconnectRequestedAtMs }),
     everConnected: agentHasEverConnected({ events: agentConnection.events }),
   });
   const chatRequests = agent.requests.filter(
@@ -6613,6 +6686,10 @@ export const ReviewController = () => {
     hasAgentRuntime: identity !== null,
     isReadOnly: runtimeSession?.authoritative === false,
     isObservable: agentStatusIsAvailable,
+    primacy: agentPrimacyHealth({
+      agents: agent.agents,
+      nowMs: agentProjectionNowMs,
+    }),
   });
   const threadIsOpen = ({
     commentId,
@@ -7343,13 +7420,52 @@ export const ReviewController = () => {
           identity !== null ? (
             <InputsSurface />
           ) : null}
+          {pendingHandoff === null
+            ? null
+            : (() => {
+                const requested = agent.agents.find(
+                  (candidate) => candidate.writerId === pendingHandoff,
+                );
+                // The agent can leave between opening the dialog and answering
+                // it; a dialog about an agent that is gone would ask the
+                // reviewer to decide something that no longer exists.
+                if (requested === undefined) {
+                  setPendingHandoff(null);
+                  return null;
+                }
+                return (
+                  <PrimacyHandoffDialog
+                    agent={requested}
+                    primary={selectPrimaryAgent({
+                      agents: agent.agents,
+                      nowMs: agentProjectionNowMs,
+                    })}
+                    agents={agent.agents}
+                    /* The same evidence the disconnect dialog uses to decide
+                       whether it is about to drop an answer: a turn is in
+                       flight, or it is not. An idle primary has no draft to
+                       carry, so there is nothing to offer. */
+                    hasWorkInProgress={agentDisconnectDropsWork(
+                      currentAgentActivity,
+                    )}
+                    onCancel={() => setPendingHandoff(null)}
+                    onConfirm={({ carryWorkInProgress }) => {
+                      setPendingHandoff(null);
+                      void submitPrimacyAnswer({
+                        writerId: requested.writerId,
+                        answer: "primary",
+                        carryWorkInProgress,
+                      });
+                    }}
+                  />
+                );
+              })()}
           {sidebarView === "agent" && identity !== null ? (
             <AgentSurface
               model={{
                 activity: currentAgentActivity,
                 status: agentHealth,
                 presenceState: agentProjection.state,
-                heldWork: agentHeldWork,
                 modelName: displayedAgentIdentity?.name,
                 modelEffort: displayedAgentIdentity?.effort,
                 modelClient: displayedAgentIdentity?.client,
@@ -7358,6 +7474,9 @@ export const ReviewController = () => {
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 runtimeSession,
+                ...(agent.presence.writerId === undefined
+                  ? {}
+                  : { presenceWriterId: agent.presence.writerId }),
                 ...(agent.presence.disconnectRequestedAtMs === undefined
                   ? {}
                   : {
@@ -7367,6 +7486,9 @@ export const ReviewController = () => {
                 isDisconnectingAgent,
                 onViewRequest: viewAgentRequest,
                 onDisconnect: () => void disconnectAgent(),
+                agents: agent.agents,
+                nowMs: agentProjectionNowMs,
+                onAnswerPrimacy: answerAgentPrimacy,
               }}
             />
           ) : null}

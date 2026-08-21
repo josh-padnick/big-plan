@@ -251,20 +251,22 @@ agent working the same review cannot narrate over or answer another agent's
 work.
 Only one request on a plan may hold a live claim, so a second agent waits rather than editing the plan in parallel.
 Without `--wait`, `agent next` reports that no work is available while another claim is live.
-With `--wait`, it continues once the holder's request is answered or canceled, or its lease lapses.
+With `--wait`, it continues once the holder's request is answered or canceled.
 A waiting `agent next` also ends when the process that started it does: it records that process at startup, rechecks it before every wait and once more before claiming, and exits rather than claiming work whose output nothing would read.
 A lapsed lease no longer risks the plan.
-Every claim carries a generation that a takeover raises, the displaced agent keeps writing only to its own candidate, and `agent respond` refuses a generation that no longer holds the claim.
-A takeover therefore starts from the last published revision, and the reviewer is told the previous agent's unpublished edits stayed in its own stage.
+Every claim carries a generation that a reviewer's hand-off raises, the displaced agent keeps writing only to its own candidate, and `agent respond` refuses a generation that no longer holds the claim.
+A hand-off therefore starts from the last published revision, and the reviewer is told the previous agent's unpublished edits stayed in its own stage.
+
 A claim also ends when the reviewer takes the message back: once an agent has reported nothing for far longer than a turn takes and no agent is connected, that claim counts as abandoned and the message becomes editable and deletable again.
 Taking a message back discards the stage its claim was drafting, and a returning agent's `agent respond` is refused rather than published, so pick up current work with `agent next`.
 
 The reviewer can also take an agent off a review from **Agent Status**, and every `agent` command answers that at its next run.
 The disconnect names exactly one agent, by the connection token of the agent holding the plan's live claim, or by the connected agent's own connection token when no claim is live.
 It names a connection rather than a pickup because disconnecting releases that pickup immediately, so it reaches that agent whether it is mid-answer or between commands, and it reaches nobody else - including a second agent waiting beside it.
-`agent next` reports it as an ordinary end - `ended` and `disconnected` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
+`agent next` reports it as an ordinary end - `ended`, `disconnected`, and `role: "disconnected"` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
 `agent push`, `agent note`, and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
-The answer the disconnected session was drafting is dropped, its private stage is removed, and its open message can be picked up by whichever agent connects next.
+The answer the disconnected session was drafting is dropped, its private stage is removed, and the reviewer's message goes back in the queue for whichever agent connects next.
+The agent also leaves the roster of attached agents, so the seat it held is empty and the next connector takes it instead of attaching as an observer of an agent that has gone.
 
 `agent respond` publishes under one plan-mutation lock: it re-proves the claim, requires the plan to still carry the revision the candidate started from, and swaps the candidate in with one atomic rename.
 A response that finds the plan changed underneath it is refused with the `SOURCE_MOVED` code rather than applied, so the agent takes the work again from the current plan.
@@ -304,6 +306,73 @@ premise, claim-time baseline, and result snapshots rather than DOM mutation.
 The temporary development-only `review --diff-preview` flag seeds a synthetic
 gallery answer through that same pipeline and marks the browser with a visible
 preview banner.
+
+### One review, one primary agent
+
+One agent answers a review at a time, and which one is the reviewer's decision rather than a race.
+The first connector to attach is the **primary**: it may claim work, report progress, and publish.
+Every connector after it attaches as an **observer**, which may read the plan and may do none of those three things; the reviewer's comments and the state of their requests are not handed to an observer either.
+An observer never picks up queued work, however long the primary has been quiet, and it never becomes the primary by arriving.
+
+Arriving as an observer is itself the request to become the primary, so nothing extra has to be passed for the reviewer to be asked.
+`agent next` returns this instead of a work item:
+
+```json
+{
+  "pending": false,
+  "role": "observer",
+  "plan": "/path/to/plan.mdx",
+  "review": "http://127.0.0.1:8420/",
+  "reason": "Another agent is the primary for this review, so this session cannot answer the reviewer yet"
+}
+```
+
+Without `--wait` that result is final and the process should exit.
+With `--wait` the loop stays attached and keeps asking until the reviewer answers, then continues as a work item if they made it the primary.
+
+The reviewer answers from **Agent Status** in the review, where every attached agent has a card: **Make it primary**, **Leave it as observer**, or **Disconnect this agent**.
+Making an observer the primary displaces the incumbent immediately: its open claim is freed, and the reviewer may hand its unpublished draft to the new primary as `previous_agent_draft` - a path to read as reference, never a candidate to publish.
+
+A displaced agent finds out at its next command rather than after paying for a whole turn, and there are two shapes to branch on.
+`agent note` and `agent respond` refuse with the error code `PRIMACY_LOST`, naming the agent that holds the plan now.
+`agent next` is not an error: a displaced loop is an observer again, so it returns the `role: "observer"` result above.
+Branch on both.
+A harness that watches only for `PRIMACY_LOST` reads the observer result as ordinary "no work" and polls on, which is exactly the churn this design removes; the correct response to either is to stop claiming, not to retry.
+
+**Disconnect this agent** ends the loop outright rather than moving its role.
+The reviewer's answer is recorded, so a loop already waiting on `--wait` is told at its very next refresh instead of quietly registering again, and `agent next` returns a final result:
+
+```json
+{
+  "pending": false,
+  "ended": true,
+  "disconnected": true,
+  "role": "disconnected",
+  "plan": "/path/to/plan.mdx",
+  "review": "http://127.0.0.1:8420/",
+  "reason": "The reviewer disconnected this agent from the review, so this session no longer speaks for the plan"
+}
+```
+
+That is the same result **Disconnect agent** on the agent status card returns, because it is the same fact: the reviewer took this agent off the review.
+It states that fact twice on purpose - as the end (`ended` and `disconnected`) and as the role it is no longer in (`role`) - so a harness branches on whichever one it already reads, rather than on which control the reviewer pressed.
+That result is terminal even with `--wait`: stop the loop.
+`agent note` and `agent respond` from the same session refuse with `PRIMACY_LOST` and say the reviewer disconnected it, for as long as the turn they belong to could still be running.
+The claim it was part way through is freed as well, so the turn it had in flight can no longer reach the plan, and no other agent's claim is touched.
+Disconnecting the agent that answers the review leaves the review with no primary until the reviewer fills the seat, and they have two ways to do it.
+No agent already attached succeeds into a seat the reviewer emptied, so an observer waits there until they pick it from **Agent Status**.
+A connector started afterwards is a different matter: it arrives to an empty seat and becomes the primary under the ordinary arrival rule, without being asked, because running the connect prompt is the reviewer saying who answers.
+
+A published turn keeps its own seat for as long as the answering agent's return trip takes.
+`agent respond` therefore returns `next`: an `agent next ... --wait --agent <token>` command carrying the token just answered under.
+Run it as given.
+It reclaims the same registration at once, which is what keeps one agent one agent to the reviewer across the several short-lived processes a turn takes.
+A bare `agent next` after publishing mints a new identity instead, so it attaches as an observer of the turn it just finished and waits for the seat rather than picking up straight away.
+It does not put a question to the reviewer while it waits: until the return trip is over, Big Plan cannot tell a second agent from the incumbent coming back, so the question is held and raised only if a second agent is what it turns out to be.
+
+An observer succeeds to the seat by itself in one case only: the primary fell silent, and the seat has stayed empty for longer than a turn's own quiet.
+That is the recovery path for an agent that died mid review, and it is deliberately slow.
+Every other way a seat empties - a turn ending, a poll returning, a reviewer disconnecting the primary - is either momentary or the reviewer's own decision, and neither is a vacancy to be filled.
 
 ### `big-plan service`
 
@@ -375,6 +444,11 @@ An empty, non-numeric, negative, nonzero sub-minute, or overflowing `review --id
 
 `agent` rejects an unknown action or invalid action arguments with
 `INVALID_INPUT` and its complete multi-line usage text.
+
+`agent note` and `agent respond` raise `PRIMACY_LOST` when the reviewer has made another attached agent the primary for this review, or has disconnected this one.
+The message names the agent that holds the plan now, or says the reviewer disconnected this one, and the help entries say to stop the loop rather than retry.
+It carries no usage text, because the command was well formed; a harness branches on the code to end a displaced loop cleanly instead of churning.
+`agent next` reports the same two situations as ordinary results rather than errors - `role: "observer"` and `role: "disconnected"` - so a harness must branch on those too.
 
 If the input for `validate`, `render`, `compile`, or `review` cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.

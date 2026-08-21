@@ -180,7 +180,7 @@ export const ReviewImage = ({
                 ref={closeButton}
                 variant="secondary"
                 size="compactIcon"
-                className="col-start-3 justify-self-end border border-edge shadow-floating"
+                className="col-start-3 justify-self-end shadow-floating"
                 aria-label="Close image"
                 onClick={close}
               >

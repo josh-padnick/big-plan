@@ -35,7 +35,7 @@ const PLAN = "# Disconnect\n\nThe review has one plan-wide question open.\n";
 const QUESTION = "Why does the plan start with the status quo?";
 
 const DISCONNECT_HELP =
-  "Tells the agent to end its session so a different agent can attach. Work in flight is dropped; your comments stay.";
+  "Tell the agent to end its session so a different agent can become the primary. Work in flight is dropped; your comments stay.";
 
 /** Asks the plan-wide question that gives the next agent something to claim. */
 const askPlanWideQuestion = async (page: Page): Promise<void> => {

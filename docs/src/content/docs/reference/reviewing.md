@@ -256,8 +256,9 @@ A thread its package heads reports its wait through that heading instead of repe
 
 **Agent Status** offers **Reconnect your agent**, holding the one prompt that starts a coding-agent session; a session that has never had an agent reads **Connect your agent** instead.
 An agent going quiet never hides that section, because it is the only place that prompt lives and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
-While a request is picked up that section instead reads **Connect a new agent** and says plainly that the agent may still be working on it, and that the agent connected now would stop being able to answer, so anything it has in flight is dropped rather than delivered - because [the agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) serializes pickup and only the current holder may answer.
-The taken-over agent's unfinished edits stay in its own copy and never reach your plan, so the new agent starts from the last published revision.
+While an agent is attached that section instead reads **Connect another agent** and says what connecting one actually does: the new agent joins as an observer that can read the plan, cannot read your comments, and cannot answer you unless you make it the primary, and when it arrives you are asked who answers you from then on.
+Nothing the current agent is working on is dropped unless you make the new agent the primary - because [the agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) serializes pickup and only the current holder may answer, so the agent holding the plan keeps answering until you move that.
+When you do move it, the displaced agent's unfinished edits stay in its own copy and reach your plan only if you tick the box that hands them over, and even then they arrive as reference rather than as something that publishes itself.
 Your comments are safe whichever you choose.
 
 The agent status card carries **Disconnect agent** wherever an agent is attached, with a mark beside it that explains on hover or keyboard focus what disconnecting does: the agent is told to end its session so a different agent can attach, work it has in flight is dropped, and your comments stay.
@@ -272,6 +273,21 @@ That row is recorded even when the agent had already gone quiet long enough for 
 It is recorded when a second agent was waiting beside the one you disconnected too, and that agent stays attached and untouched: the log describes the review's connection rather than each agent separately, so it states the end you asked for and then shows the review continuing under the agent that stayed.
 `agent next` reports the disconnect as an ordinary end; `agent push`, `agent note`, and `agent respond` refuse with the `AGENT_DISCONNECTED` code, so a harness stops instead of retrying.
 The review itself is free the moment you confirm, so a second agent can connect without waiting for the first one to notice.
+
+A second agent that connects does not take the review by arriving.
+It attaches as an observer - able to read the plan, and nothing else: not your comments, not the state of your requests, and able to answer nothing - and asks you whether it should be the one answering you.
+**Agent Status** raises a hazard mark while that question is unanswered.
+The sidebar always leads with the agent status card, which carries a **Current primary** badge once a second agent is on the rail; under it sits the card that names the agent that asked, and a **Current observer** card for anyone else attached.
+Each agent gets exactly one card: the primary's is the status card at the top, so nobody is drawn twice.
+The three answers stack under the asking agent's name with a mark beside each that says, on hover or keyboard focus, what it will do: **Make it primary** hands the review to that agent and makes the current one an observer, **Leave as observer** keeps the arrangement as it is and stops asking, and **Disconnect this agent** drops it from the review.
+Making an observer the primary asks you to confirm, and offers to hand the outgoing agent's unfinished draft to the new one as reference it may read rather than as work that publishes itself; left unticked, that draft stays where it is and never reaches your plan.
+Whichever you choose, the agent you moved away from is told at its next command instead of discovering it when its answer is refused, and anything it had in flight is fenced rather than delivered.
+A disconnected agent stays gone: the decision is recorded, so a connector sitting in its waiting loop is told and stops rather than quietly re-attaching and asking you again.
+Disconnecting the agent that answers you leaves the review without one until you say who takes over: Big Plan does not promote a watching agent into a seat you emptied, because that would answer a question you were asked and chose not to answer.
+You say so in one of two ways, and **Agent Status** keeps showing its cards for as long as nobody is answering you so that both stay available.
+Either pick an agent that is already watching and choose **Make it primary**, or connect a new one - a connector you start after the seat is empty takes it and begins answering, since starting it is you saying who answers.
+The roster stays out of the way while one agent is answering you: a single attached agent with nothing to ask shows no cards at all.
+It comes back the moment nobody is answering you, so the decision is always in reach.
 
 The stalled reading is bounded, because a pickup cannot account for silence indefinitely.
 After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: **Agent Status** gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.

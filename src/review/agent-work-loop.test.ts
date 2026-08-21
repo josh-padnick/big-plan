@@ -41,12 +41,20 @@ import {
 } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
+import {
+  pendingPrimacyRequest,
+  selectPrimaryAgent,
+} from "./shared/agent-primacy.js";
 import { MAX_IMAGE_BYTES, reviewImageId } from "./shared/review-image.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
 import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+} from "./shared/agent-timing.js";
 
 let runtime: ReviewRuntime;
 let pickedUpToken = "";
@@ -262,6 +270,46 @@ describe("agent work loop", () => {
     }
   });
 
+  it("should remove an observer registration when a push is refused", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-push-observer-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Push refusal\n\nOnly the primary may push.\n");
+    const pushRuntime = await startReviewRuntime({ planPath });
+
+    try {
+      await reviewStore.attachAgentToRoster({
+        store: pushRuntime.store,
+        sessionId: pushRuntime.sessionId,
+        writerId: "primary-agent",
+      });
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "push",
+          planPath,
+          executablePath,
+          origin: "about",
+          body: "This observer must not leave a card behind.",
+          connectionToken: "observer-agent",
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "primacy-lost",
+      });
+      await expect(
+        reviewStore.readAgentRoster({
+          store: pushRuntime.store,
+          sessionId: pushRuntime.sessionId,
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({ writerId: "primary-agent" }),
+      ]);
+    } finally {
+      await pushRuntime.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should tolerate a heartbeat file being replaced while the review server is live", async () => {
     const readHeartbeat = vi
       .spyOn(reviewStore, "readSessionHeartbeatValue")
@@ -409,6 +457,414 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should discard an inherited draft when a later handoff leaves it behind", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-draft-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nCarry only the draft the reviewer chose.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await reviewStore.attachAgentToRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "aaaaaaaaaaaaaaaa",
+      });
+      await reviewStore.attachAgentToRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "bbbbbbbbbbbbbbbb",
+      });
+      await reviewStore.grantAgentPrimacy({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "bbbbbbbbbbbbbbbb",
+        inheritedDraftPath: "/stage/old/candidate.mdx",
+      });
+      await reviewStore.grantAgentPrimacy({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "aaaaaaaaaaaaaaaa",
+      });
+      await reviewStore.grantAgentPrimacy({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "bbbbbbbbbbbbbbbb",
+      });
+      await writeAgentRequest({
+        store: review.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId: "abab1212abab1212",
+          sessionId: review.sessionId,
+          planId: review.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-21T12:00:00.000Z",
+          body: "Which draft should inform this answer?",
+        }),
+      });
+
+      const promoted = (
+        await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        })
+      ).find((agent) => agent.writerId === "bbbbbbbbbbbbbbbb");
+      expect(promoted).toMatchObject({
+        writerId: "bbbbbbbbbbbbbbbb",
+        role: "primary",
+      });
+      expect(promoted?.inheritedDraftPath).toBeUndefined();
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        connectionToken: "bbbbbbbbbbbbbbbb",
+      });
+      expect(pickup).toMatchObject({
+        pending: true,
+        work: { requestId: "abab1212abab1212" },
+      });
+      expect(pickup.previous_agent_draft).toBeUndefined();
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should return a raced pickup when its agent loses the primary seat", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-link-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nOnly the recorded primary may keep a claim.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "cdcd1212cdcd1212",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Who is allowed to answer?",
+      }),
+    });
+    const recordClaim = reviewStore.recordAgentClaimToken;
+    const linking = vi
+      .spyOn(reviewStore, "recordAgentClaimToken")
+      .mockImplementationOnce(async (options) => {
+        await reviewStore.attachAgentToRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+          writerId: "successor",
+        });
+        await reviewStore.grantAgentPrimacy({
+          store: review.store,
+          sessionId: review.sessionId,
+          writerId: "successor",
+        });
+        return recordClaim(options);
+      });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({ pending: false, role: "observer" });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.requests[0]?.claimedBy).toBeUndefined();
+    } finally {
+      linking.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse publication when no roster record holds the claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-fence-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAn unlinked claim cannot publish.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const requestId = "efef1212efef1212";
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Can this claim publish?",
+      }),
+    });
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.agent_token !== "string" ||
+        typeof pickup.response_file !== "string"
+      ) {
+        throw new Error("Pickup did not return its response contract");
+      }
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId, message: "This must not publish." }),
+      );
+      await reviewStore.writeStoreJson({
+        path: review.store.agentRosterPath,
+        value: { sessionId: review.sessionId, agents: [] },
+      });
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "primacy-lost",
+      });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.responses).toEqual([]);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should publish from the recorded primary after the recovery horizon", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-slow-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA slow recorded holder still owns its turn.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const requestId = "eded1212eded1212";
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Can the slow holder publish?",
+      }),
+    });
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.agent_token !== "string" ||
+        typeof pickup.response_file !== "string"
+      ) {
+        throw new Error("Pickup did not return its response contract");
+      }
+      const roster = await reviewStore.readAgentRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      await reviewStore.writeStoreJson({
+        path: review.store.agentRosterPath,
+        value: {
+          sessionId: review.sessionId,
+          agents: roster.map((agent) => ({
+            ...agent,
+            signalAtMs: Date.now() - AGENT_RECOVERY_HORIZON_MS - 1,
+          })),
+        },
+      });
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId, message: "The recorded holder answers." }),
+      );
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: requestId });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.responses).toHaveLength(1);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report a failed release even when the agent was disconnected", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-release-"));
+    const planPath = join(directory, "plan.mdx");
+    const source =
+      "# Plan\n\nA failed release is not a completed disconnect.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const requestId = "acac1212acac1212";
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Will a failed release stay visible?",
+      }),
+    });
+    const recordClaim = reviewStore.recordAgentClaimToken;
+    let restoreRequestWrite = (): void => undefined;
+    const linking = vi
+      .spyOn(reviewStore, "recordAgentClaimToken")
+      .mockImplementationOnce(async (options) => {
+        await reviewStore.writeAgentDisconnectRequest({
+          store: review.store,
+          directive: {
+            writerId: options.writerId,
+            requestedAtMs: Date.now(),
+          },
+        });
+        await reviewStore.detachAgentFromRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+          writerId: options.writerId,
+        });
+        const requestWrite = vi
+          .spyOn(reviewStore, "writeAgentRequestValue")
+          .mockRejectedValueOnce(new Error("release write failed"));
+        restoreRequestWrite = () => requestWrite.mockRestore();
+        return recordClaim(options);
+      });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).rejects.toThrow(/Cannot release.*release write failed/iu);
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.requests[0]?.claimedBy).toEqual(expect.any(String));
+    } finally {
+      restoreRequestWrite();
+      linking.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report a failed release after a post-claim disconnect", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-post-claim-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA disconnect succeeds only after release.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const requestId = "adad1212adad1212";
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Will the disconnect wait for release?",
+      }),
+    });
+    const writeRequest = reviewStore.writeAgentRequestValue;
+    let writes = 0;
+    const requestWrites = vi
+      .spyOn(reviewStore, "writeAgentRequestValue")
+      .mockImplementation(async (options) => {
+        writes += 1;
+        if (writes > 1) throw new Error("post-claim release failed");
+        await writeRequest(options);
+        const claimed = (
+          await readAgentExchange({
+            store: review.store,
+            sessionId: review.sessionId,
+            planId: review.planId,
+          })
+        ).requests.find((request) => request.requestId === requestId);
+        if (claimed?.claimedByConnection === undefined) {
+          throw new Error("The claimed request did not name its connection");
+        }
+        await reviewStore.writeAgentDisconnectRequest({
+          store: review.store,
+          directive: {
+            writerId: claimed.claimedByConnection,
+            requestedAtMs: Date.now(),
+          },
+        });
+      });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).rejects.toThrow(/Cannot release.*post-claim release failed/iu);
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.requests[0]?.claimedBy).toEqual(expect.any(String));
+    } finally {
+      requestWrites.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should execute the returned note and respond commands", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-commands-"));
     const planPath = join(directory, "plan.mdx");
@@ -508,6 +964,102 @@ describe("agent work loop lifecycle", () => {
           }),
         ],
       });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should keep answering the reviewer turn after turn as one agent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-turns-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer two questions in a row.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const ask = async (requestId: string, body: string): Promise<void> => {
+      await writeAgentRequest({
+        store: review.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId,
+          sessionId: review.sessionId,
+          planId: review.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-12T12:00:00.000Z",
+          body,
+        }),
+      });
+    };
+    /*
+    One turn of the loop the agent prompt describes: take the work, report
+    progress the way the returned command does, answer, and come back.
+
+    The return trip carries the token, because that is what the product tells
+    the agent to do - `respond` hands back a `next` command with `--agent
+    <token>` on it, and the prompt says to run it as given. The token is how a
+    fresh process finds the record it is coming back to instead of arriving as
+    a stranger.
+    */
+    const takeOneTurn = async (
+      requestId: string,
+      agentToken?: string,
+    ): Promise<string> => {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        ...(agentToken === undefined ? {} : { agentToken }),
+      });
+      expect(pickup).toMatchObject({
+        pending: true,
+        work: expect.objectContaining({ requestId }),
+      });
+      if (
+        typeof pickup.note_command !== "string" ||
+        typeof pickup.respond_command !== "string" ||
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return executable agent commands");
+      }
+      await execAsync(pickup.note_command, { cwd: directory });
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId, message: "Answered." }),
+      );
+      const responded = await execAsync(pickup.respond_command, {
+        cwd: directory,
+      });
+      // The command the agent is told to run next carries the token it just
+      // answered under, which is what makes the next turn the same agent.
+      expect(responded.stdout).toMatch(
+        new RegExp(`agent next .*--agent \\S*${pickup.agent_token}`, "u"),
+      );
+      return pickup.agent_token;
+    };
+
+    try {
+      await ask("1212121212121212", "What is the first answer?");
+      const agentToken = await takeOneTurn("1212121212121212");
+      await ask("3434343434343434", "What is the second answer?");
+      // The second turn is the whole test. Nothing else has connected, so the
+      // only agent this review has ever seen must still be its primary - a
+      // loop that comes back to find itself an observer of its own last turn
+      // stops answering the reviewer entirely (BIG-171).
+      await takeOneTurn("3434343434343434", agentToken);
+
+      // One agent connected, so the review has one agent - not a queue of
+      // strangers, and never a question to the reviewer about a second agent
+      // that does not exist.
+      const attached = await reviewStore.readAgentRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(attached).toHaveLength(1);
+      expect(
+        pendingPrimacyRequest({ agents: attached, nowMs: Date.now() }),
+      ).toBeUndefined();
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
@@ -1426,7 +1978,18 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should serialize concurrent waiting pickups until the holder answers", async () => {
+  /*
+  Replaces the pre-BIG-171 race this test used to encode.
+
+  Two concurrent public pickups used to select the same unclaimed request and
+  be serialized by the plan-claim lock, with the loser taking the next request
+  once the holder answered. That is the interleaving the observer model
+  removes: a second loop no longer competes for work at all, so the guarantee
+  worth proving here is that it attaches, waits, and takes nothing until the
+  reviewer says so. The claim lock itself is unchanged and still proven in
+  request-mailbox.test.ts.
+  */
+  it("should attach a second concurrent loop as an observer that takes no work", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-race-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nOne agent works this plan at a time.\n";
@@ -1454,134 +2017,703 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request: firstRequest });
     await writeAgentRequest({ store: review.store, request: secondRequest });
 
-    let releaseLock: (() => Promise<void>) | undefined;
+    let observing: Promise<Record<string, unknown>> | undefined;
     try {
-      releaseLock = await holdAgentRequestLock({
-        store: review.store,
-        requestId: firstRequest.requestId,
-      });
-      const firstPickup = runAgentWorkLoopAction({
+      const firstPickup = await runAgentWorkLoopAction({
         kind: "next",
         planPath,
         shouldWait: true,
         executablePath,
-        modelName: "Race agent one",
+        modelName: "claude-opus-5",
       });
-      await vi.waitFor(
-        async () => {
-          expect(
-            await reviewStore.readAgentPresence({
-              store: review.store,
-              sessionId: review.sessionId,
-            }),
-          ).toMatchObject({
-            state: "working",
-            requestId: firstRequest.requestId,
-          });
-        },
-        { timeout: 5_000 },
-      );
-      const firstPresence = await reviewStore.readAgentPresence({
-        store: review.store,
-        sessionId: review.sessionId,
-      });
-      if (firstPresence.updatedAtMs === undefined) {
-        throw new Error("The first pickup did not persist its heartbeat time");
-      }
-      await vi.waitFor(
-        () => {
-          expect(Date.now()).toBeGreaterThan(firstPresence.updatedAtMs ?? 0);
-        },
-        { timeout: 5_000 },
-      );
-      const secondPickup = runAgentWorkLoopAction({
-        kind: "next",
-        planPath,
-        shouldWait: true,
-        executablePath,
-        modelName: "Race agent two",
-      });
-      await vi.waitFor(
-        async () => {
-          expect(
-            await reviewStore.readAgentPresence({
-              store: review.store,
-              sessionId: review.sessionId,
-            }),
-          ).toMatchObject({
-            state: "working",
-            requestId: firstRequest.requestId,
-            updatedAtMs: expect.any(Number),
-          });
-          expect(
-            (
-              await reviewStore.readAgentPresence({
-                store: review.store,
-                sessionId: review.sessionId,
-              })
-            ).updatedAtMs,
-          ).toBeGreaterThan(firstPresence.updatedAtMs ?? 0);
-        },
-        { timeout: 5_000 },
-      );
-      // The persisted heartbeat barrier proves both public pickups selected the
-      // same unclaimed request. Without plan-level serialization, both promises
-      // resolve before either response; that counterfactual was verified.
-      await releaseLock();
-      releaseLock = undefined;
-      const firstSettled = await Promise.race([
-        firstPickup.then((pickup) => ({ pickup, waiting: secondPickup })),
-        secondPickup.then((pickup) => ({ pickup, waiting: firstPickup })),
-      ]);
-      expect(firstSettled.pickup).toMatchObject({
+      expect(firstPickup).toMatchObject({
         pending: true,
         work: { requestId: firstRequest.requestId },
       });
+
+      // A second connector arrives while the first holds the plan. It is told
+      // its role rather than handed the queued request.
+      const oneShot = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        modelName: "gpt-5-6-sol",
+      });
+      expect(oneShot).toMatchObject({ pending: false, role: "observer" });
+      expect(oneShot["work"]).toBeUndefined();
+
+      /*
+      A connector that stays, which is what the reviewer is asked about.
+
+      The question belongs to an agent that is waiting for the answer, so it is
+      raised by a loop that is still there to hear it. The one-shot above took
+      no work and left nothing behind - a card offering to promote a process
+      that has already exited would demote the agent actually working.
+      */
+      observing = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "gpt-5-6-sol",
+      });
+      // The reviewer, not the arriving agent, is the one being asked.
       await vi.waitFor(
         async () => {
+          const roster = await reviewStore.readAgentRoster({
+            store: review.store,
+            sessionId: review.sessionId,
+          });
+          const nowMs = Date.now();
           expect(
-            await reviewStore.readAgentPresence({
-              store: review.store,
-              sessionId: review.sessionId,
-            }),
-          ).toMatchObject({ state: "waiting" });
+            selectPrimaryAgent({ agents: roster, nowMs })?.model?.name,
+          ).toBe("claude-opus-5");
+          expect(
+            pendingPrimacyRequest({ agents: roster, nowMs })?.model?.name,
+          ).toBe("gpt-5-6-sol");
         },
         { timeout: 5_000 },
       );
-      if (
-        typeof firstSettled.pickup.agent_token !== "string" ||
-        typeof firstSettled.pickup.response_file !== "string"
-      ) {
-        throw new Error(
-          "The first pickup did not return its response contract",
-        );
-      }
-      await writeFile(
-        firstSettled.pickup.response_file,
-        JSON.stringify({
-          requestId: firstRequest.requestId,
-          message: "The first request is answered.",
+
+      /*
+      The review has one presence record, and it belongs to the agent that
+      answers the review.
+
+      An observer waiting beside the primary writes its own heartbeat twice a
+      second, and this record is replaced whole, so an observer allowed to
+      write it renamed the review's agent to itself on every pass. The
+      reviewer's activity card is drawn from exactly this, and with both loops
+      idle it alternated between the two of them twice a second (BIG-171).
+      */
+      const presence = await reviewStore.readAgentPresence({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(presence.model?.name).toBe("claude-opus-5");
+      const primaryWriterId = selectPrimaryAgent({
+        agents: await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
         }),
-      );
+        nowMs: Date.now(),
+      })?.writerId;
+      expect(presence.writerId).toBe(primaryWriterId);
+
+      // The queued request is still queued: nothing took it.
+      const stillQueued = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        stillQueued.requests.find(
+          (request) => request.requestId === secondRequest.requestId,
+        )?.claimedBy,
+      ).toBeUndefined();
+    } finally {
+      await review.close();
+      await observing;
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should let a promoted observer pick up work, and tell the displaced agent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-handoff-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nPrimacy moves only when the reviewer says so.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "abababababababab",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-19T12:00:00.000Z",
+        body: "Answer this.",
+      }),
+    });
+    let observing: Promise<Record<string, unknown>> | undefined;
+    try {
+      const incumbent = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "claude-opus-5",
+      });
+      const incumbentToken = incumbent["agent_token"];
+      if (typeof incumbentToken !== "string") {
+        throw new Error("The incumbent did not return its token");
+      }
+      // While it holds the plan, its own notes are accepted.
       await expect(
         runAgentWorkLoopAction({
-          kind: "respond",
+          kind: "note",
           planPath,
-          responsePath: firstSettled.pickup.response_file,
+          detail: "Reading the request",
           executablePath,
-          agentToken: firstSettled.pickup.agent_token,
+          agentToken: incumbentToken,
         }),
-      ).resolves.toMatchObject({ responded: firstRequest.requestId });
-      await expect(firstSettled.waiting).resolves.toMatchObject({
-        pending: true,
-        work: { requestId: secondRequest.requestId },
+      ).resolves.toMatchObject({ noted: "Reading the request" });
+
+      // The arriving connector waits for the answer rather than exiting: the
+      // question the reviewer is shown belongs to an agent that is still here
+      // to be told what it is.
+      observing = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "gpt-5-6-sol",
+      });
+      let observerWriterId = "";
+      await vi.waitFor(
+        async () => {
+          const observer = pendingPrimacyRequest({
+            agents: await reviewStore.readAgentRoster({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+            nowMs: Date.now(),
+          });
+          if (observer === undefined) {
+            throw new Error("The arriving agent did not ask to be the primary");
+          }
+          observerWriterId = observer.writerId;
+        },
+        { timeout: 5_000 },
+      );
+
+      // The reviewer answers.
+      await reviewStore.grantAgentPrimacy({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: observerWriterId,
+      });
+
+      // The displaced agent learns at its very next command, in a code its
+      // harness can branch on, rather than at publication.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Still working",
+          executablePath,
+          agentToken: incumbentToken,
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "primacy-lost",
+        message: expect.stringContaining("GPT-5.6-sol"),
       });
     } finally {
-      await releaseLock?.();
+      await review.close();
+      await observing;
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should stop a waiting observer the reviewer disconnects", async () => {
+    /*
+    The reviewer's answer has to outlast the loop it was about. Removing the
+    record alone is undone within 500 ms: the loop refreshes, finds nothing
+    under its id, and registers again as an arrival - so the card the reviewer
+    just dismissed reappears with its question re-raised (BIG-171).
+    */
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nOne review, one primary.\n");
+    const review = await startReviewRuntime({ planPath });
+    let observing: Promise<Record<string, unknown>> | undefined;
+    try {
+      // An agent already speaks for the plan, so the arriving loop observes.
+      await reviewStore.attachAgentToRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: "incumbent",
+      });
+      observing = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+      });
+      const observer = await vi.waitFor(
+        async () => {
+          const waiting = pendingPrimacyRequest({
+            agents: await reviewStore.readAgentRoster({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+            nowMs: Date.now(),
+          });
+          if (waiting === undefined) {
+            throw new Error("The arriving agent did not ask to be the primary");
+          }
+          return waiting;
+        },
+        { timeout: 5_000 },
+      );
+
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: observer.writerId,
+      });
+
+      // The loop is told, in a result its harness can branch on, and it ends.
+      await expect(observing).resolves.toMatchObject({
+        pending: false,
+        role: "disconnected",
+      });
+      // And it stays gone rather than re-raising the question it was answered
+      // about.
+      await expect(
+        reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toEqual([expect.objectContaining({ writerId: "incumbent" })]);
+    } finally {
+      await review.close();
+      await observing;
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should not re-seat a waiting primary the reviewer disconnects", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-p-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nThe seat stays empty.\n");
+    const review = await startReviewRuntime({ planPath });
+    let waiting: Promise<Record<string, unknown>> | undefined;
+    try {
+      waiting = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+      });
+      const primary = await vi.waitFor(
+        async () => {
+          const seated = selectPrimaryAgent({
+            agents: await reviewStore.readAgentRoster({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+            nowMs: Date.now(),
+          });
+          if (seated === undefined) throw new Error("No agent registered yet");
+          return seated;
+        },
+        { timeout: 5_000 },
+      );
+
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: primary.writerId,
+      });
+
+      await expect(waiting).resolves.toMatchObject({
+        pending: false,
+        role: "disconnected",
+      });
+      // The empty-seat rule must not hand the plan straight back to the agent
+      // the reviewer just removed from it.
+      await expect(
+        reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      await review.close();
+      await waiting;
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  /*
+  BIG-171: the reviewer disconnects the primary, and the rail has to notice.
+
+  Disconnecting writes a directive and detaches the registration milliseconds
+  apart, and the waiting loop reads the two at opposite ends of the same pass.
+  When the registration is what it sees first, this is the only write left that
+  can retire the presence record: the agent stops, an observer does not write
+  presence, and the seat is empty. Without it the card kept drawing a connected
+  agent with its Disconnect button stuck at "Disconnecting…", and then blamed a
+  lapsed signal for an end the reviewer performed.
+  */
+  it("should end the presence record when the roster is what tells it", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-h-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(
+      planPath,
+      "# Plan\n\nThe card must stop saying connected.\n",
+    );
+    const review = await startReviewRuntime({ planPath });
+    let waiting: Promise<Record<string, unknown>> | undefined;
+    try {
+      waiting = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+      });
+      const primary = await vi.waitFor(
+        async () => {
+          const seated = selectPrimaryAgent({
+            agents: await reviewStore.readAgentRoster({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+            nowMs: Date.now(),
+          });
+          if (seated === undefined) throw new Error("No agent registered yet");
+          return seated;
+        },
+        { timeout: 5_000 },
+      );
+      // The loop has to be vouching for itself before the record can be shown
+      // to stop: an assertion against a record it had not written yet would
+      // pass whether or not the fix exists.
+      await vi.waitFor(
+        async () => {
+          const presence = await reviewStore.readAgentPresence({
+            store: review.store,
+            sessionId: review.sessionId,
+          });
+          if (presence.writerId !== primary.writerId) {
+            throw new Error("The primary has not written presence yet");
+          }
+        },
+        { timeout: 5_000 },
+      );
+
+      // Only the registration goes, which is the half of a disconnect this
+      // loop is being made to notice.
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: primary.writerId,
+      });
+
+      await expect(waiting).resolves.toMatchObject({
+        pending: false,
+        role: "disconnected",
+      });
+      // An ended record is projected as a disconnected one carrying the moment
+      // it ended, which is exactly what the card reads to stop drawing a
+      // connected agent and to retire its Disconnect button.
+      const presence = await reviewStore.readAgentPresence({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(presence.connected).toBe(false);
+      expect(presence.endedAtMs).toBeTypeOf("number");
+      expect(presence.writerId).toBe(primary.writerId);
+    } finally {
+      await review.close();
+      await waiting;
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should tell a disconnected agent at its next command", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-n-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await writeAgentRequest({
+        store: review.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId: "abababababababab",
+          sessionId: review.sessionId,
+          planId: review.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-19T12:00:00.000Z",
+          body: "Answer this.",
+        }),
+      });
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const holder = (
+        await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        })
+      )[0];
+      if (holder === undefined || typeof pickup.agent_token !== "string") {
+        throw new Error("The pickup did not register an agent");
+      }
+
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: holder.writerId,
+      });
+
+      // Its record is gone, so nothing else can recognise it; the reviewer's
+      // answer is the true reason, and it is the one a harness can act on.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Still working",
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "agent-disconnected",
+      });
+    } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 20_000);
+
+  it("should still name the disconnect once a long turn reaches its answer", async () => {
+    /*
+    The reviewer disconnects an agent that is mid turn, and that agent works on
+    for minutes before it runs anything. A turn routinely outlives the window
+    that answers a waiting loop, so the half of the answer that belongs to the
+    turn is owed the recovery horizon: without it the agent met a refusal about
+    another agent holding its claim - an agent that does not exist - instead of
+    the answer the reviewer gave.
+    */
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-l-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await writeAgentRequest({
+        store: review.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId: "abababababababab",
+          sessionId: review.sessionId,
+          planId: review.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-19T12:00:00.000Z",
+          body: "Answer this.",
+        }),
+      });
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const holder = (
+        await reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        })
+      )[0];
+      if (holder === undefined || typeof pickup.agent_token !== "string") {
+        throw new Error("The pickup did not register an agent");
+      }
+
+      // The reviewer disconnected it three minutes ago, which is an ordinary
+      // length for one turn and far past the window a waiting loop needs.
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: holder.writerId,
+        now: Date.now() - AGENT_STALL_MS * 3,
+      });
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Still working",
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "agent-disconnected",
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should leave no registration behind when a command is refused", async () => {
+    // Registration happens before any of the refusals, and only the returning
+    // paths used to give it back. A record left standing for a process that
+    // has already failed is a card asking the reviewer to promote nobody.
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-ghost-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\nNothing to answer.\n");
+    const review = await startReviewRuntime({ planPath });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken: "aaaaaaaaaaaaaaaa",
+        }),
+      ).rejects.toMatchObject({ name: "AgentWorkLoopRejected" });
+
+      await expect(
+        reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should keep a resuming loop as the primary rather than demoting it", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA restart is the same agent.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "abababababababab",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-19T12:00:00.000Z",
+        body: "Answer this.",
+      }),
+    });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "claude-opus-5",
+      });
+      const token = pickup["agent_token"];
+      if (typeof token !== "string") {
+        throw new Error("The pickup did not return its token");
+      }
+      // A new process resuming the same pickup must not become an observer of
+      // itself, which would strand the request it still holds.
+      const resumed = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        agentToken: token,
+        modelName: "claude-opus-5",
+      });
+      expect(resumed).toMatchObject({
+        pending: true,
+        work: { requestId: "abababababababab" },
+      });
+      const roster = await reviewStore.readAgentRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(roster).toHaveLength(1);
+      expect(
+        selectPrimaryAgent({ agents: roster, nowMs: Date.now() }),
+      ).toBeDefined();
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("should return the adopted roster identity to a resuming loop", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-identity-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA resumed turn keeps one identity.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "acacacacacacacac",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Which identity continues this turn?",
+      }),
+    });
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        connectionToken: "aaaaaaaaaaaaaaaa",
+      });
+      if (typeof pickup.agent_token !== "string") {
+        throw new Error("The pickup did not return its token");
+      }
+
+      const resumed = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        agentToken: pickup.agent_token,
+        connectionToken: "bbbbbbbbbbbbbbbb",
+      });
+      expect(resumed).toMatchObject({
+        pending: true,
+        connection_token: "aaaaaaaaaaaaaaaa",
+      });
+      expect(resumed.next_command).toContain("aaaaaaaaaaaaaaaa");
+      if (typeof resumed.response_file !== "string") {
+        throw new Error("The resumed pickup did not return its response file");
+      }
+      await writeFile(
+        resumed.response_file,
+        JSON.stringify({
+          requestId: "acacacacacacacac",
+          message: "The roster identity continues.",
+        }),
+      );
+      const response = await runAgentWorkLoopAction({
+        kind: "respond",
+        planPath,
+        responsePath: resumed.response_file,
+        executablePath,
+        agentToken: pickup.agent_token,
+        connectionToken: "bbbbbbbbbbbbbbbb",
+      });
+      expect(response.next).toContain("aaaaaaaaaaaaaaaa");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 
   it.each(["answered", "canceled"] as const)(
     "should move past a request %s during pickup preparation",
@@ -1937,7 +3069,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should refuse a resume token whose request is already terminal", async () => {
+  it("should give a returning agent its next request under a fresh token", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nAnswer two questions in order.\n";
@@ -1995,15 +3127,21 @@ describe("agent work loop lifecycle", () => {
         agentToken: firstPickup.agent_token,
       });
 
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "next",
-          planPath,
-          shouldWait: false,
-          executablePath,
-          agentToken: firstPickup.agent_token,
-        }),
-      ).rejects.toThrow(/already answered|terminal/i);
+      // The answered token is spent as work and still good as a name. It
+      // buys the agent its own registration back, never a second turn on the
+      // request it already closed.
+      const secondPickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        agentToken: firstPickup.agent_token,
+      });
+      expect(secondPickup).toMatchObject({
+        pending: true,
+        work: expect.objectContaining({ requestId: secondRequest.requestId }),
+      });
+      expect(secondPickup.agent_token).not.toBe(firstPickup.agent_token);
       const exchange = await readAgentExchange({
         store: review.store,
         sessionId: review.sessionId,
@@ -2011,9 +3149,16 @@ describe("agent work loop lifecycle", () => {
       });
       expect(
         exchange.requests.find(
-          (candidate) => candidate.requestId === secondRequest.requestId,
-        ),
-      ).not.toHaveProperty("claimedBy");
+          (candidate) => candidate.requestId === firstRequest.requestId,
+        )?.answeredAt,
+      ).toEqual(expect.any(String));
+      // One agent, one row: coming back is not arriving.
+      await expect(
+        reviewStore.readAgentRoster({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toHaveLength(1);
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
@@ -3000,32 +4145,34 @@ describe("agent work loop lifecycle", () => {
       body: "Keep working on this request.",
     });
     await writeAgentRequest({ store: review.store, request });
-    let waiting: Promise<Record<string, unknown>> | undefined;
     try {
-      await runAgentWorkLoopAction({
+      const pickup = await runAgentWorkLoopAction({
         kind: "next",
         planPath,
         shouldWait: false,
         executablePath,
       });
       await expect(fetch(review.url)).resolves.toMatchObject({ status: 200 });
-      waiting = runAgentWorkLoopAction({
-        kind: "next",
-        planPath,
-        shouldWait: true,
-        executablePath,
+      /*
+      The agent goes back to waiting while its claim is still open, which is
+      the ordinary shape of a turn: `next` hands the work to the harness and
+      the process exits, so the loop reports waiting long before the answer is
+      published. The heartbeat is written directly rather than by standing up a
+      second loop - a second loop attaches as an observer now, and an observer
+      is deliberately unable to say anything about the review's presence.
+      */
+      await reviewStore.writeAgentHeartbeat({
+        store: review.store,
+        sessionId: review.sessionId,
+        state: "waiting",
+        writerId: String(pickup["connection_token"]),
       });
-      await vi.waitFor(
-        async () => {
-          expect(
-            await reviewStore.readAgentPresence({
-              store: review.store,
-              sessionId: review.sessionId,
-            }),
-          ).toMatchObject({ state: "waiting" });
-        },
-        { timeout: 5_000 },
-      );
+      expect(
+        await reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).toMatchObject({ state: "waiting" });
       const survivedUntil = Date.now() + 1_100;
       await vi.waitFor(
         () => {
@@ -3036,7 +4183,6 @@ describe("agent work loop lifecycle", () => {
       await expect(fetch(review.url)).resolves.toMatchObject({ status: 200 });
     } finally {
       await review.close();
-      await waiting;
       await rm(directory, { recursive: true, force: true });
     }
   });

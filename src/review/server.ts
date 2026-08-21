@@ -135,6 +135,7 @@ import {
   reviewImageResponse,
 } from "./routes-assets.js";
 import {
+  answerAgentPrimacy,
   cancelPendingAgentRequest,
   disconnectAgent,
   deleteQueuedAgentRequest,
@@ -251,6 +252,11 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
     method: "POST",
     path: "/api/agent-disconnect",
     handler: disconnectAgent,
+  },
+  {
+    method: "POST",
+    path: "/api/agent-primacy",
+    handler: answerAgentPrimacy,
   },
   { method: "GET", path: "/api/progress", handler: readProgressEvents },
   { method: "GET", path: "/api/snapshot-diff", handler: readSnapshotDiff },

@@ -14,13 +14,18 @@ import {
   deriveSnapshotDigest,
   messageAgentRequest,
   readAgentExchange,
+  readValidatedAgentRequests,
+  requestIsTerminal,
 } from "./agent-exchange.js";
+import { readMutationStage } from "./staged-plan-mutation.js";
+import type { ReviewStore } from "./store.js";
 import {
   appendProgressEvent,
   cancelAgentRequest,
   deleteQueuedRequest,
   ensureAgentRequest,
   recordAgentConnectionState,
+  releaseClaimsForPrimacyHandoff,
   releaseClaimsHeldBy,
   reviseQueuedRequest,
   withPlanClaimLock,
@@ -32,7 +37,11 @@ import {
   randomId,
   readAgentConnectionEvents,
   readAgentDisconnectRequestFor,
+  declineAgentPrimacy,
+  detachAgentFromRoster,
+  grantAgentPrimacy,
   readAgentPresence,
+  readAgentRoster,
   readProgress,
   writeAgentDisconnectRequest,
   writeSnapshot,
@@ -49,6 +58,11 @@ import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
 import { heldAgentClaim } from "./shared/agent-claim.js";
 import { settlementRefusal } from "./review-route-settlement.js";
+import {
+  agentForClaimToken,
+  agentIsAttached,
+  selectPrimaryAgent,
+} from "./shared/agent-primacy.js";
 
 const appendProgressBestEffort = async ({
   context,
@@ -110,27 +124,32 @@ export const readAgentSnapshot = async (
     ...(presence.writerId === undefined ? {} : { writerId: presence.writerId }),
   });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
+  const agents = await readAgentRoster({ store, sessionId });
   return jsonResponse({
     status: 200,
-    value: encodeAgentSnapshot({
-      // The browser reloads only revisions the response command has
-      // rendered, linted, and accepted. Watching the raw file here would
-      // navigate the reviewer onto a transient parse error while an agent
-      // is midway through editing the authoritative MDX.
-      currentSnapshot: readerProgress.currentSnapshot(),
-      presence: {
-        ...presence,
-        ...(disconnect === undefined
-          ? {}
-          : { disconnectRequestedAtMs: disconnect.requestedAtMs }),
+    value: encodeAgentSnapshot(
+      {
+        // The browser reloads only revisions the response command has
+        // rendered, linted, and accepted. Watching the raw file here would
+        // navigate the reviewer onto a transient parse error while an agent
+        // is midway through editing the authoritative MDX.
+        currentSnapshot: readerProgress.currentSnapshot(),
+        presence: {
+          ...presence,
+          ...(disconnect === undefined
+            ? {}
+            : { disconnectRequestedAtMs: disconnect.requestedAtMs }),
+        },
+        agents,
+        connectionLog,
+        plan: context.resolvedPlanPath,
+        agentCommand: context.agentCommand,
+        recoveryPrompt: context.recoveryPrompt,
+        requests: exchange.requests,
+        responses: exchange.responses,
       },
-      connectionLog,
-      plan: context.resolvedPlanPath,
-      agentCommand: context.agentCommand,
-      recoveryPrompt: context.recoveryPrompt,
-      requests: exchange.requests,
-      responses: exchange.responses,
-    }),
+      { nowMs: Date.now() },
+    ),
   });
 };
 
@@ -405,6 +424,9 @@ type DisconnectDecision =
        * the caller that no ordinary edge will ever report this departure.
        */
       readonly presenceNamedAddressee: boolean;
+      /** The connection the directive names, so the roster can drop it too. */
+      readonly addressee: string;
+      readonly detached?: string;
       readonly claimToken?: string;
       readonly requestId?: string;
     };
@@ -494,6 +516,12 @@ export const disconnectAgent = async (
             "This agent cannot be identified, so it cannot be disconnected",
         };
       }
+      const attached = await readAgentRoster({ store: claimStore, sessionId });
+      const detached =
+        (claimToken === undefined
+          ? undefined
+          : agentForClaimToken({ agents: attached, claimToken })?.writerId) ??
+        attached.find((agent) => agent.writerId === addressee)?.writerId;
       const requestedAtMs = Date.now();
       await writeAgentDisconnectRequest({
         store: claimStore,
@@ -503,6 +531,8 @@ export const disconnectAgent = async (
         requestedAtMs,
         presenceWasConnected: presence.connected,
         presenceNamedAddressee: presence.writerId === addressee,
+        addressee,
+        ...(detached === undefined ? {} : { detached }),
         ...(claimToken === undefined ? {} : { claimToken }),
         ...(claimed === undefined ? {} : { requestId: claimed.requestId }),
       };
@@ -513,6 +543,24 @@ export const disconnectAgent = async (
   }
   const { requestedAtMs } = decision;
   const claimToken = "claimToken" in decision ? decision.claimToken : undefined;
+  /*
+  The roster is the other record of who is attached, and it has to agree.
+
+  The directive alone only tells the agent to stop; its registration stays, and
+  a registration is what the seat is. Left standing, the review still looks
+  taken, so the next connector attaches as an observer of an agent that has
+  gone and waits for a reviewer decision about nobody (BIG-171). The record is
+  found by the claim it holds when it holds one, because that is the one handle
+  that survives a loop adopting an older registration; otherwise the connection
+  the directive names is the registration's own id.
+  */
+  if (decision.detached !== undefined) {
+    await detachAgentFromRoster({
+      store,
+      sessionId,
+      writerId: decision.detached,
+    });
+  }
   // Released outside the claim gate, in the order `claimAgentRequest`
   // established: that call takes this gate and then each request lock, so
   // taking a request lock while still holding the gate would invert it.
@@ -648,4 +696,201 @@ export const cancelPendingAgentRequest = async (
     failureMessage: `Review progress update failed after canceling request ${requestId}`,
   });
   return jsonResponse({ status: 200, value: { request: canceled } });
+};
+
+/**
+ * The candidate file the current holder has been editing, if there is one.
+ *
+ * Read before the claim is released, because the claim is what names the stage
+ * the file lives in. Returns nothing when no claim is open or the stage was
+ * never created, so the reviewer's choice degrades to "there was nothing to
+ * carry" rather than to a broken path in the next agent's work item.
+ */
+const outgoingDraftPath = async ({
+  store,
+  sessionId,
+  planId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+}): Promise<string | undefined> => {
+  const held = (
+    await readValidatedAgentRequests({ store, sessionId, planId })
+  ).find(
+    (request) => !requestIsTerminal(request) && request.claimedBy !== undefined,
+  );
+  if (held?.claimedBy === undefined) return undefined;
+  try {
+    const stage = await readMutationStage({
+      store,
+      requestId: held.requestId,
+      claimedBy: held.claimedBy,
+    });
+    return stage.candidatePath;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Applies the reviewer's answer about which agent speaks for this plan.
+ *
+ * The three answers are one route because they are one decision with three
+ * outcomes, and because they share every precondition: a live session, a named
+ * agent, and a roster whose invariant must hold across the write. Splitting
+ * them would duplicate those checks and let the three drift apart.
+ *
+ * Nothing here stops a process. Disconnecting removes the registration, and the
+ * agent is told at its next command; Big Plan cannot kill a process on the
+ * reviewer's machine, and a button implying otherwise would promise what the
+ * product cannot deliver.
+ */
+export const answerAgentPrimacy = async (
+  context: ReviewRouteContext,
+  { body }: ReviewRouteRequest,
+): Promise<ReviewRouteResponse> => {
+  const { store, sessionId, planId } = context;
+  const payload = payloadOf(body);
+  const writerId = payload.writerId;
+  const answer = payload.answer;
+  if (typeof writerId !== "string" || writerId === "") {
+    return refusal({ status: 400, reason: "An answer must name an agent" });
+  }
+  if (
+    answer !== "primary" &&
+    answer !== "observer" &&
+    answer !== "disconnect"
+  ) {
+    return refusal({
+      status: 400,
+      reason: 'An answer must be "primary", "observer", or "disconnect"',
+    });
+  }
+  const attached = await readAgentRoster({ store, sessionId });
+  const nowMs = Date.now();
+  // The same test the cards are drawn from. A record the roster has stopped
+  // counting as here describes a process that is gone, and answering a
+  // question about it would install a dead agent as the plan's primary.
+  const target = attached.find(
+    (agent) => agent.writerId === writerId && agentIsAttached({ agent, nowMs }),
+  );
+  if (target === undefined) {
+    return refusal({ status: 404, reason: "That agent is not attached" });
+  }
+  /*
+  The turn this answer leaves in flight, when it leaves one.
+
+  Removing the record is not by itself a fence: the commands that finish a turn
+  know their token and not their registration, so a disconnected agent whose
+  claim was left open still publishes the revision the reviewer had just
+  removed it from - and the card promised the opposite. The release below is
+  the same boundary a hand-off uses, named to this agent's own token so an
+  answer about one agent can never reach into a turn another one is mid way
+  through.
+  */
+  const disconnectedTurn =
+    answer === "disconnect" && target.claimClosedAtMs === undefined
+      ? target.claimToken
+      : undefined;
+  /*
+  The turn a hand-off displaces, when there is one to displace.
+
+  Named for the same reason the disconnect above is: the release frees the
+  claims it is given, so giving it one agent's own token is what makes it
+  incapable of reaching into a turn another agent is mid way through. A seat
+  with nobody in it displaces nothing, and an incumbent that holds no claim has
+  nothing to free, so both leave the plan's claims alone.
+  */
+  const displacedTurn =
+    answer === "primary"
+      ? selectPrimaryAgent({ agents: attached, nowMs })?.claimToken
+      : undefined;
+  /*
+  The reviewer may hand the outgoing agent's unpublished draft to the new
+  primary. It is resolved before anything moves, because the release below is
+  what frees the claim that names the stage the draft lives in.
+
+  Carrying it over is deliberately a pointer and not a seed: the new primary
+  still starts from the last published revision, and the draft is one more
+  input it may read. Seeding the candidate with another model's half-finished
+  work would publish it by default, which is the opposite of what the toggle
+  promises.
+  */
+  const carryWorkInProgress = payload.carryWorkInProgress === true;
+  const inheritedDraftPath =
+    answer === "primary" && carryWorkInProgress
+      ? await outgoingDraftPath({ store, sessionId, planId })
+      : undefined;
+  const agents =
+    answer === "primary"
+      ? await grantAgentPrimacy({
+          store,
+          sessionId,
+          writerId,
+          now: nowMs,
+          ...(inheritedDraftPath === undefined ? {} : { inheritedDraftPath }),
+        })
+      : answer === "observer"
+        ? await declineAgentPrimacy({ store, sessionId, writerId })
+        : await detachAgentFromRoster({ store, sessionId, writerId });
+  if (answer === "primary") {
+    /*
+    The roster moves first, and the claim is freed after it.
+
+    Both have to happen and they cannot be one write, so the order is chosen by
+    which half-finished state is survivable. Grant first and the new primary may
+    briefly wait behind a lease that is already lapsing - visible, temporary,
+    and it resolves itself. Release first and a failed grant leaves the
+    incumbent still named primary with the claim it is mid turn on silently
+    taken away, so it works on until publication and is refused there with a
+    message about an agent that never took anything.
+
+    A grant that changed nothing is a target that left between the check above
+    and the write. Nothing is released for it: the incumbent keeps the claim it
+    is working on, and the reviewer is told the agent they picked has gone
+    rather than being left with a plan no agent speaks for.
+    */
+    if (
+      agents.find((agent) => agent.writerId === writerId)?.role !== "primary"
+    ) {
+      return refusal({ status: 404, reason: "That agent is not attached" });
+    }
+    if (displacedTurn !== undefined) {
+      await releaseClaimsForPrimacyHandoff({
+        store,
+        sessionId,
+        planId,
+        claimedBy: displacedTurn,
+      });
+    }
+  }
+  if (disconnectedTurn !== undefined) {
+    await releaseClaimsForPrimacyHandoff({
+      store,
+      sessionId,
+      planId,
+      claimedBy: disconnectedTurn,
+      step: "Claim released when you disconnected this agent",
+      detail:
+        "The disconnected agent can no longer publish it; send this message again for the agent that answers you now",
+    });
+  }
+  await appendProgressBestEffort({
+    context,
+    event: {
+      sessionId,
+      atMs: Date.now(),
+      stepCode: "agent-primacy-answered",
+      step:
+        answer === "primary"
+          ? "Made this agent the primary"
+          : answer === "observer"
+            ? "Kept this agent as an observer"
+            : "Disconnected this agent",
+      state: "done",
+    },
+    failureMessage: "Could not record the agent primacy answer",
+  });
+  return jsonResponse({ status: 200, value: { agents } });
 };
