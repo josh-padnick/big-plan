@@ -208,6 +208,10 @@ export type DiffLocation = {
   readonly runs: ReadonlyArray<DiffRun>;
   readonly oldHtml?: string;
   readonly newHtml?: string;
+  /** Component-owned diff data, present only on migrated component roots. */
+  readonly diffModel?: unknown;
+  /** Trusted inert component-owned markup for the diff-state root. */
+  readonly view?: string;
 };
 
 export type DiffPlace = {
@@ -1069,6 +1073,10 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
           ...(typeof location.newHtml === "string"
             ? { newHtml: location.newHtml }
             : {}),
+          ...(Object.hasOwn(location, "diffModel")
+            ? { diffModel: location.diffModel }
+            : {}),
+          ...(typeof location.view === "string" ? { view: location.view } : {}),
           runs,
         },
       ];

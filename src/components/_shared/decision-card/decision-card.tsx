@@ -431,8 +431,10 @@ const Details = ({ model }: { readonly model: CompiledDecisionCard }) =>
 
 export const DecisionCard = ({
   model,
+  isChangeOpen = false,
 }: {
   readonly model: CompiledDecisionCard;
+  readonly isChangeOpen?: boolean;
 }) => {
   const answerable = isAnswerableDecisionCard(model);
   const critical = isCriticalDecisionCard(model);
@@ -440,7 +442,7 @@ export const DecisionCard = ({
   return (
     <figure
       id={model.id}
-      className="decision mb-6 min-w-0 overflow-hidden rounded-xl border border-edge bg-paper shadow-raised"
+      className="decision group mb-6 min-w-0 overflow-hidden rounded-xl border border-edge bg-paper shadow-raised"
       data-decision=""
       data-decision-status={model.status}
       data-decision-layout={model.layout}
@@ -448,6 +450,7 @@ export const DecisionCard = ({
       data-decision-interaction={model.interaction}
       {...(answerable ? { "data-decision-selector": "" } : {})}
       {...(critical ? { "data-decision-critical": "" } : {})}
+      {...(isChangeOpen ? { "data-decision-change-open": "" } : {})}
     >
       <figcaption className="decision-zone-question bg-header px-6 py-4">
         {model.layout === "rows" ? (
@@ -541,6 +544,18 @@ export const DecisionCard = ({
       </fieldset>
       <Reversibility model={model} />
       <Details model={model} />
+      {answerable && isChangeOpen ? (
+        <p
+          className="m-0 hidden items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)] group-data-[decision-change-open]:flex"
+          data-decision-change-note=""
+          role="status"
+        >
+          <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+            {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: true })}
+          </span>
+          <span>{"Accept this change before answering this decision."}</span>
+        </p>
+      ) : null}
       {answerable ? <AnswerControls /> : null}
     </figure>
   );

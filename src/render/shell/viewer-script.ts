@@ -592,6 +592,9 @@ const infoPopoverRegistry = [];
 document.addEventListener("pointerdown", (event) => {
   for (const entry of infoPopoverRegistry) entry.onOutsidePointerDown(event);
 });
+document.addEventListener("keydown", (event) => {
+  for (const entry of infoPopoverRegistry) entry.onDocumentKeydown(event);
+});
 document.addEventListener(
   "scroll",
   () => {
@@ -642,6 +645,12 @@ const wireInfoPopovers = () => {
     const close = () => {
       info.open = false;
     };
+    const closeOnEscape = (event) => {
+      if (event.key !== "Escape" || !info.open) return;
+      pinned = false;
+      event.bigPlanEscapeHandled = true;
+      close();
+    };
     info.addEventListener("pointerenter", (event) => {
       if (event.pointerType !== "touch") open();
     });
@@ -669,14 +678,9 @@ const wireInfoPopovers = () => {
         open();
       }, 0);
     });
-    summary.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || !info.open) return;
-      pinned = false;
-      event.bigPlanEscapeHandled = true;
-      close();
-    });
     infoPopoverRegistry.push({
       info,
+      onDocumentKeydown: closeOnEscape,
       onOutsidePointerDown: (event) => {
         if (
           pinned &&
@@ -2847,6 +2851,11 @@ const wireDecisions = () => {
     // article replacement starts out locked too.
     const readOnlyReview = () =>
       document.documentElement.hasAttribute("data-review-read-only");
+    // Decision owns this ordering rule: a changed decision is finalized first
+    // and answered second. The review layer only removes the overlay once its
+    // disposition says the change is accepted.
+    const changeIsOpen = () =>
+      decision.hasAttribute("data-decision-change-open");
 
     const showPanel = (index) => {
       for (const panel of panels) {
@@ -2887,7 +2896,10 @@ const wireDecisions = () => {
       // option uses. Neither borrows the other's chrome.
       confirm.hidden = proposing && !decisionMode;
       confirm.disabled =
-        locked || choice === null || (proposing && proposalValue() === "");
+        locked ||
+        changeIsOpen() ||
+        choice === null ||
+        (proposing && proposalValue() === "");
       change.disabled = locked;
       for (const candidate of choices) candidate.disabled = locked;
       if (proposalText !== null) proposalText.disabled = locked;
@@ -3275,6 +3287,62 @@ const wireDecisions = () => {
     sync();
   }
 };
+// The default component diff is server-rendered so it stays readable without
+// scripts. This enhancement makes its Was/Now selector a real two-state
+// control while leaving the proposed side as the authored default.
+const wiredComponentDiffs = new WeakSet();
+const wireComponentDiffs = () => {
+  for (const diff of document.querySelectorAll("[data-component-diff]")) {
+    if (wiredComponentDiffs.has(diff)) continue;
+    wiredComponentDiffs.add(diff);
+    const controls = Array.from(
+      diff.querySelectorAll("[data-component-diff-show]"),
+    );
+    const sides = Array.from(
+      diff.querySelectorAll("[data-component-diff-side]"),
+    );
+    const thumb = diff.querySelector("[data-component-diff-toggle-thumb]");
+    const show = (side) => {
+      for (const candidate of sides) {
+        candidate.hidden =
+          candidate.getAttribute("data-component-diff-side") !== side;
+      }
+      for (const control of controls) {
+        const selected =
+          control.getAttribute("data-component-diff-show") === side;
+        control.setAttribute("aria-pressed", String(selected));
+        control.classList.toggle("text-muted", !selected);
+        control.classList.toggle(
+          side === "baseline"
+            ? "text-[var(--diff-remove-c)]"
+            : "text-[var(--diff-add-c)]",
+          selected,
+        );
+      }
+      if (thumb !== null) {
+        thumb.classList.toggle("translate-x-0", side === "baseline");
+        thumb.classList.toggle(
+          "translate-x-[calc(100%+2px)]",
+          side === "proposed",
+        );
+        thumb.classList.toggle(
+          "bg-[var(--diff-remove-bg)]",
+          side === "baseline",
+        );
+        thumb.classList.toggle(
+          "bg-[var(--diff-add-bg)]",
+          side === "proposed",
+        );
+      }
+    };
+    for (const control of controls) {
+      control.addEventListener("click", () => {
+        const side = control.getAttribute("data-component-diff-show");
+        if (side === "baseline" || side === "proposed") show(side);
+      });
+    }
+  }
+};
 // focusVisible is not honoured everywhere; the attribute is the fallback and
 // is spent the moment the reader does anything else.
 for (const type of ["keydown", "pointerdown", "blur"]) {
@@ -3308,6 +3376,7 @@ const wireViewer = () => {
   wireCollapse();
   wireDataTables();
   wireFigureMaximize();
+  wireComponentDiffs();
   wireDecisions();
 };
 wireViewer();

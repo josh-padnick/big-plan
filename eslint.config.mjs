@@ -336,7 +336,7 @@ export default tseslint.config(
           "**/components/*/definition.js",
           "**/render/markdown/component-pipeline/**",
         ],
-        mayImport: ["icons", "model", "planVocabulary", "ui"],
+        mayImport: ["icons", "model", "planVocabulary", "sharedUi", "ui"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
@@ -384,7 +384,7 @@ export default tseslint.config(
           "**/render-document.js",
           "**/serialize-html.js",
         ],
-        mayImport: ["markdown", "shell", "page"],
+        mayImport: ["components", "markdown", "model", "shell", "page"],
       },
       // The pages the service serves in its own right. They are the one
       // renderer surface built from the product's recipes without a plan

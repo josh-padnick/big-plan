@@ -7,6 +7,7 @@ import { fromHtml } from "hast-util-from-html";
 import { toHtml } from "hast-util-to-html";
 import type { Element, Root, RootContent, ElementContent } from "hast";
 import { renderDocument } from "../render/render-document.js";
+import { renderDiffView } from "../render/render-diff-view.js";
 import { jsonResponse, refusal } from "./review-route-context.js";
 import type {
   ReviewRouteContext,
@@ -20,6 +21,11 @@ import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
 
 const isHastElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";
+
+// Honest rollout scaffolding. Every definition has compileDiff once the
+// contract exists, so presence cannot say which kinds have completed the
+// browser migration. The set leaves with the last migration wave.
+const MIGRATED_DIFF_KINDS: ReadonlySet<string> = new Set(["decision"]);
 
 const findRenderedBlock = ({
   node,
@@ -158,25 +164,57 @@ export const readSnapshotDiff = async (
     value: encodeSnapshotDiff({
       ...snapshotDiff,
       locations: snapshotDiff.locations.map((location) =>
-        usesRenderedSnapshot(location)
+        location.isComponentRoot && MIGRATED_DIFF_KINDS.has(location.kind)
           ? (() => {
-              const oldHtml = renderedBlockHtml({
-                html: before.html,
-                blockId: location.oldBlockId,
-                namespace: `was-${from}`,
+              const rendered = renderDiffView({
+                baselineMarkdown: beforeSource,
+                proposedMarkdown: afterSource,
+                baselineBlockId: location.oldBlockId,
+                proposedBlockId: location.newBlockId,
+                status: location.status,
+                runs: location.runs,
               });
-              const newHtml = renderedBlockHtml({
-                html: after.html,
-                blockId: location.newBlockId,
-                namespace: `now-${to}`,
-              });
-              return {
-                ...location,
-                ...(oldHtml === undefined ? {} : { oldHtml }),
-                ...(newHtml === undefined ? {} : { newHtml }),
-              };
+              return rendered === null
+                ? location
+                : {
+                    ...location,
+                    // Superseded changes still use the one legitimate copy:
+                    // identity-free content in the historical archive. Keep
+                    // its legacy payload until the final copy migration owns
+                    // historical component rendering without identity.
+                    oldHtml: renderedBlockHtml({
+                      html: before.html,
+                      blockId: location.oldBlockId,
+                      namespace: `was-${from}`,
+                    }),
+                    newHtml: renderedBlockHtml({
+                      html: after.html,
+                      blockId: location.newBlockId,
+                      namespace: `now-${to}`,
+                    }),
+                    diffModel: rendered.model,
+                    view: rendered.view,
+                  };
             })()
-          : location,
+          : usesRenderedSnapshot(location)
+            ? (() => {
+                const oldHtml = renderedBlockHtml({
+                  html: before.html,
+                  blockId: location.oldBlockId,
+                  namespace: `was-${from}`,
+                });
+                const newHtml = renderedBlockHtml({
+                  html: after.html,
+                  blockId: location.newBlockId,
+                  namespace: `now-${to}`,
+                });
+                return {
+                  ...location,
+                  ...(oldHtml === undefined ? {} : { oldHtml }),
+                  ...(newHtml === undefined ? {} : { newHtml }),
+                };
+              })()
+            : location,
       ),
     }),
   });

@@ -81,10 +81,11 @@ export const lensMissReason = (
   return "unknown-id";
 };
 
-// A lens renders a scrubbed copy of plan content. Both the host the island
-// creates and the lens itself are marked, so either marker proves a copy.
+// A legacy lens renders a scrubbed copy of plan content. A component-owned
+// diff root is the live plan block itself, so its lens frame is deliberately
+// excluded until the legacy copy vocabulary leaves with the remaining waves.
 const LENS_COPY_SELECTOR =
-  "[data-review-diff-lens], [data-review-diff-lens-host]";
+  "[data-review-diff-lens]:not([data-component-diff]), [data-review-diff-lens-host]";
 
 /** True when the element is a snapshot copy inside a What-changed lens. */
 export const isLensCopy = (element: Element): boolean =>

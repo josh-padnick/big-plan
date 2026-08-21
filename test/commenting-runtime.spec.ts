@@ -5596,6 +5596,151 @@ test("should preview stale, historical, and multi-place causal diffs through the
   }
 });
 
+test("should keep a Decision live and addressed while reviewing its change", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-decision-diff-"));
+  const planPath = join(directory, "decision.mdx");
+  const before = `# Release plan
+
+## Delivery choice
+
+<Decision question="How should we ship this release?">
+
+<Option title="Ship immediately" recommended>
+
+<Consideration label="Safety" verdict="Risky" tone="bad">
+
+There is no soak time.
+
+</Consideration>
+
+</Option>
+
+<Option title="Wait one week">
+
+<Consideration label="Safety" verdict="Strong" tone="good">
+
+The release gets a full soak.
+
+</Consideration>
+
+</Option>
+
+</Decision>`;
+  const after = before.replace(
+    "Ship immediately",
+    "Ship after a one-day canary",
+  );
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const originalDecision = await page
+      .locator('[data-block-kind="decision"]')
+      .elementHandle();
+    expect(originalDecision).not.toBeNull();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+
+    await test.step("open the Decision change in place", async () => {
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await rail.getByRole("tab", { name: "Chat" }).click();
+      await rail
+        .getByRole("button", { name: /changes? across/u })
+        .first()
+        .click();
+      await rail
+        .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
+        .last()
+        .click();
+
+      const diff = page.locator("[data-component-diff]");
+      await expect(diff).toBeVisible();
+      await expect(diff).toContainText("How should we ship this release?");
+      await expect(page.locator('[data-block-kind="decision"]')).toHaveCount(1);
+      await expect(
+        page.getByRole("button", {
+          name: "Comment on How should we ship this release?",
+        }),
+      ).toBeVisible();
+    });
+
+    await test.step("use the real Decision controls without answering early", async () => {
+      const diff = page.locator("[data-component-diff]");
+      const proposed = diff.locator('[data-component-diff-side="proposed"]');
+      const disclosure = proposed.locator("details").first();
+      const disclosureTrigger = disclosure.locator("summary");
+      await disclosureTrigger.click();
+      await expect(disclosure).toHaveAttribute("open", "");
+      await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+      await page.keyboard.press("Escape");
+      await expect(disclosure).not.toHaveAttribute("open", "");
+      await expect(diff).toBeVisible();
+
+      await proposed
+        .getByRole("radio", { name: /Ship after a one-day canary/u })
+        .check();
+      await expect(
+        proposed.getByRole("button", { name: "Confirm choice" }),
+      ).toBeDisabled();
+      await expect(proposed).toContainText(
+        "Accept this change before answering this decision.",
+      );
+
+      await diff.getByRole("button", { name: "Was" }).click();
+      await expect(
+        diff.locator('[data-component-diff-side="baseline"]'),
+      ).toBeVisible();
+      await diff.getByRole("button", { name: "Now" }).click();
+      await expect(proposed).toBeVisible();
+    });
+
+    await test.step("restore the untouched article when review exits", async () => {
+      await page.getByRole("button", { name: "Exit review" }).first().click();
+      await expect(page.locator("[data-component-diff]")).toHaveCount(0);
+      expect(
+        await originalDecision?.evaluate(
+          (node) =>
+            node.isConnected &&
+            node === document.querySelector('[data-block-kind="decision"]'),
+        ),
+      ).toBe(true);
+    });
+
+    await test.step("archive a missing Decision without publishing its identity", async () => {
+      await page
+        .locator("article [data-block-id]")
+        .evaluateAll((nodes) => nodes.forEach((node) => node.remove()));
+      await rail
+        .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
+        .last()
+        .click();
+      const archive = page.locator("[data-review-historical-changes]");
+      const historical = archive.locator("[data-review-diff-lens]");
+      await expect(historical).toBeVisible();
+      await expect(historical.locator("[data-block-id]")).toHaveCount(0);
+      await expect(historical.locator("input").first()).toBeDisabled();
+      await expect(
+        page.getByRole("button", {
+          name: "Comment on How should we ship this release?",
+        }),
+      ).toHaveCount(0);
+    });
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should keep component replacements inside their slide and preserve Callout presentation", async ({
   page,
 }, testInfo) => {

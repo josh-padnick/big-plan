@@ -13,6 +13,12 @@ import type {
 import type { DocumentOutline } from "../_model/document-outline/document-outline.js";
 import { EMPTY_DOCUMENT_OUTLINE } from "../_model/document-outline/document-outline.js";
 import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
+import type {
+  ComponentDiffInput,
+  ComponentDiffModel,
+  DefaultComponentDiffModel,
+} from "../_model/component-diff/contract.js";
+import { DefaultComponentDiffView } from "../_shared/component-diff/default-component-diff-view.js";
 
 /**
  * What the deck transform needs to place one component instance in the
@@ -40,8 +46,16 @@ export type CompiledComponent = {
   };
 };
 
+export type CompiledComponentDiff = {
+  readonly model: ComponentDiffModel;
+  readonly presentation: () => ReactNode;
+};
+
 export type ComponentDefinition = {
   readonly compile: (input: ComponentCompilerInput) => CompiledComponent;
+  readonly compileDiff: (
+    input: ComponentDiffInput<unknown>,
+  ) => CompiledComponentDiff;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   // Present when the component is authorable only as a direct child of the
   // document root. The string is the author-facing diagnostic every command
@@ -51,14 +65,21 @@ export type ComponentDefinition = {
 };
 
 /** Pairs one concrete model compiler with the React view that consumes it. */
-export const defineComponent = <Model>({
+export const defineComponent = <
+  Model,
+  DiffModel = DefaultComponentDiffModel<Model>,
+>({
   compile,
   view,
+  diff,
+  diffView,
   scopedChildren,
   topLevelOnly,
 }: {
   readonly compile: ComponentModelCompiler<Model>;
   readonly view: ComponentType<{ readonly model: Model }>;
+  readonly diff?: (input: ComponentDiffInput<Model>) => DiffModel;
+  readonly diffView?: ComponentType<{ readonly model: DiffModel }>;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
 }): ComponentDefinition => ({
@@ -67,6 +88,20 @@ export const defineComponent = <Model>({
     return {
       model,
       presentation: () => createElement(view, { model }),
+    };
+  },
+  compileDiff: (input) => {
+    const typedInput = input as ComponentDiffInput<Model>;
+    const model = diff === undefined ? typedInput : diff(typedInput);
+    return {
+      model,
+      presentation: () =>
+        diffView === undefined
+          ? createElement(DefaultComponentDiffView<Model>, {
+              model: typedInput,
+              view,
+            })
+          : createElement(diffView, { model: model as DiffModel }),
     };
   },
   ...(scopedChildren === undefined ? {} : { scopedChildren }),
@@ -79,9 +114,14 @@ export const defineComponent = <Model>({
  * materialization, direct presentation), the view renders against the empty
  * outline and its outline-fed slots stay blank.
  */
-export const defineOutlineComponent = <Model>({
+export const defineOutlineComponent = <
+  Model,
+  DiffModel = DefaultComponentDiffModel<Model>,
+>({
   compile,
   view,
+  diff,
+  diffView,
   marker,
   scopedChildren,
   topLevelOnly,
@@ -91,6 +131,8 @@ export const defineOutlineComponent = <Model>({
     readonly model: Model;
     readonly outline: DocumentOutline;
   }>;
+  readonly diff?: (input: ComponentDiffInput<Model>) => DiffModel;
+  readonly diffView?: ComponentType<{ readonly model: DiffModel }>;
   readonly marker: (model: Model) => OutlineMarker;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
@@ -105,6 +147,25 @@ export const defineOutlineComponent = <Model>({
         marker: marker(model),
         present: (outline) => createElement(view, { model, outline }),
       },
+    };
+  },
+  compileDiff: (input) => {
+    const typedInput = input as ComponentDiffInput<Model>;
+    const model = diff === undefined ? typedInput : diff(typedInput);
+    const OutlineView = ({ model: sideModel }: { readonly model: Model }) =>
+      createElement(view, {
+        model: sideModel,
+        outline: EMPTY_DOCUMENT_OUTLINE,
+      });
+    return {
+      model,
+      presentation: () =>
+        diffView === undefined
+          ? createElement(DefaultComponentDiffView<Model>, {
+              model: typedInput,
+              view: OutlineView,
+            })
+          : createElement(diffView, { model: model as DiffModel }),
     };
   },
   ...(scopedChildren === undefined ? {} : { scopedChildren }),
