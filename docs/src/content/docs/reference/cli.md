@@ -19,6 +19,7 @@ big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeo
 big-plan service status|start|stop|restart
 big-plan agent <input.mdx>
 big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
+big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]
 big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
 big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]
 big-plan update [--check]
@@ -45,6 +46,7 @@ npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--t
 npx big-plan service status
 npx big-plan agent <input.mdx>
 npx big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
+npx big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]
 npx big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
 npx big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]
 npx big-plan update --check
@@ -200,6 +202,7 @@ a model provider itself. The launched coding-agent session uses:
 - `agent next <input.mdx> --wait` to receive the oldest pending feedback,
   thread reply, or plan-wide chat question, its prior conversation, a validated
   response template, the private candidate to edit, and the exact publish command;
+- `agent push <input.mdx> --prompt "<text>"` to relay the reviewer's own words as an agent-initiated thread, or `--about "<text>"` to open it in the agent's words;
 - `agent note <input.mdx> "<progress>"` to keep the reviewer
   informed as each meaningful work step begins; and
 - `agent respond <input.mdx> <response.json>` to publish one
@@ -207,6 +210,14 @@ a model provider itself. The launched coding-agent session uses:
   candidate has rendered and passed lint.
 
 A claim records the connection that took it, so the agent that is working can be named without ever naming one that is only waiting.
+
+`agent push` opens and claims a private candidate immediately rather than placing work in the reviewer-message queue.
+Exactly one of `--prompt` or `--about` is required because the stored origin determines whose words the review later presents.
+Pass the returned thread id back with `--thread <id>` to continue a pushed thread; omitting it opens a new thread.
+A resolved or unknown thread is refused, and any live claim or other non-terminal push on the plan must be answered or canceled first.
+Queued but unclaimed reviewer messages do not block a push, but the returned `rules` list names their count so the agent can answer them next.
+The result mirrors `agent next`: it returns the claimed `work`, private `candidate_plan`, `response_file`, claim and connection tokens, ready-to-run `note_command` and `respond_command`, and whether the returned thread was opened or continued.
+The unchanged reviewer cancel action drops the push's private stage and releases the plan.
 
 `agent next` mints the `--agent` token when it hands out a request, and returns
 it as `agent_token` together with ready-to-run `note_command`,
@@ -252,15 +263,15 @@ The reviewer can also take an agent off a review from **Agent Status**, and ever
 The disconnect names exactly one agent, by the connection token of the agent holding the plan's live claim, or by the connected agent's own connection token when no claim is live.
 It names a connection rather than a pickup because disconnecting releases that pickup immediately, so it reaches that agent whether it is mid-answer or between commands, and it reaches nobody else - including a second agent waiting beside it.
 `agent next` reports it as an ordinary end - `ended` and `disconnected` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
-`agent note` and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
-The answer the disconnected session was drafting is dropped; the reviewer's message goes back in the queue for whichever agent connects next.
+`agent push`, `agent note`, and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
+The answer the disconnected session was drafting is dropped, its private stage is removed, and its open message can be picked up by whichever agent connects next.
 
 `agent respond` publishes under one plan-mutation lock: it re-proves the claim, requires the plan to still carry the revision the candidate started from, and swaps the candidate in with one atomic rename.
-A response that finds the plan changed underneath it is refused rather than applied, so the agent takes the work again from the current plan.
+A response that finds the plan changed underneath it is refused with the `SOURCE_MOVED` code rather than applied, so the agent takes the work again from the current plan.
 If the process dies mid-publish, the next `agent` command and the next `big-plan review` settle the interrupted commit before serving anything: the answer completes if the swap won, the request stays open if it did not, and a plan matching neither revision stops agent edits with a conflict naming both digests instead of overwriting the file.
 
-Export any of these environment variables before running `agent next` or `agent
-note` to report who is connected. They carry the four facts **Agent Status**
+Export any of these environment variables before running `agent next`, `agent
+push`, or `agent note` to report who is connected. They carry the four facts **Agent Status**
 shows, with a session declared either as an address or as an id:
 
 | Variable                     | What it declares                                                         | Limit       |
@@ -281,7 +292,7 @@ Where nothing is declared the reviewer is shown no identity at all rather than a
 note about its absence.
 A value that exceeds its limit, is empty, or fails its own check is dropped on
 its own; the rest of the declaration still stands.
-`agent next` stores the declaration with the durable per-pickup claim, and `agent note` preserves or refreshes that claim identity.
+`agent next` and `agent push` store the declaration with the durable per-pickup claim, and `agent note` preserves or refreshes that claim identity.
 The reviewer's browser reads the declaration from the pickup it is describing, for as long as that pickup still explains the plan's quiet, so a waiting agent's heartbeat cannot relabel another agent's request.
 
 A `changed` outcome is accepted only when the result snapshot differs and every

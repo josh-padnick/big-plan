@@ -45,6 +45,7 @@ import {
   deleteQueuedRequest,
   commitRequestTerminal,
   ensureAgentRequest,
+  mintAgentPush,
   recordAgentConnectionState,
   releaseClaimsHeldBy,
   removeCommentFromQueuedFeedbackRequest,
@@ -291,6 +292,40 @@ const runRequestWorker = async ({
 };
 
 describe("request mailbox", () => {
+  it("should roll back a push whose mutation stage cannot open", async () => {
+    const { planPath, store } = await preparedReview();
+    const requestId = "7777777777777777";
+    await writeFile(
+      join(store.agentMutationDirectory, requestId),
+      "stage unavailable\n",
+    );
+
+    const mint = () =>
+      mintAgentPush({
+        store,
+        planPath,
+        activeSessionId: sessionId,
+        planId,
+        requestId,
+        claimedBy: agentA,
+        origin: "about",
+        body: "Tighten the rollback boundary.",
+        now: "2026-08-10T12:00:01.000Z",
+      });
+
+    await expect(mint()).rejects.toThrow();
+    await expect(
+      readAgentRequestValue({ store, requestId }),
+    ).resolves.toBeUndefined();
+    await expect(readdir(store.agentMutationDirectory)).resolves.not.toContain(
+      requestId,
+    );
+    await expect(mint()).resolves.toMatchObject({
+      request: { requestId, claimedBy: agentA },
+      stage: { requestId, claimedBy: agentA },
+    });
+  });
+
   it("should refuse a symlinked request mailbox before touching its lock", async () => {
     const { store } = await preparedReview();
     const request = chatRequest("Do not touch an outside lock.");

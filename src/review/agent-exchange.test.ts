@@ -205,6 +205,50 @@ describe("agent exchange response contract", () => {
     });
   });
 
+  it.each([
+    ["answered", {}],
+    ["warning", { summary: "Would cross a review boundary" }],
+    ["needs-input", {}],
+    ["declined", {}],
+  ] as const)(
+    "should refuse a plan revision from a push settled as %s",
+    (state, extra) => {
+      const claimed = validateAgentRequest({
+        ...pushRequest(),
+        baselineSnapshot: deriveSnapshotDigest(before),
+        claimedAt: "2026-08-02T12:00:30.000Z",
+        claimedBy: "cccc0000cccc0000",
+        claimExpiresAtMs: 1_775_000_000_000,
+        claimGeneration: 1,
+      });
+      expect(() =>
+        validateAgentResponseDraft({
+          value: {
+            requestId: claimed.requestId,
+            outcomes: [
+              {
+                commentId: claimed.threadId,
+                state,
+                message: "No plan revision should be published.",
+                ...extra,
+              },
+            ],
+          },
+          request: claimed,
+          commentsById: commentsFromExchange({
+            requests: [claimed],
+            responses: [],
+          }),
+          changedBlocks: new Set(),
+          currentSnapshot: deriveSnapshotDigest(after),
+          now: "2026-08-02T12:01:00.000Z",
+        }),
+      ).toThrow(
+        'A push with no "changed" outcome cannot revise the plan source',
+      );
+    },
+  );
+
   it("should require one outcome for every comment in a feedback request", () => {
     expect(() =>
       validateAgentResponseDraft({

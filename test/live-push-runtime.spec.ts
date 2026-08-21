@@ -2,16 +2,28 @@
 // candidate edits stay hidden until respond commits, and the resulting article
 // replacement preserves the reviewer's reading and composing context.
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { deriveSnapshotDigest } from "../src/review/agent-exchange.js";
+import {
+  deriveSnapshotDigest,
+  messageAgentRequest,
+  readAgentExchange,
+  writeAgentRequest,
+} from "../src/review/agent-exchange.js";
+import { readCommittedRevision } from "../src/review/change-set-commit.js";
+import { claimAgentRequest } from "../src/review/request-mailbox.js";
+import {
+  writeAgentRequestValue,
+  writeResolvedCommentIds,
+} from "../src/review/store.js";
 import { startReviewRuntime } from "../src/review/server.js";
 import {
   agentIdOf,
   closeReviewRuntime,
   expect,
   runAgentCli,
+  runRefusedAgentCli,
   stageComment,
   test,
   type Page,
@@ -52,6 +64,52 @@ const responseDraftOf = (stdout: string): string => {
     throw new Error(`The agent CLI returned no response file:\n${stdout}`);
   }
   return draft;
+};
+
+/** Sends the unchanged outcome that settles a push without publishing bytes. */
+const settlePushWithoutChanges = async ({
+  planPath,
+  stdout,
+}: {
+  readonly planPath: string;
+  readonly stdout: string;
+}): Promise<void> => {
+  const requestId = agentIdOf(stdout, "requestId");
+  const threadId = agentIdOf(stdout, "threadId");
+  const agentToken = agentIdOf(stdout, "agent_token");
+  const responsePath = responseDraftOf(stdout);
+  await writeFile(
+    responsePath,
+    JSON.stringify({
+      requestId,
+      outcomes: [
+        {
+          commentId: threadId,
+          state: "answered",
+          message: "No plan revision was needed.",
+        },
+      ],
+    }),
+    "utf8",
+  );
+  await runAgentCli(["respond", planPath, responsePath, "--agent", agentToken]);
+};
+
+/** Cancels one request through the unchanged reviewer HTTP route. */
+const cancelRequest = async (page: Page, requestId: string): Promise<void> => {
+  const canceled = await page.evaluate(async (id) => {
+    const root = document.documentElement;
+    const response = await fetch("/api/agent-cancel", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+      body: JSON.stringify({ requestId: id }),
+    });
+    return response.ok;
+  }, requestId);
+  expect(canceled).toBe(true);
 };
 
 /** Reads the snapshot selected by the runtime's answered-gated agent payload. */
@@ -188,6 +246,402 @@ test("should reveal a real agent edit only at commit and preserve review context
   } finally {
     if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
     else process.env.BIG_PLAN_AGENT_MODEL = previousModel;
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should mint, continue, and settle pushes while disclosing queued reviewer work", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-mint-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  const previousModel = process.env.BIG_PLAN_AGENT_MODEL;
+  process.env.BIG_PLAN_AGENT_MODEL = "live-push-test-model";
+  try {
+    await page.goto(runtime.url);
+    await writeAgentRequest({
+      store: runtime.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "1111111111111111",
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+        premiseSnapshot: deriveSnapshotDigest(PLAN),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Queued reviewer question",
+      }),
+    });
+    const opened = await runAgentCli([
+      "push",
+      planPath,
+      "--prompt",
+      "Tighten the delivery boundary",
+    ]);
+    expect(opened.stdout).toContain(
+      "1 reviewer message is waiting; answer it next",
+    );
+    const openingId = agentIdOf(opened.stdout, "requestId");
+    const openingThreadId = agentIdOf(opened.stdout, "threadId");
+    const openingAgentToken = agentIdOf(opened.stdout, "agent_token");
+    const openingConnectionToken = agentIdOf(opened.stdout, "connection_token");
+    expect(openingThreadId).toBe(openingId);
+    expect(
+      (
+        await readAgentExchange({
+          store: runtime.store,
+          sessionId: runtime.sessionId,
+          planId: runtime.planId,
+        })
+      ).requests.find((request) => request.requestId === openingId),
+    ).toMatchObject({
+      kind: "push",
+      origin: "prompt",
+      body: "Tighten the delivery boundary",
+      threadId: openingThreadId,
+      claimGeneration: 1,
+      claimedModel: { name: "live-push-test-model" },
+    });
+    const unintendedCandidate = PLAN.replace(
+      "The terminal response publishes the candidate atomically.",
+      "A non-changed push must not publish this candidate.",
+    );
+    await writeFile(
+      candidatePlanOf(opened.stdout),
+      unintendedCandidate,
+      "utf8",
+    );
+    await writeFile(
+      responseDraftOf(opened.stdout),
+      JSON.stringify({
+        requestId: openingId,
+        outcomes: [
+          {
+            commentId: openingThreadId,
+            state: "answered",
+            message: "No plan revision was needed.",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const refusedEdit = await runRefusedAgentCli([
+      "respond",
+      planPath,
+      responseDraftOf(opened.stdout),
+      "--agent",
+      openingAgentToken,
+    ]);
+    expect(`${refusedEdit.stdout}\n${refusedEdit.stderr}`).toContain(
+      "outcome cannot revise the plan source",
+    );
+    await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
+    await expect(
+      readCommittedRevision({ store: runtime.store, requestId: openingId }),
+    ).resolves.toBeUndefined();
+    await writeFile(candidatePlanOf(opened.stdout), PLAN, "utf8");
+    await settlePushWithoutChanges({ planPath, stdout: opened.stdout });
+    await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
+    await expect(
+      readCommittedRevision({ store: runtime.store, requestId: openingId }),
+    ).resolves.toBeUndefined();
+
+    const continued = await runAgentCli([
+      "push",
+      planPath,
+      "--about",
+      "Also clarified the delivery wording",
+      "--thread",
+      openingThreadId,
+      "--agent",
+      openingAgentToken,
+      "--connection",
+      openingConnectionToken,
+    ]);
+    expect(agentIdOf(continued.stdout, "threadId")).toBe(openingThreadId);
+    expect(continued.stdout).toContain("opened: false");
+    const continuationId = agentIdOf(continued.stdout, "requestId");
+    expect(
+      (
+        await readAgentExchange({
+          store: runtime.store,
+          sessionId: runtime.sessionId,
+          planId: runtime.planId,
+        })
+      ).requests.find((request) => request.requestId === continuationId),
+    ).toMatchObject({
+      kind: "push",
+      origin: "about",
+      body: "Also clarified the delivery wording",
+      threadId: openingThreadId,
+    });
+    const continuedCandidate = PLAN.replace(
+      "The terminal response publishes the candidate atomically.",
+      "The pushed response publishes the candidate atomically.",
+    );
+    await writeFile(
+      candidatePlanOf(continued.stdout),
+      continuedCandidate,
+      "utf8",
+    );
+    await writeFile(
+      responseDraftOf(continued.stdout),
+      JSON.stringify({
+        requestId: continuationId,
+        outcomes: [
+          {
+            commentId: openingThreadId,
+            state: "changed",
+            message: "Clarified the pushed publication boundary.",
+            changeTargets: ["section/delivery-boundary/paragraph-1"],
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await runAgentCli([
+      "respond",
+      planPath,
+      responseDraftOf(continued.stdout),
+      "--agent",
+      agentIdOf(continued.stdout, "agent_token"),
+    ]);
+    await expect(readFile(planPath, "utf8")).resolves.toBe(continuedCandidate);
+    await expect(
+      readCommittedRevision({
+        store: runtime.store,
+        requestId: continuationId,
+      }),
+    ).resolves.toMatchObject({ provenance: "push" });
+    const unknownThread = "9999999999999999";
+    const unknown = await runRefusedAgentCli([
+      "push",
+      planPath,
+      "--about",
+      "Continue a missing thread",
+      "--thread",
+      unknownThread,
+    ]);
+    expect(`${unknown.stdout}\n${unknown.stderr}`).toContain(
+      `No pushed thread ${unknownThread} exists on this plan`,
+    );
+    await writeResolvedCommentIds({
+      store: runtime.store,
+      ids: [openingThreadId],
+    });
+    const resolved = await runRefusedAgentCli([
+      "push",
+      planPath,
+      "--about",
+      "Continue a resolved thread",
+      "--thread",
+      openingThreadId,
+    ]);
+    expect(`${resolved.stdout}\n${resolved.stderr}`).toContain(
+      "Unresolve this thread before sending new work.",
+    );
+    await cancelRequest(page, "1111111111111111");
+  } finally {
+    if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
+    else process.env.BIG_PLAN_AGENT_MODEL = previousModel;
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should fence live and open pushes and keep a displaced candidate private", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-fence-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    const opened = await test.step("open the first push", () =>
+      runAgentCli([
+        "push",
+        planPath,
+        "--about",
+        "Prepare an isolated revision",
+      ]));
+    const requestId = agentIdOf(opened.stdout, "requestId");
+    const agentToken = agentIdOf(opened.stdout, "agent_token");
+    const candidatePath = candidatePlanOf(opened.stdout);
+    const responsePath = responseDraftOf(opened.stdout);
+    const privateRevision = PLAN.replace(
+      "The terminal response publishes the candidate atomically.",
+      "The displaced response must stay private.",
+    );
+    await writeFile(candidatePath, privateRevision, "utf8");
+
+    const ownClaim = await test.step("refuse the holder's second push", () =>
+      runRefusedAgentCli([
+        "push",
+        planPath,
+        "--about",
+        "Try to stack another revision",
+        "--agent",
+        agentToken,
+      ]));
+    expect(`${ownClaim.stdout}\n${ownClaim.stderr}`).toContain(
+      "This agent is mid-answer on another request",
+    );
+    const otherClaim = await test.step("refuse another live claimant", () =>
+      runRefusedAgentCli([
+        "push",
+        planPath,
+        "--about",
+        "Try from another session",
+      ]));
+    expect(`${otherClaim.stdout}\n${otherClaim.stderr}`).toContain(
+      "Another agent session is working on this plan",
+    );
+
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const stored = exchange.requests.find(
+      (request) => request.requestId === requestId,
+    );
+    if (stored === undefined)
+      throw new Error("The push request was not stored");
+    await writeAgentRequestValue({
+      store: runtime.store,
+      requestId,
+      value: { ...stored, claimExpiresAtMs: Date.now() - 1 },
+    });
+    const stacked = await test.step("refuse a second open push", () =>
+      runRefusedAgentCli([
+        "push",
+        planPath,
+        "--about",
+        "Try after the first claim lapses",
+      ]));
+    expect(`${stacked.stdout}\n${stacked.stderr}`).toContain(
+      `This agent already holds an open push (thread ${requestId})`,
+    );
+
+    const takeoverToken = "2222222222222222";
+    const takeover = await test.step("take over the lapsed push", () =>
+      claimAgentRequest({
+        store: runtime.store,
+        activeSessionId: runtime.sessionId,
+        requestId,
+        claimedBy: takeoverToken,
+        baselineSnapshot: deriveSnapshotDigest(PLAN),
+        now: new Date().toISOString(),
+      }));
+    expect(takeover).toMatchObject({
+      requestId,
+      claimedBy: takeoverToken,
+      claimGeneration: 2,
+    });
+    await writeFile(
+      responsePath,
+      JSON.stringify({
+        requestId,
+        outcomes: [
+          {
+            commentId: requestId,
+            state: "changed",
+            message: "Publish the displaced revision.",
+            changeTargets: ["section/delivery-boundary/paragraph-1"],
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const displaced = await test.step("refuse the displaced response", () =>
+      runRefusedAgentCli([
+        "respond",
+        planPath,
+        responsePath,
+        "--agent",
+        agentToken,
+      ]));
+    expect(`${displaced.stdout}\n${displaced.stderr}`).toContain(
+      "this claim generation can no longer publish",
+    );
+    await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
+    await cancelRequest(page, requestId);
+    await expect(
+      access(join(runtime.store.agentMutationDirectory, requestId)),
+    ).rejects.toThrow();
+
+    const released = await runAgentCli([
+      "push",
+      planPath,
+      "--about",
+      "The canceled push released the plan",
+    ]);
+    await cancelRequest(page, agentIdOf(released.stdout, "requestId"));
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should refuse a push whose source moved and preserve the moving revision", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-moved-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    const opened = await runAgentCli([
+      "push",
+      planPath,
+      "--about",
+      "Revise the delivery boundary",
+    ]);
+    const requestId = agentIdOf(opened.stdout, "requestId");
+    const agentToken = agentIdOf(opened.stdout, "agent_token");
+    const candidatePath = candidatePlanOf(opened.stdout);
+    const responsePath = responseDraftOf(opened.stdout);
+    const candidate = PLAN.replace(
+      "The terminal response publishes the candidate atomically.",
+      "The push response publishes the candidate atomically.",
+    );
+    await writeFile(candidatePath, candidate, "utf8");
+    const moved = PLAN.replace(
+      "The reviewer keeps reading while an agent prepares a revision.",
+      "The reviewer moved the plan while the agent prepared a revision.",
+    );
+    await writeFile(planPath, moved, "utf8");
+    await writeFile(
+      responsePath,
+      JSON.stringify({
+        requestId,
+        outcomes: [
+          {
+            commentId: requestId,
+            state: "changed",
+            message: "Updated the delivery boundary.",
+            changeTargets: ["section/delivery-boundary/paragraph-1"],
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const refused = await runRefusedAgentCli([
+      "respond",
+      planPath,
+      responsePath,
+      "--agent",
+      agentToken,
+    ]);
+    expect(`${refused.stdout}\n${refused.stderr}`).toContain("SOURCE_MOVED");
+    await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
+    await cancelRequest(page, requestId);
+  } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }

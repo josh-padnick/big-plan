@@ -23,7 +23,7 @@ describe("agent command adapter", () => {
     });
   });
 
-  it.each(["next", "note", "respond"])(
+  it.each(["next", "push", "note", "respond"])(
     "should reject the bare reserved %s action",
     async (action) => {
       await expect(agentCommand([action])).rejects.toMatchObject({
@@ -32,6 +32,44 @@ describe("agent command adapter", () => {
       });
     },
   );
+
+  it.each([
+    {
+      label: "neither wording flag",
+      args: ["push", "plan.mdx", "--thread", "1111111111111111"],
+    },
+    {
+      label: "both wording flags",
+      args: [
+        "push",
+        "plan.mdx",
+        "--prompt",
+        "Reviewer words",
+        "--about",
+        "Agent words",
+      ],
+    },
+    {
+      label: "an invalid thread id",
+      args: [
+        "push",
+        "plan.mdx",
+        "--about",
+        "Agent words",
+        "--thread",
+        "not-a-thread",
+      ],
+    },
+    {
+      label: "a repeated wording flag",
+      args: ["push", "plan.mdx", "--about", "First", "--about", "Second"],
+    },
+  ])("should reject a push with $label", async ({ args }) => {
+    await expect(agentCommand(args)).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+      message: expect.stringContaining("--prompt"),
+    });
+  });
 
   // Without the token these two cannot say which agent process is speaking,
   // so accepting them untokened would quietly reopen the double-claim they
