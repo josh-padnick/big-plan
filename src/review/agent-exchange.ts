@@ -1002,7 +1002,7 @@ const commentsFromRequests = (
         comments.set(entry.id, entry);
       }
     }
-    if (request.kind === "push" && request.threadId === request.requestId) {
+    if (request.kind === "push" && !comments.has(request.threadId)) {
       comments.set(request.threadId, {
         id: request.threadId,
         body: request.body,

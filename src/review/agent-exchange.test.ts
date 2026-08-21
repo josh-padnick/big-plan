@@ -544,8 +544,10 @@ describe("agent exchange filesystem", () => {
     await writeFile(planPath, before);
     const store = reviewStoreFor({ planPath, planId });
     await prepareStore(store);
+    const threadId = "7777777777777777";
     const opener = validateAgentRequest({
       ...pushRequest(),
+      threadId,
       baselineSnapshot: deriveSnapshotDigest(before),
       claimedAt: "2026-08-02T12:00:01.000Z",
       claimedBy: agentSessionId,
@@ -562,7 +564,7 @@ describe("agent exchange filesystem", () => {
       premiseSnapshot: opener.premiseSnapshot,
       createdAt: "2026-08-02T12:01:00.000Z",
       body: "Also clarify why the publish is atomic.",
-      commentId: opener.threadId,
+      commentId: threadId,
     });
     await writeAgentRequest({ store, request: reply });
 
@@ -580,7 +582,7 @@ describe("agent exchange filesystem", () => {
           requestId: claimed.requestId,
           outcomes: [
             {
-              commentId: opener.threadId,
+              commentId: threadId,
               state: "answered",
               message: "The guarded rename is the publication point.",
             },

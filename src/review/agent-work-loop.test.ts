@@ -208,25 +208,25 @@ describe("agent work loop", () => {
     await writeFile(planPath, source);
     const pushRuntime = await startReviewRuntime({ planPath });
     const requestId = "dddddddddddddddd";
-    await writeAgentRequest({
-      store: pushRuntime.store,
-      request: validateAgentRequest({
-        version: 3,
-        requestId,
-        sessionId: pushRuntime.sessionId,
-        planId: pushRuntime.planId,
-        premiseSnapshot: deriveSnapshotDigest(source),
-        createdAt: "2026-08-02T12:00:00.000Z",
-        attachmentManifest: [],
-        attachments: [],
-        kind: "push",
-        origin: "about",
-        body: "Tightened the retry boundary.",
-        threadId: requestId,
-      }),
-    });
 
     try {
+      await writeAgentRequest({
+        store: pushRuntime.store,
+        request: validateAgentRequest({
+          version: 3,
+          requestId,
+          sessionId: pushRuntime.sessionId,
+          planId: pushRuntime.planId,
+          premiseSnapshot: deriveSnapshotDigest(source),
+          createdAt: "2026-08-02T12:00:00.000Z",
+          attachmentManifest: [],
+          attachments: [],
+          kind: "push",
+          origin: "about",
+          body: "Tightened the retry boundary.",
+          threadId: requestId,
+        }),
+      });
       const result = await runAgentWorkLoopAction({
         kind: "next",
         planPath,

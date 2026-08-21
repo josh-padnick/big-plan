@@ -900,14 +900,15 @@ const requestTargetsPushedThread = async ({
 }): Promise<boolean> => {
   if (request.kind === "push") return true;
   if (request.kind !== "reply") return false;
-  try {
-    const opener = validateAgentRequest(
-      await readAgentRequestValue({ store, requestId: request.commentId }),
-    );
-    return opener.kind === "push" && opener.threadId === request.commentId;
-  } catch {
-    return false;
-  }
+  const requests = await readValidatedAgentRequests({
+    store,
+    sessionId: request.sessionId,
+    planId: request.planId,
+  });
+  return requests.some(
+    (candidate) =>
+      candidate.kind === "push" && candidate.threadId === request.commentId,
+  );
 };
 
 /** Describes one committed revision to the Change Engine's change sets. */
