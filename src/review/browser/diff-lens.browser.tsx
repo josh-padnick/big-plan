@@ -586,13 +586,19 @@ const SnapshotSideContent = ({
 };
 
 /**
- * Replays a component's own diff view in the historical archive, which is the
- * one place a change is shown without being in the plan. The view's only
- * review identity is what `inheritProposedRootIdentity` copied onto its root,
- * so removing it there is complete rather than defensive: a block address the
- * plan still holds must never appear twice in one document.
+ * Replays a component's own diff view where the lens shows a change beside the
+ * plan rather than in place of it. Two paths reach here: the historical
+ * archive, where the block is gone, and a superseded change, where the block
+ * survives but the lens hides it and stands in front of it, because a revision
+ * the plan has already moved past is evidence rather than a live question.
+ *
+ * Both paths need the same thing. The view's only review identity is what
+ * `inheritProposedRootIdentity` copied onto its root, so removing it there is
+ * complete rather than defensive: an address the plan still holds - which the
+ * superseded path proves is not hypothetical - must never appear twice in one
+ * document. Held inert for the same reason, since neither path is answerable.
  */
-const ArchivedComponentDiff = ({ view }: { readonly view: string }) => {
+const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
   const hostRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const host = hostRef.current;
@@ -651,9 +657,9 @@ export const DiffLensContent = ({
   );
   // A picture stays inside the stacked Was/Now panels beside the words that
   // changed with it. A component root brings its own complete diff view, so it
-  // takes the lens over; this only ever happens in the historical archive,
-  // because a component whose block is still in the plan replaces that block
-  // instead of being shown beside it.
+  // takes the lens over. A change the plan still holds never arrives here at
+  // all - it replaces its own block instead - so reaching this point means the
+  // change is archived or superseded, and the replay handles both.
   const componentLocation = visibleLocations.find(
     (location) => location.view !== undefined,
   );
@@ -682,7 +688,7 @@ export const DiffLensContent = ({
         <em className="text-2xs text-muted">{place.note}</em>
       </div>
       {componentLocation?.view !== undefined ? (
-        <ArchivedComponentDiff view={componentLocation.view} />
+        <ReplayedComponentDiff view={componentLocation.view} />
       ) : canUseWordRuns && only !== undefined ? (
         only.kind === "list" ? (
           <ListRunContent runs={only.runs} location={only} />
