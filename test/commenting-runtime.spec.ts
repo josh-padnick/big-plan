@@ -5696,12 +5696,38 @@ The release gets a full soak.
         "Accept this change before answering this decision.",
       );
 
-      await page.evaluate(() => {
+      const sideToggle = diff.locator("[data-component-diff-toggle]");
+      await diff.locator('[data-component-diff-choice="proposed"]').focus();
+      await page.keyboard.press("ArrowLeft");
+      await expect(
+        diff.locator('[data-component-diff-choice="baseline"]'),
+      ).toBeChecked();
+      await expect(sideToggle).toHaveCSS("outline-style", "solid");
+      await expect(sideToggle).toHaveCSS("outline-width", "2px");
+      await page.keyboard.press("ArrowRight");
+
+      await page.evaluate((original) => {
         const article = document.querySelector("article");
         if (article === null) throw new Error("Review article is missing");
-        article.replaceWith(article.cloneNode(true));
+        const refreshedArticle = article.cloneNode(true);
+        const refreshedDecision = original.cloneNode(true);
+        if (
+          !(refreshedArticle instanceof HTMLElement) ||
+          !(refreshedDecision instanceof HTMLElement)
+        ) {
+          throw new Error("Review article refresh could not be cloned");
+        }
+        refreshedDecision.dataset.refreshProof = "";
+        const currentDiff = refreshedArticle.querySelector(
+          "[data-component-diff]",
+        );
+        if (currentDiff === null) {
+          throw new Error("Component diff is missing from refreshed article");
+        }
+        currentDiff.replaceWith(refreshedDecision);
+        article.replaceWith(refreshedArticle);
         document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
-      });
+      }, originalDecision);
       const reinstalled = page.locator('[data-component-diff-side="proposed"]');
       await expect(
         reinstalled.getByRole("button", { name: "Confirm choice" }),
@@ -5729,16 +5755,15 @@ The release gets a full soak.
       await expect(proposed).toBeVisible();
     });
 
-    await test.step("restore the untouched article when review exits", async () => {
+    await test.step("restore the refreshed article root when review exits", async () => {
       await page.getByRole("button", { name: "Exit review" }).first().click();
       await expect(page.locator("[data-component-diff]")).toHaveCount(0);
-      expect(
-        await originalDecision?.evaluate(
-          (node) =>
-            node.isConnected &&
-            node === document.querySelector('[data-block-kind="decision"]'),
-        ),
-      ).toBe(true);
+      expect(await originalDecision?.evaluate((node) => node.isConnected)).toBe(
+        false,
+      );
+      await expect(
+        page.locator('[data-block-kind="decision"][data-refresh-proof]'),
+      ).toHaveCount(1);
     });
 
     await test.step("archive a missing Decision without publishing its identity", async () => {

@@ -39,6 +39,14 @@
     background: var(--diff-add-bg);
   }
 
+  /* Override invariant: keyboard focus on either visually hidden radio beats
+     the toggle's resting border treatment. */
+  [data-component-diff]:has([data-component-diff-choice]:focus-visible)
+    [data-component-diff-toggle] {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
+  }
+
   /* Override invariant: the selected side beats both side panels' resting
      rendered state. */
   [data-component-diff-choice="baseline"]:not(:checked)

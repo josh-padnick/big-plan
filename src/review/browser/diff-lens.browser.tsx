@@ -5,6 +5,7 @@
 import { createPortal } from "react-dom";
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1292,9 +1293,11 @@ const ComponentDiffReplacement = ({
 }) => {
   const replacementRef = useRef<HTMLElement | null>(null);
   const locationRef = useRef(location);
-  locationRef.current = location;
   const acceptedRef = useRef(isAccepted);
-  acceptedRef.current = isAccepted;
+  useLayoutEffect(() => {
+    locationRef.current = location;
+    acceptedRef.current = isAccepted;
+  }, [isAccepted, location]);
   useEffect(() => {
     if (location.view === undefined) return;
     let original: HTMLElement | null = null;
@@ -1314,7 +1317,7 @@ const ComponentDiffReplacement = ({
         isAccepted: acceptedRef.current,
       });
       if (anchor.placement === "replace") {
-        original ??= anchor.found;
+        original = anchor.found;
         replacePlanDom({ target: anchor.found, replacement: next });
       } else {
         if (anchor.placement === "before") anchor.found.before(next);
