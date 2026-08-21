@@ -795,6 +795,7 @@ export const mintAgentPush = async ({
                   throw new AggregateError(
                     [error, ...cleanupFailures],
                     "The push request failed and could not be rolled back",
+                    { cause: error },
                   );
                 }
                 throw error;

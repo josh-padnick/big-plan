@@ -263,11 +263,11 @@ The reviewer can also take an agent off a review from **Agent Status**, and ever
 The disconnect names exactly one agent, by the connection token of the agent holding the plan's live claim, or by the connected agent's own connection token when no claim is live.
 It names a connection rather than a pickup because disconnecting releases that pickup immediately, so it reaches that agent whether it is mid-answer or between commands, and it reaches nobody else - including a second agent waiting beside it.
 `agent next` reports it as an ordinary end - `ended` and `disconnected` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
-`agent note` and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
-The answer the disconnected session was drafting is dropped; the reviewer's message goes back in the queue for whichever agent connects next.
+`agent push`, `agent note`, and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
+The answer the disconnected session was drafting is dropped, its private stage is removed, and its open message can be picked up by whichever agent connects next.
 
 `agent respond` publishes under one plan-mutation lock: it re-proves the claim, requires the plan to still carry the revision the candidate started from, and swaps the candidate in with one atomic rename.
-A response that finds the plan changed underneath it is refused rather than applied, so the agent takes the work again from the current plan.
+A response that finds the plan changed underneath it is refused with the `SOURCE_MOVED` code rather than applied, so the agent takes the work again from the current plan.
 If the process dies mid-publish, the next `agent` command and the next `big-plan review` settle the interrupted commit before serving anything: the answer completes if the swap won, the request stays open if it did not, and a plan matching neither revision stops agent edits with a conflict naming both digests instead of overwriting the file.
 
 Export any of these environment variables before running `agent next`, `agent
