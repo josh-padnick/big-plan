@@ -50,8 +50,6 @@ ${Array.from(
 ).join("\n\n")}
 `;
 
-test.describe.configure({ mode: "serial" });
-
 const candidatePlanOf = (stdout: string): string => {
   const candidate = /candidate_plan: (\S+)/u.exec(stdout)?.[1];
   if (candidate === undefined) {
@@ -306,6 +304,44 @@ test("should mint, continue, and settle pushes while disclosing queued reviewer 
       claimGeneration: 1,
       claimedModel: { name: "live-push-test-model" },
     });
+    const unintendedCandidate = PLAN.replace(
+      "The terminal response publishes the candidate atomically.",
+      "A non-changed push must not publish this candidate.",
+    );
+    await writeFile(
+      candidatePlanOf(opened.stdout),
+      unintendedCandidate,
+      "utf8",
+    );
+    await writeFile(
+      responseDraftOf(opened.stdout),
+      JSON.stringify({
+        requestId: openingId,
+        outcomes: [
+          {
+            commentId: openingThreadId,
+            state: "answered",
+            message: "No plan revision was needed.",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const refusedEdit = await runRefusedAgentCli([
+      "respond",
+      planPath,
+      responseDraftOf(opened.stdout),
+      "--agent",
+      openingAgentToken,
+    ]);
+    expect(`${refusedEdit.stdout}\n${refusedEdit.stderr}`).toContain(
+      "outcome cannot revise the plan source",
+    );
+    await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
+    await expect(
+      readCommittedRevision({ store: runtime.store, requestId: openingId }),
+    ).resolves.toBeUndefined();
+    await writeFile(candidatePlanOf(opened.stdout), PLAN, "utf8");
     await settlePushWithoutChanges({ planPath, stdout: opened.stdout });
     await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
     await expect(

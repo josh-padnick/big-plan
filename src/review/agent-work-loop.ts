@@ -238,6 +238,25 @@ const pushWork = async ({
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return fail(error.message);
   }
+  if (
+    (await acknowledgeDisconnect({
+      store: session.store,
+      sessionId: session.sessionId,
+      writerId,
+      requestId: minted.request.requestId,
+    })) !== undefined
+  ) {
+    await releaseClaimsHeldBy({
+      store: session.store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+      claimedBy,
+      step: "Claim released when the reviewer disconnected the agent",
+      detail:
+        "The agent was disconnected as it opened this push, so the push was dropped and the plan released",
+    }).catch(() => undefined);
+    failDisconnected();
+  }
   await writeAgentHeartbeat({
     store: session.store,
     sessionId: session.sessionId,

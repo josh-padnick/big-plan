@@ -641,11 +641,6 @@ export const mintAgentPush = async ({
         requestId,
         change: async (lockedStore) => {
           const nowMs = readClock(clock);
-          const requests = await readValidatedAgentRequests({
-            store: lockedStore,
-            sessionId: activeSessionId,
-            planId,
-          });
           await assertPlanIsFree({
             store: lockedStore,
             activeSessionId,
@@ -654,34 +649,39 @@ export const mintAgentPush = async ({
             claimedBy,
             nowMs,
           });
-          const openPush = requests.find(
-            (candidate): candidate is AgentPushRequest =>
-              candidate.kind === "push" &&
-              candidate.answeredAt === undefined &&
-              candidate.canceledAt === undefined,
-          );
-          if (openPush !== undefined) {
-            throw new AgentExchangeRejected(
-              `This agent already holds an open push (thread ${openPush.threadId}); respond to it, or ask the reviewer to cancel it`,
-            );
-          }
-          const continuedThread =
-            threadId === undefined
-              ? undefined
-              : requests.find(
-                  (candidate) =>
-                    candidate.kind === "push" &&
-                    candidate.requestId === threadId &&
-                    candidate.threadId === threadId,
-                );
-          if (threadId !== undefined && continuedThread === undefined) {
-            throw new AgentExchangeRejected(
-              `No pushed thread ${threadId} exists on this plan`,
-            );
-          }
           return withResolvedCommentLock({
             store: lockedStore,
             change: async () => {
+              const requests = await readValidatedAgentRequests({
+                store: lockedStore,
+                sessionId: activeSessionId,
+                planId,
+              });
+              const openPush = requests.find(
+                (candidate): candidate is AgentPushRequest =>
+                  candidate.kind === "push" &&
+                  candidate.answeredAt === undefined &&
+                  candidate.canceledAt === undefined,
+              );
+              if (openPush !== undefined) {
+                throw new AgentExchangeRejected(
+                  `This agent already holds an open push (thread ${openPush.threadId}); respond to it, or ask the reviewer to cancel it`,
+                );
+              }
+              const continuedThread =
+                threadId === undefined
+                  ? undefined
+                  : requests.find(
+                      (candidate) =>
+                        candidate.kind === "push" &&
+                        candidate.requestId === threadId &&
+                        candidate.threadId === threadId,
+                    );
+              if (threadId !== undefined && continuedThread === undefined) {
+                throw new AgentExchangeRejected(
+                  `No pushed thread ${threadId} exists on this plan`,
+                );
+              }
               if (threadId !== undefined) {
                 await assertCommentsAreUnresolved({
                   store: lockedStore,

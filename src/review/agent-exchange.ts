@@ -858,6 +858,15 @@ export const validateAgentResponseDraft = ({
       "The response must contain exactly one outcome for every requested comment",
     );
   }
+  if (
+    request.kind === "push" &&
+    outcomes.every((entry) => entry.state !== "changed") &&
+    currentSnapshot !== requestBaselineSnapshot(request)
+  ) {
+    throw new AgentExchangeRejected(
+      'A push with no "changed" outcome cannot revise the plan source',
+    );
+  }
   return { ...base, kind: request.kind, outcomes };
 };
 
