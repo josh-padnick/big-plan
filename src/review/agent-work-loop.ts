@@ -1257,15 +1257,21 @@ const nextWork = async ({
         request left under a claim nobody will answer waits out its whole lease.
         */
         if (await wasDisconnected()) {
-          await releaseClaimsHeldBy({
-            store: session.store,
-            sessionId: session.sessionId,
-            planId: session.planId,
-            claimedBy,
-            step: "Claim released when the reviewer disconnected the agent",
-            detail:
-              "The agent was disconnected as it picked this up, so the message went back in the queue for the next agent",
-          }).catch(() => undefined);
+          try {
+            await releaseClaimsHeldBy({
+              store: session.store,
+              sessionId: session.sessionId,
+              planId: session.planId,
+              claimedBy,
+              step: "Claim released when the reviewer disconnected the agent",
+              detail:
+                "The agent was disconnected as it picked this up, so the message went back in the queue for the next agent",
+            });
+          } catch (releaseError: unknown) {
+            return fail(
+              `Cannot release the claim after this agent was disconnected: ${String(releaseError)}`,
+            );
+          }
           return disconnectedResult();
         }
       } catch (error: unknown) {

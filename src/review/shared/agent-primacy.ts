@@ -25,8 +25,8 @@ import type { AgentModelIdentity } from "./agent-model.js";
  * What an attached agent is allowed to do.
  *
  * A primary owns the plan's work: it may claim a request, renew that claim,
- * and publish. An observer is attached and reading - the plan, the
- * conversation, request state - and may do none of those things. The role is
+ * and publish. An observer may read the plan, is handed neither the reviewer's
+ * comments nor request state, and may not claim, renew, or publish. The role is
  * the whole permission model, so a reader of this type has read the rule.
  */
 export type AgentRole = "primary" | "observer";

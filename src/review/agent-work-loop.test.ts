@@ -754,6 +754,76 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should report a failed release after a post-claim disconnect", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-post-claim-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA disconnect succeeds only after release.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const requestId = "adad1212adad1212";
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Will the disconnect wait for release?",
+      }),
+    });
+    const writeRequest = reviewStore.writeAgentRequestValue;
+    let writes = 0;
+    const requestWrites = vi
+      .spyOn(reviewStore, "writeAgentRequestValue")
+      .mockImplementation(async (options) => {
+        writes += 1;
+        if (writes > 1) throw new Error("post-claim release failed");
+        await writeRequest(options);
+        const claimed = (
+          await readAgentExchange({
+            store: review.store,
+            sessionId: review.sessionId,
+            planId: review.planId,
+          })
+        ).requests.find((request) => request.requestId === requestId);
+        if (claimed?.claimedByConnection === undefined) {
+          throw new Error("The claimed request did not name its connection");
+        }
+        await reviewStore.writeAgentDisconnectRequest({
+          store: review.store,
+          directive: {
+            writerId: claimed.claimedByConnection,
+            requestedAtMs: Date.now(),
+          },
+        });
+      });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).rejects.toThrow(/Cannot release.*post-claim release failed/iu);
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.requests[0]?.claimedBy).toEqual(expect.any(String));
+    } finally {
+      requestWrites.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should execute the returned note and respond commands", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-commands-"));
     const planPath = join(directory, "plan.mdx");
