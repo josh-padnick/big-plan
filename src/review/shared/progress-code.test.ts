@@ -19,6 +19,7 @@ const EXPECTED_OWNERS = {
   "request-canceled": "reviewer",
   "claim-released": "reviewer",
   "agent-disconnect-requested": "reviewer",
+  "agent-primacy-answered": "reviewer",
   "push-opened": "agent",
   "request-picked-up": "agent",
   "request-reclaimed": "agent",

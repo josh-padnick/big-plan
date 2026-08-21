@@ -266,7 +266,7 @@ export const agentCommand = async (
             ? "AGENT_DISCONNECTED"
             : error.code === "primacy-lost"
               ? "PRIMACY_LOST"
-             : "INVALID_INPUT";
+              : "INVALID_INPUT";
     throw new AxiError(
       error.message,
       code,

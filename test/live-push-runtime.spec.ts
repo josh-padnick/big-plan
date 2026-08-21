@@ -77,6 +77,7 @@ const settlePushWithoutChanges = async ({
   const requestId = agentIdOf(stdout, "requestId");
   const threadId = agentIdOf(stdout, "threadId");
   const agentToken = agentIdOf(stdout, "agent_token");
+  const connectionToken = agentIdOf(stdout, "connection_token");
   const responsePath = responseDraftOf(stdout);
   await writeFile(
     responsePath,
@@ -92,7 +93,15 @@ const settlePushWithoutChanges = async ({
     }),
     "utf8",
   );
-  await runAgentCli(["respond", planPath, responsePath, "--agent", agentToken]);
+  await runAgentCli([
+    "respond",
+    planPath,
+    responsePath,
+    "--agent",
+    agentToken,
+    "--connection",
+    connectionToken,
+  ]);
 };
 
 /** Cancels one request through the unchanged reviewer HTTP route. */
@@ -423,6 +432,10 @@ test("should mint, continue, and settle pushes while disclosing queued reviewer 
       "Continue a missing thread",
       "--thread",
       unknownThread,
+      "--agent",
+      openingAgentToken,
+      "--connection",
+      openingConnectionToken,
     ]);
     expect(`${unknown.stdout}\n${unknown.stderr}`).toContain(
       `No pushed thread ${unknownThread} exists on this plan`,
@@ -438,6 +451,10 @@ test("should mint, continue, and settle pushes while disclosing queued reviewer 
       "Continue a resolved thread",
       "--thread",
       openingThreadId,
+      "--agent",
+      openingAgentToken,
+      "--connection",
+      openingConnectionToken,
     ]);
     expect(`${resolved.stdout}\n${resolved.stderr}`).toContain(
       "Unresolve this thread before sending new work.",
@@ -470,6 +487,7 @@ test("should fence live and open pushes and keep a displaced candidate private",
       ]));
     const requestId = agentIdOf(opened.stdout, "requestId");
     const agentToken = agentIdOf(opened.stdout, "agent_token");
+    const connectionToken = agentIdOf(opened.stdout, "connection_token");
     const candidatePath = candidatePlanOf(opened.stdout);
     const responsePath = responseDraftOf(opened.stdout);
     const privateRevision = PLAN.replace(
@@ -498,7 +516,7 @@ test("should fence live and open pushes and keep a displaced candidate private",
         "Try from another session",
       ]));
     expect(`${otherClaim.stdout}\n${otherClaim.stderr}`).toContain(
-      "Another agent session is working on this plan",
+      "PRIMACY_LOST",
     );
 
     const exchange = await readAgentExchange({
@@ -522,6 +540,10 @@ test("should fence live and open pushes and keep a displaced candidate private",
         planPath,
         "--about",
         "Try after the first claim lapses",
+        "--agent",
+        agentToken,
+        "--connection",
+        connectionToken,
       ]));
     expect(`${stacked.stdout}\n${stacked.stderr}`).toContain(
       `This agent already holds an open push (thread ${requestId})`,
@@ -579,6 +601,10 @@ test("should fence live and open pushes and keep a displaced candidate private",
       planPath,
       "--about",
       "The canceled push released the plan",
+      "--agent",
+      agentToken,
+      "--connection",
+      connectionToken,
     ]);
     await cancelRequest(page, agentIdOf(released.stdout, "requestId"));
   } finally {

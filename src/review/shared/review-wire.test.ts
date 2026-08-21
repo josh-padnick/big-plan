@@ -171,7 +171,7 @@ describe("review wire contract", () => {
 
   it("should round-trip push request and response vocabulary", () => {
     const threadId = "1".repeat(16);
-    const encoded = encodeAgentSnapshot({
+    const encoded = encodeSnapshot({
       currentSnapshot: "b".repeat(16),
       presence: { connected: true, state: "working" },
       requests: [

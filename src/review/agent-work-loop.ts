@@ -233,6 +233,27 @@ const pushWork = async ({
   }
   const claimedBy = agentToken ?? randomId(8);
   const writerId = connectionToken ?? randomId(8);
+  const registration = await attachAgentToRoster({
+    store: session.store,
+    sessionId: session.sessionId,
+    writerId,
+    ...(agentToken === undefined ? {} : { adoptClaimToken: agentToken }),
+    ...(model === undefined ? {} : { model }),
+  }).catch((error: unknown) => {
+    if (!(error instanceof AgentDisconnectedByReviewer)) throw error;
+    return failDisconnected();
+  });
+  if (registration.agent.role !== "primary") {
+    const primary = registration.agents.find(
+      (agent) => agent.role === "primary",
+    );
+    return failPrimacyLost(
+      primary === undefined
+        ? "no agent is currently the primary"
+        : agentModelLabel(primary),
+    );
+  }
+  const rosterWriterId = registration.agent.writerId;
   const requestId = randomId(8);
   let minted: Awaited<ReturnType<typeof mintAgentPush>>;
   try {
@@ -247,7 +268,7 @@ const pushWork = async ({
           planId: session.planId,
           requestId,
           claimedBy,
-          connectionToken: writerId,
+          connectionToken: rosterWriterId,
           ...(model === undefined ? {} : { model }),
           origin,
           body,
@@ -267,7 +288,7 @@ const pushWork = async ({
     (await acknowledgeDisconnect({
       store: session.store,
       sessionId: session.sessionId,
-      writerId,
+      writerId: rosterWriterId,
       requestId: minted.request.requestId,
     })) !== undefined
   ) {
@@ -282,12 +303,19 @@ const pushWork = async ({
     }).catch(() => undefined);
     failDisconnected();
   }
+  await recordAgentClaimToken({
+    store: session.store,
+    sessionId: session.sessionId,
+    writerId: rosterWriterId,
+    claimToken: claimedBy,
+    expectedRole: "primary",
+  }).catch(() => undefined);
   await writeAgentHeartbeat({
     store: session.store,
     sessionId: session.sessionId,
     state: "working",
     requestId: minted.request.requestId,
-    writerId,
+    writerId: rosterWriterId,
     ...(model === undefined ? {} : { model }),
   }).catch(() => undefined);
   const binPath = resolve(executablePath);
@@ -296,18 +324,18 @@ const pushWork = async ({
     planPath: session.planPath,
     responsePath: minted.stage.responseDraftPath,
     agentToken: claimedBy,
-    connectionToken: writerId,
+    connectionToken: rosterWriterId,
   });
   const noteCommand = agentNoteCommand({
     executablePath: binPath,
     planPath: session.planPath,
     agentToken: claimedBy,
-    connectionToken: writerId,
+    connectionToken: rosterWriterId,
   });
   const nextCommand = agentNextCommand({
     executablePath: binPath,
     planPath: session.planPath,
-    connectionToken: writerId,
+    connectionToken: rosterWriterId,
   });
   const historySnapshot = await readAgentCommentHistory({
     store: session.store,
@@ -335,7 +363,7 @@ const pushWork = async ({
     }),
     response_template: responseTemplateFor(minted.request),
     agent_token: claimedBy,
-    connection_token: writerId,
+    connection_token: rosterWriterId,
     thread: {
       threadId: minted.request.threadId,
       opened: minted.threadOpened,
