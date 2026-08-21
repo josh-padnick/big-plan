@@ -256,7 +256,7 @@ A thread its package heads reports its wait through that heading instead of repe
 
 **Agent Status** offers **Reconnect your agent**, holding the one prompt that starts a coding-agent session; a session that has never had an agent reads **Connect your agent** instead.
 An agent going quiet never hides that section, because it is the only place that prompt lives and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
-While an agent is attached that section instead reads **Connect another agent** and says what connecting one actually does: the new agent joins as an observer that can read the plan and the conversation and cannot answer you until you say so, and when it arrives you are asked who answers you from then on.
+While an agent is attached that section instead reads **Connect another agent** and says what connecting one actually does: the new agent joins as an observer that can read the plan, cannot read your comments, and cannot answer you unless you make it the primary, and when it arrives you are asked who answers you from then on.
 Nothing the current agent is working on is dropped unless you make the new agent the primary - because [the agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) serializes pickup and only the current holder may answer, so the agent holding the plan keeps answering until you move that.
 When you do move it, the displaced agent's unfinished edits stay in its own copy and reach your plan only if you tick the box that hands them over, and even then they arrive as reference rather than as something that publishes itself.
 Your comments are safe whichever you choose.
@@ -275,7 +275,7 @@ It is recorded when a second agent was waiting beside the one you disconnected t
 The review itself is free the moment you confirm, so a second agent can connect without waiting for the first one to notice.
 
 A second agent that connects does not take the review by arriving.
-It attaches as an observer - able to read the plan, the conversation, and the state of your requests, and able to answer nothing - and asks you whether it should be the one answering you.
+It attaches as an observer - able to read the plan, and nothing else: not your comments, not the state of your requests, and able to answer nothing - and asks you whether it should be the one answering you.
 **Agent Status** raises a hazard mark while that question is unanswered.
 The sidebar always leads with the agent status card, which carries a **Current primary** badge once a second agent is on the rail; under it sits the card that names the agent that asked, and a **Current observer** card for anyone else attached.
 Each agent gets exactly one card: the primary's is the status card at the top, so nobody is drawn twice.

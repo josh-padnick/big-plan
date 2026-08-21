@@ -311,7 +311,7 @@ preview banner.
 
 One agent answers a review at a time, and which one is the reviewer's decision rather than a race.
 The first connector to attach is the **primary**: it may claim work, report progress, and publish.
-Every connector after it attaches as an **observer**, which may read the plan, the conversation, and request state, and may do none of those three things.
+Every connector after it attaches as an **observer**, which may read the plan and may do none of those three things; the reviewer's comments and the state of their requests are not handed to an observer either.
 An observer never picks up queued work, however long the primary has been quiet, and it never becomes the primary by arriving.
 
 Arriving as an observer is itself the request to become the primary, so nothing extra has to be passed for the reviewer to be asked.
