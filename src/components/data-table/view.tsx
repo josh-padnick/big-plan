@@ -22,6 +22,7 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import type {
   CompiledDataTable,
   CompiledDataTableColumn,
+  CompiledDataTableRow,
   DataTableFit,
 } from "./compile.js";
 import type { TableCell } from "./parse-table-grid.js";
@@ -276,6 +277,42 @@ const FilterField = ({ id }: { readonly id: string }) => (
   </span>
 );
 
+const RowCells = ({
+  row,
+  columns,
+  kind,
+}: {
+  readonly row: CompiledDataTableRow;
+  readonly columns: ReadonlyArray<CompiledDataTableColumn>;
+  readonly kind: "data" | "summary";
+}) => (
+  <>
+    {row.cells.map((cell, cellIndex) => {
+      const column = columns[cellIndex];
+      return (
+        <td
+          key={cellIndex}
+          className={
+            kind === "summary"
+              ? "data-table-cell border-t border-b-0 border-edge-strong font-semibold data-[table-align=center]:text-center data-[table-align=right]:text-right"
+              : "data-table-cell data-[table-align=center]:text-center data-[table-align=right]:text-right"
+          }
+          data-commentable-kind="table-cell"
+          data-commentable-label={`${column?.label ?? `Column ${cellIndex + 1}`}: ${cell.text === "" ? "Empty" : cell.text}`}
+          data-table-column={cellIndex}
+          data-table-align={column?.align ?? "left"}
+          {...(column?.fit === undefined
+            ? {}
+            : { "data-table-cell-fit": column.fit })}
+          title={cell.text}
+        >
+          <CellContent cell={cell} />
+        </td>
+      );
+    })}
+  </>
+);
+
 /** Renders one DataTable as a figure: caption chrome over the complete grid. */
 export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
   <figure
@@ -319,7 +356,7 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
         already declares itself a scroll container, so the figure keeps one
         box instead of gaining a second bordered wrapper inside itself. */}
     <div
-      className="data-table-scroll"
+      className="data-table-scroll border-t-2 border-edge-strong"
       data-table-scroll-container=""
       {...{ [BODY_ATTRIBUTE]: "" }}
     >
@@ -343,28 +380,25 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
               }
               data-table-row={rowIndex}
             >
-              {row.cells.map((cell, cellIndex) => {
-                const column = model.columns[cellIndex];
-                return (
-                  <td
-                    key={cellIndex}
-                    className="data-table-cell data-[table-align=center]:text-center data-[table-align=right]:text-right"
-                    data-commentable-kind="table-cell"
-                    data-commentable-label={`${column?.label ?? `Column ${cellIndex + 1}`}: ${cell.text === "" ? "Empty" : cell.text}`}
-                    data-table-column={cellIndex}
-                    data-table-align={column?.align ?? "left"}
-                    {...(column?.fit === undefined
-                      ? {}
-                      : { "data-table-cell-fit": column.fit })}
-                    title={cell.text}
-                  >
-                    <CellContent cell={cell} />
-                  </td>
-                );
-              })}
+              <RowCells row={row} columns={model.columns} kind="data" />
             </tr>
           ))}
         </tbody>
+        {model.summaryRow === undefined ? null : (
+          <tfoot>
+            <tr
+              data-commentable-kind="table-row"
+              data-commentable-label={`Summary: ${model.summaryRow.cells[0]?.text || "Table summary"}`}
+              data-table-summary-row
+            >
+              <RowCells
+                row={model.summaryRow}
+                columns={model.columns}
+                kind="summary"
+              />
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
     {/* The first thing a reader sees when a filter finds nothing, so it says

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseCellSegments, parseTableGrid } from "./parse-table-grid.js";
+import {
+  parseCellSegments,
+  parseTableGrid,
+  parseTableRow,
+} from "./parse-table-grid.js";
 
 describe("parseTableGrid", () => {
   it("should read headers, rows, and alignments when given a padded GFM grid", () => {
@@ -125,5 +129,43 @@ describe("parseCellSegments", () => {
 
   it("should return one empty text segment when given an empty cell", () => {
     expect(parseCellSegments("")).toEqual([{ kind: "text", value: "" }]);
+  });
+});
+
+describe("parseTableRow", () => {
+  it("should parse one summary row against the table width", () => {
+    const parsed = parseTableRow({
+      source: "| Total | `13` |",
+      columnCount: 2,
+    });
+
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.row?.map((cell) => cell.text)).toEqual(["Total", "13"]);
+  });
+
+  it("should reject a summary row with the wrong number of cells", () => {
+    expect(
+      parseTableRow({ source: "| Total |", columnCount: 2 }).diagnostics,
+    ).toEqual([
+      {
+        line: 1,
+        message: "Row has 1 cells but the table has 2 columns",
+      },
+    ]);
+  });
+
+  it("should reject multiple rows because a table has one summary seat", () => {
+    expect(
+      parseTableRow({
+        source: "| Subtotal | 8 |\n| Total | 13 |",
+        columnCount: 2,
+      }).diagnostics,
+    ).toEqual([{ line: 2, message: "Expected exactly one pipe row" }]);
+  });
+
+  it("should reject text without a pipe delimiter in a single-column table", () => {
+    expect(
+      parseTableRow({ source: "Total", columnCount: 1 }).diagnostics,
+    ).toEqual([{ line: 1, message: "Expected exactly one pipe row" }]);
   });
 });

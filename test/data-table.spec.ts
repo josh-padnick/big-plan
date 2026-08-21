@@ -3,6 +3,98 @@
 
 import { expect, test } from "./fixtures";
 
+test("should keep the aggregate row pinned when sorting data rows", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (
+            window as typeof window & { copiedTableText?: string }
+          ).copiedTableText = text;
+        },
+      },
+    });
+  });
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    hasText: "Retry outcomes",
+  });
+  const attemptsSort = table.getByRole("button", {
+    name: "Attempts",
+    exact: true,
+  });
+
+  await attemptsSort.click();
+  await attemptsSort.click();
+
+  await expect(table.locator("[data-table-count]")).toHaveText("3 rows");
+  await expect(
+    table.locator("tbody > tr[data-table-row]").first().locator("td").first(),
+  ).toHaveText("Processor timeout");
+  await expect(
+    table.locator("table tr").last().locator("td").first(),
+  ).toHaveText("Total");
+  await expect(table.locator("tfoot > tr[data-table-summary-row]")).toHaveCount(
+    1,
+  );
+
+  const columnsButton = table.getByRole("button", { name: "Choose columns" });
+  await columnsButton.click();
+  const outcomeToggle = table.getByRole("menuitemcheckbox", {
+    name: "Outcome",
+  });
+  await outcomeToggle.click();
+  await expect(
+    table.locator('[data-table-summary-row] [data-table-column="2"]'),
+  ).toBeHidden();
+  await outcomeToggle.click();
+  await page.keyboard.press("Escape");
+
+  await attemptsSort.focus();
+  await attemptsSort.press("Alt+ArrowRight");
+  await expect
+    .poll(() =>
+      table
+        .locator("thead [data-table-column]")
+        .evaluateAll((cells) =>
+          cells.map((cell) => cell.getAttribute("data-table-column")),
+        ),
+    )
+    .toEqual(["0", "2", "1"]);
+  await expect
+    .poll(() =>
+      table
+        .locator("[data-table-summary-row] [data-table-column]")
+        .evaluateAll((cells) =>
+          cells.map((cell) => cell.getAttribute("data-table-column")),
+        ),
+    )
+    .toEqual(["0", "2", "1"]);
+
+  await table.getByRole("button", { name: "Copy table" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { copiedTableText?: string })
+            .copiedTableText,
+      ),
+    )
+    .toBe(
+      [
+        "Failure\tOutcome\tAttempts",
+        "Processor timeout\tRetry with backoff\t5",
+        "Network reset\tRetry immediately\t5",
+        "Card declined\tGive up and notify\t3",
+        "Total\tAll retry outcomes\t13",
+      ].join("\n"),
+    );
+});
+
 test("should preserve content-proportional columns when truncating text", async ({
   page,
   allComponentsViewerUrl,

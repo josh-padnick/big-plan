@@ -55,7 +55,11 @@ export const STYLESHEET_BUDGETS = {
     declarations: 58,
   },
   "src/components/code-diff/styles.css": { declarations: 44 },
-  "src/components/data-table/styles.css": { declarations: 81 },
+  "src/components/data-table/styles.css": {
+    // Bought so the last visible data row yields its lower edge to the
+    // summary row's stronger divider, including an empty filtered result.
+    declarations: 82,
+  },
   "src/components/database-table-schema/styles.css": { declarations: 47 },
   "src/components/flow-diagram/styles.css": { declarations: 467 },
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },
