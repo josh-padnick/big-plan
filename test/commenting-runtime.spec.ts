@@ -5958,7 +5958,7 @@ The runbook stays inline for the first rollout.
   }
 });
 
-test("should colour a component snapshot switch as a diff", async ({
+test("should colour the default component switch as a diff", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -5990,49 +5990,43 @@ test("should colour a component snapshot switch as a diff", async ({
       .first()
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
-    const componentDiff = page.locator("[data-review-component-diff]");
+    const componentDiff = page.locator("[data-component-diff]");
     await expect(componentDiff).toHaveCount(1);
-    const snapshot = componentDiff.locator("[data-review-component-snapshot]");
+    const baseline = componentDiff.locator(
+      '[data-component-diff-side="baseline"]',
+    );
+    const proposed = componentDiff.locator(
+      '[data-component-diff-side="proposed"]',
+    );
     const now = componentDiff.getByRole("button", { name: "Now" });
     const was = componentDiff.getByRole("button", { name: "Was" });
     const toggleThumb = componentDiff.locator(
-      "[data-review-diff-toggle-thumb]",
+      "[data-component-diff-toggle-thumb]",
     );
 
-    await expect(
-      snapshot.getByRole("button", { name: "Maximize component diff" }),
-    ).toBeVisible();
-    await expect(
-      snapshot.getByRole("button", { name: "Maximize wireframe diff" }),
-    ).toHaveCount(0);
-
-    await expect(snapshot).toHaveAttribute(
-      "data-review-component-snapshot",
-      "new",
-    );
+    await expect(proposed).toBeVisible();
+    await expect(baseline).toBeHidden();
     const added = await now.evaluate((node) => ({
       color: getComputedStyle(node).color,
     }));
     const addedThumbBackground = await toggleThumb.evaluate(
       (node) => getComputedStyle(node).backgroundColor,
     );
-    const addedBorder = await snapshot.evaluate(
+    const addedBorder = await proposed.evaluate(
       (node) => getComputedStyle(node).borderTopColor,
     );
     expect(addedBorder).not.toBe(added.color);
 
     await was.click();
-    await expect(snapshot).toHaveAttribute(
-      "data-review-component-snapshot",
-      "old",
-    );
+    await expect(baseline).toBeVisible();
+    await expect(proposed).toBeHidden();
     const removed = await was.evaluate((node) => ({
       color: getComputedStyle(node).color,
     }));
     const removedThumbBackground = await toggleThumb.evaluate(
       (node) => getComputedStyle(node).backgroundColor,
     );
-    const removedBorder = await snapshot.evaluate(
+    const removedBorder = await baseline.evaluate(
       (node) => getComputedStyle(node).borderTopColor,
     );
     expect(removedBorder).not.toBe(removed.color);
