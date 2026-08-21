@@ -6,6 +6,7 @@ import { PROGRESS_STEP_CODES } from "./progress-code.js";
 import {
   decodeAgentSnapshot,
   decodeChangeDispositions,
+  decodeCommittedChangeSets,
   decodeProgress,
   decodeRuntimeSession,
   decodeReviewInputContract,
@@ -13,6 +14,7 @@ import {
   decodeReviewState,
   decodeSnapshotDiff,
   encodeAgentSnapshot,
+  encodeCommittedChangeSets,
   encodeProgress,
   encodeRuntimeSession,
   encodeSnapshotDiff,
@@ -823,6 +825,55 @@ describe("review wire contract", () => {
     expect(decodeReviewInputContract({ inputs: [], revision: 0 })).toEqual({
       inputs: [],
       revision: 0,
+    });
+  });
+
+  it("should carry a committed change set for every provenance a commit records", () => {
+    const changeSets = (["feedback", "reply", "chat", "push"] as const).map(
+      (provenance, index) => ({
+        changeSetId: `${index}`.repeat(16),
+        provenance,
+        baseSnapshot: "a".repeat(16),
+        resultSnapshot: "b".repeat(16),
+        committedAt: "2026-08-21T00:00:00.000Z",
+      }),
+    );
+    const encoded = encodeCommittedChangeSets({ changeSets });
+    expect(
+      decodeCommittedChangeSets(JSON.parse(JSON.stringify(encoded))),
+    ).toEqual({ changeSets });
+  });
+
+  it("should drop a committed change set a browser could not act on, alone", () => {
+    const usable = {
+      changeSetId: "4444444444444444",
+      provenance: "feedback",
+      baseSnapshot: "a".repeat(16),
+      resultSnapshot: "b".repeat(16),
+      committedAt: "2026-08-21T00:00:00.000Z",
+    };
+    const decoded = decodeCommittedChangeSets({
+      changeSets: [
+        usable,
+        { ...usable, changeSetId: "not hexadecimal" },
+        { ...usable, provenance: "merge" },
+        { ...usable, baseSnapshot: "not-a-digest" },
+        { ...usable, committedAt: "whenever" },
+        "not a change set",
+      ],
+    });
+    expect(decoded?.changeSets).toEqual([usable]);
+  });
+
+  // "Nobody could read this" and "no thread changed the plan" are opposite
+  // statements to a reader, so the decoder never turns the first into the
+  // second.
+  it("should report a change-set body it cannot read rather than an empty one", () => {
+    for (const body of [null, "changes", 7, {}, { changeSets: "none" }]) {
+      expect(decodeCommittedChangeSets(body)).toBeUndefined();
+    }
+    expect(decodeCommittedChangeSets({ changeSets: [] })).toEqual({
+      changeSets: [],
     });
   });
 

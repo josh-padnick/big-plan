@@ -160,6 +160,7 @@ import {
   readChangeDispositionState,
 } from "./routes-dispositions.js";
 import { readReviewInputContract } from "./routes-input-contract.js";
+import { readCommittedChangeSetState } from "./routes-change-sets.js";
 import { readRuntimeSession } from "./routes-session.js";
 import { drainAndCloseServer } from "./http-shutdown.js";
 
@@ -222,6 +223,11 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
     method: "GET",
     path: "/api/input-contract",
     handler: readReviewInputContract,
+  },
+  {
+    method: "GET",
+    path: "/api/change-sets",
+    handler: readCommittedChangeSetState,
   },
   {
     method: "POST",
