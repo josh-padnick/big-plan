@@ -41,6 +41,7 @@ import {
   MERMAID_FONT_CSS,
   prepareMermaidArtifacts,
 } from "../../components/mermaid-diagram/renderer.js";
+import type { DocumentOutline } from "../../components/_model/document-outline/document-outline.js";
 
 export type SectionPart = {
   readonly number: number;
@@ -58,6 +59,7 @@ export type Section = {
 
 export type CompiledMarkdown = {
   readonly root: Root;
+  readonly outline: DocumentOutline;
   readonly sections: ReadonlyArray<Section>;
   readonly elementIds: ReadonlyArray<string>;
   readonly title: string | undefined;
@@ -400,6 +402,7 @@ const compileMarkdownTree = ({
 
   return {
     root: tree,
+    outline,
     embeddedStyles:
       resolvedRenderArtifacts.size === 0 ? [] : [MERMAID_FONT_CSS],
     sections: metadata.sections.map((section) => {

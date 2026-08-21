@@ -2733,6 +2733,52 @@ describe("review runtime feedback", () => {
 
 </Decision>
 
+<Part title="Component choices" />
+
+<QuickDecision question="Ship behind a flag?">
+
+<Option title="Yes" recommended summary="Rollback stays one toggle away." />
+
+<Option title="No" />
+
+</QuickDecision>
+
+<DecisionAnalysis question="Which store?" state="proposed" interaction="audit">
+
+<Criterion title="Integrity">
+
+Related records commit together.
+
+</Criterion>
+
+<Option title="SQLite" recommended>
+
+<Score criterion="Integrity" verdict="Strong" tone="good">
+
+Transactions preserve the records atomically.
+
+</Score>
+
+</Option>
+
+<Option title="Files">
+
+<Score criterion="Integrity" verdict="Weak" tone="bad">
+
+Separate writes can drift.
+
+</Score>
+
+</Option>
+
+<Reversibility rating="somewhat-hard">
+
+Changing stores requires a data migration.
+
+</Reversibility>
+
+</DecisionAnalysis>
+
 ## Flow
 
 <FlowDiagram>
@@ -2805,9 +2851,29 @@ Restores the selected snapshot as a new current plan.
 </What>
 
 </QuickSummary>
+
+## Prototype
+
+<Wireframe id="review-queue" title="Review queue">
+
+<Screen id="queue" name="Queue" device="desktop">
+
+<Panel title="Threads">
+<Text text="Three open threads" />
+</Panel>
+
+</Screen>
+
+</Wireframe>
 `;
     const after = before
       .replace('question="Which path?"', 'question="Which rollout path?"')
+      .replace(
+        '<Part title="Component choices" />',
+        '<Part title="Review choices" />',
+      )
+      .replace('question="Ship behind a flag?"', 'question="Ship locally?"')
+      .replace('question="Which store?"', 'question="Which event store?"')
       .replace('label="Review service"', 'label="Local review service"')
       .replace("A[Author] --> B[Review]", "A[Author] --> B[Plan review]")
       .replace(
@@ -2822,7 +2888,8 @@ Restores the selected snapshot as a new current plan.
         "Restores the selected snapshot as a new current plan.",
         "Restores the selected snapshot as a new current plan after confirmation.",
       )
-      .replace("Version every resolution.", "Version every resolved thread.");
+      .replace("Version every resolution.", "Version every resolved thread.")
+      .replace("Three open threads", "Two open threads");
     const from = deriveSnapshotDigest(before);
     const to = deriveSnapshotDigest(after);
     await writeSnapshot({
@@ -2839,13 +2906,18 @@ Restores the selected snapshot as a new current plan.
     const response = await call({
       path: `/api/snapshot-diff?from=${from}&to=${to}`,
     });
-    const value = (await response.json()) as {
+    const encoded = await response.text();
+    for (const retiredField of [
+      ["old", "Html"].join(""),
+      ["new", "Html"].join(""),
+    ]) {
+      expect(encoded).not.toContain(JSON.stringify(retiredField));
+    }
+    const value = JSON.parse(encoded) as {
       readonly locations: ReadonlyArray<{
         readonly kind: string;
         readonly isComponentRoot: boolean;
         readonly status: string;
-        readonly oldView?: string;
-        readonly newView?: string;
         readonly view?: string;
       }>;
     };
@@ -2856,28 +2928,38 @@ Restores the selected snapshot as a new current plan.
     const fileTree = byKind("file-tree");
     const mermaid = byKind("mermaid-diagram");
     const fileTreeDiff = byKind("file-tree-diff");
+    const part = byKind("part");
+    const quickDecision = byKind("quick-decision");
+    const decisionAnalysis = byKind("decision-analysis");
+    const wireframe = byKind("wireframe");
     const httpEndpoint = byKind("http-endpoint");
     const quickSummary = byKind("quick-summary");
     const quickSummaryFacet = byKind("quick-summary-facet");
-    // No component is shown as a scrubbed copy any more: the whole payload
-    // carries neither side of the retired copy path.
-    expect(
-      value.locations.filter(
-        (location) =>
-          location.oldView !== undefined || location.newView !== undefined,
-      ),
-    ).toEqual([]);
     // Every migrated component root answers with exactly one component-owned
     // diff view holding both sides.
     for (const location of [
+      part,
+      quickDecision,
+      decisionAnalysis,
       decision,
       flow,
       fileTree,
       mermaid,
       fileTreeDiff,
+      wireframe,
     ] as const) {
+      expect(location?.isComponentRoot).toBe(true);
       expect(location?.view).toBeTypeOf("string");
+      expect(
+        Object.keys(location ?? {}).filter((key) => key === "view"),
+      ).toEqual(["view"]);
     }
+    expect(part?.view).toContain("Component choices");
+    expect(part?.view).toContain("Review choices");
+    expect(quickDecision?.view).toContain("Ship behind a flag?");
+    expect(quickDecision?.view).toContain("Ship locally?");
+    expect(decisionAnalysis?.view).toContain("Which store?");
+    expect(decisionAnalysis?.view).toContain("Which event store?");
     expect(decision?.view).toContain("Which path?");
     expect(decision?.view).toContain("Which rollout path?");
     expect(flow?.view).toContain("Review service");
@@ -2888,6 +2970,8 @@ Restores the selected snapshot as a new current plan.
     expect(mermaid?.view).toContain("Plan review");
     expect(fileTreeDiff?.view).toContain("Coordinates review");
     expect(fileTreeDiff?.view).toContain("Coordinates plan review");
+    expect(wireframe?.view).toContain("Three open threads");
+    expect(wireframe?.view).toContain("Two open threads");
     // Only the proposed side keeps the plan's own address, so opening a diff
     // can never publish a second copy of an address a comment resolves.
     expect([

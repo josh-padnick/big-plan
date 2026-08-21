@@ -204,6 +204,10 @@ export const renderDiffView = ({
   const diffRoot = reactToHast(
     compiled.presentation(
       `${baselineBlockId ?? "removed"}:${proposedBlockId ?? "historical"}`,
+      {
+        baseline: baselineDocument.outline,
+        proposed: proposedDocument.outline,
+      },
     ),
   );
   if (diffRoot === undefined) return null;
