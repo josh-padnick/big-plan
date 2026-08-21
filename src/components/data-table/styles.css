@@ -24,6 +24,18 @@
   article .data-table-grid tbody:last-child tr:last-child td {
     border-bottom: 0;
   }
+  article
+    .data-table-grid:has(> tfoot)
+    > tbody:not([hidden]):not(:has(~ tbody:not([hidden])))
+    > tr:not([hidden]):not(:has(~ tr:not([hidden])))
+    > td,
+  article
+    .data-table-grid:has(> tfoot):not(:has(> tbody > tr:not([hidden])))
+    > thead
+    > tr:last-child
+    > th {
+    border-bottom: 0;
+  }
   article .data-table-grid tbody tr:hover td {
     background: color-mix(in srgb, var(--ink-c) 4%, var(--raised-c));
   }
