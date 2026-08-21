@@ -270,6 +270,46 @@ describe("agent work loop", () => {
     }
   });
 
+  it("should remove an observer registration when a push is refused", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-push-observer-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Push refusal\n\nOnly the primary may push.\n");
+    const pushRuntime = await startReviewRuntime({ planPath });
+
+    try {
+      await reviewStore.attachAgentToRoster({
+        store: pushRuntime.store,
+        sessionId: pushRuntime.sessionId,
+        writerId: "primary-agent",
+      });
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "push",
+          planPath,
+          executablePath,
+          origin: "about",
+          body: "This observer must not leave a card behind.",
+          connectionToken: "observer-agent",
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        code: "primacy-lost",
+      });
+      await expect(
+        reviewStore.readAgentRoster({
+          store: pushRuntime.store,
+          sessionId: pushRuntime.sessionId,
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({ writerId: "primary-agent" }),
+      ]);
+    } finally {
+      await pushRuntime.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should tolerate a heartbeat file being replaced while the review server is live", async () => {
     const readHeartbeat = vi
       .spyOn(reviewStore, "readSessionHeartbeatValue")
@@ -2438,7 +2478,7 @@ describe("agent work loop lifecycle", () => {
         }),
       ).rejects.toMatchObject({
         name: "AgentWorkLoopRejected",
-        code: "primacy-lost",
+        code: "agent-disconnected",
       });
     } finally {
       await review.close();
@@ -2508,7 +2548,7 @@ describe("agent work loop lifecycle", () => {
         }),
       ).rejects.toMatchObject({
         name: "AgentWorkLoopRejected",
-        code: "primacy-lost",
+        code: "agent-disconnected",
       });
     } finally {
       await review.close();
@@ -2605,6 +2645,75 @@ describe("agent work loop lifecycle", () => {
       await rm(directory, { recursive: true, force: true });
     }
   }, 20_000);
+
+  it("should return the adopted roster identity to a resuming loop", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-identity-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nA resumed turn keeps one identity.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "acacacacacacacac",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-21T12:00:00.000Z",
+        body: "Which identity continues this turn?",
+      }),
+    });
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        connectionToken: "aaaaaaaaaaaaaaaa",
+      });
+      if (typeof pickup.agent_token !== "string") {
+        throw new Error("The pickup did not return its token");
+      }
+
+      const resumed = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        agentToken: pickup.agent_token,
+        connectionToken: "bbbbbbbbbbbbbbbb",
+      });
+      expect(resumed).toMatchObject({
+        pending: true,
+        connection_token: "aaaaaaaaaaaaaaaa",
+      });
+      expect(resumed.next_command).toContain("aaaaaaaaaaaaaaaa");
+      if (typeof resumed.response_file !== "string") {
+        throw new Error("The resumed pickup did not return its response file");
+      }
+      await writeFile(
+        resumed.response_file,
+        JSON.stringify({
+          requestId: "acacacacacacacac",
+          message: "The roster identity continues.",
+        }),
+      );
+      const response = await runAgentWorkLoopAction({
+        kind: "respond",
+        planPath,
+        responsePath: resumed.response_file,
+        executablePath,
+        agentToken: pickup.agent_token,
+        connectionToken: "bbbbbbbbbbbbbbbb",
+      });
+      expect(response.next).toContain("aaaaaaaaaaaaaaaa");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 
   it.each(["answered", "canceled"] as const)(
     "should move past a request %s during pickup preparation",
