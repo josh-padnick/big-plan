@@ -586,10 +586,15 @@ describe("the reviewer's primacy answer over the wire", () => {
 
     // Nothing was ticked, so nothing is carried. The promoted agent starts
     // from the last published revision like any other pickup.
-    await expect(rosterOf(runtime)).resolves.toEqual(
-      expect.arrayContaining([
-        expect.not.objectContaining({ inheritedDraftPath: expect.anything() }),
-      ]),
+    const promoted = (await rosterOf(runtime)).find(
+      (agent) => agent.writerId === "arriving",
     );
+    expect(promoted).toEqual(
+      expect.objectContaining({
+        writerId: "arriving",
+        role: "primary",
+      }),
+    );
+    expect(promoted).not.toHaveProperty("inheritedDraftPath");
   });
 });
