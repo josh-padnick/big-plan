@@ -1,10 +1,19 @@
 // Proves the Change Engine seam: a change set describes committed revisions
 // only, and a thread's baseline and provenance survive every later reply.
 
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { changeSetsFrom, changeSetIdsFor } from "./change-set-commit.js";
+import {
+  changeSetsFrom,
+  changeSetIdsFor,
+  readCommittedRevision,
+  recordCommittedRevision,
+} from "./change-set-commit.js";
 import type { CommittedPlanRevision } from "./change-set-commit.js";
 import type { AgentResponse } from "./agent-exchange.js";
+import { prepareStore, reviewStoreFor } from "./store.js";
 
 const THREAD = "4444444444444444";
 const OTHER_THREAD = "5555555555555555";
@@ -69,7 +78,7 @@ describe("committed change sets", () => {
       createdAt: "2026-08-17T12:00:00.000Z",
       message: "No thread contains this one.",
     };
-    expect(changeSetIdsFor(chat)).toEqual(["cccccccccccccccc"]);
+    expect(changeSetIdsFor({ response: chat })).toEqual(["cccccccccccccccc"]);
   });
 
   it("should give one change set per answered thread, however many outcomes repeat it", () => {
@@ -88,6 +97,59 @@ describe("committed change sets", () => {
         { commentId: THREAD, state: "changed", message: "One again." },
       ],
     };
-    expect(changeSetIdsFor(feedback)).toEqual([THREAD, OTHER_THREAD]);
+    expect(changeSetIdsFor({ response: feedback })).toEqual([
+      THREAD,
+      OTHER_THREAD,
+    ]);
+  });
+
+  it("should give a push and a pushed-thread reply one immutable transaction each", () => {
+    const push: AgentResponse = {
+      version: 3,
+      kind: "push",
+      requestId: "cccccccccccccccc",
+      sessionId: "dddddddddddddddd",
+      planId: "eeeeeeeeeeeeeeee",
+      claimGeneration: 1,
+      resultSnapshot: FIRST,
+      createdAt: "2026-08-17T12:00:00.000Z",
+      outcomes: [
+        { commentId: THREAD, state: "changed", message: "Pushed once." },
+      ],
+    };
+    const reply: AgentResponse = {
+      ...push,
+      kind: "reply",
+      requestId: "dddddddddddddddd",
+      outcomes: [
+        { commentId: THREAD, state: "changed", message: "Replied once." },
+      ],
+    };
+
+    expect(changeSetIdsFor({ response: push })).toEqual([push.requestId]);
+    expect(changeSetIdsFor({ response: reply, isPushedThread: true })).toEqual([
+      reply.requestId,
+    ]);
+    expect(changeSetIdsFor({ response: reply })).toEqual([THREAD]);
+  });
+
+  it("should validate push provenance in a stored committed revision", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-push-revision-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n");
+    const store = reviewStoreFor({
+      planPath,
+      planId: "eeeeeeeeeeeeeeee",
+    });
+    await prepareStore(store);
+    const pushed = revision({ provenance: "push" });
+    try {
+      await recordCommittedRevision({ store, revision: pushed });
+      await expect(
+        readCommittedRevision({ store, requestId: pushed.requestId }),
+      ).resolves.toEqual(pushed);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

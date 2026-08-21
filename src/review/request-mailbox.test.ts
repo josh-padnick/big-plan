@@ -227,6 +227,28 @@ const replyRequest = ({
     commentId,
   });
 
+const pushRequest = ({
+  requestId = "7777777777777777",
+  threadId = "7777777777777777",
+}: {
+  readonly requestId?: string;
+  readonly threadId?: string;
+} = {}) =>
+  validateAgentRequest({
+    version: 3,
+    requestId,
+    sessionId,
+    planId,
+    premiseSnapshot: snapshot,
+    createdAt: "2026-08-10T12:00:00.000Z",
+    attachmentManifest: [],
+    attachments: [],
+    kind: "push",
+    origin: "about",
+    body: "Tightened the retry boundary.",
+    threadId,
+  });
+
 const preparedReview = async () => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-mailbox-"));
   const planPath = join(directory, "plan.mdx");
@@ -2293,6 +2315,25 @@ describe("request mailbox", () => {
       request: requestWith([
         reviewComment({ id: commentId, body: "Look at this again." }),
       ]),
+    });
+    await expect(refused).rejects.toThrow(ResolvedThreadWorkRejected);
+    await expect(refused).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should refuse a push that names a resolved thread", async () => {
+    const { store } = await preparedReview();
+    const threadId = "4444444444444444";
+    await writeResolvedCommentIds({ store, ids: [threadId] });
+
+    const refused = ensureAgentRequest({
+      store,
+      request: pushRequest({
+        requestId: "7777777777777777",
+        threadId,
+      }),
     });
     await expect(refused).rejects.toThrow(ResolvedThreadWorkRejected);
     await expect(refused).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);

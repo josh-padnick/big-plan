@@ -360,6 +360,7 @@ describe("current agent activity", () => {
     ["feedback", "Responding to a comment"],
     ["reply", "Responding in a comment thread"],
     ["chat", "Answering a plan question"],
+    ["push", "Preparing a pushed plan change"],
   ] as const)("should name %s work", (kind, headline) => {
     expect(
       deriveCurrentAgentActivity({

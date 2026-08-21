@@ -83,6 +83,15 @@ describe("thread projection", () => {
         request({ commentIds: undefined, comments: [comment] }),
       ),
     ).toEqual([comment.id]);
+    expect(
+      requestCommentIds(
+        request({
+          kind: "push",
+          threadId: comment.id,
+          commentIds: undefined,
+        }),
+      ),
+    ).toEqual([comment.id]);
   });
 
   it("should group queued, working, response, and ready work", () => {
@@ -903,6 +912,122 @@ describe("thread projection", () => {
 });
 
 describe("conversation history", () => {
+  it("should project pushed-thread turns by opener origin and include reviewer replies", () => {
+    const threadId = "1111111111111111";
+    const opener = answeredRequest({
+      requestId: threadId,
+      kind: "push",
+      origin: "prompt",
+      threadId,
+      body: "Tighten the retry boundary.",
+      commentIds: [threadId],
+      createdAt: "2026-08-10T17:00:00Z",
+    });
+    const followUp = answeredRequest({
+      requestId: "2222222222222222",
+      kind: "push",
+      origin: "about",
+      threadId,
+      body: "Also corrected the cap.",
+      commentIds: [threadId],
+      createdAt: "2026-08-10T18:00:00Z",
+    });
+    const reviewerReply = answeredRequest({
+      requestId: "3333333333333333",
+      kind: "reply",
+      commentId: threadId,
+      body: "Why twelve attempts?",
+      commentIds: [threadId],
+      createdAt: "2026-08-10T18:30:00Z",
+    });
+    const current = request({
+      requestId: "4444444444444444",
+      kind: "push",
+      origin: "about",
+      threadId,
+      body: "Documented the reason for twelve attempts.",
+      commentIds: [threadId],
+      createdAt: "2026-08-10T19:00:00Z",
+    });
+    const pushedResponse = (
+      requestId: string,
+      message: string,
+      createdAt: string,
+    ): ThreadResponse => ({
+      requestId,
+      resultSnapshot: "2222222222222222",
+      createdAt,
+      kind: "push",
+      outcomes: [{ commentId: threadId, state: "changed", message }],
+    });
+
+    expect(
+      projectConversationHistory({
+        request: current,
+        requests: [opener, followUp, reviewerReply, current],
+        responses: [
+          pushedResponse(
+            opener.requestId,
+            "Tightened the boundary.",
+            "2026-08-10T17:01:00Z",
+          ),
+          pushedResponse(
+            followUp.requestId,
+            "Corrected the cap.",
+            "2026-08-10T18:01:00Z",
+          ),
+          {
+            requestId: reviewerReply.requestId,
+            resultSnapshot: "2222222222222222",
+            createdAt: "2026-08-10T18:31:00Z",
+            kind: "reply",
+            outcomes: [
+              {
+                commentId: threadId,
+                state: "answered",
+                message: "Twelve covers the longest recovery window.",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        role: "reviewer",
+        body: "Tighten the retry boundary.",
+        createdAt: "2026-08-10T17:00:00Z",
+      },
+      {
+        role: "agent",
+        body: "Tightened the boundary.",
+        state: "changed",
+        createdAt: "2026-08-10T17:01:00Z",
+      },
+      {
+        role: "agent",
+        body: "Also corrected the cap.",
+        createdAt: "2026-08-10T18:00:00Z",
+      },
+      {
+        role: "agent",
+        body: "Corrected the cap.",
+        state: "changed",
+        createdAt: "2026-08-10T18:01:00Z",
+      },
+      {
+        role: "reviewer",
+        body: "Why twelve attempts?",
+        createdAt: "2026-08-10T18:30:00Z",
+      },
+      {
+        role: "agent",
+        body: "Twelve covers the longest recovery window.",
+        state: "answered",
+        createdAt: "2026-08-10T18:31:00Z",
+      },
+    ]);
+  });
+
   it("should project prior chat turns", () => {
     const earlier = answeredRequest({
       requestId: "1111111111111111",

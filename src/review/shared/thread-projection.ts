@@ -32,11 +32,13 @@ export type ThreadRequest = CancelableRequest &
     readonly baselineSnapshot?: string;
     readonly claimedAt?: string;
     readonly createdAt: string;
-    readonly kind: "feedback" | "reply" | "chat";
+    readonly kind: "feedback" | "reply" | "chat" | "push";
     readonly body?: string;
     readonly commentId?: string;
     readonly commentIds?: ReadonlyArray<string>;
     readonly comments?: ReadonlyArray<ReviewComment>;
+    readonly origin?: "prompt" | "about";
+    readonly threadId?: string;
   };
 
 export type ThreadOutcome = {
@@ -53,7 +55,7 @@ export type ThreadResponse = {
   readonly requestId: string;
   readonly resultSnapshot: string;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat";
+  readonly kind: "feedback" | "reply" | "chat" | "push";
   readonly outcomes?: ReadonlyArray<ThreadOutcome>;
   readonly message?: string;
 };
@@ -129,6 +131,9 @@ export const requestCommentIds = (
     return (
       request.commentIds ?? request.comments?.map((comment) => comment.id) ?? []
     );
+  }
+  if (request.kind === "push" && request.threadId !== undefined) {
+    return [request.threadId];
   }
   return request.kind === "reply" && request.commentId !== undefined
     ? [request.commentId]
@@ -224,6 +229,7 @@ export const canReviseQueuedMessage = ({
   readonly nowMs: number;
 }): boolean =>
   request.kind !== "feedback" &&
+  request.kind !== "push" &&
   !canceled &&
   response === undefined &&
   !agentStillOwnsRequest({ request, agentConnected, nowMs });
@@ -245,6 +251,7 @@ export const canDeleteQueuedMessage = ({
   readonly nowMs: number;
 }): boolean =>
   request.kind !== "feedback" &&
+  request.kind !== "push" &&
   response === undefined &&
   !agentStillOwnsRequest({ request, agentConnected, nowMs });
 
@@ -589,6 +596,54 @@ export const projectConversationHistory = ({
           createdAt: response.createdAt,
         },
       );
+    }
+    const threadId =
+      request.kind === "push" ? request.threadId : request.commentId;
+    if (
+      threadId !== undefined &&
+      candidate.kind === "push" &&
+      candidate.threadId === threadId &&
+      response?.kind === "push"
+    ) {
+      history.push({
+        role: candidate.origin === "prompt" ? "reviewer" : "agent",
+        body: candidate.body,
+        createdAt: candidate.createdAt,
+      });
+      const outcome = response.outcomes?.find(
+        (entry) => entry.commentId === threadId,
+      );
+      if (outcome !== undefined) {
+        history.push({
+          role: "agent",
+          body: outcome.message,
+          state: outcome.state,
+          createdAt: response.createdAt,
+        });
+      }
+    }
+    if (
+      request.kind === "push" &&
+      candidate.kind === "reply" &&
+      candidate.commentId === request.threadId &&
+      response?.kind === "reply"
+    ) {
+      const outcome = response.outcomes?.find(
+        (entry) => entry.commentId === request.threadId,
+      );
+      history.push({
+        role: "reviewer",
+        body: candidate.body,
+        createdAt: candidate.createdAt,
+      });
+      if (outcome !== undefined) {
+        history.push({
+          role: "agent",
+          body: outcome.message,
+          state: outcome.state,
+          createdAt: response.createdAt,
+        });
+      }
     }
     if (
       request.kind === "reply" &&

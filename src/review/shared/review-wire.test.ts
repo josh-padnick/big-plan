@@ -2,6 +2,7 @@
 // contract, including feedback target projection and stable progress codes.
 
 import { describe, expect, it } from "vitest";
+import { PROGRESS_STEP_CODES } from "./progress-code.js";
 import {
   decodeAgentSnapshot,
   decodeChangeDispositions,
@@ -150,6 +151,101 @@ describe("review wire contract", () => {
       connectionLog: [{ eventId: "event-1", connected: true }],
       plan: "/tmp/plan.mdx",
     });
+  });
+
+  it("should round-trip push request and response vocabulary", () => {
+    const threadId = "1".repeat(16);
+    const encoded = encodeAgentSnapshot({
+      currentSnapshot: "b".repeat(16),
+      presence: { connected: true, state: "working" },
+      requests: [
+        {
+          requestId: threadId,
+          premiseSnapshot: "a".repeat(16),
+          createdAt: "2026-08-10T12:00:00.000Z",
+          kind: "push",
+          origin: "about",
+          body: "Tightened the retry boundary.",
+          threadId,
+        },
+      ],
+      responses: [
+        {
+          requestId: threadId,
+          resultSnapshot: "b".repeat(16),
+          createdAt: "2026-08-10T12:01:00.000Z",
+          kind: "push",
+          outcomes: [
+            {
+              commentId: threadId,
+              state: "changed",
+              message: "Tightened the retry boundary.",
+              changeTargets: ["section/retries/paragraph-1"],
+            },
+          ],
+        },
+      ],
+      connectionLog: [],
+      plan: "/tmp/plan.mdx",
+      agentCommand: "big-plan agent /tmp/plan.mdx",
+      recoveryPrompt: "Reconnect this review",
+    });
+
+    expect(decodeAgentSnapshot(encoded)).toMatchObject({
+      requests: [
+        {
+          kind: "push",
+          origin: "about",
+          body: "Tightened the retry boundary.",
+          threadId,
+          commentIds: [threadId],
+        },
+      ],
+      responses: [
+        {
+          kind: "push",
+          outcomes: [
+            {
+              commentId: threadId,
+              state: "changed",
+              changeTargets: ["section/retries/paragraph-1"],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("should ignore unknown request and response kinds at the browser boundary", () => {
+    const base = {
+      currentSnapshot: "a".repeat(16),
+      presence: { connected: false, state: "waiting" },
+      connectionLog: [],
+      plan: "/tmp/plan.mdx",
+      agentCommand: "big-plan agent /tmp/plan.mdx",
+      recoveryPrompt: "Reconnect this review",
+    };
+    expect(
+      decodeAgentSnapshot({
+        ...base,
+        requests: [
+          {
+            requestId: "1".repeat(16),
+            premiseSnapshot: "a".repeat(16),
+            createdAt: "2026-08-10T12:00:00.000Z",
+            kind: "future",
+          },
+        ],
+        responses: [
+          {
+            requestId: "1".repeat(16),
+            resultSnapshot: "a".repeat(16),
+            createdAt: "2026-08-10T12:01:00.000Z",
+            kind: "future",
+          },
+        ],
+      }),
+    ).toMatchObject({ requests: [], responses: [] });
   });
 
   it.each([
@@ -533,20 +629,23 @@ describe("review wire contract", () => {
   });
 
   it("should preserve stable progress semantics and reject unknown codes", () => {
-    const event = {
-      seq: 1,
-      stepCode: "request-picked-up" as const,
-      step: "Coding agent reviewing comment",
+    const events = PROGRESS_STEP_CODES.map((stepCode, index) => ({
+      seq: index + 1,
+      stepCode,
+      step: `Progress ${index + 1}`,
       state: "live" as const,
       requestId: "1".repeat(16),
-    };
+    }));
 
-    expect(decodeProgress(encodeProgress({ events: [event] }))).toEqual([
-      event,
-    ]);
+    expect(decodeProgress(encodeProgress({ events }))).toEqual(events);
     expect(
       decodeProgress({
-        events: [{ ...event, stepCode: "wording-dependent-guess" }],
+        events: [
+          {
+            ...events[0],
+            stepCode: "wording-dependent-guess",
+          },
+        ],
       }),
     ).toEqual([]);
   });

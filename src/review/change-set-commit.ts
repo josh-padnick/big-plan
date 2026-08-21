@@ -5,8 +5,9 @@
 //
 // One durable record per committed request answers two questions. Read in
 // commit order it is the revision log the reader's current snapshot advances
-// from; folded by change-set id it is each thread's stable baseline, its
-// provenance, and its latest committed result across every later reply.
+// from. Folded by change-set id, ordinary comment threads share a stable
+// baseline across later replies, while every pushed-thread transaction keeps
+// the immutable request-keyed identity it was committed with.
 //
 // When the full change-set aggregate lands it implements this contract without
 // adopting attempt files as domain state.
@@ -19,13 +20,13 @@ import type { ReviewStore } from "./store.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
-// A change set is addressed by the thread it belongs to, and a comment id is a
-// short hexadecimal identifier rather than a request-shaped one.
+// A change-set id names either an ordinary comment thread or an immutable
+// request-keyed transaction, so it accepts short comment ids and request ids.
 const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/;
 const COMMITTED_REVISION_VERSION = 1;
 
 /** What caused the change set the committed revision belongs to. */
-export type ChangeSetProvenance = "feedback" | "reply" | "chat";
+export type ChangeSetProvenance = "feedback" | "reply" | "chat" | "push";
 
 /** One published revision, addressed to the change sets it advances. */
 export type CommittedPlanRevision = {
@@ -69,14 +70,20 @@ const revisionPath = ({
 };
 
 /**
- * A thread owns its change set, so every later reply advances the same one. A
- * plan-wide question owns a change set of its own, because no thread contains
- * it.
+ * Ordinary comment threads share one change set across replies. Plan-wide
+ * questions, pushes, and replies in pushed threads are immutable transactions
+ * addressed by their request ids.
  */
-export const changeSetIdsFor = (
-  response: AgentResponse,
-): ReadonlyArray<string> =>
-  response.kind === "chat"
+export const changeSetIdsFor = ({
+  response,
+  isPushedThread = false,
+}: {
+  readonly response: AgentResponse;
+  readonly isPushedThread?: boolean;
+}): ReadonlyArray<string> =>
+  response.kind === "chat" ||
+  response.kind === "push" ||
+  (response.kind === "reply" && isPushedThread)
     ? [response.requestId]
     : [...new Set(response.outcomes.map((outcome) => outcome.commentId))];
 
@@ -124,7 +131,8 @@ const validateRevision = (value: unknown): CommittedPlanRevision => {
   if (
     provenance !== "feedback" &&
     provenance !== "reply" &&
-    provenance !== "chat"
+    provenance !== "chat" &&
+    provenance !== "push"
   ) {
     throw new CommittedRevisionRejected(
       "A committed revision needs a known provenance",
