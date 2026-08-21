@@ -261,8 +261,8 @@ here; all values use the document theme's closed token vocabulary.
     }
   }
 
-  /* Chrome text actions: underline on hover, never a surface wash. Authored
-     prose keeps its standing underline in prose.css. */
+  /* Chrome text actions: underline on hover. Clickable controls restore their
+     own surface wash; this rule must not paint a wash on non-clickable text. */
   :where(
       header,
       aside,
@@ -288,6 +288,5 @@ here; all values use the document theme's closed token vocabulary.
   [data-review-chrome-link]:hover,
   :is(button, a):hover > [data-review-chrome-link] {
     text-decoration-line: underline;
-    background-color: transparent;
   }
 }

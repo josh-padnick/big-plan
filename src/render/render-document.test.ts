@@ -180,7 +180,7 @@ The lede.
   it("should name the plan quietly in the bar so a deep reader keeps its title", () => {
     expect(html).toContain("data-plan-title");
     expect(html).toMatch(
-      /<p class="(?=[^"]*\bhidden\b)(?=[^"]*\bwide:block\b)[^"]*truncate[^"]*"><span class="italic" data-plan-title/,
+      /<p class="(?=[^"]*\bhidden\b)(?=[^"]*\bwide:flex\b)[^"]*"><span class="(?=[^"]*\btruncate\b)[^"]*" data-plan-title/,
     );
     // The bar repeats the h1, so it is chrome for the eye only; a screen
     // reader already has the title from the document and the page head.

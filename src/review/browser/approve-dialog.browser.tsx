@@ -80,7 +80,7 @@ const VIEW_ALL_LIMIT = 3;
 const APPROVE_IN_FLIGHT_CAVEAT = "Approving now cancels all in-flight work.";
 
 const APPROVE_ITEM_ROW_CLASS =
-  "flex min-h-11 w-full cursor-pointer gap-2 rounded-md border border-edge bg-raised px-3 py-2 text-left focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "flex min-h-11 w-full cursor-pointer gap-2 rounded-md border border-edge bg-raised px-3 py-2 text-left hover:bg-surface focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 const APPROVE_ITEM_ACTION_CLASS = "shrink-0 text-xs font-medium text-accent";
 
@@ -146,56 +146,38 @@ const ApprovedStampMark = () => (
   </span>
 );
 
-/** A rubber-stamp mark that sits on the header/content seam, not in the bar. */
-const ApprovedStampOverlay = ({
-  anchorRef,
-}: {
-  readonly anchorRef: RefObject<HTMLElement | null>;
-}) => {
-  const [position, setPosition] = useState<{
-    readonly top: number;
-    readonly left: number;
-  } | null>(null);
+/** A rubber-stamp mark on the reading surface, above the contents list. */
+const ApprovedStampOverlay = () => {
+  const [slot, setSlot] = useState<HTMLElement | null>(() =>
+    document.querySelector<HTMLElement>("[data-review-approval-page-stamp]"),
+  );
 
   useLayoutEffect(() => {
-    const update = () => {
-      const anchor = anchorRef.current;
-      if (anchor === null) {
-        setPosition(null);
-        return;
-      }
-      const header = document.querySelector("[data-shell-chrome]");
-      const headerBottom =
-        header?.getBoundingClientRect().bottom ??
-        anchor.getBoundingClientRect().bottom;
-      const rect = anchor.getBoundingClientRect();
-      setPosition({
-        top: headerBottom,
-        left: rect.left + rect.width / 2,
-      });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    document.addEventListener("bigplan:article-replaced", update);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-      document.removeEventListener("bigplan:article-replaced", update);
-    };
-  }, [anchorRef]);
+    const read = () =>
+      setSlot(
+        document.querySelector<HTMLElement>(
+          "[data-review-approval-page-stamp]",
+        ),
+      );
+    read();
+    document.addEventListener("bigplan:article-replaced", read);
+    return () => document.removeEventListener("bigplan:article-replaced", read);
+  }, []);
 
-  if (position === null) return null;
+  useLayoutEffect(() => {
+    if (slot === null) return;
+    slot.hidden = false;
+    return () => {
+      slot.hidden = true;
+    };
+  }, [slot]);
+
+  if (slot === null) return null;
   return createPortal(
-    <span
-      aria-hidden="true"
-      className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2 -rotate-2"
-      style={{ top: position.top, left: position.left }}
-      data-review-approval-stamp=""
-    >
+    <span aria-hidden="true" data-review-approval-stamp="">
       <ApprovedStampMark />
     </span>,
-    document.body,
+    slot,
   );
 };
 
@@ -720,7 +702,7 @@ export const ApproveDialog = ({
             </p>
             <button
               type="button"
-              className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-xs font-medium text-accent focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
+              className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1 text-xs font-medium text-accent hover:bg-surface focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0"
               onClick={() => openSettingsAndClose(onKeepReviewing)}
               data-review-approve-edit-message=""
               data-review-chrome-link=""
@@ -1184,7 +1166,7 @@ export const ApproveControl = ({
           Plan approved
           <Icon icon={CHEVRON_DOWN_ICON} />
         </button>
-        <ApprovedStampOverlay anchorRef={triggerRef} />
+        <ApprovedStampOverlay />
         <ApprovalDetails
           id={detailsId}
           open={detailsOpen}

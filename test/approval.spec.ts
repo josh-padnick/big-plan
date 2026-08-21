@@ -655,7 +655,25 @@ test("should approve a plan, stamp the page, and keep the record across reload",
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-ui-"));
   const planPath = join(directory, "plan.mdx");
-  await writeFile(planPath, PLAN);
+  const source = PLAN.replace(
+    "Choose the release path before implementation begins.",
+    `Choose the release path before implementation begins.
+
+## Release path
+
+Pick the path before the work starts.
+
+## Rollback owner
+
+Name who can reverse the release.
+
+## Follow-through
+
+The approved stamp travels with this reading surface, so the rest of the page needs enough height that a reviewer can scroll it off the toolbar.
+
+The follow-through is not extra product scope. It only gives the stamp a long page to ride.`,
+  );
+  await writeFile(planPath, source);
   const runtime = await startCompiledReviewRuntime(planPath);
   try {
     await openWritableReview(page, runtime.url);
@@ -731,16 +749,12 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     ).toBeVisible();
     const stampBox = await stamp.boundingBox();
     const approvedBox = await approvedButton.boundingBox();
-    const headerBox = await page.locator("[data-shell-chrome]").boundingBox();
+    const toc = page.locator("[data-desktop-toc]");
+    const tocBox = (await toc.isVisible()) ? await toc.boundingBox() : null;
     const feedbackBox = await page
       .getByRole("button", { name: "Feedback" })
       .boundingBox();
-    if (
-      stampBox === null ||
-      approvedBox === null ||
-      headerBox === null ||
-      feedbackBox === null
-    ) {
+    if (stampBox === null || approvedBox === null || feedbackBox === null) {
       throw new Error(
         "The approved stamp, Plan approved control, and Feedback were not laid out",
       );
@@ -748,10 +762,51 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     expect(approvedBox.x + approvedBox.width).toBeLessThanOrEqual(
       feedbackBox.x,
     );
-    expect(stampBox.y).toBeLessThan(headerBox.y + headerBox.height);
-    expect(stampBox.y + stampBox.height).toBeGreaterThan(
-      headerBox.y + headerBox.height,
+    expect(stampBox.x).toBeLessThan(approvedBox.x);
+    expect(
+      tocBox,
+      "desktop contents list is visible on a wide review",
+    ).not.toBeNull();
+    if (tocBox !== null) {
+      expect(stampBox.x).toBeLessThan(tocBox.x + tocBox.width);
+      expect(stampBox.y).toBeLessThan(tocBox.y + 48);
+    }
+    const stampLayer = await stamp.evaluate((element) => {
+      const slot = element.closest("[data-review-approval-page-stamp]");
+      if (slot === null) return null;
+      const style = getComputedStyle(slot);
+      return {
+        position: style.position,
+        zIndex: style.zIndex,
+      };
+    });
+    expect(stampLayer?.position).toBe("absolute");
+    expect(Number(stampLayer?.zIndex)).toBeGreaterThanOrEqual(50);
+    const stampTopBefore = stampBox.y;
+    const scrolled = await page.evaluate(() => {
+      const html = document.documentElement;
+      const previous = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollBy(0, 240);
+      const y = window.scrollY;
+      html.style.scrollBehavior = previous;
+      return y;
+    });
+    expect(scrolled).toBeGreaterThanOrEqual(200);
+    const stampTopAfter = (await stamp.boundingBox())?.y;
+    if (stampTopAfter === undefined) {
+      throw new Error("The approved stamp left the layout while scrolling");
+    }
+    expect(Math.abs(stampTopAfter - (stampTopBefore - scrolled))).toBeLessThan(
+      2,
     );
+    await page.evaluate(() => {
+      const html = document.documentElement;
+      const previous = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(0, 0);
+      html.style.scrollBehavior = previous;
+    });
 
     await approvedButton.click();
     const details = page.locator("[data-review-approval-details]");
@@ -773,7 +828,7 @@ test("should approve a plan, stamp the page, and keep the record across reload",
     expect(stored).toMatchObject({
       version: 1,
       entries: [
-        { kind: "approval", pinnedSnapshot: deriveSnapshotDigest(PLAN) },
+        { kind: "approval", pinnedSnapshot: deriveSnapshotDigest(source) },
       ],
     });
 

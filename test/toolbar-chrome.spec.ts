@@ -20,6 +20,13 @@ const REVIEW_PANEL_EDGE_CONTRAST_FLOORS = {
   dark: NON_TEXT_FLOOR,
 } as const;
 const REVIEW_PANEL_LABELS = new Set(["Agent Status", "Feedback"]);
+// BIG-130's filled pastel Approve control is a labeled secondary action whose
+// sage edge is quieter than this chrome-edge floor on purpose.
+const APPROVE_ACTION_LABELS = new Set([
+  "Approve plan",
+  "Plan approved",
+  "Re-approve",
+]);
 
 const channel = (value: number): number => {
   const c = value / 255;
@@ -98,6 +105,15 @@ test("should keep the toolbar plan title's descenders inside its clipping box", 
   expect(box.clipHeight).toBeGreaterThanOrEqual(box.inlineHeight);
   expect(box.belowClip).toBeLessThanOrEqual(0);
   expect(box.aboveClip).toBeLessThanOrEqual(0);
+
+  const center = await title.evaluate((span) => {
+    const box = span.getBoundingClientRect();
+    return {
+      titleCenter: box.left + box.width / 2,
+      viewportCenter: window.innerWidth / 2,
+    };
+  });
+  expect(Math.abs(center.titleCenter - center.viewportCenter)).toBeLessThan(12);
 });
 
 // BIG-178: the toolbar is chrome, not the first inch of the plan, so it carries
@@ -160,6 +176,13 @@ test("should give the toolbar its own band and legible control edges in every pa
         `${where} toolbar band differs from the page`,
       ).not.toBe(chrome.page);
       for (const edge of chrome.edges) {
+        if (
+          [...APPROVE_ACTION_LABELS].some((label) =>
+            edge.label?.startsWith(label),
+          )
+        ) {
+          continue;
+        }
         const isReviewPanel = [...REVIEW_PANEL_LABELS].some((label) =>
           edge.label?.startsWith(label),
         );

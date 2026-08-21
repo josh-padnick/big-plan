@@ -64,7 +64,7 @@ const BODY_CLASSES = "bg-paper font-sans text-base text-ink antialiased";
 // margin. The sidebar gap in particular places the reading column, so a step
 // off the scale here moved every surface on the page sideways.
 const LAYOUT_CLASSES =
-  "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
+  "relative grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
 const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,54.5rem)]`;
 const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,54.5rem)]`;
 
@@ -406,7 +406,7 @@ const renderHeaderActions = ({
 }: {
   readonly feedback: boolean;
 }): string =>
-  `<div class="col-start-3 ml-auto flex items-center gap-1.5 wide:gap-2">
+  `<div class="relative z-10 col-start-3 ml-auto flex items-center gap-1.5 wide:gap-2">
 ${feedback ? renderCommentDraftControl() : ""}
 ${renderPreferencesControl()}
 </div>`;
@@ -510,8 +510,10 @@ export const renderShell = ({
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
   // The plan's own title, shown quietly in the wide bar so a reader deep in a
-  // long document can still see which plan they are in. Below that breakpoint
-  // the bar drops it: chrome buttons need the width more than a truncated echo.
+  // long document can still see which plan they are in. It is centered on the
+  // full bar, not the gap between the wordmark and the actions. Below the wide
+  // breakpoint the bar drops it: chrome buttons need the width more than a
+  // truncated echo.
   readonly title: string;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
@@ -528,20 +530,21 @@ export const renderShell = ({
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
-<div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
-<div class="flex min-w-0 items-center gap-0.5">
+<div class="relative grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
+<div class="relative z-10 flex min-w-0 items-center gap-0.5">
 <a class="shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="h-auto w-27" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="h-auto w-27" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
 </div>
-${standalone ? "<p></p>" : `<p class="col-start-2 hidden min-w-0 truncate text-center text-sm text-muted wide:block"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 ${renderHeaderActions({ feedback: !standalone })}
+${standalone ? "" : `<p class="pointer-events-none absolute inset-x-0 top-0 z-0 hidden h-11 items-center justify-center overflow-hidden wide:flex"><span class="max-w-[min(40rem,70%)] truncate italic text-sm text-muted" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 </div>
   </header>
   ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
 ${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
+<span class="pointer-events-none absolute top-8 left-5 z-50 -rotate-2 wide:top-6 wide:left-6" data-review-approval-page-stamp hidden></span>
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">
 <article>
