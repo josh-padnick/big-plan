@@ -5702,8 +5702,10 @@ The release gets a full soak.
       await expect(
         diff.locator('[data-component-diff-choice="baseline"]'),
       ).toBeChecked();
+      await expect(sideToggle).not.toHaveCSS("box-shadow", "none");
+      await page.emulateMedia({ forcedColors: "active" });
       await expect(sideToggle).toHaveCSS("outline-style", "solid");
-      await expect(sideToggle).toHaveCSS("outline-width", "2px");
+      await page.emulateMedia({ forcedColors: "none" });
       await page.keyboard.press("ArrowRight");
 
       await page.evaluate((original) => {

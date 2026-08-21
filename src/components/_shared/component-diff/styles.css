@@ -43,8 +43,18 @@
      the toggle's resting border treatment. */
   [data-component-diff]:has([data-component-diff-choice]:focus-visible)
     [data-component-diff-toggle] {
-    outline: 2px solid var(--accent-c);
-    outline-offset: 2px;
+    outline: none;
+    box-shadow: var(--elevation-focus);
+  }
+
+  @media (forced-colors: active) {
+    /* Override invariant: the system focus outline replaces a halo that
+       forced-colours mode may suppress. */
+    [data-component-diff]:has([data-component-diff-choice]:focus-visible)
+      [data-component-diff-toggle] {
+      outline: medium solid Highlight;
+      box-shadow: none;
+    }
   }
 
   /* Override invariant: the selected side beats both side panels' resting
