@@ -150,9 +150,8 @@ export const requestCommentIds = (
 /**
  * Projects the immutable opener of each pushed thread for browser presentation.
  *
- * A continuation never changes who opened a conversation. Keeping this view
- * derived from the first push is what lets the UI label origin without adding
- * a behavioral thread type or another stored record.
+ * A continuation never changes who opened a conversation. The request whose
+ * id equals the thread id is the canonical opener, independent of ordering.
  */
 export const projectPushedThreadOpeners = (
   requests: ReadonlyArray<ThreadRequest>,
@@ -163,6 +162,7 @@ export const projectPushedThreadOpeners = (
       request.kind !== "push" ||
       request.threadId === undefined ||
       request.origin === undefined ||
+      request.requestId !== request.threadId ||
       openers.has(request.threadId)
     ) {
       continue;

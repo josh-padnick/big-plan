@@ -6,6 +6,7 @@ import {
   projectCommentThread,
   projectConversationHistory,
   projectLatestAgentStatus,
+  projectPushedThreadOpeners,
   projectRequestDelivery,
   projectRequestStatus,
   queuedRequestsAhead,
@@ -912,6 +913,39 @@ describe("thread projection", () => {
 });
 
 describe("conversation history", () => {
+  it("should select a pushed thread opener by its canonical request id", () => {
+    const threadId = "1111111111111111";
+    const continuation = answeredRequest({
+      requestId: "2222222222222222",
+      kind: "push",
+      origin: "about",
+      threadId,
+      body: "Continuation sorted first.",
+      createdAt: "2026-08-10T16:00:00Z",
+    });
+    const opener = answeredRequest({
+      requestId: threadId,
+      kind: "push",
+      origin: "prompt",
+      threadId,
+      body: "Canonical opener.",
+      createdAt: "2026-08-10T17:00:00Z",
+    });
+
+    expect(projectPushedThreadOpeners([continuation, opener])).toEqual([
+      {
+        origin: "prompt",
+        comment: {
+          id: threadId,
+          body: "Canonical opener.",
+          createdAt: "2026-08-10T17:00:00Z",
+          premiseSnapshot: "1111111111111111",
+          target: { type: "document" },
+        },
+      },
+    ]);
+  });
+
   it("should project pushed-thread turns by opener origin and include reviewer replies", () => {
     const threadId = "1111111111111111";
     const opener = answeredRequest({

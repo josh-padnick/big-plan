@@ -1070,8 +1070,8 @@ export const readValidatedAgentRequests = async ({
  * listing, so choosing the window costs one listing rather than the reads it
  * exists to avoid.
  *
- * `retain` receives every accepted request, oldest first, and names the ones
- * the caller will keep. Response files are opened only for retained requests.
+ * `retain` receives every accepted request, oldest first, and independently
+ * selects the request metadata and response files the caller will keep.
  */
 const readCompleteAgentExchange = async ({
   store,
@@ -1085,7 +1085,10 @@ const readCompleteAgentExchange = async ({
   readonly retain?: (input: {
     readonly requests: ReadonlyArray<AgentRequest>;
     readonly answeredRequestIds: ReadonlySet<string>;
-  }) => ReadonlySet<string>;
+  }) => {
+    readonly requestIds: ReadonlySet<string>;
+    readonly responseIds: ReadonlySet<string>;
+  };
 }): Promise<AgentExchangeSnapshot> => {
   const requests = await readValidatedAgentRequests({
     store,
@@ -1094,12 +1097,13 @@ const readCompleteAgentExchange = async ({
   });
   const commentsById = commentsFromRequests(requests);
   const answeredRequestIds = new Set(await listAgentResponseRequestIds(store));
-  const retainedRequestIds =
+  const allRequestIds = new Set(requests.map((request) => request.requestId));
+  const retained =
     retain === undefined
-      ? new Set(requests.map((request) => request.requestId))
+      ? { requestIds: allRequestIds, responseIds: allRequestIds }
       : retain({ requests, answeredRequestIds });
   const retainedRequests = requests.filter((request) =>
-    retainedRequestIds.has(request.requestId),
+    retained.requestIds.has(request.requestId),
   );
   const requestById = new Map(
     retainedRequests.map((request) => [request.requestId, request]),
@@ -1110,6 +1114,7 @@ const readCompleteAgentExchange = async ({
     .map((request) => request.requestId)
     .filter(
       (requestId) =>
+        retained.responseIds.has(requestId) &&
         answeredRequestIds.has(requestId) &&
         requestById.get(requestId)?.answeredAt !== undefined,
     );
@@ -1288,14 +1293,17 @@ export const readAgentExchange = async ({
         requestBlocksPlanPickup({ request, nowMs }),
       );
       const pushedThreadOpeners = requests.filter(isPushedThreadOpener);
-      return new Set(
-        [
-          ...pending,
-          ...terminal,
-          ...pickupBlockers,
-          ...pushedThreadOpeners,
-        ].map((request) => request.requestId),
-      );
+      const responseRequests = [...pending, ...terminal, ...pickupBlockers];
+      return {
+        requestIds: new Set(
+          [...responseRequests, ...pushedThreadOpeners].map(
+            (request) => request.requestId,
+          ),
+        ),
+        responseIds: new Set(
+          responseRequests.map((request) => request.requestId),
+        ),
+      };
     },
   });
   const pending = outstandingAgentRequests(complete);
@@ -1346,8 +1354,12 @@ export const readAgentCommentHistory = async ({
     planId,
     // This history answers questions about one comment, so the responses of
     // every other comment's requests are read for nothing.
-    retain: ({ requests }) =>
-      new Set(requests.filter(forComment).map((request) => request.requestId)),
+    retain: ({ requests }) => {
+      const requestIds = new Set(
+        requests.filter(forComment).map((request) => request.requestId),
+      );
+      return { requestIds, responseIds: requestIds };
+    },
   });
   const requests = complete.requests.filter(forComment);
   const requestIds = new Set(requests.map((request) => request.requestId));
