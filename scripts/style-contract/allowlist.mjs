@@ -71,7 +71,8 @@ export const STYLESHEET_BUDGETS = {
     // per palette. Dark mode reuses the general edge instead of adding shades.
     // The shared tooltip adds four semantic theme tokens and their four utility
     // aliases so dialog-owned tooltips can use one light-and-dark treatment.
-    declarations: 551,
+    // Approve adds three role tokens and one success-scale edge to each palette.
+    declarations: 561,
   },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },
