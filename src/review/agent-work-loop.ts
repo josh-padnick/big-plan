@@ -710,7 +710,7 @@ Work in the plan's repository. You never edit that plan file: each work item han
 Run this command to receive the next real review request:
 ${nextCommand}
 
-Big Plan permits one live request claim for this plan at a time, and one agent answers this review at a time. If another agent is already the primary, this command attaches you as an observer instead of starting parallel plan edits: you may read the plan, the conversation, and the state of the reviewer's requests, and you may not claim, note, or respond. Arriving is itself the request to be the primary, and the reviewer answers it; with --wait you keep observing until they do. If they move primacy away from you, agent note and agent respond refuse with the error code PRIMACY_LOST and agent next returns role: "observer" again; if they disconnect you, agent next returns role: "disconnected". Any of the three means stop this loop rather than retrying.
+Big Plan permits one live request claim for this plan at a time, and one agent answers this review at a time. If another agent is already the primary, this command attaches you as an observer instead of starting parallel plan edits: you are given the plan path and the review URL, and you may not claim, note, or respond - an observer is not handed the reviewer's comments or their conversation. Arriving is itself the request to be the primary, and the reviewer answers it; with --wait you keep observing until they do. If they move primacy away from you, agent note and agent respond refuse with the error code PRIMACY_LOST and agent next returns role: "observer" again; if they disconnect you, agent next returns role: "disconnected". Any of the three means stop this loop rather than retrying.
 
 For each returned work item:
 1. Read the returned candidate_plan and the request plus its conversation history.
@@ -973,6 +973,33 @@ const nextWork = async ({
       });
     } catch (error: unknown) {
       if (!(error instanceof AgentDisconnectedByReviewer)) throw error;
+      /*
+      The reviewer's disconnect reaches this loop by two routes, and both have
+      to end the session.
+
+      Disconnecting writes a directive addressed to this agent and detaches its
+      registration, two writes milliseconds apart. `wasDisconnected` reads the
+      first at the top of each wait pass and marks this session ended; the
+      registration is read here, at the bottom of the same pass. Whichever the
+      loop reaches first wins, so roughly half of all disconnects returned
+      through this branch - which left the presence record saying "waiting"
+      under the name of an agent that had just stopped.
+
+      Nothing else could ever correct it: an observer does not write presence,
+      and the seat is now empty. So Agent Status went on drawing a connected
+      agent with its Disconnect button stuck at "Disconnecting…" until the
+      75-second lease lapsed, and then blamed a lapsed signal for an end the
+      reviewer had performed themselves (BIG-171).
+
+      The marker's own guard still decides whether it lands: it refuses unless
+      the presence record is this agent's, so a loop that was never the primary
+      cannot end a bystander's session on its way out.
+      */
+      await writeAgentHeartbeatEnded({
+        store: session.store,
+        sessionId: session.sessionId,
+        writerId: rosterWriterId,
+      }).catch(() => undefined);
       return "disconnected";
     }
     rosterWriterId = registration.agent.writerId;
@@ -1015,7 +1042,7 @@ const nextWork = async ({
     help: [
       "This session is exiting, so the reviewer is not left with a question about it",
       "Run again with --wait to stay attached, ask the reviewer, and continue if they make this agent the primary",
-      "Reading the plan and the review is allowed; claiming, noting, and responding are not",
+      "Reading the plan is allowed; claiming, noting, and responding are not, and the reviewer's comments are not handed to an observer",
     ],
   });
   try {

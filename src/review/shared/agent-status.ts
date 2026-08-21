@@ -99,7 +99,11 @@ export type CurrentAgentActivity =
   | {
       readonly state: "disconnected";
       readonly tone: "danger";
-      readonly headline: "The agent has disconnected.";
+      /* Two headlines, because there are two facts. "The agent has
+         disconnected" reports something the agent did, which is right for a
+         lease Big Plan watched lapse and wrong for a departure the reviewer
+         ordered. */
+      readonly headline: "The agent has disconnected." | "Agent disconnected";
       readonly supporting: string;
     }
   | {
@@ -482,17 +486,33 @@ reviewer who connects over held work has to be told what it costs them.
 const disconnectedSupporting = ({
   heartbeatAt,
   endedAtMs,
+  disconnectRequestedAtMs,
   now,
   claimStillOpen,
 }: {
   readonly heartbeatAt: number;
   readonly endedAtMs?: number;
+  /** When the reviewer asked this agent to disconnect, if they did. */
+  readonly disconnectRequestedAtMs?: number;
   readonly now: number;
   readonly claimStillOpen: boolean;
 }): string => {
   const takeover = claimStillOpen
     ? " An agent still holds work here, so connecting a session takes that work over and its answer will no longer be accepted."
     : "";
+  /*
+  An end the reviewer performed is never explained as one Big Plan inferred.
+
+  Every sentence below this exists to account for an absence nobody witnessed -
+  how long the signal has been gone, which threshold decided it, whether the
+  session may merely be idle - and offers a reconnect as the way out. Said to a
+  reviewer who has just disconnected the agent on purpose, all of it reads as
+  the product failing to notice what they did, and the invitation to reconnect
+  reads as an instruction to undo it (BIG-171).
+  */
+  if (disconnectRequestedAtMs !== undefined) {
+    return `You disconnected this agent. Connect another when you want your comments answered.${takeover} All comments are safe.`;
+  }
   // The threshold sentence explains an inference. Once the loop has reported
   // its own end there is no inference left to explain, and naming the
   // threshold anyway would offer the reviewer a guess in place of a fact.
@@ -679,6 +699,7 @@ export const deriveCurrentAgentActivity = ({
   now,
   heartbeatAt,
   endedAtMs,
+  disconnectRequestedAtMs,
   everConnected,
 }: {
   readonly requests: ReadonlyArray<AgentActivityRequest>;
@@ -690,6 +711,13 @@ export const deriveCurrentAgentActivity = ({
   readonly heartbeatAt: number;
   /** When the agent's own loop reported the session ending, if it did. */
   readonly endedAtMs?: number;
+  /**
+   * When the reviewer asked this agent to disconnect, if they did.
+   *
+   * It is the difference between an absence Big Plan noticed and one the
+   * reviewer created, and only the second can be stated as a fact.
+   */
+  readonly disconnectRequestedAtMs?: number;
   readonly everConnected: boolean;
 }): CurrentAgentActivity => {
   if (runtimeOffline) {
@@ -776,10 +804,19 @@ export const deriveCurrentAgentActivity = ({
     return {
       state: "disconnected",
       tone: "danger",
-      headline: "The agent has disconnected.",
+      /* "Has disconnected" reports something the agent did. When the reviewer
+         is the one who did it, the headline says so rather than handing their
+         own decision back to them as news. */
+      headline:
+        disconnectRequestedAtMs === undefined
+          ? "The agent has disconnected."
+          : "Agent disconnected",
       supporting: disconnectedSupporting({
         heartbeatAt,
         ...(endedAtMs === undefined ? {} : { endedAtMs }),
+        ...(disconnectRequestedAtMs === undefined
+          ? {}
+          : { disconnectRequestedAtMs }),
         now,
         claimStillOpen:
           heldWorkQuiet({ requests, cancelPendingRequestIds, now }) === "stale",

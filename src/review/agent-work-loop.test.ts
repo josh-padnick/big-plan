@@ -1887,6 +1887,92 @@ describe("agent work loop lifecycle", () => {
     }
   }, 20_000);
 
+  /*
+  BIG-171: the reviewer disconnects the primary, and the rail has to notice.
+
+  Disconnecting writes a directive and detaches the registration milliseconds
+  apart, and the waiting loop reads the two at opposite ends of the same pass.
+  When the registration is what it sees first, this is the only write left that
+  can retire the presence record: the agent stops, an observer does not write
+  presence, and the seat is empty. Without it the card kept drawing a connected
+  agent with its Disconnect button stuck at "Disconnecting…", and then blamed a
+  lapsed signal for an end the reviewer performed.
+  */
+  it("should end the presence record when the roster is what tells it", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-h-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(
+      planPath,
+      "# Plan\n\nThe card must stop saying connected.\n",
+    );
+    const review = await startReviewRuntime({ planPath });
+    let waiting: Promise<Record<string, unknown>> | undefined;
+    try {
+      waiting = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+      });
+      const primary = await vi.waitFor(
+        async () => {
+          const seated = selectPrimaryAgent({
+            agents: await reviewStore.readAgentRoster({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+            nowMs: Date.now(),
+          });
+          if (seated === undefined) throw new Error("No agent registered yet");
+          return seated;
+        },
+        { timeout: 5_000 },
+      );
+      // The loop has to be vouching for itself before the record can be shown
+      // to stop: an assertion against a record it had not written yet would
+      // pass whether or not the fix exists.
+      await vi.waitFor(
+        async () => {
+          const presence = await reviewStore.readAgentPresence({
+            store: review.store,
+            sessionId: review.sessionId,
+          });
+          if (presence.writerId !== primary.writerId) {
+            throw new Error("The primary has not written presence yet");
+          }
+        },
+        { timeout: 5_000 },
+      );
+
+      // Only the registration goes, which is the half of a disconnect this
+      // loop is being made to notice.
+      await reviewStore.detachAgentFromRoster({
+        store: review.store,
+        sessionId: review.sessionId,
+        writerId: primary.writerId,
+      });
+
+      await expect(waiting).resolves.toMatchObject({
+        pending: false,
+        role: "disconnected",
+      });
+      // An ended record is projected as a disconnected one carrying the moment
+      // it ended, which is exactly what the card reads to stop drawing a
+      // connected agent and to retire its Disconnect button.
+      const presence = await reviewStore.readAgentPresence({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(presence.connected).toBe(false);
+      expect(presence.endedAtMs).toBeTypeOf("number");
+      expect(presence.writerId).toBe(primary.writerId);
+    } finally {
+      await review.close();
+      await waiting;
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it("should tell a disconnected agent at its next command", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-drop-n-"));
     const planPath = join(directory, "plan.mdx");

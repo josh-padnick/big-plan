@@ -45,6 +45,7 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   AGENT_STALL_MS,
+  agentDisconnectDropsWork,
   agentHasEverConnected,
   deriveAgentHealth,
   deriveCurrentAgentActivity,
@@ -6578,6 +6579,11 @@ export const ReviewController = () => {
     now: agentProjectionNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
     ...(agentEndedAtMs === undefined ? {} : { endedAtMs: agentEndedAtMs }),
+    /* The directive rides on the presence record it addresses, so a card that
+       has one is describing the very agent the reviewer disconnected. */
+    ...(agent.presence.disconnectRequestedAtMs === undefined
+      ? {}
+      : { disconnectRequestedAtMs: agent.presence.disconnectRequestedAtMs }),
     everConnected: agentHasEverConnected({ events: agentConnection.events }),
   });
   const chatRequests = agent.requests.filter(
@@ -7434,6 +7440,14 @@ export const ReviewController = () => {
                       agents: agent.agents,
                       nowMs: agentProjectionNowMs,
                     })}
+                    agents={agent.agents}
+                    /* The same evidence the disconnect dialog uses to decide
+                       whether it is about to drop an answer: a turn is in
+                       flight, or it is not. An idle primary has no draft to
+                       carry, so there is nothing to offer. */
+                    hasWorkInProgress={agentDisconnectDropsWork(
+                      currentAgentActivity,
+                    )}
                     onCancel={() => setPendingHandoff(null)}
                     onConfirm={({ carryWorkInProgress }) => {
                       setPendingHandoff(null);
