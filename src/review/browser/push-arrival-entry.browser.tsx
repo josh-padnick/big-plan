@@ -68,11 +68,15 @@ export const PushArrivalEntry = ({
          an offer rather than an interruption. */
       role="status"
     >
-      <p className="m-0 flex items-center gap-1.5 text-xs font-semibold text-ink">
+      {/* An eyebrow, so the three lines read as one ramp: what happened, who
+          did it, and what it touched. The identity keeps the agent card's own
+          presentation exactly, which is what stops one agent reading as two
+          across the two surfaces. */}
+      <p className="m-0 flex items-center gap-1.5 text-2xs font-bold uppercase tracking-caps text-muted">
         <Icon icon={BOT_ICON} />
         {pushArrivalTimeLabel({ arrivedAt: arrival.arrivedAt, nowMs })}
       </p>
-      <p className="mt-1 mb-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]">
+      <p className="mt-1.5 mb-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]">
         <AgentIdentityText
           label={name === undefined ? "Agent" : agentModelDisplayName(name)}
           client={arrival.model?.client}

@@ -445,7 +445,7 @@ const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
 const TOOLBAR_CONTROL_CLASS =
   "inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-review-panel-edge bg-transparent px-1.5 py-1 text-xs text-muted shadow-none hover:border-review-panel-edge-strong hover:bg-toolbar-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-review-panel-edge-strong aria-expanded:bg-toolbar-surface aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:px-2";
 const FEEDBACK_TAB_CLASS =
-  "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>span]:min-w-5 [&>span]:justify-center [&>span]:bg-[var(--annotation-bg)] [&>span]:text-2xs [&>span]:text-[var(--annotation-c)]";
+  "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>[data-review-tab-count]]:min-w-5 [&>[data-review-tab-count]]:justify-center [&>[data-review-tab-count]]:bg-[var(--annotation-bg)] [&>[data-review-tab-count]]:text-2xs [&>[data-review-tab-count]]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
 const APPLE_PLATFORM = /Mac|iPhone|iPad/u.test(navigator.platform);
 const MODIFIER_SHORTCUT = APPLE_PLATFORM ? "⌘+Enter" : "Ctrl+Enter";
@@ -7513,7 +7513,9 @@ export const ReviewController = () => {
                   <Icon icon={MESSAGE_SQUARE_ICON} />
                   Comments
                   {unresolvedDrafts.length > 0 ? (
-                    <Badge size="compact">{unresolvedDrafts.length}</Badge>
+                    <Badge size="compact" data-review-tab-count="">
+                      {unresolvedDrafts.length}
+                    </Badge>
                   ) : null}
                 </button>
                 <button
