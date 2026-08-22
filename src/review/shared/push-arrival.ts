@@ -1,0 +1,126 @@
+// Owns the browser's answer to "did a push just land?".
+//
+// A push is the one exchange the reviewer did not start, so the review island
+// has to notice it rather than be told. The arrival fact is deliberately the
+// response id: a push response id newly present in a poll payload is the only
+// signal that is both terminal (the commit already happened) and durable
+// (nothing about it is browser-held, so a reload simply re-seeds). The article
+// swap stays driven purely by the snapshot changing, which is why the settle
+// targets below are looked up by result snapshot rather than by arrival: the
+// swap knows which revision it is showing, not which poll noticed it.
+//
+// Seeding is the subtle half. A reader who opens a plan with pushes already in
+// it has not just been pushed to, so the first payload marks every push
+// response seen and reports no arrivals. Only a payload that adds one does.
+
+import type { AgentModelIdentity } from "./agent-model.js";
+import type { AgentRequest, AgentResponse } from "./review-wire.js";
+
+/** One push that landed while the reader was reading. */
+export type PushArrival = {
+  readonly requestId: string;
+  /** The thread the push opened or replied into, for the entry's controls. */
+  readonly threadId: string;
+  readonly resultSnapshot: string;
+  /** When the commit landed, for the entry's freshness label. */
+  readonly arrivedAt: string;
+  /** Every block the revision changed, in the order the agent listed them. */
+  readonly changeTargets: ReadonlyArray<string>;
+  /** What the agent declared about itself when it claimed the push. */
+  readonly model?: AgentModelIdentity;
+};
+
+export type PushArrivalScan = {
+  readonly arrivals: ReadonlyArray<PushArrival>;
+  /** The seed for the next scan; pass it back verbatim. */
+  readonly seenPushResponseIds: ReadonlySet<string>;
+};
+
+const pushResponses = (
+  responses: ReadonlyArray<AgentResponse>,
+): ReadonlyArray<AgentResponse> =>
+  responses.filter((response) => response.kind === "push");
+
+/**
+ * Every block a response reported changed, deduplicated but kept in the order
+ * the agent listed them, because that order is presentation order and the
+ * settle reads as one sweep down the page rather than a scatter.
+ */
+const changedBlocks = (response: AgentResponse): ReadonlyArray<string> => [
+  ...new Set(response.outcomes.flatMap((outcome) => outcome.changeTargets)),
+];
+
+/**
+ * Reports the pushes this payload added, and the seed for the next scan.
+ *
+ * A null seed means the island has not scanned yet: every push already in the
+ * payload is recorded as seen and nothing is reported, so opening a plan is
+ * never mistaken for being pushed to.
+ */
+export const scanPushArrivals = ({
+  requests,
+  responses,
+  seenPushResponseIds,
+}: {
+  readonly requests: ReadonlyArray<AgentRequest>;
+  readonly responses: ReadonlyArray<AgentResponse>;
+  readonly seenPushResponseIds: ReadonlySet<string> | null;
+}): PushArrivalScan => {
+  const landed = pushResponses(responses);
+  if (seenPushResponseIds === null) {
+    return {
+      arrivals: [],
+      seenPushResponseIds: new Set(
+        landed.map((response) => response.requestId),
+      ),
+    };
+  }
+  const seen = new Set(seenPushResponseIds);
+  const arrivals: Array<PushArrival> = [];
+  for (const response of landed) {
+    if (seen.has(response.requestId)) continue;
+    const request = requests.find(
+      (candidate) =>
+        candidate.requestId === response.requestId && candidate.kind === "push",
+    );
+    // A response whose request has not reached this reader yet cannot be
+    // attributed to a thread, so it stays unseen and arrives on the payload
+    // that carries both. Recording it seen here would lose the arrival.
+    if (request?.threadId === undefined) continue;
+    seen.add(response.requestId);
+    arrivals.push({
+      requestId: response.requestId,
+      threadId: request.threadId,
+      resultSnapshot: response.resultSnapshot,
+      arrivedAt: response.createdAt,
+      changeTargets: changedBlocks(response),
+      ...(request.claimedModel === undefined
+        ? {}
+        : { model: request.claimedModel }),
+    });
+  }
+  return { arrivals, seenPushResponseIds: seen };
+};
+
+/**
+ * The blocks a settle belongs on for the revision a swap is about to show.
+ *
+ * Asked of the revision rather than of the arrival because the swap is the
+ * moment the reader can see a change at all, and a swap the reader triggered
+ * later for the same revision is still showing push-changed blocks. An empty
+ * answer means this revision was not pushed, which is how the swap tells a
+ * push apart from every other reason plan DOM is replaced.
+ */
+export const pushSettleTargets = ({
+  responses,
+  resultSnapshot,
+}: {
+  readonly responses: ReadonlyArray<AgentResponse>;
+  readonly resultSnapshot: string;
+}): ReadonlyArray<string> => {
+  if (resultSnapshot === "") return [];
+  const response = pushResponses(responses).find(
+    (candidate) => candidate.resultSnapshot === resultSnapshot,
+  );
+  return response === undefined ? [] : changedBlocks(response);
+};

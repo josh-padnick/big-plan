@@ -24,6 +24,8 @@ export type ChatSurfaceModel = {
   readonly isSending: boolean;
   readonly exchanges: ReactNode;
   readonly hasExchanges: boolean;
+  /** The arrival entry for a push that landed while the reader was reading. */
+  readonly arrivalEntry: ReactNode;
   readonly pushedThreads: ReactNode;
   readonly pushedThreadCount: number;
   readonly resolvedPushedThreads: ReactNode;
@@ -111,6 +113,7 @@ export const ChatSurface = ({
               )}
             </div>
           </div>
+          {model.arrivalEntry}
           {model.pushedThreadCount === 0 ? null : (
             <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
               <h3 className="m-0 text-xs font-bold uppercase tracking-caps text-muted">

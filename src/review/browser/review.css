@@ -5,7 +5,34 @@ positioning, selection, and association rules that cross into inert HTML live
 here; all values use the document theme's closed token vocabulary.
 */
 
+/* The settle a pushed revision leaves on the blocks it changed. A keyframe
+   definition has no layer of its own; the rule that uses it is layered below.
+   There is deliberately no reduced-motion arm: the island skips the mark
+   entirely for a reader who asked for less motion, because a brief wash that
+   fades is the whole effect and a stilled version of it would be a permanent
+   highlight the reader never dismissed. */
+@keyframes review-push-settle {
+  from {
+    background-color: color-mix(in srgb, var(--accent-c) 16%, transparent);
+    box-shadow: 0 0 0 0.35rem
+      color-mix(in srgb, var(--accent-c) 16%, transparent);
+  }
+
+  to {
+    background-color: transparent;
+    box-shadow: 0 0 0 0.35rem transparent;
+  }
+}
+
 @layer components {
+  /* A push replaces plan DOM under a reader who did not ask for it, and the
+     swap is otherwise silent by design. This is the only evidence the words
+     changed, so it paints the arriving blocks once; the island removes the
+     attribute when the animation ends. */
+  [data-block-id][data-review-settled] {
+    border-radius: 0.25rem;
+    animation: review-push-settle 1.6s ease-out 1;
+  }
   [data-block-id]:not([data-block-kind="part"]),
   [data-slide][data-review-slide-selectable],
   [data-quick-summary][data-review-slide-selectable] {
