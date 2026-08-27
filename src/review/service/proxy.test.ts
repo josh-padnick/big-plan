@@ -104,6 +104,21 @@ describe("the opt-in review proxy", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(running.review.url);
+
+    // Nothing the hop taught this address may reach a switched-off service.
+    // Without the hop there is no document reading its own address here, so a
+    // request that states a non-document destination still gets the page it
+    // got before the switch existed.
+    await running.review.close();
+    const ended = await fetch(
+      `${running.service.origin}/plan/${running.review.planId}`,
+      {
+        redirect: "manual",
+        headers: { "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin" },
+      },
+    );
+    expect(ended.status).toBe(200);
+    expect(ended.headers.get("content-type")).toContain("text/html");
   });
 
   it("should serve identical bytes and accept browser reads and writes through the hop", async () => {
@@ -166,8 +181,19 @@ describe("the opt-in review proxy", () => {
     const planPrefix = `/plan/${running.review.planId}/`;
     await running.review.close();
 
-    const [page, poll, image] = await Promise.all([
-      fetch(`${running.service.origin}${planPrefix}`, { redirect: "manual" }),
+    const [page, refresh, poll, image] = await Promise.all([
+      fetch(`${running.service.origin}${planPrefix}`, {
+        redirect: "manual",
+        headers: { "sec-fetch-dest": "document" },
+      }),
+      // The open document refetching its own address to pick up a revision.
+      // It shares that address with the navigation above and reads the answer
+      // as the plan, so it must be told the runtime is gone rather than handed
+      // a status page it would report as a plan with no reading surface.
+      fetch(`${running.service.origin}${planPrefix}`, {
+        redirect: "manual",
+        headers: { "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin" },
+      }),
       fetch(`${running.service.origin}${planPrefix}api/drafts`, {
         headers: {
           "x-big-plan-review-token": running.token,
@@ -184,7 +210,7 @@ describe("the opt-in review proxy", () => {
     // What the open page asks for itself must not read as a successful answer,
     // or the document parses a status page as data instead of showing that its
     // runtime is gone.
-    for (const answer of [poll, image]) {
+    for (const answer of [refresh, poll, image]) {
       expect(answer.ok).toBe(false);
       expect(answer.status).toBe(502);
       expect(answer.headers.get("content-type")).not.toContain("text/html");

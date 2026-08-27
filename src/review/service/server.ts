@@ -346,16 +346,32 @@ export const startService = async ({
       // data: the poll would see success, the parse would throw something the
       // browser's runtime boundary does not recognise, and the outage the
       // reader should have been shown would never appear.
+      //
+      // The document address is the one path both kinds of request share. A
+      // person navigates to it from a saved link, and the open document
+      // refetches it to pick up a revision the agent published - and that
+      // refetch reads whatever comes back as the plan, so answering it with a
+      // status page tells the reader their plan lost its reading surface
+      // instead of that their session ended. `Sec-Fetch-Dest` is what
+      // separates the two, and its absence counts as the navigation: every
+      // browser states the destination, so nothing arriving here without one
+      // is a page reading itself.
+      const fetchDestination = request.headers["sec-fetch-dest"];
       const readablePage =
         method === "GET" &&
-        (target.pathname === planRoot || target.pathname === `${planRoot}/`);
+        (target.pathname === planRoot || target.pathname === `${planRoot}/`) &&
+        (fetchDestination === undefined || fetchDestination === "document");
       // A malformed id is answered like an unknown one rather than with a
       // validation error, because the visitor clicked a link and cannot act
       // on the difference.
       const answer = isServicePlanId(planId)
         ? await answerForPlan({ planId })
         : ({ kind: "unknown" } as const);
-      if (answer.kind !== "live" && !readablePage) {
+      // Only the hop can reach a request this refusal is right for. With the
+      // switch off nothing but a navigation to the plan address arrives here
+      // at all, so gating on it is what keeps every switched-off answer the
+      // answer it was before the hop existed.
+      if (proxyEnabled && answer.kind !== "live" && !readablePage) {
         if (answer.kind === "unknown") {
           refuse({ response, status: 404, reason: "No such route" });
         } else {
