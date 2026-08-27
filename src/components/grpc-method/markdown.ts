@@ -2,9 +2,11 @@
 
 import {
   markdownFromHast,
+  markdownHeading,
   markdownInlineCode,
   markdownInlineText,
   markdownTable,
+  markdownTableProse,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
 import type { CompiledGrpcMethod } from "./compile.js";
@@ -12,50 +14,101 @@ import type { CompiledGrpcMethod } from "./compile.js";
 const grpcFields = (
   title: string,
   fields: CompiledGrpcMethod["requestFields"],
-): ReadonlyArray<string> =>
-  fields.length === 0
-    ? []
-    : [
-        title,
-        markdownTable({
-          headers: ["Name", "Type", "Description"],
-          rows: fields.map((field) => [
-            markdownInlineText(field.name),
-            markdownInlineText(field.fieldType ?? ""),
-            markdownFromHast(field.children),
-          ]),
-        }),
-      ];
+): ReadonlyArray<string> => {
+  if (fields.length === 0) return [];
+  const rows = fields.map((field) => ({
+    field,
+    prose: markdownTableProse(markdownFromHast(field.children)),
+  }));
+  return [
+    title,
+    markdownTable({
+      headers: ["Name", "Type", "Description"],
+      rows: rows.map(({ field, prose }) => [
+        markdownInlineText(field.name),
+        markdownInlineText(field.fieldType ?? ""),
+        prose.cell,
+      ]),
+    }),
+    ...rows.flatMap(({ field, prose }) =>
+      prose.blocks === undefined
+        ? []
+        : [`**${markdownInlineText(field.name)}**\n\n${prose.blocks}`],
+    ),
+  ];
+};
 
 export const grpcMethodMarkdown: ComponentMarkdownRenderer<
   CompiledGrpcMethod
-> = (model) => {
+> = (model, { headingOffset }) => {
   const description = markdownFromHast(model.description);
+  const errors = model.errors.map((error) => ({
+    error,
+    prose: markdownTableProse(markdownFromHast(error.children)),
+  }));
   return [
-    `### ${markdownInlineText(`${model.service}/${model.name}`)}`,
+    markdownHeading({
+      level: 3,
+      offset: headingOffset,
+      text: markdownInlineText(`${model.service}/${model.name}`),
+    }),
     `**Transport:** ${model.kind} · Request ${markdownInlineCode(model.request)} · Response ${markdownInlineCode(model.response)}`,
     ...(model.deprecated ? ["**Deprecated:** Yes"] : []),
     ...(description === "" ? [] : [description]),
-    ...grpcFields("#### Request fields", model.requestFields),
-    ...grpcFields("#### Response fields", model.responseFields),
-    ...(model.errors.length === 0
+    ...grpcFields(
+      markdownHeading({
+        level: 4,
+        offset: headingOffset,
+        text: "Request fields",
+      }),
+      model.requestFields,
+    ),
+    ...grpcFields(
+      markdownHeading({
+        level: 4,
+        offset: headingOffset,
+        text: "Response fields",
+      }),
+      model.responseFields,
+    ),
+    ...(errors.length === 0
       ? []
       : [
-          "#### Errors",
+          markdownHeading({
+            level: 4,
+            offset: headingOffset,
+            text: "Errors",
+          }),
           markdownTable({
             headers: ["Code", "Meaning"],
-            rows: model.errors.map((error) => [
+            rows: errors.map(({ error, prose }) => [
               markdownInlineText(error.code),
-              markdownFromHast(error.children),
+              prose.cell,
             ]),
           }),
+          ...errors.flatMap(({ error, prose }) =>
+            prose.blocks === undefined
+              ? []
+              : [`**${markdownInlineText(error.code)}**\n\n${prose.blocks}`],
+          ),
         ]),
     ...model.examples.flatMap((example, index) => [
-      `#### Example${example.label === undefined ? ` ${index + 1}` : ` — ${markdownInlineText(example.label)}`}`,
+      markdownHeading({
+        level: 4,
+        offset: headingOffset,
+        text: `Example${example.label === undefined ? ` ${index + 1}` : ` — ${markdownInlineText(example.label)}`}`,
+      }),
       markdownFromHast(example.children),
     ]),
     ...(model.proto === undefined
       ? []
-      : ["#### Proto", markdownFromHast(model.proto)]),
+      : [
+          markdownHeading({
+            level: 4,
+            offset: headingOffset,
+            text: "Proto",
+          }),
+          markdownFromHast(model.proto),
+        ]),
   ].join("\n\n");
 };

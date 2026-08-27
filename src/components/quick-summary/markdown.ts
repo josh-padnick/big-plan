@@ -3,6 +3,7 @@
 import {
   markdownBullet,
   markdownFromHast,
+  markdownHeading,
   markdownInlineText,
 } from "../_model/markdown-export.js";
 import type { ComponentMarkdownRenderer } from "../_model/markdown-export.js";
@@ -10,9 +11,9 @@ import type { CompiledQuickSummary } from "./compile.js";
 
 export const quickSummaryMarkdown: ComponentMarkdownRenderer<
   CompiledQuickSummary
-> = (model) =>
+> = (model, { headingOffset }) =>
   [
-    "## Summary",
+    markdownHeading({ level: 2, offset: headingOffset, text: "Summary" }),
     ...model.facets.map((facet) =>
       [
         `**${markdownInlineText(facet.name)}**`,

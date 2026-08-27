@@ -2,6 +2,7 @@
 
 import {
   markdownFence,
+  markdownHeading,
   markdownInlineText,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
@@ -29,11 +30,17 @@ const treeLines = (
 
 export const fileTreeDiffMarkdown: ComponentMarkdownRenderer<
   CompiledFileTreeDiff
-> = (model) =>
+> = (model, { headingOffset }) =>
   [
     ...(model.title === undefined
       ? []
-      : [`### ${markdownInlineText(model.title)}`]),
+      : [
+          markdownHeading({
+            level: 3,
+            offset: headingOffset,
+            text: markdownInlineText(model.title),
+          }),
+        ]),
     markdownFence({
       source: treeLines(model.entries).join("\n"),
       language: "text",

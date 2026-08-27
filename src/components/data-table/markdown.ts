@@ -1,6 +1,7 @@
 // Renders DataTable's complete authored grid, grouping dimension, and summary.
 
 import {
+  markdownHeading,
   markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
@@ -9,6 +10,7 @@ import type { CompiledDataTable } from "./compile.js";
 
 export const dataTableMarkdown: ComponentMarkdownRenderer<CompiledDataTable> = (
   model,
+  { headingOffset },
 ) => {
   const rows = model.rows.map((row) =>
     row.cells.map((cell) => markdownInlineText(cell.text)),
@@ -23,7 +25,13 @@ export const dataTableMarkdown: ComponentMarkdownRenderer<CompiledDataTable> = (
   return [
     ...(model.title === undefined
       ? []
-      : [`### ${markdownInlineText(model.title)}`]),
+      : [
+          markdownHeading({
+            level: 3,
+            offset: headingOffset,
+            text: markdownInlineText(model.title),
+          }),
+        ]),
     ...(model.groupColumn === -1
       ? []
       : [

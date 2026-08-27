@@ -2,6 +2,7 @@
 // label, value, state, status, and navigation target remains plain text.
 
 import {
+  markdownHeading,
   markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
@@ -214,12 +215,21 @@ const nodeLines = (
 
 export const wireframeMarkdown: ComponentMarkdownRenderer<CompiledWireframe> = (
   model,
+  { headingOffset },
 ) =>
   [
-    `### Wireframe${model.title === undefined ? "" : `: ${markdownInlineText(model.title)}`}`,
+    markdownHeading({
+      level: 3,
+      offset: headingOffset,
+      text: `Wireframe${model.title === undefined ? "" : `: ${markdownInlineText(model.title)}`}`,
+    }),
     ...model.screens.map((screen) =>
       [
-        `#### Screen: ${markdownInlineText(screen.name)}${screen.id === model.initialScreenId ? " — Initial" : ""}`,
+        markdownHeading({
+          level: 4,
+          offset: headingOffset,
+          text: `Screen: ${markdownInlineText(screen.name)}${screen.id === model.initialScreenId ? " — Initial" : ""}`,
+        }),
         `- Device: ${screen.device}`,
         ...(screen.url === undefined
           ? []

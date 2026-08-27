@@ -3,6 +3,7 @@
 import {
   markdownBullet,
   markdownFromHast,
+  markdownHeading,
   markdownInlineCode,
   markdownInlineText,
   markdownTable,
@@ -12,10 +13,14 @@ import type { CompiledFlowDiagram } from "./compile.js";
 
 export const flowDiagramMarkdown: ComponentMarkdownRenderer<
   CompiledFlowDiagram
-> = (model) => {
+> = (model, { headingOffset }) => {
   const stages = model.stages.map((stage, index) =>
     [
-      `#### Stage ${index + 1}: ${markdownInlineText(stage.title)}`,
+      markdownHeading({
+        level: 4,
+        offset: headingOffset,
+        text: `Stage ${index + 1}: ${markdownInlineText(stage.title)}`,
+      }),
       ...stage.nodes.map((node) => {
         const properties = [
           `id ${markdownInlineCode(node.id)}`,
@@ -35,12 +40,20 @@ export const flowDiagramMarkdown: ComponentMarkdownRenderer<
     ].join("\n"),
   );
   return [
-    "### Flow diagram",
+    markdownHeading({
+      level: 3,
+      offset: headingOffset,
+      text: "Flow diagram",
+    }),
     ...stages,
     ...(model.edges.length === 0
       ? []
       : [
-          "#### Connections",
+          markdownHeading({
+            level: 4,
+            offset: headingOffset,
+            text: "Connections",
+          }),
           markdownTable({
             headers: ["From", "Relationship", "To"],
             rows: model.edges.map((edge) => [

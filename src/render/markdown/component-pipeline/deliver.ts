@@ -12,8 +12,12 @@ import {
   type ComponentIdAllocator,
 } from "../../../components/_authoring/contract.js";
 import type { DiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
-import type { DocumentOutline } from "../../../components/_model/document-outline/document-outline.js";
-import { markdownExportPlaceholder } from "../../../components/_model/markdown-export.js";
+import {
+  deferredMarkdownPlaceholder,
+  markdownExportPlaceholder,
+  type ComponentMarkdownContext,
+} from "../../../components/_model/markdown-export.js";
+import { EMPTY_DOCUMENT_OUTLINE } from "../../../components/_model/document-outline/document-outline.js";
 import {
   COMPONENT_REGISTRY,
   definitionFor,
@@ -77,9 +81,12 @@ type ComponentDelivery =
       readonly deferOutline: DeferredMarkdownPresentations;
     };
 
-/** Component Markdown callbacks deferred until the document outline exists. */
+/**
+ * Component Markdown callbacks deferred until the document knows both its
+ * outline and how deep each component's headings belong.
+ */
 export type DeferredMarkdownPresentations = Array<
-  (outline: DocumentOutline) => string
+  (context: ComponentMarkdownContext) => string
 >;
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
@@ -262,6 +269,36 @@ const renderFlowElement = ({
     insideComponentBody &&
     (delivery.kind === "markdown" ||
       (delivery.kind === "render" && delivery.materializeNestedModels));
+  // Every Markdown component defers, not only the outline-aware ones: heading
+  // depth is a property of where the document ends up putting this root, and
+  // only the completion pass over the finished tree knows that. A model
+  // materialized inside a parent's body never reaches that tree, so it
+  // presents immediately against the empty outline at the document's own depth.
+  if (delivery.kind === "markdown") {
+    if (materializeModel) {
+      return markdownExportPlaceholder({
+        markdown: compiled.markdown({
+          outline: EMPTY_DOCUMENT_OUTLINE,
+          headingOffset: 0,
+        }),
+        ...(node.position === undefined ? {} : { position: node.position }),
+      });
+    }
+    delivery.deferOutline.push(compiled.markdown);
+    const index = delivery.deferOutline.length - 1;
+    return compiled.outline === undefined
+      ? deferredMarkdownPlaceholder({
+          index,
+          ...(node.position === undefined ? {} : { position: node.position }),
+        })
+      : createOutlinePlaceholder({
+          index,
+          marker: compiled.outline.marker,
+          ...(node.position === undefined ? {} : { position: node.position }),
+          ...(name === null ? {} : { component: name }),
+          ...(stampedKey === undefined ? {} : { instanceKey: stampedKey }),
+        });
+  }
   // An outline-aware component defers its presentation behind a placeholder
   // until the deck transform has computed the document outline. A model being
   // materialized inside a parent's body never reaches the document tree, so
@@ -271,23 +308,13 @@ const renderFlowElement = ({
     delivery.deferOutline !== undefined &&
     !materializeModel
   ) {
-    if (delivery.kind === "markdown") {
-      delivery.deferOutline.push(compiled.markdown);
-    } else {
-      delivery.deferOutline.push(compiled.outline.present);
-    }
+    delivery.deferOutline.push(compiled.outline.present);
     return createOutlinePlaceholder({
       index: delivery.deferOutline.length - 1,
       marker: compiled.outline.marker,
       ...(node.position === undefined ? {} : { position: node.position }),
       ...(name === null ? {} : { component: name }),
       ...(stampedKey === undefined ? {} : { instanceKey: stampedKey }),
-    });
-  }
-  if (delivery.kind === "markdown") {
-    return markdownExportPlaceholder({
-      markdown: compiled.markdown({ parts: [], sections: [] }),
-      ...(node.position === undefined ? {} : { position: node.position }),
     });
   }
   const rendered = named(delivery.adapt(compiled.presentation()));

@@ -331,4 +331,135 @@ The reader follows one more hop.
       "Part",
     );
   });
+
+  it("should demote component headings beneath the Part that owns them", () => {
+    const result = render(`# Plan
+
+## Before the part
+
+<DataTable title="Rollout gates">
+
+\`\`\`table
+| Gate | Owner |
+| --- | --- |
+| Canary | Release |
+\`\`\`
+
+</DataTable>
+
+<Part title="Delivery" />
+
+## Inside the part
+
+<DataTable title="Release gates">
+
+\`\`\`table
+| Gate | Owner |
+| --- | --- |
+| Canary | Release |
+\`\`\`
+
+</DataTable>
+
+<QuickSummary>
+
+<Why>
+
+- The queue must survive a restart.
+
+</Why>
+
+<What>
+
+- Persist every retry attempt.
+
+</What>
+
+<How>
+
+- Move retries into a worker.
+
+</How>
+
+</QuickSummary>
+`);
+
+    const levels = result.markdown
+      .split("\n")
+      .filter((line) => /^#{1,6} /u.test(line));
+
+    expect(levels).toEqual([
+      "# Plan",
+      "## Before the part",
+      "### Rollout gates",
+      "## Part 1 — Delivery",
+      "### Inside the part",
+      "#### Release gates",
+      "### Summary",
+    ]);
+  });
+
+  it("should preserve authored referential actions in a schema export", () => {
+    const result = render(`# Plan
+
+<DatabaseTableSchema name="public.orders">
+
+\`\`\`dbml
+id          bigint [pk]
+customer_id bigint [not null, ref: > public.customers.id, delete: cascade, update: set null]
+\`\`\`
+
+</DatabaseTableSchema>
+`);
+
+    const html = readerHtml(result.markdown);
+    expect(html).toContain(
+      "<td>not null, references public.customers.id on delete cascade on update set null</td>",
+    );
+  });
+
+  it("should keep a fenced example out of the table row it cannot fit in", () => {
+    const result = render(`# Plan
+
+<HttpEndpoint method="GET" path="/api/orders">
+
+<Param name="filter" in="query" type="string">
+
+Restricts the result set. Example:
+
+\`\`\`json
+{ "status": "open" }
+\`\`\`
+
+</Param>
+
+</HttpEndpoint>
+`);
+
+    const html = readerHtml(result.markdown);
+    expect(html).toContain("<td>Restricts the result set. Example:</td>");
+    expect(html).toContain(
+      '<pre><code class="language-json">{ "status": "open" }\n</code></pre>',
+    );
+    expect(html).toContain("<p><strong>filter</strong></p>");
+    expect(html).not.toMatch(/<td>[^<]*```/u);
+  });
+
+  it("should keep a Slide's wireframe reason its own paragraph", () => {
+    const html = readerHtml(
+      render(`# Plan
+
+<Slide type="user-journey" name="Operator queue" toc="Queue" wireframeReason="The queue is the product." />
+
+## Operator queue
+`).markdown,
+    );
+
+    expect(html).toContain(
+      "<p>Slide structure — type: user-journey; name: Operator queue; outline label: Queue</p>",
+    );
+    expect(html).toContain(
+      "<p>Wireframe reason: The queue is the product.</p>",
+    );
+  });
 });
