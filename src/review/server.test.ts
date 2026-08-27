@@ -63,7 +63,7 @@ import {
 } from "./server.js";
 import { runAgentWorkLoopAction } from "./agent-work-loop.js";
 import type { ReviewRuntime } from "./server.js";
-import { DEFAULT_SERVICE_PORT } from "./service/paths.js";
+import { servicePort } from "./service/paths.js";
 import {
   reviewSessionIsRunning,
   stopReviewSessionIfInactive,
@@ -551,19 +551,23 @@ describe("review runtime transport", () => {
   it("should admit the service hop's addresses and no other name for itself", async () => {
     // The hop forwards the browser's Host untouched, so a page opened at
     // either address the service answers on arrives here under that name and
-    // has to be accepted. The premise of the rest of this test is that the two
-    // ports differ; an ephemeral port is never the service's fixed one.
-    expect(runtime.port).not.toBe(DEFAULT_SERVICE_PORT);
+    // has to be accepted. Which port that is has to be resolved the same way
+    // the runtime resolved it, because `BIG_PLAN_PORT` moves the service and
+    // the default is only where it sits when nothing moved it. The premise of
+    // the rest of this test is that the two ports differ; an ephemeral port is
+    // never the service's configured one.
+    const hopPort = servicePort();
+    expect(runtime.port).not.toBe(hopPort);
     expect(
       await rawStatus({
         path: "/api/session",
-        host: `127.0.0.1:${DEFAULT_SERVICE_PORT}`,
+        host: `127.0.0.1:${hopPort}`,
       }),
     ).toBe(200);
     expect(
       await rawStatus({
         path: "/api/session",
-        host: `localhost:${DEFAULT_SERVICE_PORT}`,
+        host: `localhost:${hopPort}`,
       }),
     ).toBe(200);
     // Widening for the hop must not widen anything else: nothing publishes
@@ -577,9 +581,10 @@ describe("review runtime transport", () => {
   });
 
   it("should accept the service's origins and no other name for itself", async () => {
+    const hopPort = servicePort();
     for (const origin of [
-      `http://127.0.0.1:${DEFAULT_SERVICE_PORT}`,
-      `http://localhost:${DEFAULT_SERVICE_PORT}`,
+      `http://127.0.0.1:${hopPort}`,
+      `http://localhost:${hopPort}`,
       `http://127.0.0.1:${runtime.port}`,
     ]) {
       expect(
