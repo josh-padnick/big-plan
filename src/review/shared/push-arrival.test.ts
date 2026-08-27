@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   announcedArrival,
+  pendingPushArrival,
   pushSettleTargets,
   scanPushArrivals,
   type PushArrival,
@@ -231,6 +232,33 @@ describe("announcedArrival", () => {
   it("should leave a lone arrival exactly as it landed", () => {
     const only = landed({ requestId: "one", changeTargets: ["a"] });
     expect(announcedArrival([only])).toEqual(only);
+  });
+});
+
+describe("pendingPushArrival", () => {
+  const landed = (
+    overrides: Partial<PushArrival> & { readonly requestId: string },
+  ): PushArrival => ({
+    threadId: `thread-${overrides.requestId}`,
+    resultSnapshot: `snapshot-${overrides.requestId}`,
+    arrivedAt: "2026-08-21T00:00:01.000Z",
+    changeTargets: [],
+    ...overrides,
+  });
+
+  it("should retain blocks from a push superseded before its swap lands", () => {
+    const first = landed({ requestId: "one", changeTargets: ["a", "b"] });
+    const second = landed({ requestId: "two", changeTargets: ["b", "c"] });
+
+    expect(pendingPushArrival({ pending: first, arrived: second })).toEqual({
+      ...second,
+      changeTargets: ["a", "b", "c"],
+    });
+  });
+
+  it("should leave the first pending push unchanged", () => {
+    const first = landed({ requestId: "one", changeTargets: ["a"] });
+    expect(pendingPushArrival({ pending: null, arrived: first })).toBe(first);
   });
 });
 

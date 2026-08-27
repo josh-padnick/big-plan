@@ -146,6 +146,29 @@ export const announcedArrival = (
 };
 
 /**
+ * Keeps every changed block waiting for the article swap that will show it.
+ *
+ * A later poll can supersede an in-flight article request before its swap
+ * lands. The next request then shows both pushes at once, so it must settle
+ * both pushes' blocks while naming the newer arrival and snapshot.
+ */
+export const pendingPushArrival = ({
+  pending,
+  arrived,
+}: {
+  readonly pending: PushArrival | null;
+  readonly arrived: PushArrival;
+}): PushArrival =>
+  pending === null
+    ? arrived
+    : {
+        ...arrived,
+        changeTargets: [
+          ...new Set([...pending.changeTargets, ...arrived.changeTargets]),
+        ],
+      };
+
+/**
  * The blocks a settle belongs on for the revision a swap is about to show.
  *
  * Asked of the arrival this reader was actually told about rather than of
