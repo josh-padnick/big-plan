@@ -4219,15 +4219,11 @@ const ChatExchange = ({
           />
         </div>
       ) : null}
-      {response === undefined ? null : (
+      {response === undefined || request.kind === "approval" ? null : (
         <MessageTurn
           role="agent"
           surface="chat"
-          body={
-            request.kind === "approval"
-              ? (response.summary ?? "Approval acknowledged")
-              : (response.message ?? "")
-          }
+          body={response.message ?? ""}
           createdAt={response.createdAt}
         >
           {hasChanges ? (
