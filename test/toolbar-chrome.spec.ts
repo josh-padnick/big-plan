@@ -308,7 +308,21 @@ test("should keyboard-dismiss the More actions menu and return focus", async ({
   await more.click();
   await page.locator("article").click({ position: { x: 10, y: 10 } });
   await expect(page.getByRole("menu")).toHaveCount(0);
-  await expect(more).toBeFocused();
+  // Clicking elsewhere dismisses without pulling focus back to the trigger,
+  // so the next keystroke still belongs to whatever the reader clicked. The
+  // frames flush first because a deferred refocus would land after this turn.
+  expect(
+    await page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              resolve(document.activeElement?.getAttribute("aria-label") ?? ""),
+            ),
+          );
+        }),
+    ),
+  ).not.toBe("More actions");
 });
 
 test("should hold the export dialog pending and recover from a refusal", async ({

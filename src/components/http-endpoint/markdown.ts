@@ -16,7 +16,7 @@ export const httpEndpointMarkdown: ComponentMarkdownRenderer<
   const description = markdownFromHast(model.description);
   const params = model.params.map((param) => ({
     param,
-    prose: markdownTableProse(markdownFromHast(param.children)),
+    prose: markdownTableProse(param.children),
   }));
   return [
     markdownHeading({

@@ -62,28 +62,6 @@ export const markdownHeading = ({
   readonly text: string;
 }): string => `${"#".repeat(Math.min(6, level + offset))} ${text}`;
 
-/**
- * Splits component prose into the part one GFM table row can hold and the
- * block content it cannot. A table cell is a single line, so a fenced example
- * or a second paragraph has to keep its structure beside the table instead of
- * being flattened into the row.
- */
-export const markdownTableProse = (
-  markdown: string,
-): { readonly cell: string; readonly blocks?: string } => {
-  if (markdown === "" || !markdown.includes("\n")) return { cell: markdown };
-  const [first = "", ...rest] = markdown.split("\n\n");
-  const opensBlock = /^(?:[`~>#|]|[-+*](?=\s)|\d+[.)](?=\s))/u.test(
-    first.trim(),
-  );
-  const cell = opensBlock ? "" : first.replace(/\s*\n\s*/gu, " ").trim();
-  // One soft-wrapped paragraph fits a row whole, so repeating it below the
-  // table would say the same thing twice.
-  return rest.length === 0 && !opensBlock
-    ? { cell }
-    : { cell, blocks: markdown };
-};
-
 /** Renders a GFM table in the authored row and column order. */
 export const markdownTable = ({
   headers,
@@ -166,48 +144,62 @@ export const markdownInlineCode = (value: string): string => {
   return `${delimiter}${padding}${value}${padding}${delimiter}`;
 };
 
-const inline = (nodes: ReadonlyArray<ElementContent>): string =>
-  nodes
-    .map((node) => {
-      if (node.type === "text") return markdownInlineText(node.value);
-      if (!isElement(node)) return "";
-      const content = inline(node.children);
-      switch (node.tagName) {
-        case "strong":
-          return `**${content}**`;
-        case "em":
-          return `_${content}_`;
-        case "del":
-          return `~~${content}~~`;
-        case "code":
-          return markdownInlineCode(textOf(node.children));
-        case "a": {
-          const href = propertyString(node, "href") ?? "";
-          if (href.startsWith("#user-content-fn-")) {
-            return `[^${href.slice("#user-content-fn-".length)}]`;
-          }
-          if (href.startsWith("#user-content-fnref-")) return "";
-          const title = propertyString(node, "title");
-          return `[${content}](${href}${title === undefined ? "" : ` "${title.replace(/"/gu, '\\"')}"`})`;
-        }
-        case "img": {
-          const alt = propertyString(node, "alt")?.trim() ?? "";
-          const source = propertyString(node, "src") ?? "";
-          if (alt === "") {
-            throw new MarkdownExportRejected(
-              `A referenced image needs meaningful alternative text before this plan can be exported: ${locator(source)}`,
-            );
-          }
-          const title = propertyString(node, "title");
-          return `![${alt.replace(/([\\\]])/gu, "\\$1")}](${source}${title === undefined ? "" : ` "${title.replace(/"/gu, '\\"')}"`})`;
-        }
-        case "br":
-          return "  \n";
-        default:
-          return content;
+const inline = (nodes: ReadonlyArray<ElementContent>): string => {
+  const parts: Array<string> = [];
+  let afterBreak = false;
+  for (const node of nodes) {
+    if (node.type === "text") {
+      // A hard break reaches HAST as a `br` followed by a newline text node.
+      // Emitting both would end the paragraph instead of the line.
+      const value = afterBreak ? node.value.replace(/^\n/u, "") : node.value;
+      afterBreak = false;
+      parts.push(markdownInlineText(value));
+      continue;
+    }
+    afterBreak = isElement(node) && node.tagName === "br";
+    parts.push(inlineElement(node));
+  }
+  return parts.join("");
+};
+
+const inlineElement = (node: ElementContent): string => {
+  if (!isElement(node)) return "";
+  const content = inline(node.children);
+  switch (node.tagName) {
+    case "strong":
+      return `**${content}**`;
+    case "em":
+      return `_${content}_`;
+    case "del":
+      return `~~${content}~~`;
+    case "code":
+      return markdownInlineCode(textOf(node.children));
+    case "a": {
+      const href = propertyString(node, "href") ?? "";
+      if (href.startsWith("#user-content-fn-")) {
+        return `[^${href.slice("#user-content-fn-".length)}]`;
       }
-    })
-    .join("");
+      if (href.startsWith("#user-content-fnref-")) return "";
+      const title = propertyString(node, "title");
+      return `[${content}](${href}${title === undefined ? "" : ` "${title.replace(/"/gu, '\\"')}"`})`;
+    }
+    case "img": {
+      const alt = propertyString(node, "alt")?.trim() ?? "";
+      const source = propertyString(node, "src") ?? "";
+      if (alt === "") {
+        throw new MarkdownExportRejected(
+          `A referenced image needs meaningful alternative text before this plan can be exported: ${locator(source)}`,
+        );
+      }
+      const title = propertyString(node, "title");
+      return `![${alt.replace(/([\\\]])/gu, "\\$1")}](${source}${title === undefined ? "" : ` "${title.replace(/"/gu, '\\"')}"`})`;
+    }
+    case "br":
+      return "  \n";
+    default:
+      return content;
+  }
+};
 
 const indent = (value: string, prefix: string): string =>
   value
@@ -357,6 +349,22 @@ const PHRASING_TAG_NAMES: ReadonlySet<string> = new Set([
   "var",
   "wbr",
 ]);
+
+const isPhrasingNode = (node: ElementContent): boolean =>
+  node.type === "text" ||
+  (node.type === "element" && PHRASING_TAG_NAMES.has(node.tagName));
+
+const takeWhile = <Item>(
+  items: ReadonlyArray<Item>,
+  predicate: (item: Item) => boolean,
+): ReadonlyArray<Item> => {
+  const taken: Array<Item> = [];
+  for (const item of items) {
+    if (!predicate(item)) break;
+    taken.push(item);
+  }
+  return taken;
+};
 
 type EmittedBlock = {
   readonly value: string;
@@ -525,6 +533,40 @@ export const markdownFromHast = (
   nodes: ReadonlyArray<RootContent | ElementContent>,
   { headingOffset = 0 }: { readonly headingOffset?: number } = {},
 ): string => blocks(nodes, headingOffset).trim();
+
+/**
+ * Splits component prose into the part one GFM table row can hold and the
+ * block content it cannot. A table cell is a single line, so a fenced example
+ * or a second paragraph keeps its structure beside the table instead of being
+ * flattened into the row. The decision reads the authored nodes rather than the
+ * serialized text, because a leading code span and a fence both start with a
+ * backtick once serialized.
+ */
+export const markdownTableProse = (
+  nodes: ReadonlyArray<ElementContent>,
+): { readonly cell: string; readonly blocks?: string } => {
+  const meaningful = nodes.filter(
+    (node) => node.type !== "text" || node.value.trim() !== "",
+  );
+  const lead = meaningful[0];
+  if (lead === undefined) return { cell: "" };
+  const inlineLead =
+    lead.type === "element" && lead.tagName === "p"
+      ? { source: inline(lead.children), consumed: 1 }
+      : isPhrasingNode(lead)
+        ? (() => {
+            const run = takeWhile(meaningful, isPhrasingNode);
+            return { source: inline(run), consumed: run.length };
+          })()
+        : undefined;
+  if (inlineLead === undefined) {
+    return { cell: "", blocks: markdownFromHast(nodes) };
+  }
+  const cell = inlineLead.source.replace(/\s*\n\s*/gu, " ").trim();
+  return meaningful.length > inlineLead.consumed
+    ? { cell, blocks: markdownFromHast(nodes) }
+    : { cell };
+};
 
 /** Builds the compiler-only node used to carry component-owned Markdown. */
 export const markdownExportPlaceholder = ({

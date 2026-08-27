@@ -18,7 +18,7 @@ const grpcFields = (
   if (fields.length === 0) return [];
   const rows = fields.map((field) => ({
     field,
-    prose: markdownTableProse(markdownFromHast(field.children)),
+    prose: markdownTableProse(field.children),
   }));
   return [
     title,
@@ -44,7 +44,7 @@ export const grpcMethodMarkdown: ComponentMarkdownRenderer<
   const description = markdownFromHast(model.description);
   const errors = model.errors.map((error) => ({
     error,
-    prose: markdownTableProse(markdownFromHast(error.children)),
+    prose: markdownTableProse(error.children),
   }));
   return [
     markdownHeading({
