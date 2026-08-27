@@ -1293,14 +1293,20 @@ describe("the approval handoff on the status card", () => {
   });
   const activityFor = ({
     requests,
+    responses = [],
     progressEvents,
   }: {
     readonly requests: ReadonlyArray<AgentActivityRequest>;
+    readonly responses?: ReadonlyArray<{
+      readonly requestId: string;
+      readonly hardStop?: string;
+    }>;
     readonly progressEvents: ReadonlyArray<ReturnType<typeof step>>;
   }) =>
     deriveCurrentAgentActivity({
       everConnected: true,
       requests,
+      responses,
       cancelPendingRequestIds: new Set<string>(),
       progressEvents,
       agentConnected: true,
@@ -1392,6 +1398,43 @@ describe("the approval handoff on the status card", () => {
         isObservable: true,
       }),
     ).toMatchObject({ indicator: "stalled" });
+  });
+
+  // The step that says an approval was answered lands after the answer and only
+  // best-effort, so the card reads the answer rather than waiting for its
+  // narration.
+  it("should report a refusal the narrating step never recorded", () => {
+    expect(
+      activityFor({
+        requests: [approvalRequest({ answeredAt: "2026-08-08T20:00:00.000Z" })],
+        responses: [
+          {
+            requestId: "dddddddddddddddd",
+            hardStop: "The plan no longer matches the pinned snapshot.",
+          },
+        ],
+        progressEvents: [step("plan-approved", NOW - 2_000)],
+      }),
+    ).toMatchObject({
+      state: "handoff-blocked",
+      headline: "Approval not acknowledged",
+      supporting:
+        "The agent stopped instead of acknowledging: The plan no longer matches the pinned snapshot.",
+    });
+  });
+
+  it("should stop waiting on an acknowledgment the agent already gave", () => {
+    expect(
+      activityFor({
+        requests: [approvalRequest({ answeredAt: "2026-08-08T20:00:00.000Z" })],
+        responses: [{ requestId: "dddddddddddddddd" }],
+        progressEvents: [step("plan-approved", NOW - 2_000)],
+      }),
+    ).toMatchObject({
+      state: "handoff",
+      supporting:
+        "Approval acknowledged. The agent has the approved plan and the decisions recorded with it.",
+    });
   });
 
   it("should hand the card back once the agent answers later work", () => {

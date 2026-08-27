@@ -840,7 +840,7 @@ export const commitStagedPlanMutation = async ({
               "The plan source changed while this claim was working, so its candidate can no longer be published. Take the work again from the current plan.",
             );
           }
-          await publishPreparedPlanAssets(assets);
+          if (publishes) await publishPreparedPlanAssets(assets);
           await writeStoreJson({
             path: journalPath({
               store: lockedStore,
