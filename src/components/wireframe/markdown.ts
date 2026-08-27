@@ -2,6 +2,7 @@
 // label, value, state, status, and navigation target remains plain text.
 
 import {
+  markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
@@ -173,14 +174,18 @@ const nodeLines = (
       case "Table": {
         const headers = [
           ...(node.selected === undefined ? [] : ["Selected"]),
-          ...node.headers,
+          ...node.headers.map((header) => markdownInlineText(header)),
         ];
         const rows = node.rows.map((row, index) => [
           ...(node.selected === undefined
             ? []
             : [node.selected === index + 1 ? "Yes" : "No"]),
           ...row.map((cell) =>
-            cell.tone === undefined ? cell.text : `${cell.text} (${cell.tone})`,
+            markdownInlineText(
+              cell.tone === undefined
+                ? cell.text
+                : `${cell.text} (${cell.tone})`,
+            ),
           ),
         ]);
         return [

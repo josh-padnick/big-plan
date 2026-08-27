@@ -3,8 +3,14 @@
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
-import { markdownInlineText } from "../components/_model/markdown-export.js";
-import { renderMarkdownDocument } from "../render/render-markdown-document.js";
+import {
+  markdownInlineText,
+  MarkdownExportRejected,
+} from "../components/_model/markdown-export.js";
+import {
+  renderMarkdownDocument,
+  type RenderedMarkdownDocument,
+} from "../render/render-markdown-document.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
 import { decisionInventoryFromComponents } from "./decision-inventory.js";
 import { currentAnswers } from "./plan-inputs-store.js";
@@ -102,14 +108,24 @@ export const exportPlanMarkdown = async (context: {
     context.decisionAnswers.read(),
     context.approvals.read(),
   ]);
-  const rendered = renderMarkdownDocument({
-    markdown: source,
-    fallbackTitle: basename(
-      context.resolvedPlanPath,
-      extname(context.resolvedPlanPath),
-    ),
-    snapshot,
-  });
+  let rendered: RenderedMarkdownDocument;
+  try {
+    rendered = renderMarkdownDocument({
+      markdown: source,
+      fallbackTitle: basename(
+        context.resolvedPlanPath,
+        extname(context.resolvedPlanPath),
+      ),
+      snapshot,
+    });
+  } catch (error: unknown) {
+    // A refusal names what the plan has to change; letting it reach the outer
+    // boundary would answer the reviewer with an unactionable runtime failure.
+    if (error instanceof MarkdownExportRejected) {
+      return refusal({ status: 400, reason: error.message });
+    }
+    throw error;
+  }
   const after = await Promise.all([
     context.decisionAnswers.read(),
     context.approvals.read(),

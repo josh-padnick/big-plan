@@ -2,6 +2,7 @@
 
 import {
   markdownFromHast,
+  markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
@@ -31,11 +32,11 @@ export const httpEndpointMarkdown: ComponentMarkdownRenderer<
               "Description",
             ],
             rows: model.params.map((param) => [
-              param.name,
-              param.location,
-              param.dataType ?? "",
+              markdownInlineText(param.name),
+              markdownInlineText(param.location),
+              markdownInlineText(param.dataType ?? ""),
               param.required ? "Yes" : "No",
-              param.defaultValue ?? "",
+              markdownInlineText(param.defaultValue ?? ""),
               markdownFromHast(param.children),
             ]),
           }),

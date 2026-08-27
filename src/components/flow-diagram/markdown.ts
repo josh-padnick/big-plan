@@ -1,7 +1,9 @@
 // Renders FlowDiagram's ordered stages, nodes, explicit edges, and footer.
 
 import {
+  markdownBullet,
   markdownFromHast,
+  markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
@@ -23,7 +25,9 @@ export const flowDiagramMarkdown: ComponentMarkdownRenderer<
             : [`status ${node.badge} (${node.badgeTone})`]),
         ];
         const body = markdownFromHast(node.body);
-        return `- **${node.label}** (${properties.join("; ")})${body === "" ? "" : ` — ${body}`}`;
+        return markdownBullet(
+          `**${node.label}** (${properties.join("; ")})${body === "" ? "" : ` — ${body}`}`,
+        );
       }),
     ].join("\n"),
   );
@@ -37,9 +41,9 @@ export const flowDiagramMarkdown: ComponentMarkdownRenderer<
           markdownTable({
             headers: ["From", "Relationship", "To"],
             rows: model.edges.map((edge) => [
-              edge.from,
-              edge.label ?? "connects to",
-              edge.to,
+              markdownInlineText(edge.from),
+              markdownInlineText(edge.label ?? "connects to"),
+              markdownInlineText(edge.to),
             ]),
           }),
         ]),

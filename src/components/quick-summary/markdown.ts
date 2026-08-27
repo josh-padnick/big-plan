@@ -1,6 +1,6 @@
 // Renders QuickSummary's three ordered facets as ordinary Markdown.
 
-import { markdownFromHast } from "../_model/markdown-export.js";
+import { markdownBullet, markdownFromHast } from "../_model/markdown-export.js";
 import type { ComponentMarkdownRenderer } from "../_model/markdown-export.js";
 import type { CompiledQuickSummary } from "./compile.js";
 
@@ -12,7 +12,7 @@ export const quickSummaryMarkdown: ComponentMarkdownRenderer<
     ...model.facets.map((facet) =>
       [
         `**${facet.name}**`,
-        ...facet.items.map((item) => `- ${markdownFromHast(item)}`),
+        ...facet.items.map((item) => markdownBullet(markdownFromHast(item))),
       ].join("\n"),
     ),
   ].join("\n\n");

@@ -125,7 +125,11 @@ export const PlanExportControl = ({
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
+      // Browsers that queue the download navigation rather than starting it
+      // during click dispatch cancel it when the blob URL is already gone.
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 0);
       setAnnouncement(`Downloaded ${result.filename}.`);
       setDialogOpen(false);
       focusTrigger(triggerRef);

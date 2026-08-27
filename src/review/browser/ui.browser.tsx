@@ -662,6 +662,14 @@ export const AlertDialog = ({
     };
   }, [open]);
 
+  // Both choices are disabled while the action is in flight, which drops focus
+  // to the body and takes Escape and Tab out of this dialog's key handler.
+  // Holding focus on the panel keeps the trap and the post-refusal position.
+  useLayoutEffect(() => {
+    if (!open || !pending) return;
+    dialogRef.current?.focus();
+  }, [open, pending]);
+
   useLayoutEffect(() => {
     if (!open) {
       setAnchorPosition(null);

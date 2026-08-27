@@ -32,12 +32,13 @@ const propertyString = (element: Element, name: string): string | undefined => {
   return typeof value === "string" ? value : undefined;
 };
 
-/** Escapes one table cell without introducing viewer-specific HTML. */
+/**
+ * Escapes one already-inline-Markdown table cell without introducing
+ * viewer-specific HTML. Callers holding raw authored text escape it with
+ * `markdownInlineText` first; this helper only protects the cell boundary.
+ */
 export const markdownTableCell = (value: string): string =>
-  value
-    .replace(/\\/gu, "\\\\")
-    .replace(/\|/gu, "\\|")
-    .replace(/\s*\n\s*/gu, " ");
+  value.replace(/\|/gu, "\\|").replace(/\s*\n\s*/gu, " ");
 
 /** Renders a GFM table in the authored row and column order. */
 export const markdownTable = ({
@@ -83,7 +84,10 @@ export const markdownFence = ({
 export const markdownInlineText = (value: string): string =>
   value
     .replace(/([\\`*_[\]<>#])/gu, "\\$1")
-    .replace(/(^|\n)(\s*)([-+]|\d+[.)])(?=\s)/gu, "$1$2\\$3");
+    .replace(/(^|\n)(\s*)([-+])(?=\s)/gu, "$1$2\\$3")
+    // CommonMark only honours a backslash before ASCII punctuation, so an
+    // ordered marker has to escape its delimiter rather than its digits.
+    .replace(/(^|\n)(\s*)(\d{1,9})([.)])(?=\s)/gu, "$1$2$3\\$4");
 
 const textOf = (nodes: ReadonlyArray<ElementContent>): string =>
   nodes
@@ -152,8 +156,17 @@ const inline = (nodes: ReadonlyArray<ElementContent>): string =>
 const indent = (value: string, prefix: string): string =>
   value
     .split("\n")
-    .map((line, index) => (index === 0 ? line : `${prefix}${line}`))
+    .map((line, index) =>
+      index === 0 || line === "" ? line : `${prefix}${line}`,
+    )
     .join("\n");
+
+/**
+ * Renders one bullet whose content may span several Markdown blocks, keeping
+ * every continuation line inside the item instead of ending the list.
+ */
+export const markdownBullet = (content: string): string =>
+  `- ${indent(content.trim(), "  ")}`.trimEnd();
 
 const listItem = ({
   node,

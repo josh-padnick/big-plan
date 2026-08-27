@@ -15,7 +15,10 @@ import {
   createDiagnosticCollector,
   diagnosticFromParseError,
 } from "../../components/_authoring/diagnostics.js";
-import type { ComponentDiagnostic } from "../../components/_authoring/diagnostics.js";
+import type {
+  ComponentDiagnostic,
+  DiagnosticCollector,
+} from "../../components/_authoring/diagnostics.js";
 import { rehypeCodeFigures } from "./code-figure.js";
 import { stripComponentInstanceKeys } from "./component-pipeline/component-instance.js";
 import {
@@ -86,6 +89,49 @@ export class MarkdownDiagnosticsError extends Error {
     this.diagnostics = diagnostics;
   }
 }
+
+// The component-bearing MDX node types remark-rehype must hand to delivery
+// instead of dropping, shared so a delivery cannot silently see a different
+// set of components than the gates that validated them.
+export const COMPONENT_PASS_THROUGH = [
+  "mdxjsEsm",
+  "mdxFlowExpression",
+  "mdxTextExpression",
+  "mdxJsxFlowElement",
+  "mdxJsxTextElement",
+] as const;
+
+/**
+ * Parses one plan source and runs the authoring and semantic gates every
+ * delivery shares, so no delivery can compile a plan the others would refuse.
+ */
+export const parseValidatedPlan = ({
+  markdown,
+  diagnostics,
+}: {
+  readonly markdown: string;
+  readonly diagnostics: DiagnosticCollector;
+}): MarkdownRoot => {
+  const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMdx);
+  let parsed: MarkdownRoot;
+  try {
+    parsed = parser.parse(markdown);
+  } catch (error: unknown) {
+    throw new MarkdownDiagnosticsError([diagnosticFromParseError(error)]);
+  }
+  remarkValidateComponents({ diagnostics })(parsed);
+  if (diagnostics.diagnostics.length > 0) {
+    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
+  }
+  parser()
+    .use(remarkRehype, { passThrough: [...COMPONENT_PASS_THROUGH] })
+    .use(rehypeValidateComponentSemantics, { diagnostics })
+    .runSync(parsed);
+  if (diagnostics.diagnostics.length > 0) {
+    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
+  }
+  return parsed;
+};
 
 // Flattens a heading to plain text so TOC entries keep their visible words
 // but drop inline markup such as code spans or emphasis.
@@ -315,31 +361,7 @@ const compileMarkdownTree = ({
   // back to record what the component asserted on the root it stamps.
   const componentModels: CollectedComponentModels = new Map();
   const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMdx);
-  let parsed: MarkdownRoot;
-  try {
-    parsed = parser.parse(markdown);
-  } catch (error: unknown) {
-    throw new MarkdownDiagnosticsError([diagnosticFromParseError(error)]);
-  }
-  remarkValidateComponents({ diagnostics })(parsed);
-  if (diagnostics.diagnostics.length > 0) {
-    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
-  }
-  const semanticPreflight = parser()
-    .use(remarkRehype, {
-      passThrough: [
-        "mdxjsEsm",
-        "mdxFlowExpression",
-        "mdxTextExpression",
-        "mdxJsxFlowElement",
-        "mdxJsxTextElement",
-      ],
-    })
-    .use(rehypeValidateComponentSemantics, { diagnostics });
-  semanticPreflight.runSync(parsed);
-  if (diagnostics.diagnostics.length > 0) {
-    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
-  }
+  const parsed = parseValidatedPlan({ markdown, diagnostics });
   const resolvedRenderArtifacts =
     renderArtifacts ?? prepareMermaidArtifacts(parsed);
   const processor = parser()
@@ -347,13 +369,7 @@ const compileMarkdownTree = ({
       // The GFM footnotes label ships visible as a small section heading;
       // without this option remark-rehype hides it behind class="sr-only".
       footnoteLabelProperties: { className: ["footnotes-heading"] },
-      passThrough: [
-        "mdxjsEsm",
-        "mdxFlowExpression",
-        "mdxTextExpression",
-        "mdxJsxFlowElement",
-        "mdxJsxTextElement",
-      ],
+      passThrough: [...COMPONENT_PASS_THROUGH],
     })
     .use(rehypeSlug)
     .use(rehypeCollectMetadata, { metadata })

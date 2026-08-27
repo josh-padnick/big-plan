@@ -2,6 +2,7 @@
 
 import {
   markdownFromHast,
+  markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
@@ -18,8 +19,8 @@ const grpcFields = (
         markdownTable({
           headers: ["Name", "Type", "Description"],
           rows: fields.map((field) => [
-            field.name,
-            field.fieldType ?? "",
+            markdownInlineText(field.name),
+            markdownInlineText(field.fieldType ?? ""),
             markdownFromHast(field.children),
           ]),
         }),
@@ -43,7 +44,7 @@ export const grpcMethodMarkdown: ComponentMarkdownRenderer<
           markdownTable({
             headers: ["Code", "Meaning"],
             rows: model.errors.map((error) => [
-              error.code,
+              markdownInlineText(error.code),
               markdownFromHast(error.children),
             ]),
           }),
