@@ -379,8 +379,9 @@ Every other way a seat empties - a turn ending, a poll returning, a reviewer dis
 The review-link service is one small loopback process on a fixed port that
 answers saved review links, so a link keeps working after the review session
 behind it ends. It holds no review state: it reads the plan's own session files
-at the moment of the click, then redirects to the live session or serves a page
-explaining how that session ended.
+at the moment of the click, then redirects to the live session by default,
+forwards to it when the opt-in proxy is enabled, or serves a page explaining how
+that session ended.
 
 Nothing needs installing. Any command that prints a review link starts the
 service when nothing is answering, and it stops when you tell it to or when your
