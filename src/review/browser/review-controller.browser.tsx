@@ -4268,6 +4268,7 @@ export const ReviewController = () => {
   // The Chat tab's Resolved disclosure, so a thread inside it can be revealed
   // when the reader asks for it.
   const resolvedThreadsRef = useRef<HTMLDetailsElement>(null);
+  const [revealResolvedThreads, setRevealResolvedThreads] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const [sidebarView, setSidebarView] = useState<SidebarView>("feedback");
   const [isHydrated, setIsHydrated] = useState(false);
@@ -6041,6 +6042,22 @@ export const ReviewController = () => {
       );
   }, []);
 
+  /*
+  Applied on whichever commit first has the disclosure to apply it to, which
+  is why this runs on every commit rather than on a dependency list: the ask
+  can be made from Agent Status, where the Chat tab is not mounted yet, and
+  waiting on the state that happens to mount it would be guessing at which one
+  that is. Before paint, so a reader asking for a resolved thread never sees
+  the collapsed disclosure the request was meant to open.
+  */
+  useLayoutEffect(() => {
+    if (!revealResolvedThreads) return;
+    const disclosure = resolvedThreadsRef.current;
+    if (disclosure === null) return;
+    disclosure.open = true;
+    setRevealResolvedThreads(false);
+  });
+
   useEffect(() => {
     if (
       identity === null ||
@@ -6964,8 +6981,11 @@ export const ReviewController = () => {
   A pushed thread the reviewer already resolved sits inside a disclosure that
   is collapsed until they ask for it, so opening that thread without opening
   the disclosure mounts a card nobody can see - the control that appears to do
-  nothing. Revealed imperatively at the moment the reader asks rather than by
-  driving `open` from state, because a native toggle is invisible to React: a
+  nothing. The ask is recorded rather than acted on here, because the request
+  can arrive from a surface where that disclosure is not mounted at all: the
+  activity list lives on Agent Status, and the rail only becomes the Chat tab
+  on the render after. The reveal is then written to the element itself rather
+  than driven by a prop, because a native toggle is invisible to React - a
   reader who collapsed the disclosure by hand would leave a controlled prop
   stuck at its old value, and the next request to open it would write nothing.
   */
@@ -6980,9 +7000,7 @@ export const ReviewController = () => {
         open: true,
       }),
     );
-    if (!resolvedCommentIds.has(threadId)) return;
-    const disclosure = resolvedThreadsRef.current;
-    if (disclosure !== null) disclosure.open = true;
+    if (resolvedCommentIds.has(threadId)) setRevealResolvedThreads(true);
   };
   /*
   The entry names one arrival and stops as soon as that arrival has been acted

@@ -12,24 +12,22 @@ here; all values use the document theme's closed token vocabulary.
    fades is the whole effect and a stilled version of it would be a permanent
    highlight the reader never dismissed.
 
-   It paints a ring and nothing else, for the same reason the comment marks
-   below do. A settled block may be a callout, a code block, or a table, and
-   every one of those declares its own fill; an animated background beats that
-   declaration for as long as it runs, so washing the block itself would drain
-   the component's own colour and pop it back rather than say "this one is
-   new". The ring is a shadow rather than an outline so it cannot displace the
-   outline a comment mark may be drawing on the very same block. */
+   The ring is drawn on an overlay rather than on the block, and nothing the
+   block declares for itself is animated. A settled block is whatever the agent
+   changed: a callout with its own fill, a decision card with its own
+   elevation, a table with both. Animating the block's background or shadow
+   beats those declarations for as long as it runs, so the reader would watch
+   the component's own colour drain or its card flatten and pop back - the
+   opposite of "this one is new". An overlay says the same thing and takes
+   nothing away, and it cannot displace the outline a comment mark may be
+   drawing on the very same block either. */
 @keyframes review-push-settle {
   from {
-    box-shadow:
-      0 0 0 2px color-mix(in srgb, var(--accent-c) 55%, var(--bg)),
-      0 0 0 0.35rem color-mix(in srgb, var(--accent-c) 16%, transparent);
+    opacity: 1;
   }
 
   to {
-    box-shadow:
-      0 0 0 2px transparent,
-      0 0 0 0.35rem transparent;
+    opacity: 0;
   }
 }
 
@@ -39,6 +37,19 @@ here; all values use the document theme's closed token vocabulary.
      changed, so it paints the arriving blocks once; the island removes the
      attribute when the animation ends. */
   [data-block-id][data-review-settled] {
+    position: relative;
+  }
+
+  [data-block-id][data-review-settled]::after {
+    content: "";
+    position: absolute;
+    z-index: 3;
+    inset: -0.25rem;
+    border-radius: inherit;
+    box-shadow:
+      inset 0 0 0 2px color-mix(in srgb, var(--accent-c) 55%, var(--bg)),
+      0 0 0 0.25rem color-mix(in srgb, var(--accent-c) 16%, transparent);
+    pointer-events: none;
     animation: review-push-settle 1.6s ease-out 1;
   }
   [data-block-id]:not([data-block-kind="part"]),

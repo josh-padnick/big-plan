@@ -107,7 +107,7 @@ export const PushArrivalEntry = ({
     <Card
       density="compact"
       elevation="none"
-      className="border border-accent bg-accent-wash"
+      className="border border-accent"
       data-review-push-arrival={arrival.requestId}
       /* Polite, never assertive: the reader is mid-sentence, and the entry is
          an offer rather than an interruption. */

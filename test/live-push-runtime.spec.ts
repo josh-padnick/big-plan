@@ -32,6 +32,41 @@ import {
 /** What the settle probe records into the page, so the spec can read it back. */
 type SettleRecord = { readonly settledBlockIds: ReadonlyArray<string> };
 
+/**
+ * Records every block that takes the settle mark, in the order it takes it.
+ *
+ * The island clears the mark when the wash ends, so a query made afterwards
+ * cannot tell a settle that never ran from one that has already finished -
+ * which is the difference the reduced-motion journey exists to prove. Armed
+ * before the push, this record never forgets and answers both journeys.
+ */
+const armSettleProbe = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const taken: Array<string> = [];
+    Object.defineProperty(window, "settledBlockIds", { value: taken });
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const element = record.target as HTMLElement;
+        const blockId = element.getAttribute("data-block-id");
+        if (
+          blockId === null ||
+          !element.hasAttribute("data-review-settled") ||
+          taken.includes(blockId)
+        ) {
+          continue;
+        }
+        taken.push(blockId);
+      }
+    }).observe(document.body, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-review-settled"],
+    });
+  });
+
+const settledBlockIds = (page: Page): Promise<ReadonlyArray<string>> =>
+  page.evaluate(() => (window as unknown as SettleRecord).settledBlockIds);
+
 const PLAN = `# Live push runtime probe
 
 The reviewer keeps reading while an agent prepares a revision.
@@ -1080,35 +1115,11 @@ test("should open the rail, name the agent, and settle the changed blocks when a
     ).toBeHidden();
 
     // Armed before the push commits, so the one-shot settle cannot finish
-    // between the swap landing and the assertion being made. The mark clears
-    // itself when its animation ends, so what is asserted later is this
-    // record of the blocks that took it rather than the live attribute, which
-    // is only true for as long as the wash is still running.
+    // between the swap landing and the assertion being made.
     const settled = page.waitForSelector("[data-review-settled]", {
       timeout: 20_000,
     });
-    await page.evaluate(() => {
-      const taken: Array<string> = [];
-      Object.defineProperty(window, "settledBlockIds", { value: taken });
-      new MutationObserver((records) => {
-        for (const record of records) {
-          const element = record.target as HTMLElement;
-          const blockId = element.getAttribute("data-block-id");
-          if (
-            blockId === null ||
-            !element.hasAttribute("data-review-settled") ||
-            taken.includes(blockId)
-          ) {
-            continue;
-          }
-          taken.push(blockId);
-        }
-      }).observe(document.body, {
-        subtree: true,
-        attributes: true,
-        attributeFilter: ["data-review-settled"],
-      });
-    });
+    await armSettleProbe(page);
     const { threadId } = await pushRevisionFrom({
       planPath,
       prompt: "Say plainly what the reviewer is about to see.",
@@ -1144,11 +1155,7 @@ test("should open the rail, name the agent, and settle the changed blocks when a
     // Both changed blocks are laid out in this plan, so the settle reaches
     // exactly the blocks the outcome named and nothing else.
     await expect
-      .poll(() =>
-        page.evaluate(
-          () => (window as unknown as SettleRecord).settledBlockIds,
-        ),
-      )
+      .poll(() => settledBlockIds(page))
       .toEqual([
         "document/paragraph-1",
         "section/delivery-boundary/paragraph-1",
@@ -1199,6 +1206,7 @@ test("should announce an arrival in an open rail without motion when the reader 
     );
     const scrollY = await page.evaluate(() => window.scrollY);
 
+    await armSettleProbe(page);
     await pushRevisionFrom({
       planPath,
       prompt: "Arrive while the rail is already open.",
@@ -1228,14 +1236,11 @@ test("should announce an arrival in an open rail without motion when the reader 
       .toBe("arrival-first");
 
     // A reader who asked for less motion gets no settle at all, rather than a
-    // stilled one that would leave a highlight they never dismissed.
-    await expect(page.locator("[data-review-settled]")).toHaveCount(0);
-    await expect
-      .poll(() => page.locator("[data-review-settled]").count(), {
-        timeout: 3_000,
-        intervals: [200, 200, 200, 200, 200],
-      })
-      .toBe(0);
+    // stilled one that would leave a highlight they never dismissed. Read from
+    // the probe rather than from the document: the swap has already happened
+    // by now, so an empty live query would be equally true of a wash that ran
+    // and faded, while an empty record can only mean no block was ever marked.
+    expect(await settledBlockIds(page)).toEqual([]);
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollY);
 
     await entry.getByRole("button", { name: "Dismiss" }).click();
