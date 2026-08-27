@@ -87,12 +87,10 @@ type ComponentDelivery =
  * Component Markdown callbacks deferred until the document knows both its
  * outline and how deep each component's headings belong.
  */
-export type DeferredMarkdownPresentations = Array<
-  {
-    readonly model: unknown;
-    readonly present: (context: ComponentMarkdownContext) => string;
-  }
->;
+export type DeferredMarkdownPresentations = Array<{
+  readonly model: unknown;
+  readonly present: (context: ComponentMarkdownContext) => string;
+}>;
 
 const nestedMarkdownPlaceholders = ({
   model,
