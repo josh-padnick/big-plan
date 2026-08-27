@@ -1163,6 +1163,37 @@ export const cancelAgentRequest = async ({
     },
   });
 
+/**
+ * Writes one runtime-authored request only while its owning state still permits
+ * delivery. The condition runs under the same request lock cancellation uses,
+ * so a mutation that resumes after its HTTP gate timed out cannot recreate
+ * work a later reviewer action already withdrew.
+ */
+export const writeAgentRequestWhen = async ({
+  store,
+  request,
+  permitted,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+  readonly permitted: () => Promise<boolean>;
+}): Promise<boolean> => {
+  const checked = validateAgentRequest(request);
+  return withRequestLock({
+    store,
+    requestId: checked.requestId,
+    change: async (lockedStore) => {
+      if (!(await permitted())) return false;
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId: checked.requestId,
+        value: checked,
+      });
+      return true;
+    },
+  });
+};
+
 /** Recognizes a reply whose thread was opened by an agent push. */
 const requestTargetsPushedThread = async ({
   store,

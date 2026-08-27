@@ -451,9 +451,7 @@ export const projectRequestStatus = ({
   approval it explicitly refused to start (BIG-131).
   */
   const reportedFailure =
-    failed === undefined
-      ? response?.hardStop
-      : (failed.detail ?? failed.step);
+    failed === undefined ? response?.hardStop : (failed.detail ?? failed.step);
   const lastSignalAtMs = claimSignalAtMs(request) ?? 0;
   return deriveAgentStatus({
     runtime,

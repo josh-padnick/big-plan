@@ -366,7 +366,10 @@ const approvalHandoffReading = ({
     (candidate) => candidate.requestId === request.requestId,
   );
   const answered = answer !== undefined || request.answeredAt !== undefined;
-  if (answer?.hardStop !== undefined || latest.stepCode === "approval-blocked") {
+  if (
+    answer?.hardStop !== undefined ||
+    latest.stepCode === "approval-blocked"
+  ) {
     const reason = answer?.hardStop ?? latest.detail;
     return {
       ...requestFacts(request),
