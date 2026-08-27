@@ -89,7 +89,10 @@ import {
   type ReviewImageAttachment,
 } from "./shared/review-image.js";
 import { decodeAgentModelIdentity } from "./shared/agent-model.js";
-import { prepareReviewImageAssets } from "./plan-assets.js";
+import {
+  prepareReviewImageAssets,
+  type PreparedPlanAssets,
+} from "./plan-assets.js";
 import {
   assertNoExternalSourceConflict,
   commitStagedPlanMutation,
@@ -1680,32 +1683,35 @@ const respond = async ({
   } catch (error: unknown) {
     return fail(`Cannot read the candidate plan source: ${String(error)}`);
   }
-  // Everything expensive happens before the commit takes its lock, and the
-  // candidate is compiled as if it already sat at the canonical plan location,
-  // because that is where it is about to sit.
-  let prepared: Awaited<ReturnType<typeof prepareReviewImageAssets>>;
-  try {
-    prepared = await prepareReviewImageAssets({
-      markdown: candidate,
-      planPath: session.planPath,
-      store: session.store,
-    });
-  } catch (error: unknown) {
-    return fail(
-      `Cannot materialize reviewer images into plan assets: ${String(error)}`,
-    );
+  const publishes = request.kind !== "approval";
+  let prepared: PreparedPlanAssets = { source: candidate, assets: [] };
+  let rendered: ReturnType<typeof renderDocument> | undefined;
+  if (publishes) {
+    // Everything expensive happens before the commit takes its lock, and the
+    // candidate is compiled as if it already sat at the canonical plan
+    // location, because that is where it is about to sit.
+    try {
+      prepared = await prepareReviewImageAssets({
+        markdown: candidate,
+        planPath: session.planPath,
+        store: session.store,
+      });
+    } catch (error: unknown) {
+      return fail(
+        `Cannot materialize reviewer images into plan assets: ${String(error)}`,
+      );
+    }
+    try {
+      rendered = renderDocument({
+        markdown: prepared.source,
+        fallbackTitle: basename(session.planPath, extname(session.planPath)),
+        identity: {},
+      });
+    } catch (error: unknown) {
+      return fail(`Cannot render the plan source: ${String(error)}`);
+    }
   }
   const markdown = prepared.source;
-  let rendered: ReturnType<typeof renderDocument>;
-  try {
-    rendered = renderDocument({
-      markdown,
-      fallbackTitle: basename(session.planPath, extname(session.planPath)),
-      identity: {},
-    });
-  } catch (error: unknown) {
-    return fail(`Cannot render the plan source: ${String(error)}`);
-  }
   const currentSnapshot = deriveSnapshotDigest(markdown);
   await writeSnapshot({
     store: session.store,
@@ -1713,7 +1719,7 @@ const respond = async ({
     source: markdown,
   });
   const changedBlocks = new Set<string>();
-  if (request.kind !== "approval") {
+  if (rendered !== undefined) {
     let previousRendered: ReturnType<typeof renderDocument>;
     try {
       const previousMarkdown = await readSnapshot({
@@ -1742,16 +1748,18 @@ const respond = async ({
       }
     }
   }
-  const lintDiagnostics = lintPlan({ markdown });
-  if (lintDiagnostics.length > 0) {
-    throw new AgentWorkLoopRejected(
-      "Plan failed authoring lint",
-      "validation-error",
-      lintDiagnostics.map(
-        ({ ruleId, line, column, message }) =>
-          `${line}:${column} [${ruleId}] ${message}`,
-      ),
-    );
+  if (publishes) {
+    const lintDiagnostics = lintPlan({ markdown });
+    if (lintDiagnostics.length > 0) {
+      throw new AgentWorkLoopRejected(
+        "Plan failed authoring lint",
+        "validation-error",
+        lintDiagnostics.map(
+          ({ ruleId, line, column, message }) =>
+            `${line}:${column} [${ruleId}] ${message}`,
+        ),
+      );
+    }
   }
   const validationSnapshot =
     request.kind === "reply"

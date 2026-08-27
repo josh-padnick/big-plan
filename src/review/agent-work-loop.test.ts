@@ -1210,7 +1210,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should publish nothing when a hard stop edits its candidate", async () => {
+  it("should accept an approval hard stop with an invalid candidate", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "big-plan-agent-approve-stop-edit-"),
     );
@@ -1244,12 +1244,7 @@ describe("agent work loop lifecycle", () => {
       ) {
         throw new Error("Pickup did not return a candidate plan");
       }
-      // A stop reports; it does not edit. Whatever the candidate holds when one
-      // is reported, the plan the reviewer approved is what stays on disk.
-      await writeFile(
-        pickup.candidate_plan,
-        `${source}\nThe agent rewrote the plan.\n`,
-      );
+      await writeFile(pickup.candidate_plan, "<Slide>\n");
       await writeFile(
         pickup.response_file,
         JSON.stringify({
