@@ -259,6 +259,19 @@ export const renderPlanInterruptedPage = ({
     lede: `The review stopped unexpectedly. Last seen at ${datedClockTime(lastSeenAtMs)}.`,
   });
 
+/** Holds a stable address while its unexpectedly lost runtime is replaced. */
+export const renderPlanRestartingPage = ({
+  planPath,
+}: {
+  readonly planPath: string;
+}): string =>
+  servicePage({
+    title: "The review is restarting",
+    contentHtml: `<h1${PROSE}>The review is restarting.</h1>
+<p${PROSE}>The session behind this address is not answering yet. Reload this page when the review is ready.</p>
+${restartBlock({ planPath })}`,
+  });
+
 /** The page for a plan the service knows about but has never seen reviewed. */
 export const renderPlanNeverStartedPage = ({
   planPath,

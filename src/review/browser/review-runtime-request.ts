@@ -21,20 +21,24 @@ export const isReviewRuntimeUnavailable = (error: unknown): boolean =>
 export class ReviewRuntimeRefusedError extends Error {
   readonly status: number;
   readonly code: string | undefined;
+  readonly retryAfter: string | undefined;
 
   constructor({
     status,
     reason,
     code,
+    retryAfter,
   }: {
     readonly status: number;
     readonly reason: string;
     readonly code?: string;
+    readonly retryAfter?: string;
   }) {
     super(reason);
     this.name = "ReviewRuntimeRefusedError";
     this.status = status;
     this.code = code;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -50,9 +54,11 @@ export const reviewRuntimeRefusalStatus = (
 export const reviewRuntimeRefusal = async ({
   status,
   readBody,
+  retryAfter,
 }: {
   readonly status: number;
   readonly readBody: () => Promise<unknown>;
+  readonly retryAfter?: string;
 }): Promise<ReviewRuntimeRefusedError> => {
   let reason = `Review runtime refused the request (${status})`;
   let code: string | undefined;
@@ -77,6 +83,7 @@ export const reviewRuntimeRefusal = async ({
     status,
     reason,
     ...(code === undefined ? {} : { code }),
+    ...(retryAfter === undefined ? {} : { retryAfter }),
   });
 };
 
@@ -107,10 +114,10 @@ export const isTerminalReviewRuntimeRefusal = (error: unknown): boolean => {
 // gone the hop answers rather than failing to connect - which would otherwise
 // leave the reader looking at a live-looking page whose session ended.
 //
-// 503 is deliberately not here: it is the runtime's own word for a session
-// that still answers every read but has stopped accepting changes, and that
-// answer names its own remedy. Treating it as a lost runtime would replace a
-// true, actionable report with a false one.
+// A bare 503 is deliberately not here: it is the runtime's own word for a
+// session that still answers every read but has stopped accepting changes.
+// The stable hop pairs its unavailable-runtime 503 with Retry-After, which is
+// the extra fact the normalization below uses to keep the meanings distinct.
 const GATEWAY_STATUSES = new Set([502, 504]);
 
 /**
@@ -131,7 +138,8 @@ export const normalizeReviewRuntimeRequestError = ({
   readonly timedOut: boolean;
 }): unknown => {
   if (error instanceof ReviewRuntimeRefusedError) {
-    return GATEWAY_STATUSES.has(error.status)
+    return GATEWAY_STATUSES.has(error.status) ||
+      (error.status === 503 && error.retryAfter !== undefined)
       ? new ReviewRuntimeUnavailableError({ cause: error })
       : error;
   }

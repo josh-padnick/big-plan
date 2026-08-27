@@ -3,9 +3,9 @@
 //
 // It holds no review state. Given a plan id it reads the registry for where
 // that plan lives, reads that plan's own session files for what happened, and
-// either reaches the live session or explains the ending. BIG_PLAN_PROXY=1
-// keeps a live request on this stable address; its default-off escape hatch
-// preserves the original redirect while that hop is being proved.
+// either reaches the live session or explains the ending. The proxy keeps a
+// live request on this stable address by default; BIG_PLAN_PROXY=0 preserves
+// the original redirect as the rollback escape hatch.
 //
 // The request rules below are the session runtime's rules, copied on purpose
 // rather than approximated, because this process is reachable by any page the
@@ -18,13 +18,16 @@ import {
   renderPlanEndedPage,
   renderPlanInterruptedPage,
   renderPlanNeverStartedPage,
+  renderPlanRestartingPage,
   renderPlanUnknownPage,
   renderServiceStopConfirmPage,
   renderServiceStoppedPage,
   renderServiceWelcomePage,
 } from "../../render/service-page.js";
 import { drainAndCloseServer } from "../http-shutdown.js";
+import { REVIEW_HEARTBEAT_INTERVAL_MS } from "../session-authority.js";
 import { answerForPlan } from "./plan-status.js";
+import type { ServicePlanAnswer } from "./plan-status.js";
 import { readFormNonce } from "./stop-form.js";
 import { servicePort, serviceProxyEnabled } from "./paths.js";
 import { isServicePlanId } from "./registry.js";
@@ -172,6 +175,17 @@ const refuseAsGateway = (response: ServerResponse): void => {
   refuse({ response, status: 502, reason: "No live review session" });
 };
 
+/** Asks a caller to retry after the next session heartbeat can land. */
+const refuseWhileRestarting = (response: ServerResponse): void => {
+  response.writeHead(503, {
+    "content-type": "text/plain; charset=utf-8",
+    "cache-control": "no-store",
+    "retry-after": String(Math.ceil(REVIEW_HEARTBEAT_INTERVAL_MS / 1_000)),
+    ...SECURITY_HEADERS,
+  });
+  response.end("The review runtime is restarting\n");
+};
+
 /**
  * Relays one live request without rewriting the browser's identity headers.
  *
@@ -257,6 +271,7 @@ export const startService = async ({
   port = servicePort(),
   now = Date.now(),
   proxyEnabled = serviceProxyEnabled(),
+  clock = Date.now,
   onClosed,
 }: {
   readonly readToken: () => Promise<string | undefined>;
@@ -265,6 +280,8 @@ export const startService = async ({
   readonly now?: number;
   /** Read once at startup; changing the environment cannot move this listener. */
   readonly proxyEnabled?: boolean;
+  /** Supplies request time so cache and restart boundaries stay testable. */
+  readonly clock?: () => number;
   /**
    * Runs once after the listener closes, however the stop arrived.
    *
@@ -283,6 +300,32 @@ export const startService = async ({
   // own POST long enough to serve one more GET, and `/stopped` is that page.
   // Unarmed it does not exist, so nobody can end the service by guessing a URL.
   let stopArmed = false;
+  const planAnswers = new Map<
+    string,
+    { readonly answer: ServicePlanAnswer; readonly expiresAtMs: number }
+  >();
+
+  /** Resolves one plan at most once per heartbeat-length cache window. */
+  const resolvePlan = async (planId: string): Promise<ServicePlanAnswer> => {
+    const observedAtMs = clock();
+    const cached = planAnswers.get(planId);
+    if (cached !== undefined && observedAtMs < cached.expiresAtMs) {
+      return cached.answer;
+    }
+    const answer = await answerForPlan({ planId, now: observedAtMs });
+    if (answer.kind === "live") {
+      planAnswers.set(planId, {
+        answer,
+        expiresAtMs: observedAtMs + REVIEW_HEARTBEAT_INTERVAL_MS,
+      });
+    } else {
+      // Unknown ids are attacker-controlled input and must never grow a
+      // process-lifetime cache. Non-live known states have no upstream
+      // resolution to reuse and need to notice a newly started runtime.
+      planAnswers.delete(planId);
+    }
+    return answer;
+  };
 
   const handle = async ({
     request,
@@ -365,7 +408,9 @@ export const startService = async ({
       // validation error, because the visitor clicked a link and cannot act
       // on the difference.
       const answer = isServicePlanId(planId)
-        ? await answerForPlan({ planId })
+        ? proxyEnabled
+          ? await resolvePlan(planId)
+          : await answerForPlan({ planId })
         : ({ kind: "unknown" } as const);
       // Only the hop can reach a request this refusal is right for. With the
       // switch off nothing but a navigation to the plan address arrives here
@@ -374,6 +419,8 @@ export const startService = async ({
       if (proxyEnabled && answer.kind !== "live" && !readablePage) {
         if (answer.kind === "unknown") {
           refuse({ response, status: 404, reason: "No such route" });
+        } else if (answer.kind === "interrupted") {
+          refuseWhileRestarting(response);
         } else {
           refuseAsGateway(response);
         }
@@ -398,10 +445,22 @@ export const startService = async ({
             });
           } catch {
             // The session was live when it was looked up and unreachable a
-            // moment later, which is the same condition as no live session at
-            // all and has to read as that rather than as this service failing.
-            if (!response.headersSent) refuseAsGateway(response);
-            else response.end();
+            // moment later. Drop that resolution immediately so the next
+            // request can discover a replacement runtime.
+            planAnswers.delete(planId);
+            if (!response.headersSent) {
+              if (readablePage) {
+                sendHtml({
+                  response,
+                  status: 200,
+                  html: renderPlanRestartingPage({
+                    planPath: answer.planPath,
+                  }),
+                });
+              } else {
+                refuseWhileRestarting(response);
+              }
+            } else response.end();
           }
           return;
         }
@@ -420,10 +479,12 @@ export const startService = async ({
           sendHtml({
             response,
             status: 200,
-            html: renderPlanInterruptedPage({
-              planPath: answer.planPath,
-              lastSeenAtMs: answer.lastSeenAtMs,
-            }),
+            html: proxyEnabled
+              ? renderPlanRestartingPage({ planPath: answer.planPath })
+              : renderPlanInterruptedPage({
+                  planPath: answer.planPath,
+                  lastSeenAtMs: answer.lastSeenAtMs,
+                }),
           });
           return;
         case "never-started":
@@ -564,6 +625,11 @@ export const startService = async ({
       }
       response.end();
     });
+  });
+  server.on("upgrade", (_request, socket) => {
+    socket.end(
+      "HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+    );
   });
 
   await new Promise<void>((settle, fail) => {
