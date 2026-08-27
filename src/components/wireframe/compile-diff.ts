@@ -218,17 +218,6 @@ export const compileWireframeDiff = (
   };
 };
 
-/** Resolves the selected screen identity recorded by one snapshot side. */
-export const wireframeScreenIdForSide = (
-  screen: WireframeScreenDiff,
-  side: "old" | "new",
-): string | undefined => {
-  if (side === "old") {
-    return screen.status === "added" ? undefined : screen.oldScreenId;
-  }
-  return screen.status === "removed" ? undefined : screen.newScreenId;
-};
-
 /** Formats the positional meaning carried by a screen comparison. */
 export const wireframeScreenStatusLabel = (
   screen: WireframeScreenDiff,

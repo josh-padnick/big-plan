@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import {
   compareWireframeScreens,
   compileWireframeDiff,
-  wireframeScreenIdForSide,
   wireframeScreenStatusLabel,
 } from "./compile-diff.js";
 import type {
@@ -93,8 +92,6 @@ describe("compareWireframeScreens", () => {
     ]);
     const initial = diffs[0];
     if (initial === undefined) throw new Error("Expected an initial diff");
-    expect(wireframeScreenIdForSide(initial, "old")).toBe("queue");
-    expect(wireframeScreenIdForSide(initial, "new")).toBe("detail");
     expect(wireframeScreenStatusLabel(initial)).toBe("Initial screen");
   });
 
