@@ -52,6 +52,7 @@ import {
   ResolvedThreadWorkRejected,
   reviseQueuedRequest,
   withResolvedCommentLock,
+  writeAgentRequestWhen,
 } from "./request-mailbox.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
@@ -675,6 +676,30 @@ describe("request mailbox", () => {
       requestId: secondRequest.requestId,
       claimedBy: agentB,
     });
+  });
+
+  it("should not deliver a request after its owning state was withdrawn", async () => {
+    const { store } = await preparedReview();
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Do not deliver this after the reviewer withdraws it.",
+    });
+
+    await expect(
+      writeAgentRequestWhen({
+        store,
+        request,
+        permitted: async () => false,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
   });
 
   it("should refuse the canceled request itself after the plan is released", async () => {

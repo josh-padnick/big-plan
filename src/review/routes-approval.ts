@@ -22,12 +22,12 @@ import {
   approvalAgentRequest,
   deriveSnapshotDigest,
   readAgentExchange,
-  writeAgentRequest,
 } from "./agent-exchange.js";
 import {
   AgentRequestNotWithdrawable,
   appendProgressEvent,
   cancelAgentRequest,
+  writeAgentRequestWhen,
 } from "./request-mailbox.js";
 import {
   randomId,
@@ -508,9 +508,15 @@ export const approvePlan = async (
       requestId,
     });
   }
-  let delivered = true;
+  let delivered: boolean;
   try {
-    await writeAgentRequest({ store: context.store, request: handoff });
+    delivered = await writeAgentRequestWhen({
+      store: context.store,
+      request: handoff,
+      permitted: async () =>
+        inForceApproval(await context.approvals.read())?.approvalId ===
+        entry.approvalId,
+    });
   } catch (error: unknown) {
     delivered = false;
     context.reportDiagnostic({

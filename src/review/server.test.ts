@@ -7033,9 +7033,8 @@ describe("review runtime approval", () => {
           planId: target.planId,
         });
         expect(
-          exchange.requests.find(
-            (request) => request.requestId === approvalId,
-          )?.canceledAt,
+          exchange.requests.find((request) => request.requestId === approvalId)
+            ?.canceledAt,
         ).toBeUndefined();
       },
     );
