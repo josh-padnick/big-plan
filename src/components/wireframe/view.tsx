@@ -192,16 +192,21 @@ const WireframeElement = ({
   readonly selectsInPlace?: boolean;
 }): JSX.Element => {
   // The Was side is evidence a reader may read, not a second prototype they
-  // may drive: a Was screen that navigated on its own would leave the two
-  // sides showing different screens under one Was/Now toggle. Freezing says
-  // nothing else. It is presentation-neutral, because the reader is being
-  // asked to compare two renderings and any difference the plan did not
-  // propose reads as one it did, so every hook a stylesheet selects on
-  // stays. It is state-neutral too: `disabled` is a design decision this
-  // component already spends, in paint and in what a screen reader
-  // announces, so the freeze may not borrow it. What is left is the
-  // behaviour - out of the tab order, refusing pointers, and refused again
-  // by the viewer script's baseline gate.
+  // may drive: the screen it shows is the one the reader chose from its
+  // switcher, and an in-screen control that navigated or took input would
+  // move it somewhere nobody asked for. Freezing buys exactly that and
+  // nothing more - the Was switcher stays navigable on purpose, so the two
+  // sides can and do show different screens.
+  //
+  // Freezing is presentation-neutral, because the reader is being asked to
+  // compare two renderings and any difference the plan did not propose reads
+  // as one it did, so every hook a stylesheet selects on stays. It is
+  // state-neutral too: `disabled` is a design decision this component
+  // already spends, in paint and in what a screen reader announces, so the
+  // freeze may not borrow it. What is left is the behaviour - out of the tab
+  // order, refusing pointers, and refused again by the viewer script, which
+  // owns the freeze for every control kind because a dispatched activation
+  // reaches none of the markup above.
   const frozen = useComponentDiffPresentation()?.side === "baseline";
   const navigation = (
     target: string | undefined,
@@ -1087,11 +1092,12 @@ export const Wireframe = ({
 }) => {
   // Which side this rendering is, not whether it carries badges, decides what
   // baseline isolation may hold inert: a removed wireframe carries no badges
-  // and its switcher still has to open the screens only it has.
-  const insideDiff = useComponentDiffPresentation() !== null;
-  const live: Readonly<Record<string, string>> = insideDiff
-    ? { [DIFF_LIVE_ATTRIBUTE]: "" }
-    : {};
+  // and its switcher still has to open the screens only it has. Only the
+  // baseline is isolated, so only the baseline carries the mark.
+  const live: Readonly<Record<string, string>> =
+    useComponentDiffPresentation()?.side === "baseline"
+      ? { [DIFF_LIVE_ATTRIBUTE]: "" }
+      : {};
   return (
     <figure
       className="wireframe my-8"

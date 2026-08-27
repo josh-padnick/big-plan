@@ -170,15 +170,22 @@ describe("WireframeDiffView", () => {
     for (const entry of queue) {
       expect(textWithin(entry)).toContain("Queue");
       expect(textWithin(entry)).toContain("Updated");
-      // Baseline isolation holds the Was side inert; this marker is what
-      // keeps its screen switcher operable, so a badge on that side can be
-      // opened.
-      expect(entry.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
     }
     for (const entry of triage) {
       expect(textWithin(entry)).toContain("Triage");
       expect(textWithin(entry)).not.toContain("Updated");
-      expect(entry.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
+    }
+    // Baseline isolation holds the Was side inert; this mark is what keeps
+    // its screen switcher operable, so a badge on that side can be opened.
+    // Nothing isolates the Now side, so the mark would be dead markup there.
+    for (const side of ["baseline", "proposed"] as const) {
+      const marked = switcherEntriesFor(sideOf(root, side), "queue").filter(
+        (entry) => entry.properties[DIFF_LIVE_ATTRIBUTE] === "",
+      );
+      expect(marked).toHaveLength(side === "baseline" ? 1 : 0);
+      expect(liveScreenRegionsOf(sideOf(root, side))).toHaveLength(
+        side === "baseline" ? 1 : 0,
+      );
     }
   });
 
@@ -215,9 +222,10 @@ describe("WireframeDiffView", () => {
   });
 
   it("should freeze the Was prototype's own controls without changing how they draw", () => {
-    // A navigable Was side would leave the two prototypes on different
-    // screens under one Was/Now toggle. The freeze takes the control out of
-    // the tab order and the viewer script refuses its navigation, but every
+    // The Was switcher moves that side alone on purpose, so an in-screen
+    // control that navigated too would move it somewhere nobody chose. The
+    // freeze takes the control out of the tab order and the viewer script
+    // refuses its navigation, but every
     // hook a stylesheet selects on survives: the reader is comparing these
     // two renderings, so a difference the plan never proposed reads as one
     // it did.
@@ -276,6 +284,11 @@ describe("WireframeDiffView", () => {
     expect(wasSwitcher).toHaveLength(1);
     expect(wasSwitcher[0]?.properties.disabled).toBeUndefined();
     expect(wasSwitcher[0]?.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
+    expect(
+      switcherEntriesFor(sideOf(root, "proposed"), "triage")[0]?.properties[
+        DIFF_LIVE_ATTRIBUTE
+      ],
+    ).toBeUndefined();
   });
 
   it("should freeze a Was field without borrowing the authored disabled state", () => {

@@ -382,7 +382,8 @@ The change replaces the component in the plan instead of sitting beside a hidden
 When a **Now** side exists, it is the live, commentable component.
 It keeps its comment entry and any controls, including maximize.
 The **Was** side is inert evidence and carries no live plan identity, apart from the controls that reach evidence only it holds: a wireframe's screen switcher stays navigable there, so a screen marked as removed or moved can be opened on the side that still has it.
-The controls drawn inside a **Was** screen look exactly as the plan draws them and do nothing, so the two sides always show the same screen.
+The controls drawn inside a **Was** screen look exactly as the plan draws them and do nothing, so the screen it shows stays the one the reader chose from its switcher.
+That switcher moves the **Was** side alone, so the two sides can show different screens - which is how a screen the change removed stays reachable on the side that still has it.
 Until the reviewer accepts an answerable **Now** Decision, a banner at the top of its card asks them to accept the change before answering.
 Its disabled **Confirm choice** control shows the same guidance in a hazard-icon tooltip.
 Diagram, file tree, and wireframe changes use the component's own maximize control and name.

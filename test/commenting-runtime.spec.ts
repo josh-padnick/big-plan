@@ -6214,6 +6214,7 @@ test("should render a changed wireframe as its own component diff", async ({
 <ListItem label="${headline}" selected />
 </List>
 <Button label="Open triage" navigateTo="triage" />
+<Checkbox label="Notify the owner" />
 </Panel>
 </AppContent>
 </AppShell>
@@ -6426,6 +6427,18 @@ ${unrelatedWorkspace}
         "data-wireframe-screen",
         "queue",
       );
+      // A checkbox has no navigation hook to refuse, and neither the tab
+      // order nor the pointer rule stops an activation that arrives another
+      // way - a screen reader's virtual cursor reaches this control, because
+      // the Was screens are deliberately not inert. A flipped tick would be a
+      // baseline the plan never wrote.
+      const wasTick = baseline.locator(".wireframe-tick");
+      await expect(wasTick).toHaveCount(1);
+      expect(await wasTick.evaluate((node) => node.checked)).toBe(false);
+      await wasTick.evaluate((node) => {
+        node.click();
+      });
+      expect(await wasTick.evaluate((node) => node.checked)).toBe(false);
 
       await now.click();
       await expect(proposed).toBeVisible();
@@ -6433,6 +6446,16 @@ ${unrelatedWorkspace}
         name: "Prototype screens",
       });
       await nowSwitcher.getByRole("button", { name: /Queue/u }).click();
+      // The gate is scoped to the isolated side: the live prototype still
+      // answers the same activation.
+      const nowTick = proposed.locator(".wireframe-tick");
+      await nowTick.evaluate((node) => {
+        node.click();
+      });
+      expect(await nowTick.evaluate((node) => node.checked)).toBe(true);
+      await nowTick.evaluate((node) => {
+        node.click();
+      });
       const nowOpen = proposed.getByRole("button", { name: "Open triage" });
       await expect(nowOpen).not.toHaveAttribute("tabindex", "-1");
       await nowOpen.click();

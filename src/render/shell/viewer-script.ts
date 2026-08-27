@@ -1371,10 +1371,12 @@ const wireWireframes = () => {
     };
     // A prototype rendered as the Was side of a component diff is evidence,
     // not a second prototype the reader drives: only its screen switcher
-    // navigates, so the two sides cannot end up on different screens under
-    // one Was/Now toggle. Its in-screen controls keep their markup, because
-    // stripping the navigation hook would relayout the screen the diff is
-    // asking the reader to compare.
+    // navigates, so the screen it shows stays the one the reader chose. That
+    // switcher is deliberately live and independent of the other side, so
+    // the two sides can show different screens - which is the point, since
+    // only Was still has a screen the change removed. Its in-screen controls
+    // keep their markup, because stripping the navigation hook would relayout
+    // the screen the diff is asking the reader to compare.
     const frozenPrototype =
       root.closest('[data-component-diff-side="baseline"]') !== null;
     root.addEventListener("click", (event) => {
@@ -1388,6 +1390,24 @@ const wireWireframes = () => {
       const id = trigger.getAttribute("data-wireframe-navigate");
       if (screenIds.includes(id)) show(id);
     });
+    // The freeze itself lives here, not in the markup, because the markup
+    // can only refuse a pointer and a tab stop. A control activated any
+    // other way - a screen reader's virtual cursor, a dispatched click -
+    // reaches every one of those defences and changes the evidence anyway,
+    // and a checkbox the reader flipped is a baseline the plan never wrote.
+    // Cancelling the click cancels the activation behaviour it would have
+    // run, which is the one point every control kind passes through.
+    if (frozenPrototype) {
+      root.addEventListener(
+        "click",
+        (event) => {
+          if (!(event.target instanceof Element)) return;
+          if (event.target.closest("[data-wireframe-frozen]") === null) return;
+          event.preventDefault();
+        },
+        true,
+      );
+    }
     // Maximized mode draws the switcher as a left rail; arrow keys sequence
     // through it wherever focus sits inside the maximized figure, matching
     // the guidance requirement without forcing a reader to first tab onto a
