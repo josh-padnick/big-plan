@@ -25,6 +25,7 @@ import {
   deriveSnapshotDigest,
   messageAgentRequest,
   nextPendingAgentRequest,
+  outstandingAgentRequests,
   readAgentCommentHistory,
   readAgentExchange,
   validateAgentResponseDraft,
@@ -6831,6 +6832,17 @@ describe("review runtime approval", () => {
           await callRuntime({ target, sessionToken, path: "/api/session" })
         ).json()) as { readonly approval?: unknown };
         expect(session.approval).toBeUndefined();
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          exchange.requests.find(
+            (request) => request.requestId === body.approvalId,
+          )?.canceledAt,
+        ).toBeDefined();
+        expect(outstandingAgentRequests(exchange)).toEqual([]);
       },
     );
   });
@@ -6863,8 +6875,43 @@ describe("review runtime approval", () => {
           sessionId: target.sessionId,
           planId: target.planId,
         });
-        expect(exchange.requests[0]?.canceledAt).toBeDefined();
-        void planPath;
+        const chat = exchange.requests.find(
+          (request) => request.requestId === "aaaaaaaaaaaaaaaa",
+        );
+        expect(chat?.canceledAt).toBeDefined();
+        const pending = outstandingAgentRequests(exchange);
+        expect(pending).toHaveLength(1);
+        expect(pending[0]).toMatchObject({
+          kind: "approval",
+          planPath,
+          pinnedSnapshot: digest,
+        });
+      },
+    );
+  });
+
+  it("leaves the approval request waiting when no agent is connected", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        expect(
+          (await approve(target, sessionToken, { expectedSnapshot: digest }))
+            .status,
+        ).toBe(200);
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        const pending = outstandingAgentRequests(exchange);
+        expect(pending).toHaveLength(1);
+        expect(pending[0]).toMatchObject({
+          kind: "approval",
+          planPath,
+          pinnedSnapshot: digest,
+        });
+        expect(pending[0]?.answeredAt).toBeUndefined();
+        expect(pending[0]?.canceledAt).toBeUndefined();
       },
     );
   });

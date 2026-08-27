@@ -102,7 +102,7 @@ export type AgentRequest = TerminalAgentRequest & {
   readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat" | "push";
+  readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
   readonly body?: string;
   readonly commentId?: string;
   readonly commentIds: ReadonlyArray<string>;
@@ -115,9 +115,10 @@ export type AgentResponse = {
   readonly requestId: string;
   readonly resultSnapshot: string;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat" | "push";
+  readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
   readonly outcomes: ReadonlyArray<AgentOutcome>;
   readonly message?: string;
+  readonly summary?: string;
 };
 
 export type AgentPresence = {
@@ -728,7 +729,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           (request.kind !== "feedback" &&
             request.kind !== "reply" &&
             request.kind !== "chat" &&
-            request.kind !== "push") ||
+            request.kind !== "push" &&
+            request.kind !== "approval") ||
           (request.kind === "push" &&
             ((request.origin !== "prompt" && request.origin !== "about") ||
               typeof request.body !== "string" ||
@@ -806,7 +808,11 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
               : {}),
             ...(answeredAt === undefined ? {} : { answeredAt }),
             ...(canceledAt === undefined ? {} : { canceledAt }),
-            ...(typeof request.body === "string" ? { body: request.body } : {}),
+            ...(typeof request.body === "string"
+              ? { body: request.body }
+              : typeof request.message === "string"
+                ? { body: request.message }
+                : {}),
             ...(typeof request.commentId === "string"
               ? { commentId: request.commentId }
               : {}),
@@ -853,7 +859,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           (response.kind !== "feedback" &&
             response.kind !== "reply" &&
             response.kind !== "chat" &&
-            response.kind !== "push")
+            response.kind !== "push" &&
+            response.kind !== "approval")
         ) {
           return [];
         }
@@ -900,6 +907,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
             outcomes,
             ...(typeof response.message === "string"
               ? { message: response.message }
+              : {}),
+            ...(typeof response.summary === "string"
+              ? { summary: response.summary }
               : {}),
           },
         ];

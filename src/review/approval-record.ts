@@ -1,9 +1,10 @@
-// Owns validation and immutable updates for the append-only approval log.
+// Owns validation and immutable updates for the append-only approval log,
+// and the human-readable approval brief written beside feedback briefs.
 //
 // Status derivation and the in-force rule live in the shared module, because
-// the browser paints from the same facts. This file only enforces the stored
-// shape and the two mutations that grow it: append an approval, append a
-// revocation. Entries are never rewritten.
+// the browser paints from the same facts. This file enforces the stored shape,
+// the two mutations that grow it (append an approval, append a revocation),
+// and the brief an approval request carries. Entries are never rewritten.
 
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import { APPROVAL_MESSAGE_LIMIT } from "./shared/approval-message.js";
@@ -245,6 +246,58 @@ export const validateApprovalRecord = (value: unknown): ApprovalRecord => {
     version: 1,
     entries: candidate.entries.map(logEntry),
   };
+};
+
+/** Human-readable mailbox brief written beside feedback briefs on approve. */
+export const buildApprovalBrief = ({
+  planPath,
+  entry,
+}: {
+  readonly planPath: string;
+  readonly entry: ApprovalEntry;
+}): string => {
+  const answers =
+    entry.recordedAnswers.length === 0
+      ? "None."
+      : [
+          "| Decision | Option |",
+          "| --- | --- |",
+          ...entry.recordedAnswers.map(
+            (answer) =>
+              `| \`${answer.decisionId}\` | ${answer.optionTitle} (\`${answer.optionId}\`) |`,
+          ),
+        ].join("\n");
+  const unanswered =
+    entry.unansweredDecisions.length === 0
+      ? "None."
+      : entry.unansweredDecisions.map((id) => `- \`${id}\``).join("\n");
+  return [
+    `# Plan approval · ${entry.at}`,
+    "",
+    `Plan: ${planPath}`,
+    `Approval: ${entry.approvalId}`,
+    `Pinned snapshot: ${entry.pinnedSnapshot}`,
+    "",
+    "## Message",
+    "",
+    entry.message,
+    "",
+    "## Recorded answers",
+    "",
+    answers,
+    "",
+    "## Unanswered decisions",
+    "",
+    unanswered,
+    "",
+    "## Canonical source",
+    "",
+    "Re-read the file at the plan path above.",
+    `Verify its digest equals the pinned snapshot \`${entry.pinnedSnapshot}\`.`,
+    "A missing path, missing file, or digest mismatch is a hard stop reported through the response, never a fallback search.",
+    "Acknowledge without editing the plan, then begin execution in your own harness.",
+    "",
+  ].join("\n");
 };
 
 /** Appends one approval. The previous in-force entry stays as history. */

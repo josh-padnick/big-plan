@@ -48,7 +48,9 @@ There is no silent overwrite of user skill directories.
 3. `npx big-plan@latest validate <plan.mdx>` until clean.
 4. `npx big-plan@latest render <plan.mdx>`.
 5. Give the human the absolute path or `file://` URL of the HTML review document.
-6. Wait for plan acceptance before implementation.
+6. Wait for the human to approve the plan in the live review.
+7. When the mailbox returns an `approval` request, re-read `planPath`, verify its digest equals `pinnedSnapshot`, acknowledge without editing the plan, and begin execution in your own harness.
+   A missing path, a missing file, or a digest mismatch is a hard stop: report it through the response and do not search for another copy.
 
 Details for render presentation live in [Render a plan](/for-agents/render-a-plan/).
 Authoring constraints live in [Authoring plans](/for-agents/authoring-plans/).

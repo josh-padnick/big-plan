@@ -9,6 +9,8 @@ import { join } from "node:path";
 import {
   deriveSnapshotDigest,
   messageAgentRequest,
+  outstandingAgentRequests,
+  readAgentExchange,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "../src/review/agent-exchange.js";
@@ -17,7 +19,7 @@ import {
   commitRequestTerminal,
 } from "../src/review/request-mailbox.js";
 import { writeSnapshot } from "../src/review/store.js";
-import { expect, test, type Page } from "./fixtures";
+import { agentIdOf, expect, runAgentCli, test, type Page } from "./fixtures";
 
 const PLAN = `# Durable decision answers
 
@@ -677,6 +679,18 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
   const runtime = await startCompiledReviewRuntime(planPath);
   try {
     await openWritableReview(page, runtime.url);
+    await writeAgentRequest({
+      store: runtime.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "aaaaaaaaaaaaaaaa",
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-13T17:00:00.000Z",
+        body: "Please look at the retry queue.",
+      }),
+    });
     await page.getByRole("button", { name: "Approve plan" }).click();
     const dialog = page.getByRole("alertdialog", {
       name: "Approve this plan?",
@@ -887,6 +901,66 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     await expect(
       page.getByRole("button", { name: "Approve plan" }),
     ).toHaveCount(0);
+
+    await test.step("approval clears the mailbox and the agent acknowledges through the CLI", async () => {
+      const pinned = deriveSnapshotDigest(source);
+      const claim = await runAgentCli(["next", planPath]);
+      expect(claim.stdout).toContain("pending: true");
+      expect(claim.stdout).toContain("kind: approval");
+      expect(claim.stdout).toContain(planPath);
+      expect(claim.stdout).toContain(pinned);
+      const exchange = await readAgentExchange({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+      });
+      const pending = outstandingAgentRequests(exchange);
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({
+        kind: "approval",
+        planPath,
+        pinnedSnapshot: pinned,
+      });
+      const chat = exchange.requests.find(
+        (request) => request.requestId === "aaaaaaaaaaaaaaaa",
+      );
+      expect(chat?.canceledAt).toBeDefined();
+      const approval = pending[0];
+      if (approval === undefined) {
+        throw new Error("The agent CLI did not return the approval request");
+      }
+      const draft = /response_file: (\S+)/u.exec(claim.stdout)?.[1];
+      if (draft === undefined) {
+        throw new Error(
+          `The agent CLI returned no response file:\n${claim.stdout}`,
+        );
+      }
+      await writeFile(
+        draft,
+        JSON.stringify({ requestId: approval.requestId }),
+        "utf8",
+      );
+      const response = await runAgentCli([
+        "respond",
+        planPath,
+        draft,
+        "--agent",
+        agentIdOf(claim.stdout, "agent_token"),
+      ]);
+      expect(agentIdOf(response.stdout, "responded")).toBe(approval.requestId);
+
+      await page.reload();
+      await openWritableReview(page, runtime.url);
+      await page.getByRole("button", { name: /Feedback/u }).click();
+      const rail = page.getByRole("complementary", { name: "Feedback" });
+      await rail.getByRole("tab", { name: "Chat" }).click();
+      await expect(rail).toContainText("Approval acknowledged");
+      await rail
+        .getByRole("button", { name: /Show \d+ earlier update/u })
+        .click();
+      await expect(rail).toContainText("Plan approved");
+      await expect(rail).toContainText("Approval acknowledged");
+    });
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

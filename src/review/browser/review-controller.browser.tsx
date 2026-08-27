@@ -4200,25 +4200,39 @@ const ChatExchange = ({
       <MessageTurn
         role="user"
         surface="chat"
-        body={request.body ?? ""}
+        body={
+          request.kind === "approval"
+            ? (request.body ??
+              "This plan is approved and we are ready to begin.")
+            : (request.body ?? "")
+        }
         createdAt={request.createdAt}
         delivery={delivery}
       />
-      {response === undefined ? (
+      {response === undefined || request.kind === "approval" ? (
         <div className="min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-dashed border-edge bg-paper px-2 py-2 text-muted">
           <RequestStatusStrip
             status={status}
             activity={activity}
             surface="chat"
             onShowAgent={onShowAgent}
-            onCancelRequest={() => onCancelRequest(request.requestId)}
+            onCancelRequest={
+              response === undefined && request.kind !== "approval"
+                ? () => onCancelRequest(request.requestId)
+                : undefined
+            }
           />
         </div>
-      ) : (
+      ) : null}
+      {response === undefined ? null : (
         <MessageTurn
           role="agent"
           surface="chat"
-          body={response.message ?? ""}
+          body={
+            request.kind === "approval"
+              ? (response.summary ?? "Approval acknowledged")
+              : (response.message ?? "")
+          }
           createdAt={response.createdAt}
         >
           {hasChanges ? (
@@ -7014,7 +7028,7 @@ export const ReviewController = () => {
     everConnected: agentHasEverConnected({ events: agentConnection.events }),
   });
   const chatRequests = agent.requests.filter(
-    (request) => request.kind === "chat",
+    (request) => request.kind === "chat" || request.kind === "approval",
   );
   const activeChatRequests = chatRequests.filter(
     (request) => !archivedChatRequestIds.has(request.requestId),
@@ -7026,7 +7040,8 @@ export const ReviewController = () => {
     if (identity === null) return null;
     const response = agent.responses.find(
       (candidate) =>
-        candidate.requestId === request.requestId && candidate.kind === "chat",
+        candidate.requestId === request.requestId &&
+        (candidate.kind === "chat" || candidate.kind === "approval"),
     );
     return (
       <ChatExchange
@@ -7306,7 +7321,7 @@ export const ReviewController = () => {
     });
   };
   const viewAgentRequest = (requestId: string, kind: string) => {
-    if (kind === "chat") {
+    if (kind === "chat" || kind === "approval") {
       openFeedbackSidebar("chat");
       return;
     }

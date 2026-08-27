@@ -37,6 +37,7 @@ import {
 import { agentOwnsRequest } from "./shared/request-ownership.js";
 import { requestIsOutstanding } from "./shared/request-lifecycle.js";
 import { compareTimestamps } from "./shared/timestamp-order.js";
+import { APPROVAL_MESSAGE_LIMIT } from "./shared/approval-message.js";
 
 const TEXT_LIMIT = 4000;
 const MESSAGE_LIMIT = 200;
@@ -104,11 +105,27 @@ export type AgentPushRequest = AgentRequestBase & {
   readonly threadId: string;
 };
 
+export type AgentApprovalRecordedAnswer = {
+  readonly decisionId: string;
+  readonly optionId: string;
+};
+
+export type AgentApprovalRequest = AgentRequestBase & {
+  readonly kind: "approval";
+  readonly approvalId: string;
+  readonly planPath: string;
+  readonly pinnedSnapshot: string;
+  readonly recordedAnswers: ReadonlyArray<AgentApprovalRecordedAnswer>;
+  readonly unansweredDecisions: ReadonlyArray<string>;
+  readonly message: string;
+};
+
 export type AgentRequest =
   | AgentFeedbackRequest
   | AgentReplyRequest
   | AgentChatRequest
-  | AgentPushRequest;
+  | AgentPushRequest
+  | AgentApprovalRequest;
 
 const isPushedThreadOpener = (request: AgentRequest): boolean =>
   request.kind === "push" && request.requestId === request.threadId;
@@ -148,7 +165,13 @@ export type AgentChatResponse = AgentResponseBase & {
   readonly message: string;
 };
 
-export type AgentResponse = AgentThreadResponse | AgentChatResponse;
+export type AgentApprovalResponse = AgentResponseBase & {
+  readonly kind: "approval";
+  readonly summary?: string;
+};
+
+export type AgentResponse =
+  AgentThreadResponse | AgentChatResponse | AgentApprovalResponse;
 
 export type AgentExchangeSnapshot = {
   readonly requests: ReadonlyArray<AgentRequest>;
@@ -657,7 +680,78 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
       attachments: [],
     };
   }
+  if (value.kind === "approval") {
+    if (base.attachmentManifest.length !== 0 || base.attachments.length !== 0) {
+      throw new AgentExchangeRejected(
+        "An approval request cannot contain attachments",
+      );
+    }
+    const approvalId = id(value.approvalId, "approvalId");
+    if (approvalId !== base.requestId) {
+      throw new AgentExchangeRejected('"approvalId" must match "requestId"');
+    }
+    const pinnedSnapshot = snapshotDigest(
+      value.pinnedSnapshot,
+      "pinnedSnapshot",
+    );
+    if (pinnedSnapshot !== base.premiseSnapshot) {
+      throw new AgentExchangeRejected(
+        '"premiseSnapshot" must equal "pinnedSnapshot"',
+      );
+    }
+    const planPath = text({
+      value: value.planPath,
+      field: "planPath",
+      limit: 4096,
+    });
+    if (!planPath.startsWith("/")) {
+      throw new AgentExchangeRejected('"planPath" must be an absolute path');
+    }
+    if (!Array.isArray(value.recordedAnswers)) {
+      throw new AgentExchangeRejected('"recordedAnswers" must be an array');
+    }
+    if (!Array.isArray(value.unansweredDecisions)) {
+      throw new AgentExchangeRejected('"unansweredDecisions" must be an array');
+    }
+    return {
+      ...base,
+      kind: "approval",
+      approvalId,
+      planPath,
+      pinnedSnapshot,
+      recordedAnswers: value.recordedAnswers.map(approvalRecordedAnswer),
+      unansweredDecisions: value.unansweredDecisions.map((decisionId) =>
+        text({
+          value: decisionId,
+          field: "unansweredDecision",
+          limit: 512,
+        }),
+      ),
+      message: text({
+        value: value.message,
+        field: "message",
+        limit: APPROVAL_MESSAGE_LIMIT,
+      }),
+      attachments: [],
+    };
+  }
   throw new AgentExchangeRejected("Unsupported agent request kind");
+};
+
+const approvalRecordedAnswer = (
+  value: unknown,
+): AgentApprovalRecordedAnswer => {
+  if (!isRecord(value)) {
+    throw new AgentExchangeRejected("Each recorded answer must be an object");
+  }
+  return {
+    decisionId: text({
+      value: value.decisionId,
+      field: "decisionId",
+      limit: 512,
+    }),
+    optionId: text({ value: value.optionId, field: "optionId", limit: 512 }),
+  };
 };
 
 const responseBase = ({
@@ -839,6 +933,26 @@ export const validateAgentResponseDraft = ({
       message: text({ value: value.message, field: "message" }),
     };
   }
+  if (request.kind === "approval") {
+    if (currentSnapshot !== request.pinnedSnapshot) {
+      throw new AgentExchangeRejected(
+        "An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot, then respond again.",
+      );
+    }
+    const summary =
+      value.summary === undefined
+        ? undefined
+        : text({
+            value: value.summary,
+            field: "summary",
+            limit: WARNING_SUMMARY_LIMIT,
+          });
+    return {
+      ...base,
+      kind: "approval",
+      ...(summary === undefined ? {} : { summary }),
+    };
+  }
   if (!Array.isArray(value.outcomes)) {
     throw new AgentExchangeRejected('"outcomes" must be a list');
   }
@@ -901,6 +1015,21 @@ export const validateAgentResponse = (value: unknown): AgentResponse => {
       ...base,
       kind: "chat",
       message: text({ value: value.message, field: "message" }),
+    };
+  }
+  if (value.kind === "approval") {
+    const summary =
+      value.summary === undefined
+        ? undefined
+        : text({
+            value: value.summary,
+            field: "summary",
+            limit: WARNING_SUMMARY_LIMIT,
+          });
+    return {
+      ...base,
+      kind: "approval",
+      ...(summary === undefined ? {} : { summary }),
     };
   }
   if (
@@ -992,7 +1121,14 @@ const validateStoredResponse = ({
       "A stored agent response does not match its request",
     );
   }
-  if (response.kind === "chat" || request.kind === "chat") return response;
+  if (
+    response.kind === "chat" ||
+    request.kind === "chat" ||
+    response.kind === "approval" ||
+    request.kind === "approval"
+  ) {
+    return response;
+  }
   const expected = expectedCommentIds({ request, commentsById });
   const actual = response.outcomes.map((entry) => entry.commentId);
   if (
@@ -1189,6 +1325,51 @@ export const feedbackAgentRequest = ({
   attachmentManifest: feedback.attachments,
   attachments: feedback.attachments,
 });
+
+/** Turns one recorded approval into the mailbox request the agent acknowledges. */
+export const approvalAgentRequest = ({
+  approvalId,
+  sessionId,
+  planId,
+  planPath,
+  pinnedSnapshot,
+  createdAt,
+  recordedAnswers,
+  unansweredDecisions,
+  message,
+}: {
+  readonly approvalId: string;
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly planPath: string;
+  readonly pinnedSnapshot: string;
+  readonly createdAt: string;
+  readonly recordedAnswers: ReadonlyArray<AgentApprovalRecordedAnswer>;
+  readonly unansweredDecisions: ReadonlyArray<string>;
+  readonly message: string;
+}): AgentApprovalRequest => {
+  const request = validateAgentRequest({
+    version: 3,
+    requestId: approvalId,
+    sessionId,
+    planId,
+    premiseSnapshot: pinnedSnapshot,
+    createdAt,
+    kind: "approval",
+    approvalId,
+    planPath,
+    pinnedSnapshot,
+    recordedAnswers,
+    unansweredDecisions,
+    message,
+    attachmentManifest: [],
+    attachments: [],
+  });
+  if (request.kind !== "approval") {
+    throw new AgentExchangeRejected("Unsupported agent request kind");
+  }
+  return request;
+};
 
 /** Creates a reviewer reply or plan-chat request for the same live session. */
 export const messageAgentRequest = ({
@@ -1437,6 +1618,9 @@ export const responseTemplateFor = (
       requestId: request.requestId,
       message: "Answer the reviewer's plan-wide question.",
     };
+  }
+  if (request.kind === "approval") {
+    return { requestId: request.requestId };
   }
   const commentIds =
     request.kind === "feedback"

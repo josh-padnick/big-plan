@@ -34,7 +34,7 @@ export type ThreadRequest = CancelableRequest &
     readonly claimedAt?: string;
     readonly claimedModel?: AgentModelIdentity;
     readonly createdAt: string;
-    readonly kind: "feedback" | "reply" | "chat" | "push";
+    readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
     readonly body?: string;
     readonly commentId?: string;
     readonly commentIds?: ReadonlyArray<string>;
@@ -57,9 +57,10 @@ export type ThreadResponse = {
   readonly requestId: string;
   readonly resultSnapshot: string;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat" | "push";
+  readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
   readonly outcomes?: ReadonlyArray<ThreadOutcome>;
   readonly message?: string;
+  readonly summary?: string;
 };
 
 export type ThreadProgress = {
@@ -248,7 +249,11 @@ export const projectRequestActivity = ({
   progressEvents.filter(
     (event) =>
       event.requestId === request.requestId &&
-      progressStepCodeIsAgentOwned(event.stepCode),
+      (request.kind === "approval"
+        ? event.stepCode === "plan-approved" ||
+          event.stepCode === "approval-acknowledged" ||
+          progressStepCodeIsAgentOwned(event.stepCode)
+        : progressStepCodeIsAgentOwned(event.stepCode)),
   );
 
 /**
@@ -271,6 +276,7 @@ export const canReviseQueuedMessage = ({
 }): boolean =>
   request.kind !== "feedback" &&
   request.kind !== "push" &&
+  request.kind !== "approval" &&
   !canceled &&
   response === undefined &&
   !agentStillOwnsRequest({ request, agentConnected, nowMs });
@@ -293,6 +299,7 @@ export const canDeleteQueuedMessage = ({
 }): boolean =>
   request.kind !== "feedback" &&
   request.kind !== "push" &&
+  request.kind !== "approval" &&
   response === undefined &&
   !agentStillOwnsRequest({ request, agentConnected, nowMs });
 

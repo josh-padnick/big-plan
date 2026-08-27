@@ -563,8 +563,8 @@ export const ApproveDialog = ({
       title={stale ? "Re-approve this plan?" : "Approve this plan?"}
       description={
         stale
-          ? "The plan has changed since you approved it. Approving again records the plan and message for the agent handoff."
-          : "Approving records the plan and your message for the agent handoff."
+          ? "The plan has changed since you approved it. Approving again records the plan and sends your message to the agent."
+          : "Approving records the plan and sends your message to the agent."
       }
       cancelLabel="Keep reviewing"
       actionLabel={stale ? "Re-approve" : "Approve plan"}
@@ -933,7 +933,7 @@ const ApprovalDetails = ({
                 Saved for your agent
               </p>
               <p className="mt-1 mb-0 text-xs leading-normal text-muted">
-                This message is recorded for the agent handoff.
+                This message was sent to the agent.
               </p>
               <blockquote className="mx-0 mt-2 mb-0 rounded-md border-l-2 border-edge bg-paper px-3 py-2 text-sm leading-normal text-ink not-italic">
                 {approval.message}
