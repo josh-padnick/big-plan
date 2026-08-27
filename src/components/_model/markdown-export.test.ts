@@ -12,6 +12,7 @@ import {
   markdownFence,
   markdownFromHast,
   markdownTable,
+  markdownTableProse,
   MarkdownExportRejected,
 } from "./markdown-export.js";
 
@@ -263,6 +264,24 @@ describe("Markdown export primitives", () => {
     ]);
 
     expect(readerHtml(markdown)).toContain("<td><strong>plan_id</strong></td>");
+  });
+
+  it("should split table prose into the row and the blocks a row cannot hold", () => {
+    expect(markdownTableProse("One inline sentence.")).toEqual({
+      cell: "One inline sentence.",
+    });
+    expect(markdownTableProse("Lead sentence.\n\n```json\n{}\n```")).toEqual({
+      cell: "Lead sentence.",
+      blocks: "Lead sentence.\n\n```json\n{}\n```",
+    });
+    expect(markdownTableProse("```json\n{}\n```")).toEqual({
+      cell: "",
+      blocks: "```json\n{}\n```",
+    });
+    expect(markdownTableProse("- first\n- second")).toEqual({
+      cell: "",
+      blocks: "- first\n- second",
+    });
   });
 
   it("should keep a multi-block bullet body inside its list item", () => {

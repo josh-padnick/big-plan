@@ -6,4 +6,4 @@ import type { ComponentMarkdownRenderer } from "../_model/markdown-export.js";
 
 export const decisionAnalysisMarkdown: ComponentMarkdownRenderer<
   CompiledDecisionCard
-> = (model) => decisionCardMarkdown(model);
+> = (model, context) => decisionCardMarkdown(model, context);

@@ -7,8 +7,19 @@ import type { DocumentOutline } from "./document-outline/document-outline.js";
 
 export const MARKDOWN_EXPORT_PLACEHOLDER = "big-plan-markdown-export";
 
+// Marks a placeholder whose component presentation is still deferred, so the
+// document can finish deciding heading depth before any component commits to
+// one.
+export const MARKDOWN_EXPORT_INDEX_ATTRIBUTE = "data-markdown-export";
+
 export type ComponentMarkdownContext = {
   readonly outline: DocumentOutline;
+  /**
+   * How far this component's own headings sit below the document's top level.
+   * A Part opens an act at h2, so everything under it moves one level down;
+   * a component that hard-coded its depth would become the section's peer.
+   */
+  readonly headingOffset: number;
 };
 
 export type ComponentMarkdownRenderer<Model> = (
@@ -39,6 +50,37 @@ const propertyString = (element: Element, name: string): string | undefined => {
  */
 export const markdownTableCell = (value: string): string =>
   value.replace(/\|/gu, "\\|").replace(/\s*\n\s*/gu, " ");
+
+/** Renders one component-owned heading at its document-relative depth. */
+export const markdownHeading = ({
+  level,
+  offset,
+  text,
+}: {
+  readonly level: number;
+  readonly offset: number;
+  readonly text: string;
+}): string => `${"#".repeat(Math.min(6, level + offset))} ${text}`;
+
+/**
+ * Splits component prose into the part one GFM table row can hold and the
+ * block content it cannot. A table cell is a single line, so a fenced example
+ * or a second paragraph has to keep its structure beside the table instead of
+ * being flattened into the row.
+ */
+export const markdownTableProse = (
+  markdown: string,
+): { readonly cell: string; readonly blocks?: string } => {
+  if (markdown === "" || !markdown.includes("\n")) return { cell: markdown };
+  const [first = "", ...rest] = markdown.split("\n\n");
+  const opensBlock = /^(?:[`~>#|]|[-+*](?=\s)|\d+[.)](?=\s))/u.test(
+    first.trim(),
+  );
+  const cell = opensBlock ? "" : first.replace(/\s*\n\s*/gu, " ").trim();
+  return rest.length === 0 && cell === first.trim()
+    ? { cell }
+    : { cell, blocks: markdown };
+};
 
 /** Renders a GFM table in the authored row and column order. */
 export const markdownTable = ({
@@ -412,5 +454,20 @@ export const markdownExportPlaceholder = ({
   tagName: MARKDOWN_EXPORT_PLACEHOLDER,
   properties: {},
   children: [{ type: "text", value: markdown }],
+  ...(position === undefined ? {} : { position }),
+});
+
+/** Builds the compiler-only node standing in for a deferred presentation. */
+export const deferredMarkdownPlaceholder = ({
+  index,
+  position,
+}: {
+  readonly index: number;
+  readonly position?: Element["position"];
+}): Element => ({
+  type: "element",
+  tagName: MARKDOWN_EXPORT_PLACEHOLDER,
+  properties: { [MARKDOWN_EXPORT_INDEX_ATTRIBUTE]: String(index) },
+  children: [],
   ...(position === undefined ? {} : { position }),
 });

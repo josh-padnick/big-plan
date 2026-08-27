@@ -58,6 +58,7 @@ import {
   publishPreparedPlanAssets,
 } from "./plan-assets.js";
 import {
+  binaryTransportHeaders,
   DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
   startReviewRuntime,
 } from "./server.js";
@@ -654,6 +655,29 @@ describe("review runtime transport", () => {
   });
 });
 
+describe("review runtime binary transport headers", () => {
+  it("should keep a route from turning off a transport guarantee", () => {
+    expect(
+      binaryTransportHeaders({
+        contentType: "text/markdown; charset=utf-8",
+        headers: {
+          "content-disposition": 'attachment; filename="plan.md"',
+          "content-type": "text/html",
+          "x-content-type-options": "off",
+          "cache-control": "public, max-age=31536000",
+          "referrer-policy": "unsafe-url",
+        },
+      }),
+    ).toMatchObject({
+      "content-disposition": 'attachment; filename="plan.md"',
+      "content-type": "text/markdown; charset=utf-8",
+      "x-content-type-options": "nosniff",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    });
+  });
+});
+
 describe("review runtime Markdown export", () => {
   it("should require the live token and return attachment snapshot metadata", async () => {
     const refused = await call({
@@ -671,6 +695,7 @@ describe("review runtime Markdown export", () => {
       'attachment; filename="plan.md"',
     );
     expect(response.headers.get("x-big-plan-snapshot")).toBe(PLAN_SNAPSHOT);
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     const markdown = await response.text();
     expect(markdown).toContain("# Review runtime plan");
     expect(markdown).toContain(`> Exported plan version: \`${PLAN_SNAPSHOT}\``);

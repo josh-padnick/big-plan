@@ -23,5 +23,8 @@ export const slideMarkdown: ComponentMarkdownRenderer<CompiledSlide> = (
     model.wireframeReason === undefined
       ? []
       : [`> Wireframe reason: ${markdownInlineText(model.wireframeReason)}`];
-  return [`> Slide structure — ${details.join("; ")}`, ...reason].join("\n");
+  return [
+    `> Slide structure — ${details.join("; ")}`,
+    ...(reason.length === 0 ? [] : [">", ...reason]),
+  ].join("\n");
 };

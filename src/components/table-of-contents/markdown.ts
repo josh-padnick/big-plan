@@ -1,6 +1,7 @@
 // Renders the overview against the completed document outline.
 
 import {
+  markdownHeading,
   markdownInlineText,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
@@ -16,9 +17,15 @@ const anchorFor = (value: string): string =>
 
 export const tableOfContentsMarkdown: ComponentMarkdownRenderer<
   CompiledTableOfContents
-> = (model, { outline }) => {
+> = (model, { outline, headingOffset }) => {
   let partNumber: number | undefined;
-  const rows: Array<string> = ["## Plan outline"];
+  const rows: Array<string> = [
+    markdownHeading({
+      level: 2,
+      offset: headingOffset,
+      text: "Plan outline",
+    }),
+  ];
   model.entries.forEach((entry, index) => {
     const section = outline.sections[index];
     if (section?.part !== undefined && section.part.number !== partNumber) {

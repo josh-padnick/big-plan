@@ -12,7 +12,10 @@ import type {
 } from "../_authoring/contract.js";
 import type { DocumentOutline } from "../_model/document-outline/document-outline.js";
 import { EMPTY_DOCUMENT_OUTLINE } from "../_model/document-outline/document-outline.js";
-import type { ComponentMarkdownRenderer } from "../_model/markdown-export.js";
+import type {
+  ComponentMarkdownContext,
+  ComponentMarkdownRenderer,
+} from "../_model/markdown-export.js";
 import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 import type {
   ComponentDiffInput,
@@ -40,7 +43,7 @@ export type OutlineMarker =
 export type CompiledComponent = {
   readonly model: unknown;
   readonly presentation: () => ReactNode;
-  readonly markdown: (outline: DocumentOutline) => string;
+  readonly markdown: (context: ComponentMarkdownContext) => string;
   // Present only on outline-aware components: how the instance joins the
   // document outline, and the presentation consuming the completed outline.
   readonly outline?: {
@@ -114,7 +117,7 @@ export const defineComponent = <
     return {
       model,
       presentation: () => createElement(view, { model }),
-      markdown: (outline) => markdown(model, { outline }),
+      markdown: (context) => markdown(model, context),
     };
   },
   compileDiff: (input) => {
@@ -172,7 +175,7 @@ export const defineOutlineComponent = <
         model,
         presentation: () =>
           createElement(view, { model, outline: EMPTY_DOCUMENT_OUTLINE }),
-        markdown: (outline) => markdown(model, { outline }),
+        markdown: (context) => markdown(model, context),
         outline: {
           marker: marker(model),
           present: (outline) => createElement(view, { model, outline }),

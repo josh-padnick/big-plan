@@ -13,6 +13,7 @@ import { createDiagnosticCollector } from "../components/_authoring/diagnostics.
 import {
   markdownExportPlaceholder,
   markdownFromHast,
+  MARKDOWN_EXPORT_INDEX_ATTRIBUTE,
 } from "../components/_model/markdown-export.js";
 import type { DocumentOutline } from "../components/_model/document-outline/document-outline.js";
 import {
@@ -82,26 +83,48 @@ const demotePartHeadings = (tree: Root): void => {
   }
 };
 
-/** Resolves outline-aware component callbacks on the unwrapped export tree. */
+const deferredIndexOf = (element: Element): string | undefined => {
+  const outlineIndex = element.properties[OUTLINE_PLACEHOLDER_ATTRIBUTE];
+  if (outlineIndex !== undefined) return String(outlineIndex);
+  const markdownIndex = element.properties[MARKDOWN_EXPORT_INDEX_ATTRIBUTE];
+  return markdownIndex === undefined ? undefined : String(markdownIndex);
+};
+
+/**
+ * Resolves every deferred component presentation on the unwrapped export
+ * tree, giving each one the heading depth its position earned. The Part
+ * divider itself keeps the act's own level and moves everything after it down,
+ * which is the same rule `demotePartHeadings` applies to authored headings.
+ */
 const completeMarkdownPlaceholders = ({
   parent,
   presentations,
   outline,
+  headingOffset,
 }: {
   readonly parent: Root | Element;
   readonly presentations: DeferredMarkdownPresentations;
   readonly outline: DocumentOutline;
+  readonly headingOffset: number;
 }): void => {
   let index = 0;
+  let offset = headingOffset;
   while (index < parent.children.length) {
     const child = parent.children[index];
     if (!isElement(child)) {
       index += 1;
       continue;
     }
-    const placeholderIndex = child.properties[OUTLINE_PLACEHOLDER_ATTRIBUTE];
+    const opensPart =
+      child.properties[OUTLINE_PART_TITLE_ATTRIBUTE] !== undefined;
+    const placeholderIndex = deferredIndexOf(child);
     if (placeholderIndex === undefined) {
-      completeMarkdownPlaceholders({ parent: child, presentations, outline });
+      completeMarkdownPlaceholders({
+        parent: child,
+        presentations,
+        outline,
+        headingOffset: offset,
+      });
       index += 1;
       continue;
     }
@@ -115,10 +138,14 @@ const completeMarkdownPlaceholders = ({
       index,
       1,
       markdownExportPlaceholder({
-        markdown: present(outline),
+        markdown: present({
+          outline,
+          headingOffset: opensPart ? headingOffset : offset,
+        }),
         ...(child.position === undefined ? {} : { position: child.position }),
       }),
     );
+    if (opensPart) offset = headingOffset + 1;
     index += 1;
   }
 };
@@ -199,6 +226,7 @@ export const renderMarkdownDocument = ({
     parent: tree,
     presentations: deferred,
     outline,
+    headingOffset: 0,
   });
 
   const title = titleOf(tree) ?? fallbackTitle;

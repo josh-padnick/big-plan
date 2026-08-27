@@ -4,8 +4,10 @@
 import {
   markdownBullet,
   markdownFromHast,
+  markdownHeading,
   markdownInlineText,
   markdownTable,
+  type ComponentMarkdownContext,
 } from "./markdown-export.js";
 import {
   weightedDecisionTotal,
@@ -32,11 +34,18 @@ const optionLabels = (
 ];
 
 /** Renders one decision card without browser-only selection state. */
-export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
+export const decisionCardMarkdown = (
+  model: CompiledDecisionCard,
+  { headingOffset }: ComponentMarkdownContext,
+): string => {
   const outcome =
     model.chosenOption ?? model.options.find((option) => option.recommended);
   const sections: Array<string> = [
-    `### Decision: ${markdownInlineText(model.question)}`,
+    markdownHeading({
+      level: 3,
+      offset: headingOffset,
+      text: `Decision: ${markdownInlineText(model.question)}`,
+    }),
     `**Status:** ${statusLabel(model)}${model.isCritical ? " · Critical" : ""}`,
   ];
   const context = markdownFromHast(model.context);
@@ -109,7 +118,11 @@ export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
     ...model.options.map((option) => {
       const labels = optionLabels(option);
       const content: Array<string> = [
-        `#### Option: ${markdownInlineText(option.title)}${labels.length === 0 ? "" : ` — ${labels.join(", ")}`}`,
+        markdownHeading({
+          level: 4,
+          offset: headingOffset,
+          text: `Option: ${markdownInlineText(option.title)}${labels.length === 0 ? "" : ` — ${labels.join(", ")}`}`,
+        }),
       ];
       if (option.summary !== undefined) {
         content.push(markdownInlineText(option.summary));
@@ -135,7 +148,11 @@ export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
   );
 
   const details = markdownFromHast(model.detail);
-  if (details !== "") sections.push(`#### Details\n\n${details}`);
+  if (details !== "") {
+    sections.push(
+      `${markdownHeading({ level: 4, offset: headingOffset, text: "Details" })}\n\n${details}`,
+    );
+  }
   if (model.reversibility !== undefined) {
     const detail = markdownFromHast(model.reversibility.detail);
     sections.push(
