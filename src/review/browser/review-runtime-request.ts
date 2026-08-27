@@ -101,13 +101,27 @@ export const isTerminalReviewRuntimeRefusal = (error: unknown): boolean => {
   );
 };
 
+// A status the runtime itself never sends, so it can only have come from
+// something in front of it that had nothing to reach. A page served through
+// the local service reaches its runtime over a hop, and when that runtime is
+// gone the hop answers rather than failing to connect - which would otherwise
+// leave the reader looking at a live-looking page whose session ended.
+//
+// 503 is deliberately not here: it is the runtime's own word for a session
+// that still answers every read but has stopped accepting changes, and that
+// answer names its own remedy. Treating it as a lost runtime would replace a
+// true, actionable report with a false one.
+const GATEWAY_STATUSES = new Set([502, 504]);
+
 /**
  * Normalizes browser transport failures while preserving application errors.
  *
  * A refusal outranks the timeout flag. The runtime answers before its body is
  * read, so an abort that fires during that read would otherwise turn a verdict
  * the runtime already gave into "unavailable", and a caller would retry a
- * request that was refused.
+ * request that was refused. A gateway status is the exception, because it is
+ * not a verdict the runtime gave: it is how a hop reports that there was no
+ * runtime to ask.
  */
 export const normalizeReviewRuntimeRequestError = ({
   error,
@@ -115,9 +129,13 @@ export const normalizeReviewRuntimeRequestError = ({
 }: {
   readonly error: unknown;
   readonly timedOut: boolean;
-}): unknown =>
-  error instanceof ReviewRuntimeRefusedError
-    ? error
-    : timedOut || error instanceof TypeError
+}): unknown => {
+  if (error instanceof ReviewRuntimeRefusedError) {
+    return GATEWAY_STATUSES.has(error.status)
       ? new ReviewRuntimeUnavailableError({ cause: error })
       : error;
+  }
+  return timedOut || error instanceof TypeError
+    ? new ReviewRuntimeUnavailableError({ cause: error })
+    : error;
+};

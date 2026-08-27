@@ -190,4 +190,38 @@ describe("the opt-in review proxy", () => {
       expect(answer.headers.get("content-type")).not.toContain("text/html");
     }
   });
+
+  it("should answer as a gateway when the runtime stops answering after the lookup", async () => {
+    process.env["BIG_PLAN_PROXY"] = "1";
+    const running = await startPair();
+    delete process.env["BIG_PLAN_PROXY"];
+    // Every record the service reads still says this session is live; only
+    // the address it published stops answering, which is the runtime dying
+    // between the lookup and the connection.
+    const descriptor: unknown = JSON.parse(
+      await readFile(running.review.store.sessionPath, "utf8"),
+    );
+    if (typeof descriptor !== "object" || descriptor === null) {
+      throw new Error("The live review descriptor was unreadable");
+    }
+    await writeFile(
+      running.review.store.sessionPath,
+      JSON.stringify({
+        ...descriptor,
+        url: `http://127.0.0.1:${await reserveFreePort()}/`,
+      }),
+    );
+
+    const answer = await fetch(
+      `${running.service.origin}/plan/${running.review.planId}/api/drafts`,
+      {
+        headers: {
+          "x-big-plan-review-token": running.token,
+          "sec-fetch-site": "same-origin",
+        },
+      },
+    );
+
+    expect(answer.status).toBe(502);
+  });
 });

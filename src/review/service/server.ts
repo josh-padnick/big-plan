@@ -161,6 +161,18 @@ const refuse = ({
 };
 
 /**
+ * The one answer for every way this hop has no runtime to reach: a session
+ * that already ended, and a session that stopped answering between the lookup
+ * and the connection. Both are a gateway with nothing behind it rather than
+ * this service failing, and the browser's runtime boundary reads that status
+ * as the outage it is - the same state the session's own address produces by
+ * refusing the connection outright.
+ */
+const refuseAsGateway = (response: ServerResponse): void => {
+  refuse({ response, status: 502, reason: "No live review session" });
+};
+
+/**
  * Relays one live request without rewriting the browser's identity headers.
  *
  * The runtime independently validates the service Host and Origin, so the hop
@@ -347,13 +359,7 @@ export const startService = async ({
         if (answer.kind === "unknown") {
           refuse({ response, status: 404, reason: "No such route" });
         } else {
-          // A gateway with nothing behind it, which is what the browser's
-          // existing retry and outage handling already knows how to read.
-          refuse({
-            response,
-            status: 502,
-            reason: "No live review session",
-          });
+          refuseAsGateway(response);
         }
         return;
       }
@@ -367,12 +373,20 @@ export const startService = async ({
             sendRedirect({ response, status: 302, location: `${planRoot}/` });
             return;
           }
-          await forwardLiveRequest({
-            request,
-            response,
-            target,
-            runtimeUrl: answer.url,
-          });
+          try {
+            await forwardLiveRequest({
+              request,
+              response,
+              target,
+              runtimeUrl: answer.url,
+            });
+          } catch {
+            // The session was live when it was looked up and unreachable a
+            // moment later, which is the same condition as no live session at
+            // all and has to read as that rather than as this service failing.
+            if (!response.headersSent) refuseAsGateway(response);
+            else response.end();
+          }
           return;
         }
         case "ended":
