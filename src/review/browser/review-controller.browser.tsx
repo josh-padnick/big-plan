@@ -4199,12 +4199,7 @@ const ChatExchange = ({
       <MessageTurn
         role="user"
         surface="chat"
-        body={
-          request.kind === "approval"
-            ? (request.body ??
-              "This plan is approved and we are ready to begin.")
-            : (request.body ?? "")
-        }
+        body={request.body ?? ""}
         createdAt={request.createdAt}
         delivery={delivery}
       />
