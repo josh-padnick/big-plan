@@ -21,10 +21,14 @@ export const dataTableMarkdown: ComponentMarkdownRenderer<CompiledDataTable> = (
     );
   }
   return [
-    ...(model.title === undefined ? [] : [`### ${model.title}`]),
+    ...(model.title === undefined
+      ? []
+      : [`### ${markdownInlineText(model.title)}`]),
     ...(model.groupColumn === -1
       ? []
-      : [`**Grouped by:** ${model.columns[model.groupColumn]?.label ?? ""}`]),
+      : [
+          `**Grouped by:** ${markdownInlineText(model.columns[model.groupColumn]?.label ?? "")}`,
+        ]),
     markdownTable({
       headers: model.columns.map((column) => markdownInlineText(column.label)),
       rows,

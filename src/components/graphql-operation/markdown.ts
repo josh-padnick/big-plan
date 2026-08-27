@@ -2,6 +2,7 @@
 
 import {
   markdownFromHast,
+  markdownInlineCode,
   markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
@@ -32,11 +33,13 @@ export const graphqlOperationMarkdown: ComponentMarkdownRenderer<
 > = (model) => {
   const description = markdownFromHast(model.description);
   return [
-    `### ${model.kind} ${model.name}`,
-    ...(model.access === undefined ? [] : [`**Access:** ${model.access}`]),
+    `### ${model.kind} ${markdownInlineText(model.name)}`,
+    ...(model.access === undefined
+      ? []
+      : [`**Access:** ${markdownInlineText(model.access)}`]),
     ...(model.deprecated
       ? [
-          `**Deprecated:** Yes${model.deprecationReason === undefined ? "" : ` — ${model.deprecationReason}`}`,
+          `**Deprecated:** Yes${model.deprecationReason === undefined ? "" : ` — ${markdownInlineText(model.deprecationReason)}`}`,
         ]
       : []),
     ...(description === "" ? [] : [description]),
@@ -58,7 +61,7 @@ export const graphqlOperationMarkdown: ComponentMarkdownRenderer<
     ...(model.returns === undefined
       ? []
       : [
-          `**Returns:** \`${model.returns.returnType}\``,
+          `**Returns:** ${markdownInlineCode(model.returns.returnType)}`,
           markdownFromHast(model.returns.children),
         ]),
     ...(model.operation === undefined
@@ -68,7 +71,7 @@ export const graphqlOperationMarkdown: ComponentMarkdownRenderer<
       ? []
       : ["#### Variables", markdownFromHast(model.variables.children)]),
     ...model.responses.flatMap((response, index) => [
-      `#### Response${response.label === undefined ? ` ${index + 1}` : ` — ${response.label}`}`,
+      `#### Response${response.label === undefined ? ` ${index + 1}` : ` — ${markdownInlineText(response.label)}`}`,
       markdownFromHast(response.children),
     ]),
   ]

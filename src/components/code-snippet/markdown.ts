@@ -4,6 +4,8 @@ import {
   markdownBullet,
   markdownFence,
   markdownFromHast,
+  markdownInlineCode,
+  markdownInlineText,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
 import type { CompiledCodeSnippet } from "./compile.js";
@@ -14,14 +16,14 @@ export const codeSnippetMarkdown: ComponentMarkdownRenderer<
   const metadata = [
     ...(model.filePath === undefined
       ? []
-      : [`**File:** \`${model.filePath}\``]),
+      : [`**File:** ${markdownInlineCode(model.filePath)}`]),
     ...(model.startLine === 1
       ? []
       : [`**Starts at line:** ${model.startLine}`]),
   ];
   const annotations = model.annotations.map((annotation) =>
     markdownBullet(
-      `**${annotation.start === annotation.end ? "Line" : "Lines"} ${annotation.sourceValue}:** ${markdownFromHast(annotation.children)}`,
+      `**${annotation.start === annotation.end ? "Line" : "Lines"} ${markdownInlineText(annotation.sourceValue)}:** ${markdownFromHast(annotation.children)}`,
     ),
   );
   return [

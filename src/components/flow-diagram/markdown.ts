@@ -3,6 +3,7 @@
 import {
   markdownBullet,
   markdownFromHast,
+  markdownInlineCode,
   markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
@@ -14,19 +15,21 @@ export const flowDiagramMarkdown: ComponentMarkdownRenderer<
 > = (model) => {
   const stages = model.stages.map((stage, index) =>
     [
-      `#### Stage ${index + 1}: ${stage.title}`,
+      `#### Stage ${index + 1}: ${markdownInlineText(stage.title)}`,
       ...stage.nodes.map((node) => {
         const properties = [
-          `id \`${node.id}\``,
+          `id ${markdownInlineCode(node.id)}`,
           `tone ${node.tone}`,
-          ...(node.code === undefined ? [] : [`code \`${node.code}\``]),
+          ...(node.code === undefined
+            ? []
+            : [`code ${markdownInlineCode(node.code)}`]),
           ...(node.badge === undefined
             ? []
-            : [`status ${node.badge} (${node.badgeTone})`]),
+            : [`status ${markdownInlineText(node.badge)} (${node.badgeTone})`]),
         ];
         const body = markdownFromHast(node.body);
         return markdownBullet(
-          `**${node.label}** (${properties.join("; ")})${body === "" ? "" : ` — ${body}`}`,
+          `**${markdownInlineText(node.label)}** (${properties.join("; ")})${body === "" ? "" : ` — ${body}`}`,
         );
       }),
     ].join("\n"),

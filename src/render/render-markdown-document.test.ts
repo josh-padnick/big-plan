@@ -32,7 +32,7 @@ const COMPONENT_CONTRACT_MARKERS: ReadonlyArray<
   ["CodeDiff", "```diff"],
   ["CodeSnippet", "**Annotations**"],
   ["DataTable", "### Rollout gates"],
-  ["DatabaseTableSchema", "### Database table: review.review_events"],
+  ["DatabaseTableSchema", "### Database table: review.review\\_events"],
   ["Decision", "### Decision: Where should review-event persistence live?"],
   [
     "DecisionAnalysis",
@@ -230,5 +230,105 @@ Local transactions cover the rows.
     expect(html).toContain(`<p>${detail}</p>`);
     expect(html.slice(0, html.indexOf(detail))).toContain("<li>");
     expect(html.slice(html.indexOf(detail))).toContain("</li>");
+  });
+
+  it("should keep each criterion's authored rationale beside the matrix", () => {
+    const result = render(
+      readFileSync("examples/markdown-export-adversarial.mdx", "utf8"),
+    );
+
+    const html = readerHtml(result.markdown);
+    expect(html).toContain(
+      "<strong>Integrity</strong> (impact 5/5) — Related release records must commit together.",
+    );
+    expect(html).toContain(
+      "<strong>Local setup</strong> (impact 2/5) — The first operator should start without another service.",
+    );
+  });
+
+  it("should keep the weighted method note out of the last option's score", () => {
+    const html = readerHtml(
+      render(readFileSync("examples/markdown-export-adversarial.mdx", "utf8"))
+        .markdown,
+    );
+    expect(html).toContain(
+      "<p>Method: Σ(impact × option score) ÷ Σ(impact × 5), normalized to 100%.</p>",
+    );
+    expect(html).not.toMatch(/<li>[^<]*Method: Σ/u);
+  });
+
+  it("should keep a Callout label separate from its first body sentence", () => {
+    const html = readerHtml(
+      render(`# Plan
+
+<Callout type="note" title="Captain review">
+
+First body paragraph.
+
+Second body paragraph.
+
+</Callout>
+`).markdown,
+    );
+
+    expect(html).toContain("<p><strong>Note: Captain review</strong></p>");
+    expect(html).toContain("<p>First body paragraph.</p>");
+  });
+
+  it("should keep authored Markdown punctuation literal outside tables", () => {
+    const html = readerHtml(
+      render(`# Plan
+
+<Decision question="Should we call __init__ or a factory?">
+
+<Option title="Call __init__" summary="Keep the *direct* path.">
+
+<Consideration label="Clarity" verdict="Exact" tone="good">
+
+The reader sees the constructor.
+
+</Consideration>
+
+</Option>
+
+<Option title="Use a factory" summary="Hide construction.">
+
+<Consideration label="Clarity" verdict="Indirect" tone="mixed">
+
+The reader follows one more hop.
+
+</Consideration>
+
+</Option>
+
+</Decision>
+`).markdown,
+    );
+
+    expect(html).toContain(
+      "<h3>Decision: Should we call __init__ or a factory?</h3>",
+    );
+    expect(html).toContain("<h4>Option: Call __init__</h4>");
+    expect(html).toContain("<p>Keep the *direct* path.</p>");
+    expect(html).not.toContain("<strong>init</strong>");
+  });
+
+  it("should keep an outline component nested in a component body", () => {
+    const result = render(`# Plan
+
+<Callout type="note" title="Scope">
+
+<Part title="Delivery" />
+
+</Callout>
+
+## After the part
+`);
+
+    const html = readerHtml(result.markdown);
+    expect(html).toContain("Part — Delivery");
+    expect(result.components.map((component) => component.component)).toContain(
+      "Part",
+    );
   });
 });

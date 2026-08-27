@@ -8,6 +8,16 @@ import {
 } from "../_model/markdown-export.js";
 import type { CompiledWireframe, WireframeNode } from "./model.js";
 
+// Authored labels, values, and hints are ordinary prose in the outline, so
+// they carry the same escaping the outline's tables already apply.
+const text = (value: string | undefined): string | undefined =>
+  value === undefined ? undefined : markdownInlineText(value);
+
+const navigation = (screen: string | undefined): string | undefined =>
+  screen === undefined
+    ? undefined
+    : `navigates to screen ${markdownInlineText(screen)}`;
+
 const suffix = (values: ReadonlyArray<string | undefined>): string => {
   const present = values.filter(
     (value): value is string => value !== undefined && value !== "",
@@ -34,8 +44,8 @@ const controlValue = ({
   value === undefined
     ? placeholder === undefined
       ? undefined
-      : `placeholder: ${placeholder}`
-    : `value: ${value}`;
+      : `placeholder: ${text(placeholder)}`
+    : `value: ${text(value)}`;
 
 /** Recursively turns validated UI nodes into one correctly nested outline. */
 const nodeLines = (
@@ -59,7 +69,7 @@ const nodeLines = (
         );
       case "Panel":
         return nested(
-          `Panel${suffix([node.eyebrow, node.title, `surface: ${node.surface}`, node.status === undefined ? undefined : `status: ${node.status}`])}`,
+          `Panel${suffix([text(node.eyebrow), text(node.title), `surface: ${node.surface}`, node.status === undefined ? undefined : `status: ${text(node.status)}`])}`,
           node.children,
           depth,
         );
@@ -75,21 +85,25 @@ const nodeLines = (
         return nested(node.element, node.children, depth);
       case "Sidebar":
         return nested(
-          `Sidebar${suffix([node.brand === undefined ? undefined : `brand: ${node.brand}`, node.mode === undefined ? undefined : `mode: ${node.mode}`])}`,
+          `Sidebar${suffix([node.brand === undefined ? undefined : `brand: ${text(node.brand)}`, node.mode === undefined ? undefined : `mode: ${node.mode}`])}`,
           node.children,
           depth,
         );
       case "TopBar":
-        return nested(`Top bar${suffix([node.title])}`, node.children, depth);
+        return nested(
+          `Top bar${suffix([text(node.title)])}`,
+          node.children,
+          depth,
+        );
       case "PageHeader":
         return nested(
-          `Page header: ${node.title}${suffix([node.description, node.badge === undefined ? undefined : `badge: ${node.badge}`])}`,
+          `Page header: ${text(node.title)}${suffix([text(node.description), node.badge === undefined ? undefined : `badge: ${text(node.badge)}`])}`,
           node.children,
           depth,
         );
       case "Nav":
         return nested(
-          `Navigation${suffix([node.label])}`,
+          `Navigation${suffix([text(node.label)])}`,
           node.children,
           depth,
         );
@@ -100,76 +114,76 @@ const nodeLines = (
           depth,
         );
       case "Heading":
-        return [`${prefix}Heading level ${node.level}: ${node.text}`];
+        return [`${prefix}Heading level ${node.level}: ${text(node.text)}`];
       case "Text":
-        return [`${prefix}${node.role} text: ${node.text}`];
+        return [`${prefix}${node.role} text: ${text(node.text)}`];
       case "Button":
         return [
-          `${prefix}Button: ${node.label}${suffix([`emphasis: ${node.emphasis}`, node.navigateTo === undefined ? undefined : `navigates to screen ${node.navigateTo}`])}`,
+          `${prefix}Button: ${text(node.label)}${suffix([`emphasis: ${node.emphasis}`, navigation(node.navigateTo)])}`,
         ];
       case "NavItem":
         return [
-          `${prefix}Navigation item: ${node.label}${suffix([node.active ? "active" : "inactive", node.navigateTo === undefined ? undefined : `navigates to screen ${node.navigateTo}`])}`,
+          `${prefix}Navigation item: ${text(node.label)}${suffix([node.active ? "active" : "inactive", navigation(node.navigateTo)])}`,
         ];
       case "Metric":
         return [
-          `${prefix}Metric: ${node.label} = ${node.value}${suffix([node.note])}`,
+          `${prefix}Metric: ${text(node.label)} = ${text(node.value)}${suffix([text(node.note)])}`,
         ];
       case "Progress":
         return [
-          `${prefix}Progress${node.label === undefined ? "" : `: ${node.label}`} — ${node.valueLabel ?? `${node.value}%`}${suffix([node.detail])}`,
+          `${prefix}Progress${node.label === undefined ? "" : `: ${text(node.label)}`} — ${node.valueLabel === undefined ? `${node.value}%` : text(node.valueLabel)}${suffix([text(node.detail)])}`,
         ];
       case "Badge":
-        return [`${prefix}Badge: ${node.label} (tone: ${node.tone})`];
+        return [`${prefix}Badge: ${text(node.label)} (tone: ${node.tone})`];
       case "Divider":
         return [
-          `${prefix}Divider${node.label === undefined ? "" : `: ${node.label}`}`,
+          `${prefix}Divider${node.label === undefined ? "" : `: ${text(node.label)}`}`,
         ];
       case "ImagePlaceholder":
         return [
-          `${prefix}Image placeholder: ${node.label} (shape: ${node.shape})`,
+          `${prefix}Image placeholder: ${text(node.label)} (shape: ${node.shape})`,
         ];
       case "ChoiceCard":
         return [
-          `${prefix}Choice: ${node.title} — ${node.description}${suffix([`icon: ${node.icon}`, node.selected ? "selected" : "not selected", node.navigateTo === undefined ? undefined : `navigates to screen ${node.navigateTo}`])}`,
+          `${prefix}Choice: ${text(node.title)} — ${text(node.description)}${suffix([`icon: ${text(node.icon)}`, node.selected ? "selected" : "not selected", navigation(node.navigateTo)])}`,
         ];
       case "ListItem":
         return [
-          `${prefix}List item: ${node.label}${suffix([node.meta, node.value, node.status === undefined ? undefined : `status: ${node.status}`, node.selected ? "selected" : undefined, node.navigateTo === undefined ? undefined : `navigates to screen ${node.navigateTo}`])}`,
+          `${prefix}List item: ${text(node.label)}${suffix([text(node.meta), text(node.value), node.status === undefined ? undefined : `status: ${text(node.status)}`, node.selected ? "selected" : undefined, navigation(node.navigateTo)])}`,
         ];
       case "Message":
         return [
-          `${prefix}${node.kind} message from ${node.author} at ${node.time}: ${node.text}`,
+          `${prefix}${node.kind} message from ${text(node.author)} at ${text(node.time)}: ${text(node.text)}`,
         ];
       case "TextField":
         return [
-          `${prefix}${node.kind} field: ${node.label}${suffix([controlValue(node), node.hint, node.disabled ? "disabled" : "enabled"])}`,
+          `${prefix}${node.kind} field: ${text(node.label)}${suffix([controlValue(node), text(node.hint), node.disabled ? "disabled" : "enabled"])}`,
         ];
       case "TextArea":
         return [
-          `${prefix}Text area: ${node.label}${suffix([controlValue(node), node.hint, node.disabled ? "disabled" : "enabled"])}`,
+          `${prefix}Text area: ${text(node.label)}${suffix([controlValue(node), text(node.hint), node.disabled ? "disabled" : "enabled"])}`,
         ];
       case "Select":
         return [
-          `${prefix}Select: ${node.label}${suffix([`value: ${node.value}`, node.hint, node.disabled ? "disabled" : "enabled"])}`,
+          `${prefix}Select: ${text(node.label)}${suffix([`value: ${text(node.value)}`, text(node.hint), node.disabled ? "disabled" : "enabled"])}`,
         ];
       case "Checkbox":
         return [
-          `${prefix}Checkbox: ${node.label}${suffix([node.checked ? "checked" : "unchecked", node.hint])}`,
+          `${prefix}Checkbox: ${text(node.label)}${suffix([node.checked ? "checked" : "unchecked", text(node.hint)])}`,
         ];
       case "Switch":
         return [
-          `${prefix}Switch: ${node.label}${suffix([node.on ? "on" : "off", node.hint])}`,
+          `${prefix}Switch: ${text(node.label)}${suffix([node.on ? "on" : "off", text(node.hint)])}`,
         ];
       case "Step":
-        return [`${prefix}Step: ${node.label} (state: ${node.state})`];
+        return [`${prefix}Step: ${text(node.label)} (state: ${node.state})`];
       case "Connector":
         return [
-          `${prefix}Connector: ${node.direction}${node.label === undefined ? "" : ` — ${node.label}`}`,
+          `${prefix}Connector: ${node.direction}${node.label === undefined ? "" : ` — ${text(node.label)}`}`,
         ];
       case "Crumb":
         return [
-          `${prefix}Breadcrumb: ${node.label}${suffix([node.navigateTo === undefined ? undefined : `navigates to screen ${node.navigateTo}`])}`,
+          `${prefix}Breadcrumb: ${text(node.label)}${suffix([navigation(node.navigateTo)])}`,
         ];
       case "Table": {
         const headers = [
@@ -202,15 +216,17 @@ export const wireframeMarkdown: ComponentMarkdownRenderer<CompiledWireframe> = (
   model,
 ) =>
   [
-    `### Wireframe${model.title === undefined ? "" : `: ${model.title}`}`,
+    `### Wireframe${model.title === undefined ? "" : `: ${markdownInlineText(model.title)}`}`,
     ...model.screens.map((screen) =>
       [
-        `#### Screen: ${screen.name}${screen.id === model.initialScreenId ? " — Initial" : ""}`,
+        `#### Screen: ${markdownInlineText(screen.name)}${screen.id === model.initialScreenId ? " — Initial" : ""}`,
         `- Device: ${screen.device}`,
-        ...(screen.url === undefined ? [] : [`- URL: ${screen.url}`]),
+        ...(screen.url === undefined
+          ? []
+          : [`- URL: ${markdownInlineText(screen.url)}`]),
         ...(screen.pattern === undefined
           ? []
-          : [`- Pattern: ${screen.pattern}`]),
+          : [`- Pattern: ${markdownInlineText(screen.pattern)}`]),
         "- UI outline:",
         ...nodeLines(screen.children, 1),
       ].join("\n"),

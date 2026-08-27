@@ -89,6 +89,15 @@ export const markdownInlineText = (value: string): string =>
     // ordered marker has to escape its delimiter rather than its digits.
     .replace(/(^|\n)(\s*)(\d{1,9})([.)])(?=\s)/gu, "$1$2$3\\$4");
 
+// Long sources - a data URI above all - would bury the rule the refusal is
+// stating, so the reviewer gets enough of the reference to find it.
+const locator = (source: string): string =>
+  source === ""
+    ? "the image has no source to name"
+    : source.length > 80
+      ? `${source.slice(0, 80)}...`
+      : source;
+
 const textOf = (nodes: ReadonlyArray<ElementContent>): string =>
   nodes
     .map((node) =>
@@ -100,7 +109,8 @@ const textOf = (nodes: ReadonlyArray<ElementContent>): string =>
     )
     .join("");
 
-const inlineCode = (value: string): string => {
+/** Wraps raw text as a code span whose delimiter outruns its backticks. */
+export const markdownInlineCode = (value: string): string => {
   const longest = Math.max(
     0,
     ...(value.match(/`+/gu) ?? []).map((run) => run.length),
@@ -124,7 +134,7 @@ const inline = (nodes: ReadonlyArray<ElementContent>): string =>
         case "del":
           return `~~${content}~~`;
         case "code":
-          return inlineCode(textOf(node.children));
+          return markdownInlineCode(textOf(node.children));
         case "a": {
           const href = propertyString(node, "href") ?? "";
           if (href.startsWith("#user-content-fn-")) {
@@ -136,12 +146,12 @@ const inline = (nodes: ReadonlyArray<ElementContent>): string =>
         }
         case "img": {
           const alt = propertyString(node, "alt")?.trim() ?? "";
+          const source = propertyString(node, "src") ?? "";
           if (alt === "") {
             throw new MarkdownExportRejected(
-              "A referenced image needs meaningful alternative text before this plan can be exported.",
+              `A referenced image needs meaningful alternative text before this plan can be exported: ${locator(source)}`,
             );
           }
-          const source = propertyString(node, "src") ?? "";
           const title = propertyString(node, "title");
           return `![${alt.replace(/([\\\]])/gu, "\\$1")}](${source}${title === undefined ? "" : ` "${title.replace(/"/gu, '\\"')}"`})`;
         }

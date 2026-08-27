@@ -10,6 +10,7 @@ import {
 import {
   weightedDecisionTotal,
   type CompiledDecisionCard,
+  type CompiledDecisionCardCriterion,
   type CompiledDecisionCardOption,
 } from "./decision-card.js";
 
@@ -17,6 +18,11 @@ const statusLabel = (model: CompiledDecisionCard): string =>
   model.status === "open" && model.interaction === "audit"
     ? "Proposed"
     : `${model.status[0]?.toUpperCase() ?? ""}${model.status.slice(1)}`;
+
+const criterionLabel = (criterion: CompiledDecisionCardCriterion): string =>
+  markdownInlineText(
+    `${criterion.title}${criterion.impact === undefined ? "" : ` (impact ${criterion.impact}/5)`}`,
+  );
 
 const optionLabels = (
   option: CompiledDecisionCardOption,
@@ -30,26 +36,45 @@ export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
   const outcome =
     model.chosenOption ?? model.options.find((option) => option.recommended);
   const sections: Array<string> = [
-    `### Decision: ${model.question}`,
+    `### Decision: ${markdownInlineText(model.question)}`,
     `**Status:** ${statusLabel(model)}${model.isCritical ? " · Critical" : ""}`,
   ];
   const context = markdownFromHast(model.context);
   if (context !== "") sections.push(context);
   if (outcome !== undefined) {
     sections.push(
-      `**${outcome.chosen ? "Decision" : "Recommendation"}:** ${outcome.title}`,
+      `**${outcome.chosen ? "Decision" : "Recommendation"}:** ${markdownInlineText(outcome.title)}`,
     );
   }
 
   if (model.criteria.length > 0) {
+    // The rendered card carries each criterion's rationale in a disclosure on
+    // its title; the export has no disclosure, so the rationale becomes its
+    // own list beside the matrix rather than being lost.
+    const defined = model.criteria
+      .map((criterion) => ({
+        criterion,
+        detail: markdownFromHast(criterion.detail),
+      }))
+      .filter((entry) => entry.detail !== "");
+    if (defined.length > 0) {
+      sections.push(
+        [
+          "**Criteria**",
+          ...defined.map((entry) =>
+            markdownBullet(
+              `**${markdownInlineText(entry.criterion.title)}**${entry.criterion.impact === undefined ? "" : ` (impact ${entry.criterion.impact}/5)`} — ${entry.detail}`,
+            ),
+          ),
+        ].join("\n"),
+      );
+    }
     const headers = [
       "Criterion",
       ...model.options.map((option) => markdownInlineText(option.title)),
     ];
     const rows = model.criteria.map((criterion, criterionIndex) => [
-      markdownInlineText(
-        `${criterion.title}${criterion.impact === undefined ? "" : ` (impact ${criterion.impact}/5)`}`,
-      ),
+      criterionLabel(criterion),
       ...model.options.map((option) => {
         const consideration = option.considerations[criterionIndex];
         if (consideration === undefined) return "—";
@@ -71,10 +96,12 @@ export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
         "**Normalized weighted totals**",
         ...model.options.map((option) => {
           const total = weightedDecisionTotal({ model, option });
-          return `- ${option.title}: ${total.percent}% (${total.numerator} ÷ ${total.denominator})`;
+          return `- ${markdownInlineText(option.title)}: ${total.percent}% (${total.numerator} ÷ ${total.denominator})`;
         }),
-        "Method: Σ(impact × option score) ÷ Σ(impact × 5), normalized to 100%.",
       ].join("\n"),
+      // Its own block: lazy continuation would otherwise read the shared
+      // method as the last option's score.
+      "Method: Σ(impact × option score) ÷ Σ(impact × 5), normalized to 100%.",
     );
   }
 
@@ -82,16 +109,22 @@ export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
     ...model.options.map((option) => {
       const labels = optionLabels(option);
       const content: Array<string> = [
-        `#### Option: ${option.title}${labels.length === 0 ? "" : ` — ${labels.join(", ")}`}`,
+        `#### Option: ${markdownInlineText(option.title)}${labels.length === 0 ? "" : ` — ${labels.join(", ")}`}`,
       ];
-      if (option.summary !== undefined) content.push(option.summary);
+      if (option.summary !== undefined) {
+        content.push(markdownInlineText(option.summary));
+      }
       option.considerations.forEach((consideration, index) => {
         if (consideration === undefined) return;
         const criterion = model.criteria[index];
         const detail = markdownFromHast(consideration.detail);
+        const label =
+          criterion === undefined
+            ? `Criterion ${index + 1}`
+            : markdownInlineText(criterion.title);
         content.push(
           markdownBullet(
-            `**${criterion?.title ?? `Criterion ${index + 1}`}:** ${consideration.verdict} (${consideration.tone})${detail === "" ? "" : ` — ${detail}`}`,
+            `**${label}:** ${markdownInlineText(consideration.verdict)} (${consideration.tone})${detail === "" ? "" : ` — ${detail}`}`,
           ),
         );
       });

@@ -1,6 +1,9 @@
 // Renders the overview against the completed document outline.
 
-import type { ComponentMarkdownRenderer } from "../_model/markdown-export.js";
+import {
+  markdownInlineText,
+  type ComponentMarkdownRenderer,
+} from "../_model/markdown-export.js";
 import type { CompiledTableOfContents } from "./compile.js";
 
 const anchorFor = (value: string): string =>
@@ -20,12 +23,14 @@ export const tableOfContentsMarkdown: ComponentMarkdownRenderer<
     const section = outline.sections[index];
     if (section?.part !== undefined && section.part.number !== partNumber) {
       partNumber = section.part.number;
-      rows.push(`- **Part ${section.part.number} — ${section.part.title}**`);
+      rows.push(
+        `- **Part ${section.part.number} — ${markdownInlineText(section.part.title)}**`,
+      );
     }
     const prefix = section?.part === undefined ? "-" : "  -";
     const title = section?.title ?? entry.section;
     rows.push(
-      `${prefix} [${entry.section}](#${section?.id ?? anchorFor(title)}) — ${entry.gist}`,
+      `${prefix} [${markdownInlineText(entry.section)}](#${section?.id ?? anchorFor(title)}) — ${markdownInlineText(entry.gist)}`,
     );
   });
   return rows.join("\n");

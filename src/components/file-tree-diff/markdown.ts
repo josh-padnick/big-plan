@@ -2,6 +2,7 @@
 
 import {
   markdownFence,
+  markdownInlineText,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
 import type { TreeEntry } from "../_model/tree-text/parse-tree-text.js";
@@ -30,7 +31,9 @@ export const fileTreeDiffMarkdown: ComponentMarkdownRenderer<
   CompiledFileTreeDiff
 > = (model) =>
   [
-    ...(model.title === undefined ? [] : [`### ${model.title}`]),
+    ...(model.title === undefined
+      ? []
+      : [`### ${markdownInlineText(model.title)}`]),
     markdownFence({
       source: treeLines(model.entries).join("\n"),
       language: "text",
