@@ -6327,18 +6327,30 @@ ${unrelatedWorkspace}
       ).toContainText("Updated");
       // The baseline side is evidence, not a second live prototype: it keeps
       // its markup and none of its affordances, with one exception. Its own
-      // screen switcher stays live, because a badge naming a screen only the
-      // Was side still has would otherwise be unopenable.
+      // screen switcher stays live, and so does the evidence that switcher
+      // reveals, because a badge naming a screen only the Was side still has
+      // would otherwise be unopenable. The chrome around them is still
+      // frozen: the maximize trigger leaves with its attribute and stays
+      // both inert and disabled.
       expect(
         await baseline.evaluate((node) => ({
           screens: Array.from(
             node.querySelectorAll("[data-wireframe-screen]"),
-          ).every((screen) => screen.closest("[inert]") !== null),
+          ).every((screen) => screen.closest("[inert]") === null),
           switches: Array.from(
             node.querySelectorAll("[data-wireframe-switch]"),
           ).every((button) => button.closest("[inert]") === null),
+          maximize: node.querySelectorAll("[data-figure-maximize]").length,
+          frozenChrome: Array.from(node.querySelectorAll("button")).some(
+            (button) => button.disabled && button.closest("[inert]") !== null,
+          ),
         })),
-      ).toEqual({ screens: true, switches: true });
+      ).toEqual({
+        screens: true,
+        switches: true,
+        maximize: 0,
+        frozenChrome: true,
+      });
       await switcher.getByRole("button", { name: "Archive" }).click();
       await expect(proposed).toContainText("Unchanged archive content");
     });
@@ -6354,6 +6366,15 @@ ${unrelatedWorkspace}
       await expect(audit).toContainText("Removed from 4");
       await audit.click();
       await expect(auditFrame).toBeVisible();
+      // A control whose target stays inert still does nothing for a reader
+      // using assistive technology, so the revealed screen has to be in the
+      // accessibility tree rather than merely painted.
+      expect(
+        await auditFrame.evaluate((node) => node.closest("[inert]") !== null),
+      ).toBe(false);
+      await expect(
+        auditFrame.getByRole("heading", { name: "Audit trail" }),
+      ).toBeVisible();
       await expect(auditFrame).toContainText(
         "Only the Was side still has an audit screen.",
       );
@@ -7407,6 +7428,11 @@ test("should archive a historical component inside an article that has no slides
 <Text text="Review the queue manually." />
 </Panel>
 </Screen>
+<Screen id="audit" name="Audit" device="desktop">
+<Panel title="Audit trail">
+<Text text="Every queue decision is recorded." />
+</Panel>
+</Screen>
 </Wireframe>
 `;
   const revisedSource = initialSource
@@ -7599,6 +7625,41 @@ The current plan contains no slides.
     await expect(archive.locator("[inert] [data-component-diff]")).toHaveCount(
       1,
     );
+    // The viewer script wires every [data-wireframe] in the document each
+    // time an article replacement is announced, and a live component diff or
+    // an incoming revision announces one while this replay is on screen. The
+    // replay carries no such hook, so the announcement cannot turn it into a
+    // prototype whose switcher the reader can see and cannot press.
+    await page.evaluate(() => {
+      document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+    });
+    // `connected` is part of the expectation because a detached node answers
+    // every style query with the empty string, which would read as a switcher
+    // that is not hidden.
+    await expect
+      .poll(() =>
+        archived.evaluate((node) => ({
+          connected: node.isConnected,
+          wired: node.querySelectorAll(
+            "[data-wireframe], [data-wireframe-interactive]",
+          ).length,
+          switchersShown: Array.from(
+            node.querySelectorAll(".wireframe-switcher"),
+          ).filter((nav) => getComputedStyle(nav).display !== "none").length,
+          screensHidden: Array.from(
+            node.querySelectorAll("[data-wireframe-screen]"),
+          ).filter((screen) => getComputedStyle(screen).display === "none")
+            .length,
+          screens: node.querySelectorAll("[data-wireframe-screen]").length,
+        })),
+      )
+      .toEqual({
+        connected: true,
+        wired: 0,
+        switchersShown: 0,
+        screensHidden: 0,
+        screens: 4,
+      });
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });

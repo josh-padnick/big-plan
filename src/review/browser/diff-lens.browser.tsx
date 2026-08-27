@@ -597,6 +597,13 @@ const SnapshotSideContent = ({
  * complete rather than defensive: an address the plan still holds - which the
  * superseded path proves is not hypothetical - must never appear twice in one
  * document. Held inert for the same reason, since neither path is answerable.
+ *
+ * The wiring hooks come off the whole replay for a second reason. The viewer
+ * script wires every `[data-wireframe]` in the document each time an article
+ * replacement fires, and a replay mounted without that event is wired anyway
+ * by the next one. That would light up a switcher inside an inert host: a
+ * control the reader can see and cannot press. Without the hook the replay
+ * stays what it claims to be - every screen stacked, nothing to press.
  */
 const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -608,6 +615,15 @@ const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
     if (root === null) return;
     for (const attribute of root.getAttributeNames()) {
       if (attribute.startsWith("data-block-")) root.removeAttribute(attribute);
+    }
+    for (const wired of [
+      root,
+      ...root.querySelectorAll(
+        "[data-wireframe], [data-wireframe-interactive]",
+      ),
+    ]) {
+      wired.removeAttribute("data-wireframe");
+      wired.removeAttribute("data-wireframe-interactive");
     }
     host.replaceChildren(document.importNode(root, true));
     return () => host.replaceChildren();

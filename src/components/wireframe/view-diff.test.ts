@@ -6,7 +6,7 @@ import { createElement } from "react";
 import type { Element, Root } from "hast";
 import { describe, expect, it } from "vitest";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
-import { DIFF_LIVE_CONTROL_ATTRIBUTE } from "../_model/component-diff/contract.js";
+import { DIFF_LIVE_ATTRIBUTE } from "../_model/component-diff/contract.js";
 import { compileWireframeDiff } from "./compile-diff.js";
 import type { CompiledWireframe, WireframeScreen } from "./model.js";
 import { WireframeDiffView } from "./view-diff.js";
@@ -122,12 +122,12 @@ describe("WireframeDiffView", () => {
       // Baseline isolation holds the Was side inert; this marker is what
       // keeps its screen switcher operable, so a badge on that side can be
       // opened.
-      expect(entry.properties[DIFF_LIVE_CONTROL_ATTRIBUTE]).toBe("");
+      expect(entry.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
     }
     for (const entry of triage) {
       expect(textWithin(entry)).toContain("Triage");
       expect(textWithin(entry)).not.toContain("Updated");
-      expect(entry.properties[DIFF_LIVE_CONTROL_ATTRIBUTE]).toBe("");
+      expect(entry.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
     }
   });
 

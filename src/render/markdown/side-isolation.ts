@@ -1,9 +1,9 @@
 // Owns the per-side rules that let a component render twice in one document
 // without the two renderings colliding: the baseline subtree is marked, its
 // review identity is kept out, its ordinary DOM identity is namespaced, and
-// its root affordances stay present but inert - except for the controls a
-// component's diff view marked live, which reach evidence only the baseline
-// holds. The identity walk in block-identity.ts is the other half of the
+// its root affordances stay present but inert - except for the subtrees a
+// component's diff view marked live, which hold evidence only the baseline
+// has. The identity walk in block-identity.ts is the other half of the
 // same contract: it skips a subtree this module marked, so no counter the
 // proposed side reads can move.
 //
@@ -18,7 +18,7 @@ import {
   MAXIMIZABLE_ATTRIBUTE,
   TRIGGER_ATTRIBUTE,
 } from "../../components/_model/figure-controls/figure-controls.js";
-import { DIFF_LIVE_CONTROL_ATTRIBUTE } from "../../components/_model/component-diff/contract.js";
+import { DIFF_LIVE_ATTRIBUTE } from "../../components/_model/component-diff/contract.js";
 import { COMPONENT_INSTANCE_ATTRIBUTE } from "./component-pipeline/component-instance.js";
 
 /** Marks which snapshot a rendered side belongs to. */
@@ -274,14 +274,14 @@ const stripReviewIdentity = (subtree: Element): void => {
   });
 };
 
-// Every element on a path from the isolated root down to a control the
+// Every element on a path from the isolated root down to a subtree the
 // component's diff view marked live. `inert` is inherited and a descendant
-// cannot opt back out of an inert ancestor, so a live control can only stay
-// operable when no ancestor of it is marked inert.
+// cannot opt back out of an inert ancestor, so a marked subtree can only
+// stay live when no ancestor of it is marked inert.
 const livePathsWithin = (subtree: Element): ReadonlySet<Element> => {
   const paths = new Set<Element>();
   const visit = (node: Element): boolean => {
-    let live = node.properties[DIFF_LIVE_CONTROL_ATTRIBUTE] !== undefined;
+    let live = node.properties[DIFF_LIVE_ATTRIBUTE] !== undefined;
     for (const child of node.children) {
       if (isElement(child) && visit(child)) {
         live = true;
@@ -296,16 +296,16 @@ const livePathsWithin = (subtree: Element): ReadonlySet<Element> => {
   return paths;
 };
 
-// Holds each maximal subtree that leads to no live control inert, so a
-// baseline with no live control is one inert root exactly as before.
-const markInertOutsideLiveControls = ({
+// Holds each maximal subtree that leads to no mark inert, so a baseline with
+// no mark at all is one inert root exactly as before.
+const markInertOutsideLiveSubtrees = ({
   node,
   paths,
 }: {
   readonly node: Element;
   readonly paths: ReadonlySet<Element>;
 }): void => {
-  if (node.properties[DIFF_LIVE_CONTROL_ATTRIBUTE] !== undefined) {
+  if (node.properties[DIFF_LIVE_ATTRIBUTE] !== undefined) {
     return;
   }
   if (!paths.has(node)) {
@@ -314,32 +314,48 @@ const markInertOutsideLiveControls = ({
   }
   for (const child of node.children) {
     if (isElement(child)) {
-      markInertOutsideLiveControls({ node: child, paths });
+      markInertOutsideLiveSubtrees({ node: child, paths });
+    }
+  }
+};
+
+// Root affordances leave with their attributes wherever they sit, so no
+// script wires a second copy. Only an affordance outside every marked
+// subtree is additionally frozen: freezing one inside would re-create, one
+// element lower, the dead control the mark exists to prevent.
+const stripRootAffordances = ({
+  node,
+  paths,
+  insideLive,
+}: {
+  readonly node: Element;
+  readonly paths: ReadonlySet<Element>;
+  readonly insideLive: boolean;
+}): void => {
+  const live = insideLive || node.properties[DIFF_LIVE_ATTRIBUTE] !== undefined;
+  const hadLiveAffordance = ROOT_AFFORDANCE_ATTRIBUTES.some(
+    (attribute) => node.properties[attribute] !== undefined,
+  );
+  for (const attribute of ROOT_AFFORDANCE_ATTRIBUTES) {
+    delete node.properties[attribute];
+  }
+  if (hadLiveAffordance && !live && !paths.has(node)) {
+    node.properties.inert = true;
+    if (node.tagName === "button" || node.tagName === "input") {
+      node.properties.disabled = true;
+    }
+  }
+  for (const child of node.children) {
+    if (isElement(child)) {
+      stripRootAffordances({ node: child, paths, insideLive: live });
     }
   }
 };
 
 const holdRootAffordancesInert = (subtree: Element): void => {
   const paths = livePathsWithin(subtree);
-  markInertOutsideLiveControls({ node: subtree, paths });
-  forEachElement({
-    node: subtree,
-    visit: (node) => {
-      const hadLiveAffordance = ROOT_AFFORDANCE_ATTRIBUTES.some(
-        (attribute) => node.properties[attribute] !== undefined,
-      );
-      for (const attribute of ROOT_AFFORDANCE_ATTRIBUTES) {
-        delete node.properties[attribute];
-      }
-      if (!hadLiveAffordance || paths.has(node)) {
-        return;
-      }
-      node.properties.inert = true;
-      if (node.tagName === "button" || node.tagName === "input") {
-        node.properties.disabled = true;
-      }
-    },
-  });
+  markInertOutsideLiveSubtrees({ node: subtree, paths });
+  stripRootAffordances({ node: subtree, paths, insideLive: false });
 };
 
 /**
@@ -347,11 +363,11 @@ const holdRootAffordancesInert = (subtree: Element): void => {
  * identity out of it, namespace its ordinary DOM identity, and hold its root
  * affordances inert so the proposed side remains the one live owner.
  *
- * A control the view marked with `DIFF_LIVE_CONTROL_ATTRIBUTE` stays
- * operable, and only the subtrees that lead nowhere near one are held inert.
- * That exception exists because a baseline can hold evidence the proposed
- * side does not - a screen the change removed - and a badge naming a screen
- * no click can open reads as a defect rather than as history.
+ * A subtree the view marked with `DIFF_LIVE_ATTRIBUTE` stays live, and only
+ * the subtrees that lead nowhere near a mark are held inert. That exception
+ * exists because a baseline can hold evidence the proposed side does not - a
+ * screen the change removed - and a badge naming a screen no click can open
+ * reads as a defect rather than as history.
  *
  * `key` is required so two baseline subtrees that carry the same original
  * ids cannot silently collide. It is folded into the prefix: the same

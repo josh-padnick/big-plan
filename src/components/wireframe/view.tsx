@@ -30,7 +30,7 @@ import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
-import { DIFF_LIVE_CONTROL_ATTRIBUTE } from "../_model/component-diff/contract.js";
+import { DIFF_LIVE_ATTRIBUTE } from "../_model/component-diff/contract.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -1089,7 +1089,7 @@ export const Wireframe = ({
                 data-wireframe-switch=""
                 {...(screenDiffs === undefined
                   ? {}
-                  : { [DIFF_LIVE_CONTROL_ATTRIBUTE]: "" })}
+                  : { [DIFF_LIVE_ATTRIBUTE]: "" })}
                 {...(screen.id === model.initialScreenId
                   ? { "aria-current": "true" }
                   : {})}
@@ -1121,7 +1121,10 @@ export const Wireframe = ({
           })}
         </nav>
       )}
-      <div className="wireframe-screens flex flex-col gap-6">
+      <div
+        className="wireframe-screens flex flex-col gap-6"
+        {...(screenDiffs === undefined ? {} : { [DIFF_LIVE_ATTRIBUTE]: "" })}
+      >
         {model.screens.map((screen) => (
           <Screen
             key={screen.id}
