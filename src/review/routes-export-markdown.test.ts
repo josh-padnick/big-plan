@@ -21,6 +21,33 @@ describe("Markdown export attachment naming", () => {
   });
 });
 
+describe("Markdown export refusals", () => {
+  it("should name the image whose meaning cannot survive as text", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-export-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n\n![](./diagram.png)\n");
+    try {
+      const response = await exportPlanMarkdown({
+        resolvedPlanPath: planPath,
+        decisionAnswers: {
+          read: async () => ({ version: 1, revision: 1, answers: [] }),
+        },
+        approvals: { read: async () => emptyApprovalRecord() },
+      });
+
+      expect(response).toMatchObject({
+        kind: "json",
+        status: 400,
+        value: {
+          error: expect.stringContaining("alternative text"),
+        },
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("Markdown export review-state join", () => {
   it("should refuse to combine review records that change during compilation", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-export-"));

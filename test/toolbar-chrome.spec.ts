@@ -343,7 +343,8 @@ test("should hold the export dialog pending and recover from a refusal", async (
     };
   });
   await page.goto(reviewRuntimeUrl);
-  await page.getByRole("button", { name: "More actions" }).click();
+  const more = page.getByRole("button", { name: "More actions" });
+  await more.click();
   await page.getByRole("menuitem", { name: "Export" }).click();
   const dialog = page.getByRole("alertdialog", {
     name: "Export this plan as Markdown?",
@@ -352,6 +353,9 @@ test("should hold the export dialog pending and recover from a refusal", async (
   await expect(dialog.getByRole("status")).toHaveText("Preparing export...");
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled();
   await expect(dialog.getByRole("button", { name: "Export" })).toBeDisabled();
+  // Disabling both choices would otherwise drop focus to the body and take
+  // Escape and Tab out of the dialog for the whole request.
+  await expect(dialog).toBeFocused();
 
   await page.evaluate(() =>
     window.dispatchEvent(new Event("bigplan:test-release-export")),
@@ -360,6 +364,10 @@ test("should hold the export dialog pending and recover from a refusal", async (
   await expect(dialog.getByRole("button", { name: "Export" })).toBeEnabled();
   await expect(page.getByText("The plan could not be exported.")).toBeVisible();
   await expect(dialog).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(more).toBeFocused();
 });
 
 test("should confirm and download the latest plan as Markdown", async ({

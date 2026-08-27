@@ -2,9 +2,26 @@
 // semantic for the component cases where visual presentation carries meaning.
 
 import { readFileSync } from "node:fs";
+import rehypeStringify from "rehype-stringify";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import { unified } from "unified";
 import { describe, expect, it } from "vitest";
 import { COMPONENT_REGISTRY } from "../components/_registration/registry.js";
 import { renderMarkdownDocument } from "./render-markdown-document.js";
+
+// The exported file is read outside the viewer, so these assertions read what
+// a Markdown reader shows rather than the escape spelling behind it.
+const readerHtml = (markdown: string): string =>
+  String(
+    unified()
+      .use(remarkParse)
+      .use(remarkGfm)
+      .use(remarkRehype)
+      .use(rehypeStringify)
+      .processSync(markdown),
+  );
 
 const SNAPSHOT = "0123456789abcdef";
 
@@ -128,7 +145,7 @@ Details.
       "**Reversibility:** somewhat-hard",
       "candidate | unblocks after validation | canary",
       "**Lines 41-42:** Validation must settle",
-      "![Operator confirmation state](./assets/release-confirmation.png)",
+      "![Operator confirmation state](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==)",
       "#### Screen: Ready to release — Initial",
       "Badge: Checks passed (tone: success)",
       "text field: Approval code (value: Confirmed; disabled)",
@@ -136,5 +153,82 @@ Details.
     ]) {
       expect(result.markdown).toContain(meaning);
     }
+  });
+
+  it("should keep the version beside a title that is not the first block", () => {
+    const result = render(`| Gate | Owner |
+| --- | --- |
+| Canary | Release |
+
+# Plan
+
+Body.
+`);
+
+    const html = readerHtml(result.markdown);
+    expect(html).toContain("<td>Canary</td>");
+    expect(html).toContain("<td>Release</td>");
+    expect(result.markdown).toContain(`# Plan
+
+> Exported plan version: \`${SNAPSHOT}\``);
+  });
+
+  it("should keep authored table text readable through a component table", () => {
+    const result = render(`# Plan
+
+<DataTable title="Identifiers">
+
+\`\`\`table
+| Column | Example |
+| --- | --- |
+| plan_id | C:\\tmp |
+| a * b | left \\| right |
+\`\`\`
+
+</DataTable>
+`);
+
+    const html = readerHtml(result.markdown);
+    expect(html).toContain("<td>plan_id</td>");
+    expect(html).toContain("<td>C:\\tmp</td>");
+    expect(html).toContain("<td>a * b</td>");
+    expect(html).toContain("<td>left | right</td>");
+  });
+
+  it("should keep a multi-paragraph consideration inside its decision bullet", () => {
+    const result = render(`# Plan
+
+<Decision question="Which store?">
+
+<Option title="PostgreSQL" recommended summary="Shared relational store.">
+
+<Consideration label="Integrity" verdict="Excellent" tone="good">
+
+Transactions keep the rows atomic.
+
+A second paragraph carries the caveat.
+
+</Consideration>
+
+</Option>
+
+<Option title="SQLite" summary="One embedded file.">
+
+<Consideration label="Integrity" verdict="Strong" tone="good">
+
+Local transactions cover the rows.
+
+</Consideration>
+
+</Option>
+
+</Decision>
+`);
+
+    const html = readerHtml(result.markdown);
+    const detail = "A second paragraph carries the caveat.";
+    expect(html).toContain(`<p>${detail}</p>`);
+    expect(html.slice(0, html.indexOf(detail))).toContain("<li>");
+    expect(html.slice(html.indexOf(detail))).toContain("</li>");
   });
 });

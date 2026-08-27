@@ -1,6 +1,7 @@
 // Renders CodeSnippet's exact source and line-addressed annotations.
 
 import {
+  markdownBullet,
   markdownFence,
   markdownFromHast,
   type ComponentMarkdownRenderer,
@@ -18,9 +19,10 @@ export const codeSnippetMarkdown: ComponentMarkdownRenderer<
       ? []
       : [`**Starts at line:** ${model.startLine}`]),
   ];
-  const annotations = model.annotations.map(
-    (annotation) =>
-      `- **${annotation.start === annotation.end ? "Line" : "Lines"} ${annotation.sourceValue}:** ${markdownFromHast(annotation.children)}`,
+  const annotations = model.annotations.map((annotation) =>
+    markdownBullet(
+      `**${annotation.start === annotation.end ? "Line" : "Lines"} ${annotation.sourceValue}:** ${markdownFromHast(annotation.children)}`,
+    ),
   );
   return [
     ...metadata,

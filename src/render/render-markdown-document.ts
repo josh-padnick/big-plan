@@ -3,17 +3,13 @@
 // semantic presentations as standalone Markdown.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
-import type { Root as MarkdownRoot } from "mdast";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import {
-  createDiagnosticCollector,
-  diagnosticFromParseError,
-} from "../components/_authoring/diagnostics.js";
+import { createDiagnosticCollector } from "../components/_authoring/diagnostics.js";
 import {
   markdownExportPlaceholder,
   markdownFromHast,
@@ -25,15 +21,17 @@ import {
 } from "./markdown/component-pipeline/outline-placeholder.js";
 import {
   rehypeRenderComponentsAsMarkdown,
-  rehypeValidateComponentSemantics,
   type CollectedComponentModel,
   type CollectedComponentModels,
   type DeferredMarkdownPresentations,
 } from "./markdown/component-pipeline/deliver.js";
-import { remarkValidateComponents } from "./markdown/component-pipeline/validate-authoring.js";
 import { rehypeDeckTransform } from "./markdown/deck-transform.js";
 import type { MutableDocumentOutline } from "./markdown/deck-transform.js";
-import { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
+import {
+  COMPONENT_PASS_THROUGH,
+  MarkdownDiagnosticsError,
+  parseValidatedPlan,
+} from "./markdown/compile-markdown.js";
 
 export type RenderedMarkdownDocument = {
   readonly markdown: string;
@@ -125,6 +123,32 @@ const completeMarkdownPlaceholders = ({
   }
 };
 
+/** Places a Markdown block directly after the document's title element. */
+const insertAfterTitle = ({
+  tree,
+  markdown,
+}: {
+  readonly tree: Root;
+  readonly markdown: string;
+}): boolean => {
+  const visit = (parent: Root | Element): boolean => {
+    for (const [index, child] of parent.children.entries()) {
+      if (!isElement(child)) continue;
+      if (child.tagName === "h1") {
+        parent.children.splice(
+          index + 1,
+          0,
+          markdownExportPlaceholder({ markdown }),
+        );
+        return true;
+      }
+      if (visit(child)) return true;
+    }
+    return false;
+  };
+  return visit(tree);
+};
+
 /**
  * Produces a standalone Markdown plan from one immutable source string. The
  * parsed tree is shared by validation and component delivery; no later step
@@ -141,44 +165,14 @@ export const renderMarkdownDocument = ({
 }): RenderedMarkdownDocument => {
   const diagnostics = createDiagnosticCollector();
   const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMdx);
-  let parsed: MarkdownRoot;
-  try {
-    parsed = parser.parse(markdown);
-  } catch (error: unknown) {
-    throw new MarkdownDiagnosticsError([diagnosticFromParseError(error)]);
-  }
-  remarkValidateComponents({ diagnostics })(parsed);
-  if (diagnostics.diagnostics.length > 0) {
-    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
-  }
-  parser()
-    .use(remarkRehype, {
-      passThrough: [
-        "mdxjsEsm",
-        "mdxFlowExpression",
-        "mdxTextExpression",
-        "mdxJsxFlowElement",
-        "mdxJsxTextElement",
-      ],
-    })
-    .use(rehypeValidateComponentSemantics, { diagnostics })
-    .runSync(parsed);
-  if (diagnostics.diagnostics.length > 0) {
-    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
-  }
+  const parsed = parseValidatedPlan({ markdown, diagnostics });
 
   const componentModels: CollectedComponentModels = new Map();
   const deferred: DeferredMarkdownPresentations = [];
   const processor = parser()
     .use(remarkRehype, {
       footnoteLabelProperties: { className: ["footnotes-heading"] },
-      passThrough: [
-        "mdxjsEsm",
-        "mdxFlowExpression",
-        "mdxTextExpression",
-        "mdxJsxFlowElement",
-        "mdxJsxTextElement",
-      ],
+      passThrough: [...COMPONENT_PASS_THROUGH],
     })
     .use(rehypeSlug)
     .use(rehypeRenderComponentsAsMarkdown, {
@@ -208,18 +202,16 @@ export const renderMarkdownDocument = ({
   });
 
   const title = titleOf(tree) ?? fallbackTitle;
-  const body = markdownFromHast(tree.children);
-  const withTitle =
-    titleOf(tree) === undefined ? `# ${title}\n\n${body}` : body;
-  const firstBreak = withTitle.indexOf("\n");
   const version = `> Exported plan version: \`${snapshot}\``;
-  const withVersion =
-    firstBreak === -1
-      ? `${withTitle}\n\n${version}`
-      : `${withTitle.slice(0, firstBreak)}\n\n${version}${withTitle.slice(firstBreak)}`;
+  // The version is placed as its own block beside the title element rather
+  // than spliced into serialized text, so a plan whose first block is not the
+  // title never has that block cut in half.
+  const titled = insertAfterTitle({ tree, markdown: version });
+  const body = markdownFromHast(tree.children);
+  const serialized = titled ? body : `# ${title}\n\n${version}\n\n${body}`;
   return {
     title,
-    markdown: `${withVersion.trim()}\n`,
+    markdown: `${serialized.trim()}\n`,
     components: [...componentModels.values()],
   };
 };

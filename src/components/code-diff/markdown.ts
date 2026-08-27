@@ -1,6 +1,7 @@
 // Renders CodeDiff's canonical patch and side-specific annotations.
 
 import {
+  markdownBullet,
   markdownFence,
   markdownFromHast,
   type ComponentMarkdownRenderer,
@@ -10,9 +11,10 @@ import type { CompiledCodeDiff } from "./compile.js";
 export const codeDiffMarkdown: ComponentMarkdownRenderer<CompiledCodeDiff> = (
   model,
 ) => {
-  const annotations = model.annotations.map(
-    (annotation) =>
-      `- **${annotation.side} ${annotation.startLine === annotation.endLine ? "line" : "lines"} ${annotation.lines}:** ${markdownFromHast(annotation.children)}`,
+  const annotations = model.annotations.map((annotation) =>
+    markdownBullet(
+      `**${annotation.side} ${annotation.startLine === annotation.endLine ? "line" : "lines"} ${annotation.lines}:** ${markdownFromHast(annotation.children)}`,
+    ),
   );
   return [
     `**File:** \`${model.filePath}\` · Added ${model.addedCount} · Removed ${model.removedCount}`,

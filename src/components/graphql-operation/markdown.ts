@@ -2,6 +2,7 @@
 
 import {
   markdownFromHast,
+  markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
@@ -18,9 +19,9 @@ const fieldTable = (
         markdownTable({
           headers: ["Name", "Type", "Default", "Description"],
           rows: fields.map((field) => [
-            field.name,
-            field.fieldType,
-            field.defaultValue ?? "",
+            markdownInlineText(field.name),
+            markdownInlineText(field.fieldType),
+            markdownInlineText(field.defaultValue ?? ""),
             markdownFromHast(field.children),
           ]),
         }),
@@ -46,8 +47,8 @@ export const graphqlOperationMarkdown: ComponentMarkdownRenderer<
           markdownTable({
             headers: ["Name", "Type", "Description"],
             rows: model.args.map((argument) => [
-              argument.name,
-              argument.argumentType,
+              markdownInlineText(argument.name),
+              markdownInlineText(argument.argumentType),
               markdownFromHast(argument.children),
             ]),
           }),

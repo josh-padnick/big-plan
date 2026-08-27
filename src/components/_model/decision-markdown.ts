@@ -1,7 +1,12 @@
 // Owns the semantic Markdown shared by the three decision component slices,
 // including the same weighted-total calculation the React view consumes.
 
-import { markdownFromHast, markdownTable } from "./markdown-export.js";
+import {
+  markdownBullet,
+  markdownFromHast,
+  markdownInlineText,
+  markdownTable,
+} from "./markdown-export.js";
 import {
   weightedDecisionTotal,
   type CompiledDecisionCard,
@@ -39,10 +44,12 @@ export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
   if (model.criteria.length > 0) {
     const headers = [
       "Criterion",
-      ...model.options.map((option) => option.title),
+      ...model.options.map((option) => markdownInlineText(option.title)),
     ];
     const rows = model.criteria.map((criterion, criterionIndex) => [
-      `${criterion.title}${criterion.impact === undefined ? "" : ` (impact ${criterion.impact}/5)`}`,
+      markdownInlineText(
+        `${criterion.title}${criterion.impact === undefined ? "" : ` (impact ${criterion.impact}/5)`}`,
+      ),
       ...model.options.map((option) => {
         const consideration = option.considerations[criterionIndex];
         if (consideration === undefined) return "—";
@@ -50,7 +57,9 @@ export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
           consideration.score === undefined
             ? ""
             : ` · score ${consideration.score}/5`;
-        return `${consideration.verdict} (${consideration.tone}${score})`;
+        return markdownInlineText(
+          `${consideration.verdict} (${consideration.tone}${score})`,
+        );
       }),
     ]);
     sections.push(markdownTable({ headers, rows }));
@@ -81,7 +90,9 @@ export const decisionCardMarkdown = (model: CompiledDecisionCard): string => {
         const criterion = model.criteria[index];
         const detail = markdownFromHast(consideration.detail);
         content.push(
-          `- **${criterion?.title ?? `Criterion ${index + 1}`}:** ${consideration.verdict} (${consideration.tone})${detail === "" ? "" : ` — ${detail}`}`,
+          markdownBullet(
+            `**${criterion?.title ?? `Criterion ${index + 1}`}:** ${consideration.verdict} (${consideration.tone})${detail === "" ? "" : ` — ${detail}`}`,
+          ),
         );
       });
       const detail = markdownFromHast(option.detail);
