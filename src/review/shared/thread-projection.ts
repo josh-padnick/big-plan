@@ -253,7 +253,6 @@ export const projectRequestActivity = ({
       event.requestId === request.requestId &&
       (request.kind === "approval"
         ? event.stepCode === "plan-approved" ||
-          event.stepCode === "approval-acknowledged" ||
           progressStepCodeIsAgentOwned(event.stepCode)
         : progressStepCodeIsAgentOwned(event.stepCode)),
   );

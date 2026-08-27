@@ -7011,6 +7011,7 @@ export const ReviewController = () => {
   };
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
+    responses: agent.responses,
     cancelPendingRequestIds,
     progressEvents: progress,
     agentConnected,

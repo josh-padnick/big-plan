@@ -46,6 +46,15 @@ export type AgentActivityRequest = ClaimedRequest &
     readonly targetLabel?: string;
   };
 
+/**
+ * The settled answer to one request, as the card needs to read it: an approval
+ * that carries a refusal, or one that carries none.
+ */
+export type AgentActivityAnswer = {
+  readonly requestId: string;
+  readonly hardStop?: string;
+};
+
 export type AgentActivityProgress = {
   readonly requestId?: string;
   readonly atMs?: number;
@@ -313,9 +322,11 @@ const meaningfulWork = (
  */
 const approvalHandoffReading = ({
   requests,
+  responses,
   progressEvents,
 }: {
   readonly requests: ReadonlyArray<AgentActivityRequest>;
+  readonly responses: ReadonlyArray<AgentActivityAnswer>;
   readonly progressEvents: ReadonlyArray<AgentActivityProgress>;
 }): CurrentAgentActivity | undefined => {
   const index = progressEvents.findLastIndex(
@@ -341,17 +352,31 @@ const approvalHandoffReading = ({
     (candidate) =>
       candidate.kind === "approval" && candidate.requestId === latest.requestId,
   );
-  if (request === undefined) return undefined;
-  if (latest.stepCode === "approval-blocked") {
+  if (request === undefined || request.canceledAt !== undefined) {
+    return undefined;
+  }
+  /*
+  The answer decides, and the step only narrates it. The step that says an
+  approval was answered is appended after the answer commits and only on a best
+  effort, so a card that waited for it went on asking the reviewer to wait for
+  an acknowledgment the agent had already given - or already refused - while the
+  thread beside it said otherwise (BIG-131).
+  */
+  const answer = responses.find(
+    (candidate) => candidate.requestId === request.requestId,
+  );
+  const answered = answer !== undefined || request.answeredAt !== undefined;
+  if (answer?.hardStop !== undefined || latest.stepCode === "approval-blocked") {
+    const reason = answer?.hardStop ?? latest.detail;
     return {
       ...requestFacts(request),
       state: "handoff-blocked",
       tone: "warning",
       headline: "Approval not acknowledged",
       supporting:
-        latest.detail === undefined
+        reason === undefined
           ? "The agent stopped instead of acknowledging the approval. The plan is still approved and nobody is acting on it."
-          : `The agent stopped instead of acknowledging: ${latest.detail}`,
+          : `The agent stopped instead of acknowledging: ${reason}`,
       updatedAtMs: latest.atMs ?? 0,
     };
   }
@@ -361,7 +386,7 @@ const approvalHandoffReading = ({
     tone: "neutral",
     headline: "Plan approved",
     supporting:
-      latest.stepCode === "approval-acknowledged"
+      answered || latest.stepCode === "approval-acknowledged"
         ? "Approval acknowledged. The agent has the approved plan and the decisions recorded with it."
         : "Waiting for the agent to acknowledge the approval.",
     updatedAtMs: latest.atMs ?? 0,
@@ -811,6 +836,7 @@ export const selectPendingAgentRequest = <
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
   requests,
+  responses = [],
   cancelPendingRequestIds,
   progressEvents,
   agentConnected,
@@ -822,6 +848,8 @@ export const deriveCurrentAgentActivity = ({
   everConnected,
 }: {
   readonly requests: ReadonlyArray<AgentActivityRequest>;
+  /** The answers already settled, for the readings a step cannot be trusted for. */
+  readonly responses?: ReadonlyArray<AgentActivityAnswer>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly progressEvents: ReadonlyArray<AgentActivityProgress>;
   readonly agentConnected: boolean;
@@ -947,7 +975,11 @@ export const deriveCurrentAgentActivity = ({
   // Approving cancels every request older than it, so an unanswered approval is
   // the oldest thing still open and the queue agrees it is next; a message
   // queued behind it waits its turn here as it does everywhere else.
-  const handoff = approvalHandoffReading({ requests, progressEvents });
+  const handoff = approvalHandoffReading({
+    requests,
+    responses,
+    progressEvents,
+  });
   if (
     handoff !== undefined &&
     (request === undefined || request.kind === "approval")
