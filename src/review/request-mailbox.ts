@@ -407,6 +407,19 @@ export class AgentRequestNotWithdrawable extends AgentExchangeRejected {
 }
 
 /**
+ * A cancel that found the request already answered. It is settled news rather
+ * than a failure - the answer is in, so there is nothing left to withdraw - and
+ * it is a class rather than a message so a caller can say so without matching
+ * the sentence Big Plan happens to phrase it with.
+ */
+export class AgentRequestAlreadyAnswered extends AgentExchangeRejected {
+  constructor() {
+    super("The agent has already answered this request");
+    this.name = "AgentRequestAlreadyAnswered";
+  }
+}
+
+/**
  * Refuses every state in which withdrawing one request would contradict work
  * that already reached the plan. A canceled request is not refused: cancel is
  * idempotent.
@@ -420,9 +433,7 @@ const assertRequestIsWithdrawable = async ({
 }): Promise<void> => {
   if (request.canceledAt !== undefined) return;
   if (request.answeredAt !== undefined) {
-    throw new AgentRequestNotWithdrawable(
-      "The agent has already answered this request",
-    );
+    throw new AgentRequestAlreadyAnswered();
   }
   // The commit writes its journal under this same request lock, so a journal
   // on disk here means the answer has published or is one rename from

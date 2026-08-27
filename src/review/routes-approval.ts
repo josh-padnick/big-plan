@@ -506,9 +506,11 @@ export const approvePlan = async (
       requestId,
     });
   }
+  let delivered = true;
   try {
     await writeAgentRequest({ store: context.store, request: handoff });
   } catch (error: unknown) {
+    delivered = false;
     context.reportDiagnostic({
       message: "The approval could not be delivered to the agent mailbox",
       error,
@@ -546,6 +548,10 @@ export const approvePlan = async (
       approvalId: entry.approvalId,
       pinnedSnapshot: entry.pinnedSnapshot,
       canceledRequests: canceledRequestIds.length,
+      // The record is committed either way, so the approve answer carries what
+      // the reviewer would otherwise have to take on faith: whether the agent
+      // was actually handed the decision.
+      delivered,
       approval: summary === undefined ? null : encodeApprovalSummary(summary),
     },
   });
