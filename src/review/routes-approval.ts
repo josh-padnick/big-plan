@@ -18,6 +18,7 @@ import type {
 } from "./review-route-context.js";
 import {
   AgentExchangeRejected,
+  type AgentApprovalRequest,
   approvalAgentRequest,
   deriveSnapshotDigest,
   readAgentExchange,
@@ -431,6 +432,32 @@ export const approvePlan = async (
     throw error;
   }
 
+  let handoff: AgentApprovalRequest;
+  try {
+    handoff = approvalAgentRequest({
+      approvalId: entry.approvalId,
+      sessionId: context.sessionId,
+      planId: context.planId,
+      planPath: context.resolvedPlanPath,
+      pinnedSnapshot: entry.pinnedSnapshot,
+      createdAt: entry.at,
+      recordedAnswers: entry.recordedAnswers.map((answer) => ({
+        decisionId: answer.decisionId,
+        optionId: answer.optionId,
+      })),
+      unansweredDecisions: entry.unansweredDecisions,
+      message: entry.message,
+    });
+  } catch (error: unknown) {
+    if (error instanceof AgentExchangeRejected) {
+      return refusal({
+        status: 500,
+        reason: `The approval could not be handed to the agent: ${error.message}`,
+      });
+    }
+    throw error;
+  }
+
   const next = appendApproval({ record: current, entry });
   await writeSnapshot({
     store: context.store,
@@ -484,23 +511,7 @@ export const approvePlan = async (
       entry,
     }),
   });
-  await writeAgentRequest({
-    store: context.store,
-    request: approvalAgentRequest({
-      approvalId: entry.approvalId,
-      sessionId: context.sessionId,
-      planId: context.planId,
-      planPath: context.resolvedPlanPath,
-      pinnedSnapshot: entry.pinnedSnapshot,
-      createdAt: entry.at,
-      recordedAnswers: entry.recordedAnswers.map((answer) => ({
-        decisionId: answer.decisionId,
-        optionId: answer.optionId,
-      })),
-      unansweredDecisions: entry.unansweredDecisions,
-      message: entry.message,
-    }),
-  });
+  await writeAgentRequest({ store: context.store, request: handoff });
   await emitProgress({
     context,
     stepCode: "plan-approved",

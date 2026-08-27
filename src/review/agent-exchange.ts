@@ -4,6 +4,7 @@
 // filenames, replay rules, response completeness, or source-snapshot checks.
 
 import { createHash } from "node:crypto";
+import { isAbsolute } from "node:path";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
 import {
   QUOTE_LIMIT,
@@ -704,7 +705,7 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
       field: "planPath",
       limit: 4096,
     });
-    if (!planPath.startsWith("/")) {
+    if (!isAbsolute(planPath)) {
       throw new AgentExchangeRejected('"planPath" must be an absolute path');
     }
     if (!Array.isArray(value.recordedAnswers)) {
