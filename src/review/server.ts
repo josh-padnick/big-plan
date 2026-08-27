@@ -766,9 +766,18 @@ export const startReviewRuntime = async ({
   const port =
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
+  // The anti-rebinding allow-list, and nothing wider than the hop needs: this
+  // session's own published address, plus the two authorities the review-link
+  // service answers on, because the hop forwards the browser's Host untouched
+  // and a page opened at either of them sends that name here.
+  //
+  // `localhost:${port}` is deliberately absent. Nothing publishes a session
+  // under that name - the runtime prints, and the service redirects to,
+  // `http://127.0.0.1:${port}/` - so admitting it would widen the one control
+  // that defeats DNS rebinding without any request to justify it. Every name
+  // this list does not carry is a name a rebound page cannot spend.
   const allowedHosts = new Set([
     `127.0.0.1:${port}`,
-    `localhost:${port}`,
     `127.0.0.1:${servicePort()}`,
     `localhost:${servicePort()}`,
   ]);

@@ -63,6 +63,7 @@ import {
 } from "./server.js";
 import { runAgentWorkLoopAction } from "./agent-work-loop.js";
 import type { ReviewRuntime } from "./server.js";
+import { DEFAULT_SERVICE_PORT } from "./service/paths.js";
 import {
   reviewSessionIsRunning,
   stopReviewSessionIfInactive,
@@ -545,6 +546,54 @@ describe("review runtime transport", () => {
         host: `127.0.0.1:${runtime.port}`,
       }),
     ).toBe(200);
+  });
+
+  it("should admit the service hop's addresses and no other name for itself", async () => {
+    // The hop forwards the browser's Host untouched, so a page opened at
+    // either address the service answers on arrives here under that name and
+    // has to be accepted. The premise of the rest of this test is that the two
+    // ports differ; an ephemeral port is never the service's fixed one.
+    expect(runtime.port).not.toBe(DEFAULT_SERVICE_PORT);
+    expect(
+      await rawStatus({
+        path: "/api/session",
+        host: `127.0.0.1:${DEFAULT_SERVICE_PORT}`,
+      }),
+    ).toBe(200);
+    expect(
+      await rawStatus({
+        path: "/api/session",
+        host: `localhost:${DEFAULT_SERVICE_PORT}`,
+      }),
+    ).toBe(200);
+    // Widening for the hop must not widen anything else: nothing publishes
+    // this session under `localhost`, so that name stays refused.
+    expect(
+      await rawStatus({
+        path: "/api/session",
+        host: `localhost:${runtime.port}`,
+      }),
+    ).toBe(403);
+  });
+
+  it("should accept the service's origins and no other name for itself", async () => {
+    for (const origin of [
+      `http://127.0.0.1:${DEFAULT_SERVICE_PORT}`,
+      `http://localhost:${DEFAULT_SERVICE_PORT}`,
+      `http://127.0.0.1:${runtime.port}`,
+    ]) {
+      expect(
+        (await call({ path: "/api/session", headers: { origin } })).status,
+      ).toBe(200);
+    }
+    expect(
+      (
+        await call({
+          path: "/api/session",
+          headers: { origin: `http://localhost:${runtime.port}` },
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it("should refuse a state-changing request with no session token", async () => {
