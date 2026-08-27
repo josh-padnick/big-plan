@@ -702,6 +702,62 @@ describe("request mailbox", () => {
     ).resolves.toMatchObject({ requests: [] });
   });
 
+  it("should order an owning withdrawal after an in-flight delivery", async () => {
+    const { store } = await preparedReview();
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Do not survive a withdrawal racing this delivery.",
+    });
+    const deliveryChecked = deferred();
+    const finishDelivery = deferred();
+    const order: Array<string> = [];
+    const delivery = writeAgentRequestWhen({
+      store,
+      request,
+      permitted: async () => {
+        order.push("delivery checked");
+        deliveryChecked.resolve();
+        await finishDelivery.promise;
+        order.push("delivery permitted");
+        return true;
+      },
+    });
+    await deliveryChecked.promise;
+
+    const withdrawal = cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+      beforeCancel: async () => {
+        order.push("withdrawn");
+      },
+    });
+
+    finishDelivery.resolve();
+    await expect(delivery).resolves.toBe(true);
+    await expect(withdrawal).resolves.toMatchObject({
+      requestId: request.requestId,
+      canceledAt: "2026-08-10T12:00:01.000Z",
+    });
+    expect(order).toEqual([
+      "delivery checked",
+      "delivery permitted",
+      "withdrawn",
+    ]);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({
+      requests: [
+        { requestId: request.requestId, canceledAt: expect.any(String) },
+      ],
+    });
+  });
+
   it("should refuse the canceled request itself after the plan is released", async () => {
     const { store } = await preparedReview();
     const request = messageAgentRequest({

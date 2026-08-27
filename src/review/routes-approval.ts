@@ -583,14 +583,29 @@ export const revokeApproval = async (
       approvalId,
       at,
     });
-    await context.approvals.write(next);
+    let revoked = false;
     try {
       await cancelAgentRequest({
         store: context.store,
         requestId: approvalId,
         now: at,
+        // The approval handler checks the record while it holds this same
+        // request lock. Commit revocation here so a handler abandoned by the
+        // HTTP write gate cannot pass that check and create the handoff after
+        // cancellation has already looked for it.
+        beforeCancel: async () => {
+          await context.approvals.write(next);
+          revoked = true;
+        },
       });
     } catch (error: unknown) {
+      if (!revoked) {
+        return refusal({
+          status: 409,
+          reason:
+            "The approval handoff is being updated. Try revoking it again.",
+        });
+      }
       if (
         error instanceof AgentRequestNotWithdrawable ||
         !(error instanceof AgentExchangeRejected)

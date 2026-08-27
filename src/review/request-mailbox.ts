@@ -1134,15 +1134,19 @@ export const cancelAgentRequest = async ({
   store,
   requestId,
   now,
+  beforeCancel,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
   readonly now: string;
+  /** Commits the owning withdrawal while this request cannot be created. */
+  readonly beforeCancel?: () => Promise<void>;
 }): Promise<AgentRequest> =>
   withRequestLock({
     store,
     requestId,
     change: async (lockedStore) => {
+      await beforeCancel?.();
       const request = await readCurrentRequest({
         store: lockedStore,
         requestId,
