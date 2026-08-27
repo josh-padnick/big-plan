@@ -75,7 +75,7 @@ Re-run `skill write` only when this thin shell itself changed (rare).
    Do not paste the whole HTML body into chat.
 7. **Wait for approval.** Do not implement until the mailbox returns an `approval` request.
    Re-read `work.planPath`, verify its digest equals `work.pinnedSnapshot`, acknowledge without editing the plan, and begin execution in your own harness.
-   A missing path, a missing file, or a digest mismatch is a hard stop: report it through the response and do not search for another copy.
+   A missing path, a missing file, or a digest mismatch is a hard stop: report it through the response by adding `hardStop` (one line naming what you found), and do not search for another copy.
    On feedback before approval, revise the MDX source, re-validate, re-render, and ask again.
 
 `compile` produces machine-readable JSON for tools; it does not replace human review of the HTML document.

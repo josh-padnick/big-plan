@@ -44,6 +44,7 @@ const TEXT_LIMIT = 4000;
 const MESSAGE_LIMIT = 200;
 const EXCHANGE_LIMIT = 400;
 const WARNING_SUMMARY_LIMIT = 80;
+const APPROVAL_HARD_STOP_LIMIT = 500;
 const ID = /^[a-f0-9]{16}$/;
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 
@@ -169,6 +170,16 @@ export type AgentChatResponse = AgentResponseBase & {
 export type AgentApprovalResponse = AgentResponseBase & {
   readonly kind: "approval";
   readonly summary?: string;
+  /**
+   * The canonical-source check the agent could not pass, in its own words.
+   *
+   * An acknowledgment says the agent read the pinned revision; this says it
+   * could not, which is the one other answer the handoff has. It carries its
+   * own field rather than riding on a refusal, because a refused response is
+   * only ever seen by the agent that wrote it, and the reviewer is the person
+   * who has to act on a plan the agent will not start (BIG-131).
+   */
+  readonly hardStop?: string;
 };
 
 export type AgentResponse =
@@ -935,9 +946,23 @@ export const validateAgentResponseDraft = ({
     };
   }
   if (request.kind === "approval") {
-    if (currentSnapshot !== request.pinnedSnapshot) {
+    const hardStop =
+      value.hardStop === undefined
+        ? undefined
+        : text({
+            value: value.hardStop,
+            field: "hardStop",
+            limit: APPROVAL_HARD_STOP_LIMIT,
+          });
+    /*
+    A reported hard stop is not held to the pin, because the pin is exactly what
+    it says it could not reach. It is not an acknowledgment either: it publishes
+    nothing and settles the request as unanswered work the reviewer must decide
+    about, which is why it is opt-in rather than inferred from the digest.
+    */
+    if (hardStop === undefined && currentSnapshot !== request.pinnedSnapshot) {
       throw new AgentExchangeRejected(
-        "An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot, then respond again.",
+        'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
       );
     }
     const summary =
@@ -952,6 +977,7 @@ export const validateAgentResponseDraft = ({
       ...base,
       kind: "approval",
       ...(summary === undefined ? {} : { summary }),
+      ...(hardStop === undefined ? {} : { hardStop }),
     };
   }
   if (!Array.isArray(value.outcomes)) {
@@ -1027,10 +1053,19 @@ export const validateAgentResponse = (value: unknown): AgentResponse => {
             field: "summary",
             limit: WARNING_SUMMARY_LIMIT,
           });
+    const hardStop =
+      value.hardStop === undefined
+        ? undefined
+        : text({
+            value: value.hardStop,
+            field: "hardStop",
+            limit: APPROVAL_HARD_STOP_LIMIT,
+          });
     return {
       ...base,
       kind: "approval",
       ...(summary === undefined ? {} : { summary }),
+      ...(hardStop === undefined ? {} : { hardStop }),
     };
   }
   if (

@@ -1818,6 +1818,33 @@ export const agentMutationJournalPath = ({
 };
 
 /**
+ * Whether the mailbox holds this request.
+ *
+ * Absence is answered from ENOENT alone. Every other failure is raised, because
+ * "the file is not there" and "Big Plan could not look" are different facts and
+ * a caller deciding what to tell a reviewer needs to tell them apart.
+ */
+export const hasAgentRequest = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<boolean> => {
+  try {
+    await stat(
+      exchangePath({ directory: store.agentRequestDirectory, requestId }),
+    );
+    return true;
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+};
+
+/**
  * Whether a commit for this request has already written its journal. A commit
  * that got that far has published, or is one rename away from publishing, so
  * this is what tells the reviewer's controls the answer is no longer theirs to

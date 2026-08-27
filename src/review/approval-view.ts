@@ -10,7 +10,7 @@ import {
   type ApprovalRecord,
   type ApprovalSummary,
 } from "./shared/approval.js";
-import { readAgentRequestValue } from "./store.js";
+import { hasAgentRequest } from "./store.js";
 import type { ReviewStore } from "./store.js";
 
 /**
@@ -28,9 +28,7 @@ const approvalWasDelivered = async ({
   readonly store: ReviewStore;
   readonly approvalId: string;
 }): Promise<boolean> =>
-  readAgentRequestValue({ store, requestId: approvalId })
-    .then((value) => value !== undefined)
-    .catch(() => true);
+  hasAgentRequest({ store, requestId: approvalId }).catch(() => true);
 
 /** The browser-facing summary of the approval in force, delivery included. */
 export const readApprovalSummary = async ({

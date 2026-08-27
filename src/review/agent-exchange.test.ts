@@ -1181,7 +1181,29 @@ describe("approval request contract", () => {
         now: "2026-08-13T17:42:00.000Z",
       }),
     ).toThrow(
-      "An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot, then respond again.",
+      'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
     );
+  });
+
+  // The pin is exactly what a hard stop reports it could not reach, so holding
+  // the report to it would leave the agent with nothing it could ever send.
+  it("should accept a reported hard stop the pin refuses as an acknowledgment", () => {
+    const claimed = claimedApproval();
+    expect(
+      validateAgentResponseDraft({
+        value: {
+          requestId: claimed.requestId,
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: deriveSnapshotDigest(after),
+        now: "2026-08-13T17:42:00.000Z",
+      }),
+    ).toMatchObject({
+      kind: "approval",
+      hardStop: "The plan no longer matches the pinned snapshot.",
+    });
   });
 });

@@ -305,6 +305,7 @@ export const buildApprovalBrief = ({
     "Re-read the file at the plan path above.",
     `Verify its digest equals the pinned snapshot \`${entry.pinnedSnapshot}\`.`,
     "A missing path, missing file, or digest mismatch is a hard stop reported through the response, never a fallback search.",
+    'Report it by adding "hardStop" to the response: one line naming what you found, which tells the reviewer instead of acknowledging.',
     "Acknowledge without editing the plan, then begin execution in your own harness.",
     "",
   ].join("\n");
