@@ -431,9 +431,9 @@ fuzzy matching or silently attach it to nearby prose.
 
 Loopback is not an authentication boundary.
 The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
-It checks the `Host` header on every request and refuses a value that is not its own address.
+It checks the `Host` header on every request and refuses any value outside a short allow-list: its own address and the review-link service's, so the opt-in service hop can reach it while a rebound name still cannot.
 
-The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: it redirects to this runtime rather than proxying it, so every check below still happens here.
+The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: by default it redirects to this runtime, and with `BIG_PLAN_PROXY=1` it forwards the request instead, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
 [The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
 
 Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:
