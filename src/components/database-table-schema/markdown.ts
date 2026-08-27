@@ -11,7 +11,9 @@ import type { CompiledDatabaseTableSchema } from "./compile.js";
 export const databaseTableSchemaMarkdown: ComponentMarkdownRenderer<
   CompiledDatabaseTableSchema
 > = (model) => {
-  const tableName = `${model.schemaName ?? ""}${model.tableName}`;
+  const tableName = markdownInlineText(
+    `${model.schemaName ?? ""}${model.tableName}`,
+  );
   const columns = model.schema.columns.map((column) => [
     markdownInlineText(column.name),
     markdownInlineText(column.type),
@@ -42,7 +44,9 @@ export const databaseTableSchemaMarkdown: ComponentMarkdownRenderer<
   ]);
   return [
     `### Database table: ${tableName}`,
-    ...(model.schema.note === undefined ? [] : [model.schema.note]),
+    ...(model.schema.note === undefined
+      ? []
+      : [markdownInlineText(model.schema.note)]),
     markdownTable({
       headers: ["Column", "Type", "Constraints", "Note"],
       rows: columns,
@@ -58,7 +62,7 @@ export const databaseTableSchemaMarkdown: ComponentMarkdownRenderer<
         ]),
     ...model.ddlSections.map(
       (section) =>
-        `#### ${section.title}\n\n${markdownFromHast(section.children)}`,
+        `#### ${markdownInlineText(section.title)}\n\n${markdownFromHast(section.children)}`,
     ),
   ].join("\n\n");
 };

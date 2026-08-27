@@ -42,6 +42,9 @@ describe("Markdown export refusals", () => {
           error: expect.stringContaining("alternative text"),
         },
       });
+      expect(response).toMatchObject({
+        value: { error: expect.stringContaining("./diagram.png") },
+      });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

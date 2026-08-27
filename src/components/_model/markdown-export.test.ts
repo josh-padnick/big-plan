@@ -128,6 +128,28 @@ describe("Markdown export primitives", () => {
     ];
 
     expect(() => markdownFromHast(nodes)).toThrow(MarkdownExportRejected);
+    expect(() => markdownFromHast(nodes)).toThrow(/diagram\.png/u);
+  });
+
+  it("should name an alt-less image whose source is too long to quote", () => {
+    const source = `data:image/png;base64,${"A".repeat(200)}`;
+    const nodes: Root["children"] = [
+      {
+        type: "element",
+        tagName: "p",
+        properties: {},
+        children: [
+          {
+            type: "element",
+            tagName: "img",
+            properties: { src: source },
+            children: [],
+          },
+        ],
+      },
+    ];
+
+    expect(() => markdownFromHast(nodes)).toThrow(`${source.slice(0, 80)}...`);
   });
 
   it("should preserve footnotes as portable definitions", () => {

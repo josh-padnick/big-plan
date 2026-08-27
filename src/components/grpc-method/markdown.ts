@@ -2,6 +2,7 @@
 
 import {
   markdownFromHast,
+  markdownInlineCode,
   markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
@@ -31,8 +32,8 @@ export const grpcMethodMarkdown: ComponentMarkdownRenderer<
 > = (model) => {
   const description = markdownFromHast(model.description);
   return [
-    `### ${model.service}/${model.name}`,
-    `**Transport:** ${model.kind} · Request \`${model.request}\` · Response \`${model.response}\``,
+    `### ${markdownInlineText(`${model.service}/${model.name}`)}`,
+    `**Transport:** ${model.kind} · Request ${markdownInlineCode(model.request)} · Response ${markdownInlineCode(model.response)}`,
     ...(model.deprecated ? ["**Deprecated:** Yes"] : []),
     ...(description === "" ? [] : [description]),
     ...grpcFields("#### Request fields", model.requestFields),
@@ -50,7 +51,7 @@ export const grpcMethodMarkdown: ComponentMarkdownRenderer<
           }),
         ]),
     ...model.examples.flatMap((example, index) => [
-      `#### Example${example.label === undefined ? ` ${index + 1}` : ` — ${example.label}`}`,
+      `#### Example${example.label === undefined ? ` ${index + 1}` : ` — ${markdownInlineText(example.label)}`}`,
       markdownFromHast(example.children),
     ]),
     ...(model.proto === undefined

@@ -13,9 +13,11 @@ export const httpEndpointMarkdown: ComponentMarkdownRenderer<
 > = (model) => {
   const description = markdownFromHast(model.description);
   return [
-    `### ${model.method} ${model.path}`,
-    ...(model.summary === undefined ? [] : [model.summary]),
-    ...(model.auth === undefined ? [] : [`**Authentication:** ${model.auth}`]),
+    `### ${model.method} ${markdownInlineText(model.path)}`,
+    ...(model.summary === undefined ? [] : [markdownInlineText(model.summary)]),
+    ...(model.auth === undefined
+      ? []
+      : [`**Authentication:** ${markdownInlineText(model.auth)}`]),
     ...(model.deprecated ? ["**Deprecated:** Yes"] : []),
     ...(description === "" ? [] : [description]),
     ...(model.params.length === 0
@@ -44,11 +46,11 @@ export const httpEndpointMarkdown: ComponentMarkdownRenderer<
     ...(model.request === undefined
       ? []
       : [
-          `#### Request${model.request.contentType === undefined ? "" : ` — ${model.request.contentType}`}`,
+          `#### Request${model.request.contentType === undefined ? "" : ` — ${markdownInlineText(model.request.contentType)}`}`,
           markdownFromHast(model.request.children),
         ]),
     ...model.responses.flatMap((response) => [
-      `#### Response ${response.status}${response.label === undefined ? "" : ` — ${response.label}`}`,
+      `#### Response ${response.status}${response.label === undefined ? "" : ` — ${markdownInlineText(response.label)}`}`,
       markdownFromHast(response.children),
     ]),
   ].join("\n\n");

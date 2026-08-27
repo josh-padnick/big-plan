@@ -4,6 +4,8 @@ import {
   markdownBullet,
   markdownFence,
   markdownFromHast,
+  markdownInlineCode,
+  markdownInlineText,
   type ComponentMarkdownRenderer,
 } from "../_model/markdown-export.js";
 import type { CompiledCodeDiff } from "./compile.js";
@@ -13,11 +15,11 @@ export const codeDiffMarkdown: ComponentMarkdownRenderer<CompiledCodeDiff> = (
 ) => {
   const annotations = model.annotations.map((annotation) =>
     markdownBullet(
-      `**${annotation.side} ${annotation.startLine === annotation.endLine ? "line" : "lines"} ${annotation.lines}:** ${markdownFromHast(annotation.children)}`,
+      `**${annotation.side} ${annotation.startLine === annotation.endLine ? "line" : "lines"} ${markdownInlineText(annotation.lines)}:** ${markdownFromHast(annotation.children)}`,
     ),
   );
   return [
-    `**File:** \`${model.filePath}\` · Added ${model.addedCount} · Removed ${model.removedCount}`,
+    `**File:** ${markdownInlineCode(model.filePath)} · Added ${model.addedCount} · Removed ${model.removedCount}`,
     markdownFence({ source: model.source, language: "diff" }),
     ...(annotations.length === 0
       ? []
