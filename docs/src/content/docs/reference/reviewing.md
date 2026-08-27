@@ -129,6 +129,7 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
    The **Chat** tab also shows threads that the agent pushed into the review.
    **Inputs** lists what the review is still waiting for.
    **Agent Status** - its own control beside **Feedback** - shows the coding-agent connection and current work for a live review session.
+   **More actions** follows those visible controls and contains **Export**, then **Settings**.
    The two controls share the sidebar and toggle independently: choosing one
    swaps the sidebar's body to it, and choosing it again closes the sidebar.
    A review-session outage is reported separately and does not label the agent
@@ -238,6 +239,14 @@ If the plan source changes while an approval remains in force, the bar reports *
 
 A review session that has become read-only continues to show an approval already in force, but does not offer approval or revocation actions.
 A standalone rendered document shows no approval control.
+
+## Exporting Markdown
+
+Open **More actions**, choose **Export**, and confirm to download the latest committed plan as `<plan-name>.md`. The review runtime reads the authoritative plan source when you confirm, so a browser showing an older revision does not make the export stale. Candidate agent edits that have not been published are not part of that source.
+
+The file preserves ordinary Markdown and turns every built-in component into a semantic Markdown presentation. Wireframes become recursive per-screen UI outlines rather than screenshots. A separated review overlay includes current saved decision answers and an approval summary only when the approval matches the exported plan version. Comments, comment drafts, feedback dispositions, staged agent candidates, and agent status are not included.
+
+Export is available from live reviews, including a session that has become read-only, while its runtime remains reachable. A standalone document keeps the Settings gear and does not offer export because it has no authoritative source to refresh from.
 
 ## Persistence
 

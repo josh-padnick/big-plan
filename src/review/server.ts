@@ -171,6 +171,7 @@ import {
   revokeApproval,
 } from "./routes-approval.js";
 import { readRuntimeSession } from "./routes-session.js";
+import { exportPlanMarkdown } from "./routes-export-markdown.js";
 import { drainAndCloseServer } from "./http-shutdown.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -216,6 +217,11 @@ const DOCUMENT_ROUTE: Route = { method: "GET", path: "/" };
 // is refused before anything else looks at it.
 const API_ROUTES: ReadonlyArray<ApiRoute> = [
   { method: "GET", path: "/api/session", handler: readRuntimeSession },
+  {
+    method: "GET",
+    path: "/api/export-markdown",
+    handler: exportPlanMarkdown,
+  },
   { method: "GET", path: "/api/drafts", handler: readReviewState },
   {
     method: "GET",
@@ -396,11 +402,13 @@ const sendBinary = ({
   status,
   contentType,
   body,
+  headers,
 }: {
   readonly response: ServerResponse;
   readonly status: number;
   readonly contentType: string;
   readonly body: Uint8Array;
+  readonly headers?: Readonly<Record<string, string>>;
 }): void => {
   response.writeHead(status, {
     "content-type": contentType,
@@ -408,6 +416,7 @@ const sendBinary = ({
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
     "cache-control": "no-store",
+    ...headers,
   });
   response.end(body);
 };
@@ -986,6 +995,7 @@ export const startReviewRuntime = async ({
         status: value.status,
         contentType: value.contentType,
         body: value.body,
+        headers: value.headers,
       });
       return;
     }

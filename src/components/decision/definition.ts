@@ -4,6 +4,7 @@ import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { defineComponent } from "../_registration/define-component.js";
 import { compileDecisionComponent } from "./compile.js";
 import { Decision } from "./view.js";
+import { decisionMarkdown } from "./markdown.js";
 
 const bodyPolicy = (name: string): ScopedChildDefinition["markdownBody"] => ({
   prohibited: {
@@ -17,6 +18,7 @@ const bodyPolicy = (name: string): ScopedChildDefinition["markdownBody"] => ({
 export const DECISION_COMPONENT_DEFINITION = defineComponent({
   compile: compileDecisionComponent,
   view: Decision,
+  markdown: decisionMarkdown,
   scopedChildren: {
     Option: {
       kind: "scoped-child",

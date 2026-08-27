@@ -82,14 +82,9 @@ const asDecisionCard = (model: unknown): CompiledDecisionCard | undefined => {
 };
 
 /** Projects one compiled plan into the decisions whose answers it will accept. */
-export const deriveDecisionInventory = ({
-  markdown,
-  fallbackTitle,
-}: {
-  readonly markdown: string;
-  readonly fallbackTitle: string;
-}): DecisionInventory => {
-  const { components } = compilePlanModel({ markdown, fallbackTitle });
+export const decisionInventoryFromComponents = (
+  components: ReadonlyArray<{ readonly model: unknown }>,
+): DecisionInventory => {
   const inventory = new Map<string, DecisionInventoryEntry>();
   for (const collected of components) {
     const model = asDecisionCard(collected.model);
@@ -104,3 +99,15 @@ export const deriveDecisionInventory = ({
   }
   return inventory;
 };
+
+/** Projects one compiled plan into the decisions whose answers it will accept. */
+export const deriveDecisionInventory = ({
+  markdown,
+  fallbackTitle,
+}: {
+  readonly markdown: string;
+  readonly fallbackTitle: string;
+}): DecisionInventory =>
+  decisionInventoryFromComponents(
+    compilePlanModel({ markdown, fallbackTitle }).components,
+  );

@@ -654,6 +654,106 @@ describe("review runtime transport", () => {
   });
 });
 
+describe("review runtime Markdown export", () => {
+  it("should require the live token and return attachment snapshot metadata", async () => {
+    const refused = await call({
+      path: "/api/export-markdown",
+      headers: { "x-big-plan-review-token": "not-the-token" },
+    });
+    expect(refused.status).toBe(401);
+
+    const response = await call({ path: "/api/export-markdown" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe(
+      "text/markdown; charset=utf-8",
+    );
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="plan.md"',
+    );
+    expect(response.headers.get("x-big-plan-snapshot")).toBe(PLAN_SNAPSHOT);
+    const markdown = await response.text();
+    expect(markdown).toContain("# Review runtime plan");
+    expect(markdown).toContain(`> Exported plan version: \`${PLAN_SNAPSHOT}\``);
+    expect(markdown).toContain("## Review overlay");
+  });
+
+  it("should read the committed source when the request arrives", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-export-latest-"));
+    const planPath = join(directory, "Latest saved plan.mdx");
+    await writeFile(planPath, "# Before confirmation\n\nOld content.\n");
+    const target = await startReviewRuntime({ planPath });
+    try {
+      const sessionToken = await runtimeToken(target);
+      const latest =
+        "# After confirmation\n\nThe committed change is visible.\n";
+      await writeFile(planPath, latest);
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/export-markdown",
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-disposition")).toBe(
+        'attachment; filename="Latest-saved-plan.md"',
+      );
+      expect(response.headers.get("x-big-plan-snapshot")).toBe(
+        deriveSnapshotDigest(latest),
+      );
+      const markdown = await response.text();
+      expect(markdown).toContain("# After confirmation");
+      expect(markdown).not.toContain("Old content");
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report invalid authoritative source without downloading a file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-export-invalid-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Initially valid\n");
+    const target = await startReviewRuntime({ planPath });
+    try {
+      const sessionToken = await runtimeToken(target);
+      await writeFile(planPath, "# Invalid\n\n<UnknownComponent />\n");
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/export-markdown",
+      });
+      expect(response.status).toBe(500);
+      expect(response.headers.get("content-disposition")).toBeNull();
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should remain available from a replaced read-only session", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-export-readonly-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const first = await startReviewRuntime({ planPath });
+    const firstToken = await runtimeToken(first);
+    const replacement = await startReviewRuntime({ planPath, takeover: true });
+    try {
+      const response = await callRuntime({
+        target: first,
+        sessionToken: firstToken,
+        path: "/api/export-markdown",
+      });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("# Review runtime plan");
+    } finally {
+      await Promise.all([first.close(), replacement.close()]);
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("review runtime staged decision answers", () => {
   const stageGradual = (target: ReviewRuntime, sessionToken: string) =>
     callRuntime({
@@ -971,6 +1071,36 @@ describe("review runtime staged decision answers", () => {
       ).resolves.toMatchObject({
         answers: [{ decisionId: DECISION_ID, optionId: GRADUAL_OPTION_ID }],
       });
+    });
+  });
+
+  it("should export only a decision answer still current for the compiled plan", async () => {
+    await withDecisionRuntime(async ({ target, sessionToken, planPath }) => {
+      expect((await stageGradual(target, sessionToken)).status).toBe(200);
+      const current = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/export-markdown",
+      });
+      expect(await current.text()).toContain(
+        "- **Which release path should we use?:** Gradual rollout",
+      );
+
+      await writeFile(
+        planPath,
+        DECISION_PLAN.replace(
+          "Start with one group.",
+          "Start with the beta group.",
+        ),
+      );
+      const stale = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/export-markdown",
+      });
+      expect(await stale.text()).not.toContain(
+        "- **Which release path should we use?:** Gradual rollout",
+      );
     });
   });
 
@@ -6732,6 +6862,29 @@ describe("review runtime approval", () => {
         expect(session).toMatchObject({
           approval: { status: "approved", pinnedSnapshot: digest },
         });
+
+        const exported = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/export-markdown",
+        });
+        const approvedMarkdown = await exported.text();
+        expect(approvedMarkdown).toContain("### Approval summary");
+        expect(approvedMarkdown).toContain("Start on it now.");
+
+        await writeFile(
+          target.planPath,
+          DECISION_PLAN.replace(
+            "The rollback runbook stays unchanged.",
+            "The rollback runbook now names an owner.",
+          ),
+        );
+        const changed = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/export-markdown",
+        });
+        expect(await changed.text()).not.toContain("### Approval summary");
       },
     );
   });

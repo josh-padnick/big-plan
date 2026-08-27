@@ -5,6 +5,7 @@ import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileGrpcMethodComponent } from "./compile.js";
 import { GrpcMethod } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { grpcMethodMarkdown } from "./markdown.js";
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
@@ -25,6 +26,7 @@ const scopedChild = (
 export const GRPC_METHOD_COMPONENT_DEFINITION = defineComponent({
   compile: compileGrpcMethodComponent,
   view: GrpcMethod,
+  markdown: grpcMethodMarkdown,
   scopedChildren: {
     Field: scopedChild("Field"),
     Error: scopedChild("Error"),
