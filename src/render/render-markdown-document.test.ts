@@ -138,12 +138,26 @@ Details.
       <Icon name="tip" label="Tip" labelled size="sm" />
     </Group>
     <Overlay title="Confirm export" kind="alert" backdrop="dim">
-      <ChoiceGroup>
-        <ChoiceCard emoji="📦" title="Export" description="Save the plan" selected />
-        <ChoiceCard emoji="↩️" title="Cancel" description="Keep reviewing" />
-      </ChoiceGroup>
       <Button label="Close" />
     </Overlay>
+    <ChoiceGroup>
+      <ChoiceCard emoji="📦" title="Export" description="Save the plan" navigateTo="export-selected" />
+      <ChoiceCard emoji="↩️" title="Cancel" description="Keep reviewing" navigateTo="cancel-selected" />
+    </ChoiceGroup>
+  </Screen>
+  <Screen id="export-selected" name="Export selected" device="desktop">
+    <ChoiceGroup>
+      <ChoiceCard emoji="📦" title="Export" description="Save the plan" selected />
+      <ChoiceCard emoji="↩️" title="Cancel" description="Keep reviewing" navigateTo="cancel-selected" />
+    </ChoiceGroup>
+    <Button label="Continue" emphasis="primary" />
+  </Screen>
+  <Screen id="cancel-selected" name="Cancel selected" device="desktop">
+    <ChoiceGroup>
+      <ChoiceCard emoji="📦" title="Export" description="Save the plan" navigateTo="export-selected" />
+      <ChoiceCard emoji="↩️" title="Cancel" description="Keep reviewing" selected />
+    </ChoiceGroup>
+    <Button label="Continue" emphasis="primary" />
   </Screen>
 </Wireframe>
 `);
@@ -361,7 +375,7 @@ The reader follows one more hop.
 `);
 
     const html = readerHtml(result.markdown);
-    expect(html).toContain("Part — Delivery");
+    expect(html).toContain("Part 1 — Delivery");
     expect(result.components.map((component) => component.component)).toContain(
       "Part",
     );
