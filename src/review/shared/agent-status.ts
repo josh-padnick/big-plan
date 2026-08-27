@@ -287,6 +287,11 @@ const meaningfulWork = (
  * It is read from the approval thread's own steps rather than from the approval
  * record, so a revoked approval simply stops being the latest word here, the
  * same way it stops being in force.
+ *
+ * It is also the last word only until the review has one: any later step on
+ * another request means the agent has moved on, and a card still headlining an
+ * acknowledgment - timestamped before the answer the agent has since published
+ * - would report the wrong moment as the current one.
  */
 const approvalHandoffReading = ({
   requests,
@@ -295,16 +300,22 @@ const approvalHandoffReading = ({
   readonly requests: ReadonlyArray<AgentActivityRequest>;
   readonly progressEvents: ReadonlyArray<AgentActivityProgress>;
 }): CurrentAgentActivity | undefined => {
-  const latest = progressEvents
-    .filter(
-      (event) =>
-        isApprovalHandoffStep(event.stepCode) ||
-        event.stepCode === "approval-revoked",
-    )
-    .at(-1);
+  const index = progressEvents.findLastIndex(
+    (event) =>
+      isApprovalHandoffStep(event.stepCode) ||
+      event.stepCode === "approval-revoked",
+  );
+  const latest = index === -1 ? undefined : progressEvents[index];
   if (latest === undefined || latest.stepCode === "approval-revoked") {
     return undefined;
   }
+  const movedOn = progressEvents
+    .slice(index + 1)
+    .some(
+      (event) =>
+        event.requestId !== undefined && event.requestId !== latest.requestId,
+    );
+  if (movedOn) return undefined;
   const request = requests.find(
     (candidate) =>
       candidate.kind === "approval" && candidate.requestId === latest.requestId,
@@ -899,7 +910,9 @@ export const deriveCurrentAgentActivity = ({
   }
   // An approval waiting to be picked up is not ordinary queued feedback, and
   // one already acknowledged is the last thing that happened on this review.
-  // Anything else queued outranks both, because that work is still owed.
+  // Approving cancels every request older than it, so an unanswered approval is
+  // the oldest thing still open and the queue agrees it is next; a message
+  // queued behind it waits its turn here as it does everywhere else.
   const handoff = approvalHandoffReading({ requests, progressEvents });
   if (
     handoff !== undefined &&

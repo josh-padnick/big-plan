@@ -6874,6 +6874,64 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("reports a handoff it could not cancel because the answer is publishing", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        const { approvalId } = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+        // The journal the commit writes under the request lock is what tells
+        // every reviewer control the answer is no longer theirs to withdraw.
+        await mkdir(target.store.agentMutationJournalDirectory, {
+          recursive: true,
+        });
+        await writeFile(
+          agentMutationJournalPath({
+            store: target.store,
+            requestId: approvalId,
+          }),
+          "{}",
+        );
+        const reported: Array<string> = [];
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation((chunk: unknown) => {
+            reported.push(String(chunk));
+            return true;
+          });
+        try {
+          const revoked = await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/revoke-approval",
+            method: "POST",
+            body: { approvalId },
+          });
+          expect(revoked.status).toBe(200);
+        } finally {
+          stderr.mockRestore();
+        }
+        expect(reported.join("")).toContain(
+          "The approval handoff could not be canceled after revoking",
+        );
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          exchange.requests.find(
+            (request) => request.requestId === approvalId,
+          )?.canceledAt,
+        ).toBeUndefined();
+      },
+    );
+  });
+
   it("cancels open agent requests on approve", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,

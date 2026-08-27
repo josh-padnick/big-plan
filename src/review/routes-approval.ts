@@ -24,7 +24,11 @@ import {
   readAgentExchange,
   writeAgentRequest,
 } from "./agent-exchange.js";
-import { appendProgressEvent, cancelAgentRequest } from "./request-mailbox.js";
+import {
+  AgentRequestNotWithdrawable,
+  appendProgressEvent,
+  cancelAgentRequest,
+} from "./request-mailbox.js";
 import {
   randomId,
   readSnapshot,
@@ -576,7 +580,10 @@ export const revokeApproval = async (
         now: at,
       });
     } catch (error: unknown) {
-      if (!(error instanceof AgentExchangeRejected)) {
+      if (
+        error instanceof AgentRequestNotWithdrawable ||
+        !(error instanceof AgentExchangeRejected)
+      ) {
         context.reportDiagnostic({
           message: "The approval handoff could not be canceled after revoking",
           error,

@@ -1270,19 +1270,21 @@ describe("the approval handoff on the status card", () => {
     createdAt: "2026-08-08T19:59:00.000Z",
     ...overrides,
   });
+  const STEP_TEXT = {
+    "plan-approved": "Plan approved",
+    "approval-acknowledged": "Approval acknowledged",
+    "approval-revoked": "Approval revoked",
+    "response-ready": "Agent response ready",
+  } as const;
   const step = (
-    stepCode: "plan-approved" | "approval-acknowledged" | "approval-revoked",
+    stepCode: keyof typeof STEP_TEXT,
     atMs: number,
+    requestId = "dddddddddddddddd",
   ) => ({
-    requestId: "dddddddddddddddd",
+    requestId,
     atMs,
     stepCode,
-    step:
-      stepCode === "plan-approved"
-        ? "Plan approved"
-        : stepCode === "approval-acknowledged"
-          ? "Approval acknowledged"
-          : "Approval revoked",
+    step: STEP_TEXT[stepCode],
     state: "done",
   });
   const activityFor = ({
@@ -1362,6 +1364,25 @@ describe("the approval handoff on the status card", () => {
         ],
       }),
     ).toMatchObject({ state: "waiting", requestId: "1111111111111111" });
+  });
+
+  it("should hand the card back once the agent answers later work", () => {
+    expect(
+      activityFor({
+        requests: [
+          approvalRequest({ answeredAt: "2026-08-08T20:00:00.000Z" }),
+          { ...request("chat"), answeredAt: "2026-08-08T20:00:00.000Z" },
+        ],
+        progressEvents: [
+          step("plan-approved", NOW - 3_000),
+          step("approval-acknowledged", NOW - 2_000),
+          step("response-ready", NOW - 1_000, "1111111111111111"),
+        ],
+      }),
+    ).toMatchObject({
+      state: "idle",
+      headline: "Agent connected",
+    });
   });
 
   it("should narrate the approval while the agent holds the claim", () => {
