@@ -436,6 +436,7 @@ const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
   disconnected: "Offline",
   offline: "Unreachable",
   handoff: "Approved",
+  "handoff-blocked": "Needs attention",
   idle: "Connected",
   "never-connected": "",
 };
@@ -6985,9 +6986,13 @@ export const ReviewController = () => {
   const statusForRequest = (
     request: AgentRequest,
     surface: MessageSurface,
-  ): AgentStatus =>
-    projectRequestStatus({
+  ): AgentStatus => {
+    const answer = agent.responses.find(
+      (candidate) => candidate.requestId === request.requestId,
+    );
+    return projectRequestStatus({
       request,
+      ...(answer === undefined ? {} : { response: answer }),
       requests: agent.requests,
       progressEvents: progress,
       presence: effectivePresence,
@@ -7002,6 +7007,7 @@ export const ReviewController = () => {
         cancelPendingRequestIds,
       }),
     });
+  };
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
     cancelPendingRequestIds,
