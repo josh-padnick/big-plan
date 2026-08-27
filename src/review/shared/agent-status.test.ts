@@ -1220,6 +1220,7 @@ describe("disconnecting the attached agent", () => {
       "waiting",
       "stalled",
       "errored",
+      "handoff",
       "idle",
     ] as const) {
       expect(agentActivityIsAttached({ state })).toBe(true);
@@ -1246,8 +1247,133 @@ describe("disconnecting the attached agent", () => {
 
   it("should not warn about dropped work when the queue is merely waiting", () => {
     // A request nobody picked up stays queued for the next agent.
-    for (const state of ["waiting", "idle", "disconnected"] as const) {
+    for (const state of [
+      "waiting",
+      "handoff",
+      "idle",
+      "disconnected",
+    ] as const) {
       expect(agentDisconnectDropsWork({ state })).toBe(false);
     }
+  });
+});
+
+// BIG-131: the approval is the one item whose whole life is settled steps, so
+// the card that names the agent's state has to read them directly or say
+// nothing at all about the decision the reviewer just handed over.
+describe("the approval handoff on the status card", () => {
+  const approvalRequest = (
+    overrides: Partial<AgentActivityRequest> = {},
+  ): AgentActivityRequest => ({
+    requestId: "dddddddddddddddd",
+    kind: "approval",
+    createdAt: "2026-08-08T19:59:00.000Z",
+    ...overrides,
+  });
+  const step = (
+    stepCode: "plan-approved" | "approval-acknowledged" | "approval-revoked",
+    atMs: number,
+  ) => ({
+    requestId: "dddddddddddddddd",
+    atMs,
+    stepCode,
+    step:
+      stepCode === "plan-approved"
+        ? "Plan approved"
+        : stepCode === "approval-acknowledged"
+          ? "Approval acknowledged"
+          : "Approval revoked",
+    state: "done",
+  });
+  const activityFor = ({
+    requests,
+    progressEvents,
+  }: {
+    readonly requests: ReadonlyArray<AgentActivityRequest>;
+    readonly progressEvents: ReadonlyArray<ReturnType<typeof step>>;
+  }) =>
+    deriveCurrentAgentActivity({
+      everConnected: true,
+      requests,
+      cancelPendingRequestIds: new Set<string>(),
+      progressEvents,
+      agentConnected: true,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: NOW,
+    });
+
+  it("should report an approved plan still waiting to be acknowledged", () => {
+    expect(
+      activityFor({
+        requests: [approvalRequest()],
+        progressEvents: [step("plan-approved", NOW - 2_000)],
+      }),
+    ).toMatchObject({
+      state: "handoff",
+      headline: "Plan approved",
+      supporting: "Waiting for the agent to acknowledge the approval.",
+      requestId: "dddddddddddddddd",
+      requestKind: "approval",
+      updatedAtMs: NOW - 2_000,
+    });
+  });
+
+  it("should report the acknowledgment the answer ends the request with", () => {
+    const activity = activityFor({
+      requests: [approvalRequest({ answeredAt: "2026-08-08T20:00:00.000Z" })],
+      progressEvents: [
+        step("plan-approved", NOW - 2_000),
+        step("approval-acknowledged", NOW - 1_000),
+      ],
+    });
+    expect(activity).toMatchObject({
+      state: "handoff",
+      headline: "Plan approved",
+      updatedAtMs: NOW - 1_000,
+    });
+    expect("supporting" in activity ? activity.supporting : "").toContain(
+      "Approval acknowledged",
+    );
+  });
+
+  it("should stop reporting a handoff the reviewer revoked", () => {
+    expect(
+      activityFor({
+        requests: [approvalRequest({ canceledAt: "2026-08-08T20:00:00.000Z" })],
+        progressEvents: [
+          step("plan-approved", NOW - 2_000),
+          step("approval-revoked", NOW - 1_000),
+        ],
+      }),
+    ).toMatchObject({ state: "idle" });
+  });
+
+  it("should keep queued work ahead of a settled handoff", () => {
+    expect(
+      activityFor({
+        requests: [
+          approvalRequest({ answeredAt: "2026-08-08T20:00:00.000Z" }),
+          request(),
+        ],
+        progressEvents: [
+          step("plan-approved", NOW - 2_000),
+          step("approval-acknowledged", NOW - 1_000),
+        ],
+      }),
+    ).toMatchObject({ state: "waiting", requestId: "1111111111111111" });
+  });
+
+  it("should narrate the approval while the agent holds the claim", () => {
+    expect(
+      activityFor({
+        requests: [approvalRequest({ ...liveClaim() })],
+        progressEvents: [step("plan-approved", NOW - 2_000)],
+      }),
+    ).toMatchObject({
+      state: "working",
+      headline: "Acknowledging a plan approval",
+      latestStep: "Plan approved",
+    });
   });
 });

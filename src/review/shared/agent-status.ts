@@ -112,6 +112,16 @@ export type CurrentAgentActivity =
       readonly headline: "Agent is unreachable";
       readonly supporting: string;
     }
+  // The approval handed to the agent, before and after it is acknowledged.
+  // Both readings are settled rather than in flight, which is why they are a
+  // state of their own rather than a step inside working.
+  | ({
+      readonly state: "handoff";
+      readonly tone: "neutral";
+      readonly headline: "Plan approved";
+      readonly supporting: string;
+      readonly updatedAtMs: number;
+    } & ActivityRequestFacts)
   | {
       readonly state: "idle";
       readonly tone: "neutral";
@@ -243,13 +253,75 @@ const requestFacts = (request: AgentActivityRequest): ActivityRequestFacts => ({
     : { targetLabel: request.targetLabel }),
 });
 
+/*
+An approval's two steps are settled the moment they exist: the reviewer owns
+"Plan approved" and the agent posts "Approval acknowledged" as its last act on
+the request. The ordinary reading of current work - unfinished narration by the
+agent holding the claim - therefore drops exactly the two steps the handoff is
+made of, so they are admitted by name (BIG-131).
+*/
+const isApprovalHandoffStep = (stepCode: ProgressStepCode): boolean =>
+  stepCode === "plan-approved" || stepCode === "approval-acknowledged";
+
 const meaningfulWork = (
   event: AgentActivityProgress,
   requestId: string,
 ): boolean =>
   event.requestId === requestId &&
-  (event.state === "live" || event.state === "waiting") &&
-  progressStepCodeIsAgentOwned(event.stepCode);
+  (isApprovalHandoffStep(event.stepCode) ||
+    ((event.state === "live" || event.state === "waiting") &&
+      progressStepCodeIsAgentOwned(event.stepCode)));
+
+/**
+ * The handoff reading, for a card whose other states all describe work in
+ * flight.
+ *
+ * An approval is the one item whose whole life is settled steps: it is approved
+ * before any agent sees it, and acknowledging it ends the request rather than
+ * changing the plan. Judged as work, it is therefore invisible on both sides of
+ * the claim - queued behind the ordinary "feedback is queued" copy before
+ * pickup, and gone the instant it is answered - which left the surface that
+ * names the agent's state saying nothing about the decision that was handed to
+ * it (BIG-131).
+ *
+ * It is read from the approval thread's own steps rather than from the approval
+ * record, so a revoked approval simply stops being the latest word here, the
+ * same way it stops being in force.
+ */
+const approvalHandoffReading = ({
+  requests,
+  progressEvents,
+}: {
+  readonly requests: ReadonlyArray<AgentActivityRequest>;
+  readonly progressEvents: ReadonlyArray<AgentActivityProgress>;
+}): CurrentAgentActivity | undefined => {
+  const latest = progressEvents
+    .filter(
+      (event) =>
+        isApprovalHandoffStep(event.stepCode) ||
+        event.stepCode === "approval-revoked",
+    )
+    .at(-1);
+  if (latest === undefined || latest.stepCode === "approval-revoked") {
+    return undefined;
+  }
+  const request = requests.find(
+    (candidate) =>
+      candidate.kind === "approval" && candidate.requestId === latest.requestId,
+  );
+  if (request === undefined) return undefined;
+  return {
+    ...requestFacts(request),
+    state: "handoff",
+    tone: "neutral",
+    headline: "Plan approved",
+    supporting:
+      latest.stepCode === "approval-acknowledged"
+        ? "Approval acknowledged. The agent has the approved plan and the decisions recorded with it."
+        : "Waiting for the agent to acknowledge the approval.",
+    updatedAtMs: latest.atMs ?? 0,
+  };
+};
 
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";
@@ -824,6 +896,16 @@ export const deriveCurrentAgentActivity = ({
           heldWorkQuiet({ requests, cancelPendingRequestIds, now }) === "stale",
       }),
     };
+  }
+  // An approval waiting to be picked up is not ordinary queued feedback, and
+  // one already acknowledged is the last thing that happened on this review.
+  // Anything else queued outranks both, because that work is still owed.
+  const handoff = approvalHandoffReading({ requests, progressEvents });
+  if (
+    handoff !== undefined &&
+    (request === undefined || request.kind === "approval")
+  ) {
+    return handoff;
   }
   if (request === undefined) {
     return {
