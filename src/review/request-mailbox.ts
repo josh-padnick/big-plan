@@ -393,6 +393,20 @@ const assertCommentIsRemovable = async ({
 };
 
 /**
+ * A cancel the mailbox refused because the answer it would withdraw has already
+ * landed or is landing. It is a distinct class because it is the opposite news
+ * from the ordinary rejection a caller expects here: a request that is missing
+ * or already canceled leaves nothing to do, while this one means the record and
+ * the mailbox now disagree and somebody has to be told.
+ */
+export class AgentRequestNotWithdrawable extends AgentExchangeRejected {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentRequestNotWithdrawable";
+  }
+}
+
+/**
  * Refuses every state in which withdrawing one request would contradict work
  * that already reached the plan. A canceled request is not refused: cancel is
  * idempotent.
@@ -406,7 +420,7 @@ const assertRequestIsWithdrawable = async ({
 }): Promise<void> => {
   if (request.canceledAt !== undefined) return;
   if (request.answeredAt !== undefined) {
-    throw new AgentExchangeRejected(
+    throw new AgentRequestNotWithdrawable(
       "The agent has already answered this request",
     );
   }
@@ -418,12 +432,12 @@ const assertRequestIsWithdrawable = async ({
     store,
     requestId: request.requestId,
   }).catch(() => {
-    throw new AgentExchangeRejected(
+    throw new AgentRequestNotWithdrawable(
       "Big Plan cannot tell whether the agent's answer for this request is already publishing, so it cannot be canceled",
     );
   });
   if (publishing) {
-    throw new AgentExchangeRejected(
+    throw new AgentRequestNotWithdrawable(
       "The agent's answer for this request is already publishing, so it can no longer be canceled",
     );
   }
