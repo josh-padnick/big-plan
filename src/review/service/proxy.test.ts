@@ -92,34 +92,41 @@ describe("the opt-in review proxy", () => {
     return { service, review, token: descriptor.token };
   };
 
-  it("should preserve the redirect when the switch was off at startup", async () => {
-    delete process.env["BIG_PLAN_PROXY"];
-    const running = await startPair();
-    process.env["BIG_PLAN_PROXY"] = "1";
+  it.each([undefined, "0"])(
+    "should preserve the redirect when the startup switch was %s",
+    async (proxySetting) => {
+      if (proxySetting === undefined) delete process.env["BIG_PLAN_PROXY"];
+      else process.env["BIG_PLAN_PROXY"] = proxySetting;
+      const running = await startPair();
+      process.env["BIG_PLAN_PROXY"] = "1";
 
-    const response = await fetch(
-      `${running.service.origin}/plan/${running.review.planId}`,
-      { redirect: "manual" },
-    );
+      const response = await fetch(
+        `${running.service.origin}/plan/${running.review.planId}`,
+        { redirect: "manual" },
+      );
 
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(running.review.url);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(running.review.url);
 
-    // Nothing the hop taught this address may reach a switched-off service.
-    // Without the hop there is no document reading its own address here, so a
-    // request that states a non-document destination still gets the page it
-    // got before the switch existed.
-    await running.review.close();
-    const ended = await fetch(
-      `${running.service.origin}/plan/${running.review.planId}`,
-      {
-        redirect: "manual",
-        headers: { "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin" },
-      },
-    );
-    expect(ended.status).toBe(200);
-    expect(ended.headers.get("content-type")).toContain("text/html");
-  });
+      // Nothing the hop taught this address may reach a switched-off service.
+      // Without the hop there is no document reading its own address here, so a
+      // request that states a non-document destination still gets the page it
+      // got before the switch existed.
+      await running.review.close();
+      const ended = await fetch(
+        `${running.service.origin}/plan/${running.review.planId}`,
+        {
+          redirect: "manual",
+          headers: {
+            "sec-fetch-dest": "empty",
+            "sec-fetch-site": "same-origin",
+          },
+        },
+      );
+      expect(ended.status).toBe(200);
+      expect(ended.headers.get("content-type")).toContain("text/html");
+    },
+  );
 
   it("should serve identical bytes and accept browser reads and writes through the hop", async () => {
     process.env["BIG_PLAN_PROXY"] = "1";
