@@ -112,6 +112,35 @@ export const scanPushArrivals = ({
 };
 
 /**
+ * The one arrival a payload announces, out of everything it carried.
+ *
+ * A single poll can deliver more than one push: a backgrounded tab is
+ * throttled to roughly a minute, and an agent can commit twice inside that.
+ * The reader is still told about one arrival, because two "just now" entries
+ * cannot both be the thing that just happened, and the newest push is the one
+ * whose pusher and thread the entry names.
+ *
+ * What it must not do is describe only that push's blocks. The article the
+ * reader is now looking at differs from the one they remember everywhere any
+ * of these pushes touched, so the blocks it reports are all of theirs: in the
+ * order they landed, newest last, and without repeats. Anything narrower
+ * would count and highlight less than actually moved, and leave the rest for
+ * the reader to find on their own.
+ */
+export const announcedArrival = (
+  arrivals: ReadonlyArray<PushArrival>,
+): PushArrival | undefined => {
+  const latest = arrivals.at(-1);
+  if (latest === undefined) return undefined;
+  return {
+    ...latest,
+    changeTargets: [
+      ...new Set(arrivals.flatMap((arrival) => arrival.changeTargets)),
+    ],
+  };
+};
+
+/**
  * The blocks a settle belongs on for the revision a swap is about to show.
  *
  * Asked of the arrival this reader was actually told about rather than of

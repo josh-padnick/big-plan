@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  announcedArrival,
   pushSettleTargets,
   scanPushArrivals,
   type PushArrival,
@@ -160,6 +161,59 @@ describe("scanPushArrivals", () => {
       new Set(),
     );
     expect(result.arrivals[0]?.changeTargets).toEqual(["b", "a"]);
+  });
+});
+
+describe("announcedArrival", () => {
+  const landed = (
+    overrides: Partial<PushArrival> & { readonly requestId: string },
+  ): PushArrival => ({
+    threadId: `thread-${overrides.requestId}`,
+    resultSnapshot: `snapshot-${overrides.requestId}`,
+    arrivedAt: "2026-08-21T00:00:01.000Z",
+    changeTargets: [],
+    ...overrides,
+  });
+
+  it("should have nothing to announce when the payload carried no push", () => {
+    expect(announcedArrival([])).toBeUndefined();
+  });
+
+  it("should name the newest push in the payload", () => {
+    const announced = announcedArrival([
+      landed({ requestId: "one", claimedBy: "aaaaaaaaaaaaa38a" }),
+      landed({ requestId: "two", claimedBy: "bbbbbbbbbbbbb12c" }),
+    ]);
+    expect(announced?.requestId).toBe("two");
+    expect(announced?.threadId).toBe("thread-two");
+    expect(announced?.resultSnapshot).toBe("snapshot-two");
+    expect(announced?.claimedBy).toBe("bbbbbbbbbbbbb12c");
+  });
+
+  it("should report every block the payload changed, newest last", () => {
+    // Two pushes landing in one poll leave the reader looking at a page that
+    // differs in both places, so reporting only the newest push's block would
+    // count and highlight less than actually moved.
+    expect(
+      announcedArrival([
+        landed({ requestId: "one", changeTargets: ["a", "b"] }),
+        landed({ requestId: "two", changeTargets: ["c"] }),
+      ])?.changeTargets,
+    ).toEqual(["a", "b", "c"]);
+  });
+
+  it("should count a block touched by two pushes once", () => {
+    expect(
+      announcedArrival([
+        landed({ requestId: "one", changeTargets: ["a", "b"] }),
+        landed({ requestId: "two", changeTargets: ["b", "c"] }),
+      ])?.changeTargets,
+    ).toEqual(["a", "b", "c"]);
+  });
+
+  it("should leave a lone arrival exactly as it landed", () => {
+    const only = landed({ requestId: "one", changeTargets: ["a"] });
+    expect(announcedArrival([only])).toEqual(only);
   });
 });
 

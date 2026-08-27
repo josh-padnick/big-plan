@@ -65,6 +65,7 @@ import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
 import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
 import {
+  announcedArrival,
   pushSettleTargets,
   scanPushArrivals,
   type PushArrival,
@@ -6020,10 +6021,10 @@ export const ReviewController = () => {
       seenPushResponseIds: seenPushResponseIds.current,
     });
     seenPushResponseIds.current = scan.seenPushResponseIds;
-    const latest = scan.arrivals.at(-1);
-    if (latest === undefined) return;
-    setPushArrival(latest);
-    pendingSettleArrival.current = latest;
+    const announced = announcedArrival(scan.arrivals);
+    if (announced === undefined) return;
+    setPushArrival(announced);
+    pendingSettleArrival.current = announced;
     if (isOpen || !isWide) return;
     setArrivalWantsRail(true);
   }, [
