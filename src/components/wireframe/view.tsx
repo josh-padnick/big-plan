@@ -20,6 +20,10 @@ import {
   WIREFRAME_PLACEHOLDER_GLYPH,
   wireframeGlyphFor,
 } from "./view-glyphs.js";
+import {
+  wireframeScreenStatusLabel,
+  type WireframeScreenDiff,
+} from "./compile-diff.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
@@ -925,6 +929,37 @@ const WireframeElements = ({
   </>
 );
 
+const screenDiffFor = (
+  screenId: string,
+  diffs: ReadonlyArray<WireframeScreenDiff> | undefined,
+): Exclude<WireframeScreenDiff, { status: "initial" }> | undefined => {
+  if (diffs === undefined) return undefined;
+  for (const diff of diffs) {
+    if (diff.status === "initial") continue;
+    if (diff.status === "added" && diff.newScreenId === screenId) return diff;
+    if (diff.status === "removed" && diff.oldScreenId === screenId) return diff;
+    if (
+      (diff.status === "moved" || diff.status === "updated") &&
+      diff.newScreenId === screenId
+    ) {
+      return diff;
+    }
+  }
+  return undefined;
+};
+
+const screenStatusClasses = (
+  status: Exclude<WireframeScreenDiff["status"], "initial">,
+): string => {
+  if (status === "added") {
+    return "bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]";
+  }
+  if (status === "removed") {
+    return "bg-[var(--diff-remove-bg)] text-[var(--diff-remove-c)]";
+  }
+  return "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,var(--callout-warning-bg))] text-[var(--callout-warning-c)]";
+};
+
 const Screen = ({
   screen,
   current,
@@ -1007,7 +1042,16 @@ const Screen = ({
   );
 };
 
-export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
+export const Wireframe = ({
+  model,
+  screenDiffs,
+}: {
+  readonly model: CompiledWireframe;
+  // Present only inside the component's own diff view. Omitted from ordinary
+  // plan rendering so that path stays byte-identical with a Wireframe that
+  // has never heard of a comparison.
+  readonly screenDiffs?: ReadonlyArray<WireframeScreenDiff>;
+}) => (
   <figure
     className="wireframe my-8"
     data-wireframe={model.id}
@@ -1029,20 +1073,48 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
     <div className="wireframe-content" {...{ [BODY_ATTRIBUTE]: "" }}>
       {model.screens.length < 2 ? null : (
         <nav className="wireframe-switcher" aria-label="Prototype screens">
-          {model.screens.map((screen) => (
-            <button
-              key={screen.id}
-              type="button"
-              className="wireframe-switch"
-              data-wireframe-navigate={screen.id}
-              data-wireframe-switch=""
-              {...(screen.id === model.initialScreenId
-                ? { "aria-current": "true" }
-                : {})}
-            >
-              {screen.name}
-            </button>
-          ))}
+          {model.screens.map((screen) => {
+            const annotation = screenDiffFor(screen.id, screenDiffs);
+            return (
+              <button
+                key={screen.id}
+                type="button"
+                className={
+                  screenDiffs === undefined
+                    ? "wireframe-switch"
+                    : "wireframe-switch inline-flex min-h-11 min-w-11 items-center gap-2 wide:min-h-0 wide:min-w-0"
+                }
+                data-wireframe-navigate={screen.id}
+                data-wireframe-switch=""
+                {...(screen.id === model.initialScreenId
+                  ? { "aria-current": "true" }
+                  : {})}
+              >
+                {screenDiffs === undefined ? (
+                  screen.name
+                ) : (
+                  <>
+                    <span
+                      className={
+                        annotation?.status === "removed"
+                          ? "line-through decoration-2"
+                          : undefined
+                      }
+                    >
+                      {screen.name}
+                    </span>
+                    {annotation === undefined ? null : (
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-2xs font-bold ${screenStatusClasses(annotation.status)}`}
+                      >
+                        {wireframeScreenStatusLabel(annotation)}
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            );
+          })}
         </nav>
       )}
       <div className="wireframe-screens flex flex-col gap-6">

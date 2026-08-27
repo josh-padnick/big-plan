@@ -387,7 +387,7 @@ Its disabled **Confirm choice** control shows the same guidance in a hazard-icon
 Diagram, file tree, and wireframe changes use the component's own maximize control and name.
 Their controls work inside the change: diagram theme and flow controls, tree copy controls, and wireframe screen switchers.
 A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle.
-The wireframe diff does not mark individual screens as added, removed, moved, or updated.
+Its own screen switcher marks screens that were added, removed, moved, or updated.
 A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.

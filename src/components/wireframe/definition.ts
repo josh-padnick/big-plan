@@ -1,10 +1,12 @@
 // Declares Wireframe's component integration contract: the compiler, the view
-// presenting it, and the scoped names a plan author may write inside a
-// wireframe.
+// presenting it, the bespoke screen-level diff, and the scoped names a plan
+// author may write inside a wireframe.
 
 import { compileWireframe } from "./compile.js";
+import { compileWireframeDiff } from "./compile-diff.js";
 import { WIREFRAME_ELEMENT_NAMES } from "./catalog.js";
 import { Wireframe } from "./view.js";
+import { WireframeDiffView } from "./view-diff.js";
 import type { ScopedChildDefinition } from "../_authoring/contract.js";
 import { defineComponent } from "../_registration/define-component.js";
 
@@ -27,5 +29,7 @@ const buildScopedChildren = (): Readonly<
 export const WIREFRAME_COMPONENT_DEFINITION = defineComponent({
   compile: compileWireframe,
   view: Wireframe,
+  diff: compileWireframeDiff,
+  diffView: WireframeDiffView,
   scopedChildren: buildScopedChildren(),
 });

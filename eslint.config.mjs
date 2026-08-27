@@ -261,6 +261,7 @@ export default tseslint.config(
           "**/components/_authoring/**",
           "**/components/_model/**",
           "**/components/*/compile.js",
+          "**/components/*/compile-diff.js",
           "**/components/code-diff/unified-diff.js",
           "**/components/flow-diagram/anchors.js",
           "**/components/code-snippet/split-highlighted-lines.js",

@@ -6281,13 +6281,19 @@ ${unrelatedWorkspace}
     await test.step("show the proposed wireframe first and the baseline on request", async () => {
       await expect(proposed).toBeVisible();
       await expect(baseline).toBeHidden();
-      const proposedEdge = await proposed.evaluate(
+      const proposedScreen = proposed.locator(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
+      const proposedEdge = await proposedScreen.evaluate(
         (node) => getComputedStyle(node).borderTopColor,
       );
       await was.click();
       await expect(baseline).toBeVisible();
       await expect(proposed).toBeHidden();
-      const baselineEdge = await baseline.evaluate(
+      const baselineScreen = baseline.locator(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
+      const baselineEdge = await baselineScreen.evaluate(
         (node) => getComputedStyle(node).borderTopColor,
       );
       // The pastel edge is what says which side the reader is looking at, so
@@ -6305,6 +6311,9 @@ ${unrelatedWorkspace}
       await expect(
         switcher.getByRole("button", { name: "Triage" }),
       ).toBeVisible();
+      await expect(
+        switcher.getByRole("button", { name: /Queue/u }),
+      ).toContainText("Updated");
       // The baseline side is evidence, not a second live prototype: it keeps
       // its markup but none of its affordances.
       expect(await baseline.evaluate((node) => node.inert)).toBe(true);
@@ -6335,6 +6344,18 @@ ${unrelatedWorkspace}
         expect(box.height).toBeGreaterThanOrEqual(44);
       }
       await page.setViewportSize({ width: 1600, height: 1000 });
+    });
+
+    await test.step("leave a comment on the wireframe from inside the diff", async () => {
+      const comment = page.getByRole("button", {
+        name: "Comment on Review queue",
+      });
+      await expect(comment).toBeVisible();
+      await comment.click();
+      const composer = page.getByRole("dialog", { name: /Comment on/u });
+      await expect(composer).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(composer).toBeHidden();
     });
   } finally {
     await closeReviewRuntime({ page, runtime });

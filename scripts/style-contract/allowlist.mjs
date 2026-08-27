@@ -86,7 +86,7 @@ export const STYLESHEET_BUDGETS = {
     // than wrapping, and the control that copies it drawn inside that border
     // at the same mark size, keeping the touch floor only where a finger is
     // the input.
-    declarations: 1118,
+    declarations: 1121,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,
