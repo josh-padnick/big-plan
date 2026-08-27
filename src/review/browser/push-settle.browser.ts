@@ -47,11 +47,15 @@ export const settleChangedBlocks = (
     element.removeAttribute(SETTLE_ATTRIBUTE);
     void element.offsetWidth;
     element.setAttribute(SETTLE_ATTRIBUTE, "");
-    element.addEventListener(
-      "animationend",
-      () => element.removeAttribute(SETTLE_ATTRIBUTE),
-      { once: true },
-    );
+    // `animationend` bubbles, so any animation finishing beneath this block -
+    // including a nested block the same revision settled - would otherwise
+    // clear a wash that has not run yet.
+    const clear = (event: AnimationEvent) => {
+      if (event.target !== element) return;
+      element.removeEventListener("animationend", clear);
+      element.removeAttribute(SETTLE_ATTRIBUTE);
+    };
+    element.addEventListener("animationend", clear);
     settled += 1;
   }
   return settled;

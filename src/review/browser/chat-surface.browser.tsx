@@ -30,6 +30,13 @@ export type ChatSurfaceModel = {
   readonly pushedThreadCount: number;
   readonly resolvedPushedThreads: ReactNode;
   readonly resolvedPushedThreadCount: number;
+  /**
+   * Whether a resolved thread is currently open in the rail. A push can land
+   * in a thread the reviewer already resolved, and the entry announcing it
+   * offers to open that thread - which would otherwise open it inside a
+   * collapsed disclosure and read as a control that does nothing.
+   */
+  readonly resolvedPushedThreadsOpen: boolean;
   readonly archivedExchanges: ReactNode;
   readonly archivedCount: number;
   readonly onBodyChange: (body: string) => void;
@@ -154,7 +161,10 @@ export const ChatSurface = ({
             </details>
           )}
           {model.resolvedPushedThreadCount === 0 ? null : (
-            <details className="group border-t border-edge pt-3">
+            <details
+              className="group border-t border-edge pt-3"
+              open={model.resolvedPushedThreadsOpen}
+            >
               <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                 Resolved ({model.resolvedPushedThreadCount})
               </summary>

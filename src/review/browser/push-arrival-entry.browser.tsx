@@ -13,6 +13,7 @@
 
 import { BOT_ICON } from "../../icons/lucide/bot.js";
 import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
+import type { AttachedAgent } from "../shared/agent-primacy.js";
 import type { PushArrival } from "../shared/push-arrival.js";
 import { relativeSignalLabel } from "../shared/time-label.js";
 import { AgentIdentityText } from "./agent-identity.browser.js";
@@ -38,6 +39,38 @@ export const pushArrivalTimeLabel = ({
   return label === "signal unavailable" ? "Pushed just now" : `Pushed ${label}`;
 };
 
+/** How the roster answers "which agent is this?", for one arrival. */
+export type PushArrivalLabelResolver = (
+  agent: Pick<AttachedAgent, "writerId" | "model">,
+) => string;
+
+/**
+ * How the entry names the agent that pushed.
+ *
+ * Resolved through the roster's own resolver rather than from the model alone,
+ * because two connectors running the same model are one name and two agents:
+ * the roster spends a short writer id to tell them apart, and an entry that
+ * did not would leave the reader unable to say which of the two just changed
+ * their plan. A push with no recorded claim has no id to spend, so it falls
+ * back to whatever it declared.
+ */
+export const pushArrivalAgentLabel = ({
+  arrival,
+  labelFor,
+}: {
+  readonly arrival: PushArrival;
+  readonly labelFor: PushArrivalLabelResolver;
+}): string => {
+  if (arrival.claimedBy === undefined) {
+    const name = arrival.model?.name;
+    return name === undefined ? "Agent" : agentModelDisplayName(name);
+  }
+  return labelFor({
+    writerId: arrival.claimedBy,
+    ...(arrival.model === undefined ? {} : { model: arrival.model }),
+  });
+};
+
 /** How the entry summarises what the revision touched. */
 export const pushArrivalChangeLabel = (
   changeTargets: ReadonlyArray<string>,
@@ -49,15 +82,16 @@ export const pushArrivalChangeLabel = (
 export const PushArrivalEntry = ({
   arrival,
   nowMs,
+  labelFor,
   onOpenThread,
   onDismiss,
 }: {
   readonly arrival: PushArrival;
   readonly nowMs: number;
+  readonly labelFor: PushArrivalLabelResolver;
   readonly onOpenThread: () => void;
   readonly onDismiss: () => void;
 }) => {
-  const name = arrival.model?.name;
   return (
     <Card
       density="compact"
@@ -78,7 +112,7 @@ export const PushArrivalEntry = ({
       </p>
       <p className="mt-1.5 mb-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]">
         <AgentIdentityText
-          label={name === undefined ? "Agent" : agentModelDisplayName(name)}
+          label={pushArrivalAgentLabel({ arrival, labelFor })}
           client={arrival.model?.client}
         />
       </p>

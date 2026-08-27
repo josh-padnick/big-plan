@@ -56,6 +56,7 @@ import {
   type AgentStatus,
 } from "../shared/agent-status.js";
 import {
+  agentLabelResolver,
   agentPrimacyHealth,
   selectPrimaryAgent,
 } from "../shared/agent-primacy.js";
@@ -125,6 +126,7 @@ import {
 import { AgentSurface } from "./agent-surface.browser.js";
 import {
   PrimacyHandoffDialog,
+  readAgentRosterFor,
   type AgentRosterProps,
   type PrimacyAnswer,
 } from "./agent-roster.browser.js";
@@ -4257,6 +4259,11 @@ export const ReviewController = () => {
   // before the swap a push drove and consumed by the announcement it makes, so
   // a lens replacing plan DOM for the same revision cannot inherit them.
   const armedSettleTargets = useRef<ReadonlyArray<string> | null>(null);
+  // What the swap reads to arm that settle. A ref because the poll rebuilds
+  // this array every interval whether or not anything in it changed, and a
+  // refresh that restarted on each rebuild would cancel its own in-flight
+  // fetch for as long as the pushes kept coming.
+  const agentResponsesRef = useRef<ReadonlyArray<AgentResponse>>([]);
   const sidebarRef = useRef<HTMLElement>(null);
   const [sidebarView, setSidebarView] = useState<SidebarView>("feedback");
   const [isHydrated, setIsHydrated] = useState(false);
@@ -4375,6 +4382,18 @@ export const ReviewController = () => {
   const pushedThreadComments = useMemo(
     () => pushedThreadOpeners.map((opener) => opener.comment),
     [pushedThreadOpeners],
+  );
+  /* The roster's own ambiguity set, so the arrival entry and the card the
+     reviewer compares it against never disagree about how many words it takes
+     to name one agent. Two connectors on the same model are two agents, and
+     only the roster's resolver spends the writer id that says which. */
+  const agentRosterLabel = useMemo(
+    () =>
+      agentLabelResolver(
+        readAgentRosterFor({ agents: agent.agents, nowMs: statusNowMs })
+          .attached,
+      ),
+    [agent.agents, statusNowMs],
   );
   const pollIsOffline = reviewPollIsOffline(pollHealth);
   const serverGone = reviewRuntimeIsDown(pollHealth);
@@ -4808,6 +4827,7 @@ export const ReviewController = () => {
   );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
+    agentResponsesRef.current = snapshot.responses;
     setAgent(snapshot);
     setCancelPendingRequestIds((current) =>
       reconcilePendingCancellations({
@@ -5971,6 +5991,10 @@ export const ReviewController = () => {
   when they open it themselves.
   */
   useEffect(() => {
+    // The empty snapshot the island mounts with is not an observation, and
+    // seeding against it would report every push already in the plan as one
+    // that just landed. The first accepted payload is what gets seeded.
+    if (!hasObservedAgentSnapshot) return;
     const scan = scanPushArrivals({
       requests: agent.requests,
       responses: agent.responses,
@@ -5990,7 +6014,14 @@ export const ReviewController = () => {
     requestAnimationFrame(() =>
       window.scrollTo({ left: scrollX, top: scrollY }),
     );
-  }, [agent.requests, agent.responses, isOpen, isWide, openFeedbackSidebar]);
+  }, [
+    agent.requests,
+    agent.responses,
+    hasObservedAgentSnapshot,
+    isOpen,
+    isWide,
+    openFeedbackSidebar,
+  ]);
 
   useEffect(() => {
     const settleReplacement = () => {
@@ -6026,7 +6057,7 @@ export const ReviewController = () => {
       .then((html) => {
         if (!current) return;
         armedSettleTargets.current = pushSettleTargets({
-          responses: agent.responses,
+          responses: agentResponsesRef.current,
           resultSnapshot: agent.currentSnapshot,
         });
         replacePlanArticle(new DOMParser().parseFromString(html, "text/html"));
@@ -6042,7 +6073,7 @@ export const ReviewController = () => {
     return () => {
       current = false;
     };
-  }, [agent.currentSnapshot, agent.responses, displayedSnapshot, identity]);
+  }, [agent.currentSnapshot, displayedSnapshot, identity]);
 
   useEffect(() => {
     let frame = 0;
@@ -6925,21 +6956,27 @@ export const ReviewController = () => {
     );
   };
   /*
-  The entry names one arrival and stops as soon as it has been acted on. Both
-  controls clear it, and so does the thread being resolved: a reader who is
-  looking at the thread, or has finished with it, does not need to be told
-  there is one. A newer push replaces it rather than stacking, because two
-  "just now" entries cannot both be the thing that just happened.
+  The entry names one arrival and stops as soon as that arrival has been acted
+  on: both controls clear it, and so does resolving the thread it points at,
+  because a reader looking at the thread does not need to be told there is one.
+  A newer push replaces it rather than stacking, because two "just now" entries
+  cannot both be the thing that just happened.
+
+  What it deliberately does not do is stay silent because the thread was
+  already resolved. A push into a resolved thread is still a change the
+  reviewer did not ask for, and a resolution they made before it landed cannot
+  have been an acknowledgement of it - so the arrival is announced, and the
+  thread it names is a thread that needs them again.
   */
   const pushArrivalEntry =
     pushArrival === null ||
-    resolvedCommentIds.has(pushArrival.threadId) ||
     !pushedThreadComments.some(
       (comment) => comment.id === pushArrival.threadId,
     ) ? null : (
       <PushArrivalEntry
         arrival={pushArrival}
         nowMs={statusNowMs}
+        labelFor={agentRosterLabel}
         onOpenThread={() => {
           setThreadOpenState((state) =>
             setThreadOpen({
@@ -7071,6 +7108,7 @@ export const ReviewController = () => {
     setResolveRefusal(null);
     const current = latestReviewStateRef.current.state;
     if (!current.resolvedCommentIds.has(commentId)) {
+      if (pushArrival?.threadId === commentId) setPushArrival(null);
       closeTour();
       if (selectedCommentId === commentId) setSelectedCommentId(null);
       const comment = [...current.drafts, ...sent].find(
@@ -7795,6 +7833,14 @@ export const ReviewController = () => {
                 resolvedPushedThreadCount: resolvedPushedThreadComments.length,
                 resolvedPushedThreads:
                   resolvedPushedThreadComments.map(renderPushedThread),
+                resolvedPushedThreadsOpen: resolvedPushedThreadComments.some(
+                  (comment) =>
+                    threadIsOpen({
+                      commentId: comment.id,
+                      kind: "sent",
+                      surface: "rail",
+                    }),
+                ),
                 archivedCount: archivedChatRequests.length,
                 archivedExchanges: archivedChatRequests.map(renderChatExchange),
                 onBodyChange: setChatBody,

@@ -1092,17 +1092,25 @@ test("should open the rail, name the agent, and settle the changed blocks when a
       "aria-selected",
       "true",
     );
+
+    // Asserted before the plan swap is awaited, because the freshness label is
+    // a live clock: "just now" is what it says on sight and it ages honestly
+    // from there, so pinning that one word would be pinning how long the swap
+    // and the next poll happened to take. What the entry owes the reader is
+    // that a push landed, who pushed it, and how much it touched.
+    const entry = rail.locator("[data-review-push-arrival]");
+    await expect(entry).toBeVisible({ timeout: 15_000 });
+    await expect(entry).toContainText(
+      /Pushed (?:just now|\d+[sm] ago|over an hour ago)/u,
+    );
+    await expect(entry).toContainText("Claude Opus 5");
+    await expect(entry).toContainText("Claude Code");
+    await expect(entry).toContainText("2 blocks changed in the plan.");
+
     await expect(page.locator("article")).toContainText(
       "publishes the arriving candidate atomically",
       { timeout: 15_000 },
     );
-
-    const entry = rail.locator("[data-review-push-arrival]");
-    await expect(entry).toBeVisible();
-    await expect(entry).toContainText("Pushed just now");
-    await expect(entry).toContainText("Claude Opus 5");
-    await expect(entry).toContainText("Claude Code");
-    await expect(entry).toContainText("2 blocks changed in the plan.");
 
     await expect(settled).resolves.toBeTruthy();
     // Both changed blocks are laid out in this plan, so the settle reaches

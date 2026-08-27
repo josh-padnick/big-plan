@@ -28,6 +28,12 @@ export type PushArrival = {
   readonly changeTargets: ReadonlyArray<string>;
   /** What the agent declared about itself when it claimed the push. */
   readonly model?: AgentModelIdentity;
+  /**
+   * The writer that claimed the push, which is the only thing that tells two
+   * connectors running the same model apart. The roster names them by it, and
+   * an entry that could not would be naming a model rather than an agent.
+   */
+  readonly claimedBy?: string;
 };
 
 export type PushArrivalScan = {
@@ -97,6 +103,9 @@ export const scanPushArrivals = ({
       ...(request.claimedModel === undefined
         ? {}
         : { model: request.claimedModel }),
+      ...(request.claimedBy === undefined
+        ? {}
+        : { claimedBy: request.claimedBy }),
     });
   }
   return { arrivals, seenPushResponseIds: seen };

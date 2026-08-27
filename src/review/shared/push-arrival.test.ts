@@ -131,6 +131,15 @@ describe("scanPushArrivals", () => {
     });
   });
 
+  it("should carry the writer that claimed the push, so two agents on one model stay apart", () => {
+    const result = scan(
+      [request({ requestId: "one", claimedBy: "aaaaaaaaaaaaa38a" })],
+      [response({ requestId: "one" })],
+      new Set(),
+    );
+    expect(result.arrivals[0]?.claimedBy).toBe("aaaaaaaaaaaaa38a");
+  });
+
   it("should keep changed blocks in the order listed, without duplicates", () => {
     const result = scan(
       [request({ requestId: "one" })],
