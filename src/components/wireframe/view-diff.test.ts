@@ -291,6 +291,7 @@ describe("WireframeDiffView", () => {
     // the phone top bar's push/dismiss layout, so dropping it on one side
     // would relayout the screen under the toggle.
     expect(wasButtons[0]?.properties["data-wireframe-navigate"]).toBe("triage");
+    expect(wasButtons[0]?.properties.inert).toBe(true);
     expect(wasButtons[0]?.properties.tabIndex).toBe(-1);
     expect(wasButtons[0]?.properties["data-wireframe-frozen"]).toBe("");
     expect(wasButtons[0]?.properties.disabled).toBeUndefined();
@@ -301,6 +302,7 @@ describe("WireframeDiffView", () => {
     const wasCopyButtons = referenceCopyButtonsOf(sideOf(root, "baseline"));
     const nowCopyButtons = referenceCopyButtonsOf(sideOf(root, "proposed"));
     expect(wasCopyButtons).toHaveLength(1);
+    expect(wasCopyButtons[0]?.properties.inert).toBe(true);
     expect(wasCopyButtons[0]?.properties.tabIndex).toBe(-1);
     expect(wasCopyButtons[0]?.properties["data-wireframe-frozen"]).toBe("");
     expect(nowCopyButtons).toHaveLength(1);
@@ -313,6 +315,7 @@ describe("WireframeDiffView", () => {
     const wasSwitcher = switcherEntriesFor(sideOf(root, "baseline"), "triage");
     expect(wasSwitcher).toHaveLength(1);
     expect(wasSwitcher[0]?.properties.disabled).toBeUndefined();
+    expect(wasSwitcher[0]?.properties.inert).toBeUndefined();
     expect(wasSwitcher[0]?.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
     expect(
       switcherEntriesFor(sideOf(root, "proposed"), "triage")[0]?.properties[
@@ -375,13 +378,14 @@ describe("WireframeDiffView", () => {
       undefined,
       true,
     ]);
-    // The freeze is carried by its own mark: out of the tab order, refusing
-    // pointers through the rule that mark keys, and read-only so a reader
-    // who reaches it another way still cannot edit the evidence.
+    // The freeze is carried by its own mark and native inertness: it holds
+    // without the viewer script, stays out of the tab order, refuses pointers,
+    // and remains read-only as a second state-preserving defence.
     expect(
       was.map((field) => field.properties["data-wireframe-frozen"]),
     ).toEqual(["", ""]);
     expect(was.map((field) => field.properties.tabIndex)).toEqual([-1, -1]);
+    expect(was.map((field) => field.properties.inert)).toEqual([true, true]);
     expect(was.map((field) => field.properties.readOnly)).toEqual([true, true]);
     // The label forwards a click to the control it wraps, so it is marked too.
     expect(
@@ -400,6 +404,10 @@ describe("WireframeDiffView", () => {
       undefined,
     ]);
     expect(now.map((field) => field.properties.readOnly)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(now.map((field) => field.properties.inert)).toEqual([
       undefined,
       undefined,
     ]);

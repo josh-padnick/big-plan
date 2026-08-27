@@ -203,18 +203,16 @@ const WireframeElement = ({
   // as one it did, so every hook a stylesheet selects on stays. It is
   // state-neutral too: `disabled` is a design decision this component
   // already spends, in paint and in what a screen reader announces, so the
-  // freeze may not borrow it. What is left is the behaviour - out of the tab
-  // order, refusing pointers, and refused again by the viewer script, which
-  // owns the freeze for every control kind because a dispatched activation
-  // reaches none of the markup above.
+  // freeze may not borrow it. What is left is the behaviour - natively inert
+  // even without the viewer script, out of the tab order, refusing pointers,
+  // and refused again by the viewer script when it is present.
   const frozen = useComponentDiffPresentation()?.side === "baseline";
   const navigation = (
     target: string | undefined,
   ): Readonly<Record<string, string>> =>
     target === undefined ? {} : { "data-wireframe-navigate": target };
-  const frozenControl: Readonly<Record<string, string | number>> = frozen
-    ? { tabIndex: -1, "data-wireframe-frozen": "" }
-    : {};
+  const frozenControl: Readonly<Record<string, string | number | boolean>> =
+    frozen ? { inert: true, tabIndex: -1, "data-wireframe-frozen": "" } : {};
   const frozenEntry: Readonly<Record<string, string | number | boolean>> =
     frozen ? { ...frozenControl, readOnly: true } : {};
   switch (node.element) {
