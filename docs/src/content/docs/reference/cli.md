@@ -379,8 +379,9 @@ Every other way a seat empties - a turn ending, a poll returning, a reviewer dis
 The review-link service is one small loopback process on a fixed port that
 answers saved review links, so a link keeps working after the review session
 behind it ends. It holds no review state: it reads the plan's own session files
-at the moment of the click, then redirects to the live session or serves a page
-explaining how that session ended.
+at the moment of the click, then redirects to the live session by default,
+forwards to it when the opt-in proxy is enabled, or serves a page explaining how
+that session ended.
 
 Nothing needs installing. Any command that prints a review link starts the
 service when nothing is answering, and it stops when you tell it to or when your
@@ -394,7 +395,7 @@ login session ends.
   it again. Saved links do not open in between.
 - `service restart` stops and starts it.
 
-The service listens on `127.0.0.1` only and never makes an outbound request.
+The service listens on `127.0.0.1` only and never connects beyond loopback.
 
 Opening the port itself shows what the process is, when it started, and a
 `Stop the service` control that asks for confirmation and then does exactly what
@@ -408,6 +409,15 @@ port, every command says so, names the process holding it where the platform can
 report one, and keeps working with the session's direct address. Set
 `BIG_PLAN_PORT` to choose a different port, remembering that links saved at the
 old one stop resolving.
+
+`BIG_PLAN_PROXY=1` opts the service into forwarding a running review while the
+browser stays on the saved-link address. It is a startup switch, not a
+persisted setting: the default is the existing redirect, and `BIG_PLAN_PROXY=0`
+is the reversible escape hatch that explicitly keeps that behavior. The
+listening process took its answer at startup, and a command that finds a healthy
+service adopts it, so changing the variable only reaches a service you restart:
+run `service restart` after exporting it, or `service stop` before the next
+command that prints a link.
 
 State lives under `~/.big-plan/service/`, owner-only, and honours
 `BIG_PLAN_STATE_DIR`: one small identity record per plan, the token that

@@ -63,6 +63,7 @@ import {
 } from "./server.js";
 import { runAgentWorkLoopAction } from "./agent-work-loop.js";
 import type { ReviewRuntime } from "./server.js";
+import { servicePort } from "./service/paths.js";
 import {
   reviewSessionIsRunning,
   stopReviewSessionIfInactive,
@@ -545,6 +546,59 @@ describe("review runtime transport", () => {
         host: `127.0.0.1:${runtime.port}`,
       }),
     ).toBe(200);
+  });
+
+  it("should admit the service hop's addresses and no other name for itself", async () => {
+    // The hop forwards the browser's Host untouched, so a page opened at
+    // either address the service answers on arrives here under that name and
+    // has to be accepted. Which port that is has to be resolved the same way
+    // the runtime resolved it, because `BIG_PLAN_PORT` moves the service and
+    // the default is only where it sits when nothing moved it. The premise of
+    // the rest of this test is that the two ports differ; an ephemeral port is
+    // never the service's configured one.
+    const hopPort = servicePort();
+    expect(runtime.port).not.toBe(hopPort);
+    expect(
+      await rawStatus({
+        path: "/api/session",
+        host: `127.0.0.1:${hopPort}`,
+      }),
+    ).toBe(200);
+    expect(
+      await rawStatus({
+        path: "/api/session",
+        host: `localhost:${hopPort}`,
+      }),
+    ).toBe(200);
+    // Widening for the hop must not widen anything else: nothing publishes
+    // this session under `localhost`, so that name stays refused.
+    expect(
+      await rawStatus({
+        path: "/api/session",
+        host: `localhost:${runtime.port}`,
+      }),
+    ).toBe(403);
+  });
+
+  it("should accept the service's origins and no other name for itself", async () => {
+    const hopPort = servicePort();
+    for (const origin of [
+      `http://127.0.0.1:${hopPort}`,
+      `http://localhost:${hopPort}`,
+      `http://127.0.0.1:${runtime.port}`,
+    ]) {
+      expect(
+        (await call({ path: "/api/session", headers: { origin } })).status,
+      ).toBe(200);
+    }
+    expect(
+      (
+        await call({
+          path: "/api/session",
+          headers: { origin: `http://localhost:${runtime.port}` },
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it("should refuse a state-changing request with no session token", async () => {

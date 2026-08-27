@@ -41,6 +41,18 @@ the same plan, and it keeps answering after the session ends. Save or share the
 address the command printed rather than one you assembled from the default port:
 `BIG_PLAN_PORT` moves the service, and every link with it.
 
+`BIG_PLAN_PROXY=1` makes the service keep a live review on that stable address
+instead of redirecting the browser to the session port. The switch is read once
+when the service starts; unset it or set it to `0` to retain the default
+redirect. Setting it changes nothing while a service started without it is
+still running, because later commands adopt that process rather than replacing
+it: export the variable and then run `big-plan service restart` - or
+`big-plan service stop` before the next command - for the change to take
+effect. Each review still runs on its own unique session port so its process,
+custody, and write fences remain isolated—the service only supplies the hop.
+If that hop cannot reach a live runtime, it answers as a gateway with `502` or
+`504`; a live runtime's `503` remains its own refusal while a write is stalled.
+
 Opening it while a review is running takes you straight to the running session.
 Opening it afterwards gives a page saying what happened - stopped normally after
 inactivity, stopped by the reviewer, or stopped unexpectedly - along with the
@@ -421,9 +433,9 @@ fuzzy matching or silently attach it to nearby prose.
 
 Loopback is not an authentication boundary.
 The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
-It checks the `Host` header on every request and refuses a value that is not its own address.
+It checks the `Host` header on every request and refuses any value outside a short allow-list: its own address and the review-link service's, so the opt-in service hop can reach it while a rebound name still cannot.
 
-The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: it redirects to this runtime rather than proxying it, so every check below still happens here.
+The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: by default it redirects to this runtime, and with `BIG_PLAN_PROXY=1` it forwards the request instead, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
 [The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
 
 Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:

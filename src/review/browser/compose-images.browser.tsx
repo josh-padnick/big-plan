@@ -119,7 +119,7 @@ export const ComposeImages = ({
       return;
     }
     try {
-      const response = await fetch("/api/review-images", {
+      const response = await fetch("api/review-images", {
         method: "POST",
         headers: {
           "x-big-plan-review-token": identity.token,

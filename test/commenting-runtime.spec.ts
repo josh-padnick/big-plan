@@ -3981,7 +3981,7 @@ test("should restore and submit staged comments through the local review runtime
   // reload - and after a restart, which the runtime suite proves directly.
   await expect(pastedPicture).toHaveAttribute(
     "src",
-    /^\/review-images\/[a-f0-9]{64}$/u,
+    /^review-images\/[a-f0-9]{64}$/u,
   );
 
   await test.step("the lightbox keeps every control inside the viewport and touchable", async () => {

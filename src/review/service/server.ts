@@ -3,16 +3,15 @@
 //
 // It holds no review state. Given a plan id it reads the registry for where
 // that plan lives, reads that plan's own session files for what happened, and
-// either redirects to the live session or explains the ending. Redirecting
-// rather than proxying is deliberate: the session runtime authenticates every
-// request against its own host and origin, so putting a second process in the
-// path would mean moving that protection into this one.
+// either reaches the live session or explains the ending. BIG_PLAN_PROXY=1
+// keeps a live request on this stable address; its default-off escape hatch
+// preserves the original redirect while that hop is being proved.
 //
 // The request rules below are the session runtime's rules, copied on purpose
 // rather than approximated, because this process is reachable by any page the
 // reviewer's browser happens to be showing.
 
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
@@ -27,11 +26,12 @@ import {
 import { drainAndCloseServer } from "../http-shutdown.js";
 import { answerForPlan } from "./plan-status.js";
 import { readFormNonce } from "./stop-form.js";
-import { servicePort } from "./paths.js";
+import { servicePort, serviceProxyEnabled } from "./paths.js";
 import { isServicePlanId } from "./registry.js";
 
 const TOKEN_HEADER = "x-big-plan-service-token";
 const PLAN_ROUTE = /^\/plan\/([a-z0-9]+)\/?$/;
+const PROXIED_PLAN_ROUTE = /^\/plan\/([a-z0-9]+)(?:\/.*)?$/;
 
 // A stop posted from the identity page carries this instead of the owner
 // token. The browser must never hold the token that authorizes the CLI, but
@@ -160,6 +160,82 @@ const refuse = ({
   response.end(`${reason}\n`);
 };
 
+/**
+ * The one answer for every way this hop has no runtime to reach: a session
+ * that already ended, and a session that stopped answering between the lookup
+ * and the connection. Both are a gateway with nothing behind it rather than
+ * this service failing, and the browser's runtime boundary reads that status
+ * as the outage it is - the same state the session's own address produces by
+ * refusing the connection outright.
+ */
+const refuseAsGateway = (response: ServerResponse): void => {
+  refuse({ response, status: 502, reason: "No live review session" });
+};
+
+/**
+ * Relays one live request without rewriting the browser's identity headers.
+ *
+ * The runtime independently validates the service Host and Origin, so the hop
+ * preserves both rather than replacing them with its ephemeral destination.
+ * Session processes stay separate: this only crosses the HTTP boundary and
+ * does not consolidate their custody, isolation, or write fences.
+ */
+const forwardLiveRequest = ({
+  request,
+  response,
+  target,
+  runtimeUrl,
+}: {
+  readonly request: IncomingMessage;
+  readonly response: ServerResponse;
+  readonly target: URL;
+  readonly runtimeUrl: string;
+}): Promise<void> =>
+  new Promise((settle, fail) => {
+    // Whichever end of the hop finishes first decides the relay, and it does
+    // so once. Either side going away has to tear the other down: an upstream
+    // left streaming into a response nobody is reading never ends, so the
+    // request that opened it would stay open for as long as the runtime kept
+    // writing - and a shutdown that force-closes the connection is exactly
+    // when that happens.
+    let concluded = false;
+    const conclude = (act: () => void): void => {
+      if (concluded) return;
+      concluded = true;
+      act();
+    };
+    const destination = new URL(
+      `${target.pathname}${target.search}`,
+      runtimeUrl,
+    );
+    const forwarded = httpRequest(
+      destination,
+      {
+        method: request.method,
+        headers: request.headers,
+      },
+      (upstream) => {
+        response.writeHead(upstream.statusCode ?? 502, upstream.headers);
+        upstream.once("error", (error: unknown) => {
+          conclude(() => fail(error));
+        });
+        upstream.once("end", () => conclude(settle));
+        upstream.pipe(response);
+      },
+    );
+    forwarded.once("error", (error: unknown) => {
+      conclude(() => fail(error));
+    });
+    const abandon = (): void =>
+      conclude(() => {
+        forwarded.destroy();
+        settle();
+      });
+    request.once("aborted", abandon);
+    response.once("close", abandon);
+    request.pipe(forwarded);
+  });
+
 const constantTimeEquals = (supplied: string, expected: string): boolean => {
   const a = Buffer.from(supplied);
   const b = Buffer.from(expected);
@@ -180,12 +256,15 @@ export const startService = async ({
   version,
   port = servicePort(),
   now = Date.now(),
+  proxyEnabled = serviceProxyEnabled(),
   onClosed,
 }: {
   readonly readToken: () => Promise<string | undefined>;
   readonly version: string;
   readonly port?: number;
   readonly now?: number;
+  /** Read once at startup; changing the environment cannot move this listener. */
+  readonly proxyEnabled?: boolean;
   /**
    * Runs once after the listener closes, however the stop arrived.
    *
@@ -255,19 +334,77 @@ export const startService = async ({
       return;
     }
 
-    const planRoute = PLAN_ROUTE.exec(target.pathname);
-    if (method === "GET" && planRoute !== null) {
+    const planRoute = (proxyEnabled ? PROXIED_PLAN_ROUTE : PLAN_ROUTE).exec(
+      target.pathname,
+    );
+    if ((method === "GET" || proxyEnabled) && planRoute !== null) {
       const planId = planRoute[1] ?? "";
+      const planRoot = `/plan/${planId}`;
+      // The plan address itself is the only thing here a person reads. Under
+      // the hop everything deeper is a request the served document makes for
+      // itself, so a status page would arrive at it as a 200 it parses as
+      // data: the poll would see success, the parse would throw something the
+      // browser's runtime boundary does not recognise, and the outage the
+      // reader should have been shown would never appear.
+      //
+      // The document address is the one path both kinds of request share. A
+      // person navigates to it from a saved link, and the open document
+      // refetches it to pick up a revision the agent published - and that
+      // refetch reads whatever comes back as the plan, so answering it with a
+      // status page tells the reader their plan lost its reading surface
+      // instead of that their session ended. `Sec-Fetch-Dest` is what
+      // separates the two, and its absence counts as the navigation: every
+      // browser states the destination, so nothing arriving here without one
+      // is a page reading itself.
+      const fetchDestination = request.headers["sec-fetch-dest"];
+      const readablePage =
+        method === "GET" &&
+        (target.pathname === planRoot || target.pathname === `${planRoot}/`) &&
+        (fetchDestination === undefined || fetchDestination === "document");
       // A malformed id is answered like an unknown one rather than with a
       // validation error, because the visitor clicked a link and cannot act
       // on the difference.
       const answer = isServicePlanId(planId)
         ? await answerForPlan({ planId })
         : ({ kind: "unknown" } as const);
+      // Only the hop can reach a request this refusal is right for. With the
+      // switch off nothing but a navigation to the plan address arrives here
+      // at all, so gating on it is what keeps every switched-off answer the
+      // answer it was before the hop existed.
+      if (proxyEnabled && answer.kind !== "live" && !readablePage) {
+        if (answer.kind === "unknown") {
+          refuse({ response, status: 404, reason: "No such route" });
+        } else {
+          refuseAsGateway(response);
+        }
+        return;
+      }
       switch (answer.kind) {
-        case "live":
-          sendRedirect({ response, status: 302, location: answer.url });
+        case "live": {
+          if (!proxyEnabled) {
+            sendRedirect({ response, status: 302, location: answer.url });
+            return;
+          }
+          if (method === "GET" && target.pathname === planRoot) {
+            sendRedirect({ response, status: 302, location: `${planRoot}/` });
+            return;
+          }
+          try {
+            await forwardLiveRequest({
+              request,
+              response,
+              target,
+              runtimeUrl: answer.url,
+            });
+          } catch {
+            // The session was live when it was looked up and unreachable a
+            // moment later, which is the same condition as no live session at
+            // all and has to read as that rather than as this service failing.
+            if (!response.headersSent) refuseAsGateway(response);
+            else response.end();
+          }
           return;
+        }
         case "ended":
           sendHtml({
             response,
