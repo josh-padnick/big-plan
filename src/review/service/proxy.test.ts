@@ -141,15 +141,6 @@ describe("the opt-in review proxy", () => {
     expect(canonical.status).toBe(302);
     expect(canonical.headers.get("location")).toBe(planPrefix);
 
-    const [directDocument, proxiedResponse] = await Promise.all([
-      fetch(running.review.url).then((response) => response.arrayBuffer()),
-      fetch(`${running.service.origin}${planPrefix}`, { redirect: "manual" }),
-    ]);
-    expect(proxiedResponse.status).toBe(200);
-    expect(Buffer.from(await proxiedResponse.arrayBuffer())).toEqual(
-      Buffer.from(directDocument),
-    );
-
     const browserReadHeaders = {
       "x-big-plan-review-token": running.token,
       "sec-fetch-site": "same-origin",
@@ -179,6 +170,20 @@ describe("the opt-in review proxy", () => {
       },
     );
     expect(write.status).toBe(200);
+
+    // Exercise the lightweight browser round trip before rendering the same
+    // document twice. Under a fully loaded test worker, those two renders can
+    // occupy the event loop beyond the runtime heartbeat window even though
+    // both listeners are healthy; the byte comparison itself starts both
+    // requests together and does not depend on running before the API calls.
+    const [directDocument, proxiedResponse] = await Promise.all([
+      fetch(running.review.url).then((response) => response.arrayBuffer()),
+      fetch(`${running.service.origin}${planPrefix}`, { redirect: "manual" }),
+    ]);
+    expect(proxiedResponse.status).toBe(200);
+    expect(Buffer.from(await proxiedResponse.arrayBuffer())).toEqual(
+      Buffer.from(directDocument),
+    );
   });
 
   it("should refuse a document's own requests once the session it was served by is gone", async () => {
