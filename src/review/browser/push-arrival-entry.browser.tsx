@@ -69,12 +69,12 @@ export const pushArrivalAgentLabel = ({
   readonly arrival: PushArrival;
   readonly attached: ReadonlyArray<NameableAgent>;
 }): string => {
-  if (arrival.claimedBy === undefined) {
+  if (arrival.writerId === undefined) {
     const name = arrival.model?.name;
     return name === undefined ? "Agent" : agentModelDisplayName(name);
   }
   const pusher: NameableAgent = {
-    writerId: arrival.claimedBy,
+    writerId: arrival.writerId,
     ...(arrival.model === undefined ? {} : { model: arrival.model }),
   };
   const named = attached.some(

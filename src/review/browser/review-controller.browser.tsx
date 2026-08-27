@@ -6052,8 +6052,9 @@ export const ReviewController = () => {
       return;
     }
     let frame = 0;
+    let pressing = false;
     const openRail = () => {
-      if (compose !== null || isWritingInPlace()) return;
+      if (pressing || compose !== null || isWritingInPlace()) return;
       const scrollX = window.scrollX;
       const scrollY = window.scrollY;
       setArrivalWantsRail(false);
@@ -6071,7 +6072,28 @@ export const ReviewController = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(openRail);
     };
+    /*
+    A press is an intent already in flight, and the reader is owed its result.
+    Pressing a control inside a thread card focuses it, which takes focus off
+    the reply field beside it and answers this effect's question - so without
+    this the rail could open between the press and the release, and opening it
+    re-creates every floating card. The button the pointer is still down on is
+    detached, the browser then dispatches the click at whatever ancestor
+    survived, and the Resolve or the Reply the reader asked for never runs and
+    never says so. Held from the press and re-asked after the release, which
+    the next frame puts safely after the click.
+    */
+    const holdForPress = () => {
+      pressing = true;
+    };
+    const releasePress = () => {
+      pressing = false;
+      recheck();
+    };
     openRail();
+    document.addEventListener("pointerdown", holdForPress, true);
+    document.addEventListener("pointerup", releasePress, true);
+    document.addEventListener("pointercancel", releasePress, true);
     document.addEventListener("focusin", recheck);
     document.addEventListener("focusout", recheck);
     // A field that is removed while it holds the caret takes the caret to the
@@ -6080,6 +6102,9 @@ export const ReviewController = () => {
     document.addEventListener("bigplan:article-replaced", recheck);
     return () => {
       cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", holdForPress, true);
+      document.removeEventListener("pointerup", releasePress, true);
+      document.removeEventListener("pointercancel", releasePress, true);
       document.removeEventListener("focusin", recheck);
       document.removeEventListener("focusout", recheck);
       document.removeEventListener("bigplan:article-replaced", recheck);

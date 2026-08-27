@@ -29,11 +29,16 @@ export type PushArrival = {
   /** What the agent declared about itself when it claimed the push. */
   readonly model?: AgentModelIdentity;
   /**
-   * The writer that claimed the push, which is the only thing that tells two
-   * connectors running the same model apart. The roster names them by it, and
-   * an entry that could not would be naming a model rather than an agent.
+   * The roster identity of the agent that pushed, which is the only thing that
+   * tells two connectors running the same model apart. The roster names them
+   * by it, and an entry that could not would be naming a model rather than an
+   * agent.
+   *
+   * Deliberately the connection the claim recorded and not the pickup token
+   * beside it: the token names a turn, so a label built from it matches no
+   * card on the roster and would spend an id that disambiguates nothing.
    */
-  readonly claimedBy?: string;
+  readonly writerId?: string;
 };
 
 export type PushArrivalScan = {
@@ -103,9 +108,9 @@ export const scanPushArrivals = ({
       ...(request.claimedModel === undefined
         ? {}
         : { model: request.claimedModel }),
-      ...(request.claimedBy === undefined
+      ...(request.claimedByConnection === undefined
         ? {}
-        : { claimedBy: request.claimedBy }),
+        : { writerId: request.claimedByConnection }),
     });
   }
   return { arrivals, seenPushResponseIds: seen };

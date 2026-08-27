@@ -133,13 +133,30 @@ describe("scanPushArrivals", () => {
     });
   });
 
-  it("should carry the writer that claimed the push, so two agents on one model stay apart", () => {
+  it("should carry the roster identity of the agent that pushed", () => {
     const result = scan(
-      [request({ requestId: "one", claimedBy: "aaaaaaaaaaaaa38a" })],
+      [
+        request({
+          requestId: "one",
+          claimedBy: "0000000011112222",
+          claimedByConnection: "aaaaaaaaaaaaa38a",
+        }),
+      ],
       [response({ requestId: "one" })],
       new Set(),
     );
-    expect(result.arrivals[0]?.claimedBy).toBe("aaaaaaaaaaaaa38a");
+    // The connection, never the pickup token beside it: the roster draws its
+    // cards by the former, so an entry named by the latter matches no card.
+    expect(result.arrivals[0]?.writerId).toBe("aaaaaaaaaaaaa38a");
+  });
+
+  it("should leave the pusher unnamed when the claim recorded no connection", () => {
+    const result = scan(
+      [request({ requestId: "one", claimedBy: "0000000011112222" })],
+      [response({ requestId: "one" })],
+      new Set(),
+    );
+    expect(result.arrivals[0]?.writerId).toBeUndefined();
   });
 
   it("should keep changed blocks in the order listed, without duplicates", () => {
@@ -181,13 +198,13 @@ describe("announcedArrival", () => {
 
   it("should name the newest push in the payload", () => {
     const announced = announcedArrival([
-      landed({ requestId: "one", claimedBy: "aaaaaaaaaaaaa38a" }),
-      landed({ requestId: "two", claimedBy: "bbbbbbbbbbbbb12c" }),
+      landed({ requestId: "one", writerId: "aaaaaaaaaaaaa38a" }),
+      landed({ requestId: "two", writerId: "bbbbbbbbbbbbb12c" }),
     ]);
     expect(announced?.requestId).toBe("two");
     expect(announced?.threadId).toBe("thread-two");
     expect(announced?.resultSnapshot).toBe("snapshot-two");
-    expect(announced?.claimedBy).toBe("bbbbbbbbbbbbb12c");
+    expect(announced?.writerId).toBe("bbbbbbbbbbbbb12c");
   });
 
   it("should report every block the payload changed, newest last", () => {

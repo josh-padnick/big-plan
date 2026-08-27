@@ -1173,6 +1173,10 @@ test("should open the rail, name the agent, and settle the changed blocks when a
     );
     await expect(entry).toContainText("Claude Opus 5");
     await expect(entry).toContainText("Claude Code");
+    // One connector is attached, so its model already names it. A writer id
+    // here would mean the entry is naming the pusher by an identity the
+    // roster does not draw cards under, which reads as a second agent.
+    await expect(entry).not.toContainText(/\(…[0-9a-f]{4}\)/u);
     await expect(entry).toContainText("2 blocks changed in the plan.");
 
     await expect(settled).resolves.toBeTruthy();

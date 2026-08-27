@@ -80,11 +80,11 @@ describe("pushArrivalAgentLabel", () => {
   };
   const attached = [opusA, opusB];
   const labelOf = (
-    claimedBy: string,
+    writerId: string,
     roster: ReadonlyArray<NameableAgent> = attached,
   ): string =>
     pushArrivalAgentLabel({
-      arrival: arrival({ claimedBy, model: { name: "claude-opus-5" } }),
+      arrival: arrival({ writerId, model: { name: "claude-opus-5" } }),
       attached: roster,
     });
 
@@ -112,7 +112,7 @@ describe("pushArrivalAgentLabel", () => {
     expect(labelOf(opusA.writerId, [opusB])).not.toBe("Claude Opus 5");
   });
 
-  it("should name a push with no recorded claim by what it declared", () => {
+  it("should name a push with no recorded connection by what it declared", () => {
     expect(
       pushArrivalAgentLabel({
         arrival: arrival({ model: { name: "claude-opus-5" } }),
