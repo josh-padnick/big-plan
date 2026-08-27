@@ -80,6 +80,7 @@ export const changeSetIdsFor = ({
 }): ReadonlyArray<string> =>
   response.kind === "chat" ||
   response.kind === "push" ||
+  response.kind === "approval" ||
   (response.kind === "reply" && isPushedThread)
     ? [response.requestId]
     : [...new Set(response.outcomes.map((outcome) => outcome.commentId))];

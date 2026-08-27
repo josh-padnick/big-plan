@@ -186,7 +186,7 @@ server-rendered article without client-rendering or gating the plan.
 
 An open decision card - a `Decision`, a `QuickDecision`, or a `DecisionAnalysis` with `interaction="choose"` - can be answered during a live review.
 A confirmed choice is saved with the review: it survives reload and runtime restarts, so the answer is still there when you come back to the page, and it stays saved until you change or clear it.
-The answer stays inside the review session until approval records it for the later agent handoff; tell the agent through the feedback flow when you want it acted on before then.
+The answer stays inside the review session until approval records it and sends it to the agent; tell the agent through the feedback flow when you want it acted on before then.
 The card's caption always states what is true right now: saving, saved with this review, or noted for this reading session only.
 If a save fails, the card says the answer is not saved yet and retries automatically; keep the page open until it reports the answer saved.
 
@@ -227,12 +227,19 @@ A standalone rendered document has no Inputs tab: the contract is derived by the
 Its confirmation dialog reports accepted and open change sets, answered and unanswered decisions, in-flight agent work, and the covering message from **Settings**.
 Choose a listed item to inspect it before approving, or choose **Edit in Settings** to close the confirmation and open the **Approval message** page.
 
-Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message for the later agent handoff.
+Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message.
+It then writes one `approval` mailbox request whose `requestId` is the new approval id, carrying the absolute `planPath`, the pinned snapshot digest, the recorded answers, the unanswered decisions, and the covering message.
+The agent is expected to re-read that exact path, verify its digest equals `pinnedSnapshot`, and acknowledge without editing the plan.
+A missing path, a missing file, or a digest mismatch is a hard stop: the agent reports it through the response and must not search for another copy.
+An acknowledgment whose result digest does not match the pinned snapshot is refused.
+Revoking an approval that the agent has not yet acknowledged cancels that still-open request.
+
 Every critical decision must be answered first; non-critical decisions may remain unanswered and are recorded that way.
 The approval is refused if the plan changes while the confirmation is open, so the record never silently covers a different revision.
 
 After approval, the branding-bar control reads **Plan approved**, and an approval stamp appears just above the document title in the reading column.
 Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
+The Agent tab and the plan-wide Chat thread show the two progress steps: **Plan approved**, then **Approval acknowledged** once the agent answers.
 Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.
 If the plan source changes while an approval remains in force, the bar reports **Changed since approval** and offers **Re-approve** for the plan as it now reads.
 

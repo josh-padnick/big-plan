@@ -1,10 +1,11 @@
 // The routes that finalize a review: approve pins the plan as it reads now,
-// revoke cancels the approval still in force.
+// delivers the approval to the agent mailbox, and revoke cancels both the
+// approval still in force and a still-unresponded handoff.
 //
-// Stamping the source and enqueueing the agent handoff belong to later
-// increments. This increment finalizes accepted changes, leftover work, and
-// the approval record through one recoverable commit. The browser never writes
-// the log itself.
+// Stamping decided attributes into the source belongs to a later increment.
+// This increment finalizes accepted changes, leftover work, the approval
+// record, and the agent handoff through one recoverable commit plus the
+// mailbox write that follows it. The browser never writes the log itself.
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
@@ -15,15 +16,27 @@ import type {
   ReviewRouteRequest,
   ReviewRouteResponse,
 } from "./review-route-context.js";
-import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
-import { appendProgressEvent } from "./request-mailbox.js";
-import { randomId, readSnapshot, writeSnapshot } from "./store.js";
+import {
+  AgentExchangeRejected,
+  approvalAgentRequest,
+  deriveSnapshotDigest,
+  readAgentExchange,
+  writeAgentRequest,
+} from "./agent-exchange.js";
+import { appendProgressEvent, cancelAgentRequest } from "./request-mailbox.js";
+import {
+  randomId,
+  readSnapshot,
+  writeApprovalBrief,
+  writeSnapshot,
+} from "./store.js";
 import { currentAnswers } from "./plan-inputs-store.js";
 import { reviewInputs } from "./input-contract.js";
 import {
   appendApproval,
   appendRevocation,
   ApprovalRecordRejected,
+  buildApprovalBrief,
 } from "./approval-record.js";
 import {
   approvalSummary,
@@ -326,9 +339,10 @@ export const readApprovalState = async (
 };
 
 /**
- * Finalizes the review against the source as it reads right now. Stamping and
- * the agent mailbox handoff are later increments; this accepts reviewed
- * changes, cancels leftover work, and publishes the derived approved state.
+ * Finalizes the review against the source as it reads right now. Stamping
+ * decided attributes into the source is a later increment; this accepts
+ * reviewed changes, cancels leftover work, publishes the derived approved
+ * state, and writes the agent handoff.
  */
 export const approvePlan = async (
   context: ReviewRouteContext,
@@ -461,6 +475,32 @@ export const approvePlan = async (
       requestId,
     });
   }
+  await writeApprovalBrief({
+    store: context.store,
+    approvalId: entry.approvalId,
+    createdAt: entry.at,
+    brief: buildApprovalBrief({
+      planPath: context.resolvedPlanPath,
+      entry,
+    }),
+  });
+  await writeAgentRequest({
+    store: context.store,
+    request: approvalAgentRequest({
+      approvalId: entry.approvalId,
+      sessionId: context.sessionId,
+      planId: context.planId,
+      planPath: context.resolvedPlanPath,
+      pinnedSnapshot: entry.pinnedSnapshot,
+      createdAt: entry.at,
+      recordedAnswers: entry.recordedAnswers.map((answer) => ({
+        decisionId: answer.decisionId,
+        optionId: answer.optionId,
+      })),
+      unansweredDecisions: entry.unansweredDecisions,
+      message: entry.message,
+    }),
+  });
   await emitProgress({
     context,
     stepCode: "plan-approved",
@@ -497,12 +537,22 @@ export const revokeApproval = async (
   }
   const current = await context.approvals.read();
   try {
+    const at = new Date().toISOString();
     const next = appendRevocation({
       record: current,
       approvalId,
-      at: new Date().toISOString(),
+      at,
     });
     await context.approvals.write(next);
+    try {
+      await cancelAgentRequest({
+        store: context.store,
+        requestId: approvalId,
+        now: at,
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof AgentExchangeRejected)) throw error;
+    }
     await emitProgress({
       context,
       stepCode: "approval-revoked",

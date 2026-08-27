@@ -39,7 +39,7 @@ export {
 export type AgentActivityRequest = ClaimedRequest &
   TerminalAgentRequest & {
     readonly requestId: string;
-    readonly kind: "feedback" | "reply" | "chat" | "push";
+    readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
     readonly createdAt: string;
     readonly claimedAt?: string;
     readonly baselineSnapshot?: string;
@@ -231,7 +231,9 @@ const requestHeadline = (request: AgentActivityRequest): string =>
       ? "Responding in a comment thread"
       : request.kind === "push"
         ? "Preparing a pushed plan change"
-        : "Answering a plan question";
+        : request.kind === "approval"
+          ? "Acknowledging a plan approval"
+          : "Answering a plan question";
 
 const requestFacts = (request: AgentActivityRequest): ActivityRequestFacts => ({
   requestId: request.requestId,

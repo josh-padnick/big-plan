@@ -149,7 +149,9 @@ const requestLabel = (request: {
   if (request.targetLabel !== undefined && request.targetLabel !== "") {
     return request.targetLabel;
   }
-  return request.kind === "chat" ? "Plan-wide question" : "Pending request";
+  if (request.kind === "chat") return "Plan-wide question";
+  if (request.kind === "approval") return "Plan approval";
+  return "Pending request";
 };
 
 /** The one join the toolbar, the dialog, and the record all read. */

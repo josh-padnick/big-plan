@@ -1172,7 +1172,11 @@ const committedRevisionOf = async ({
   readonly at: string;
 }): Promise<CommittedPlanRevision | undefined> => {
   const baseSnapshot = requestBaselineSnapshot(request);
-  if (request.kind === "push" && response.resultSnapshot === baseSnapshot) {
+  if (
+    request.kind === "approval" ||
+    response.kind === "approval" ||
+    (request.kind === "push" && response.resultSnapshot === baseSnapshot)
+  ) {
     return undefined;
   }
   return {
@@ -1406,7 +1410,11 @@ const readQueuedMessage = async ({
   readonly nowMs: number;
 }): Promise<AgentReplyRequest | AgentChatRequest> => {
   const request = await readCurrentRequest({ store, requestId });
-  if (request.kind === "feedback" || request.kind === "push") {
+  if (
+    request.kind === "feedback" ||
+    request.kind === "push" ||
+    request.kind === "approval"
+  ) {
     throw new AgentExchangeRejected(
       `Only a reply or plan question can be ${verb} while it waits`,
     );
@@ -1485,7 +1493,7 @@ export const reviseQueuedRequest = async ({
         body,
         attachments,
       });
-      if (revised.kind === "feedback" || revised.kind === "push") {
+      if (revised.kind !== "reply" && revised.kind !== "chat") {
         throw new AgentExchangeRejected(
           "Revising this message changed the request kind",
         );

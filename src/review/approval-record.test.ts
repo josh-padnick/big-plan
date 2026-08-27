@@ -6,6 +6,7 @@ import {
   appendApproval,
   appendRevocation,
   ApprovalRecordRejected,
+  buildApprovalBrief,
   validateApprovalRecord,
 } from "./approval-record.js";
 import {
@@ -124,5 +125,22 @@ describe("approval record", () => {
       status: "stale",
       pinnedSnapshot: SNAPSHOT,
     });
+  });
+
+  it("should write a brief that names the path, pin, answers, and digest check", () => {
+    const brief = buildApprovalBrief({
+      planPath: "/Users/you/project/plans/retry-queue.mdx",
+      entry: approval(),
+    });
+    expect(brief).toContain("# Plan approval · 2026-08-19T17:41:00.000Z");
+    expect(brief).toContain("/Users/you/project/plans/retry-queue.mdx");
+    expect(brief).toContain("a1b2c3d4e5f60718");
+    expect(brief).toContain(SNAPSHOT);
+    expect(brief).toContain("This plan is approved and we are ready to begin.");
+    expect(brief).toContain("Gradual rollout");
+    expect(brief).toContain("decision-what-should-trigger-rollback");
+    expect(brief).toContain("Verify its digest equals the pinned snapshot");
+    expect(brief).toContain("never a fallback search");
+    expect(brief).toContain("Acknowledge without editing the plan");
   });
 });

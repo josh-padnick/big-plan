@@ -1543,6 +1543,31 @@ export const writeFeedbackPackage = async ({
   return { jsonPath, briefPath };
 };
 
+/**
+ * Writes one approval brief beside feedback briefs under a generated name, so
+ * no reviewer or plan text ever reaches a filename.
+ */
+export const writeApprovalBrief = async ({
+  store,
+  approvalId,
+  createdAt,
+  brief,
+}: {
+  readonly store: ReviewStore;
+  readonly approvalId: string;
+  readonly createdAt: string;
+  readonly brief: string;
+}): Promise<string> => {
+  const stamp = createdAt.replace(/[^0-9]/g, "").slice(0, 14);
+  const briefPath = inside({
+    base: store.feedbackDirectory,
+    leaf: `${stamp}-approval-${approvalId}.md`,
+  });
+  await writeFile(briefPath, brief, { mode: FILE_MODE });
+  await chmod(briefPath, FILE_MODE);
+  return briefPath;
+};
+
 const feedbackSubmissionPath = ({
   store,
   submissionId,

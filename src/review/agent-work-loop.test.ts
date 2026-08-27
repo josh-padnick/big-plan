@@ -19,6 +19,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
+  approvalAgentRequest,
   deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
@@ -343,6 +344,9 @@ describe("agent work loop", () => {
       "one live request claim for this plan at a time",
     );
     expect(result.agent_prompt).toContain(runtime.planPath);
+    expect(result.agent_prompt).toContain(
+      "On an approval request, stop revising, acknowledge without editing the plan, and begin execution in your own harness.",
+    );
     expect(result.codex).toContain('codex "$(cat ');
     expect(result.claude).toContain('claude "$(cat ');
     if (typeof result.prompt_file !== "string") {
@@ -964,6 +968,156 @@ describe("agent work loop lifecycle", () => {
           }),
         ],
       });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should acknowledge an approval without changing the plan", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-approve-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nBegin after approval.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const pinned = deriveSnapshotDigest(source);
+    const request = approvalAgentRequest({
+      approvalId: "a1b2c3d4e5f60718",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      planPath,
+      pinnedSnapshot: pinned,
+      createdAt: "2026-08-13T17:41:00.000Z",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "This plan is approved and we are ready to begin.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      expect(pickup).toMatchObject({
+        pending: true,
+        work: {
+          kind: "approval",
+          approvalId: request.approvalId,
+          planPath,
+          pinnedSnapshot: pinned,
+        },
+      });
+      expect(pickup.rules).toEqual(
+        expect.arrayContaining([
+          "Re-read the file at work.planPath",
+          "Verify deriveSnapshotDigest of that file equals work.pinnedSnapshot",
+          "A missing path, missing file, or digest mismatch is a hard stop reported through the response, never a fallback search",
+          "Acknowledge without editing the plan",
+          "Then begin execution in your own harness",
+        ]),
+      );
+      if (
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a response file");
+      }
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId: request.requestId }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({
+        responded: request.requestId,
+        kind: "approval",
+      });
+      await expect(
+        readProgress({ store: review.store, sessionId: review.sessionId }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            stepCode: "approval-acknowledged",
+            step: "Approval acknowledged",
+            state: "done",
+          }),
+        ]),
+      );
+      expect(deriveSnapshotDigest(await readFile(planPath, "utf8"))).toBe(
+        pinned,
+      );
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse an approval acknowledgment after the agent edited the plan", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-approve-edit-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nBegin after approval.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const pinned = deriveSnapshotDigest(source);
+    const request = approvalAgentRequest({
+      approvalId: "b2c3d4e5f6071819",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      planPath,
+      pinnedSnapshot: pinned,
+      createdAt: "2026-08-13T17:41:00.000Z",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "This plan is approved and we are ready to begin.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.candidate_plan !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a candidate plan");
+      }
+      await writeFile(
+        pickup.candidate_plan,
+        `${source}\nThe agent edited first.\n`,
+      );
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId: request.requestId }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toThrow(
+        "An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot, then respond again.",
+      );
+      expect(deriveSnapshotDigest(await readFile(planPath, "utf8"))).toBe(
+        pinned,
+      );
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

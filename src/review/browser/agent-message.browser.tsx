@@ -212,10 +212,12 @@ export const RequestStatusStrip = ({
   const meaningful = activity
     .filter(
       (event) =>
-        (event.state === "live" || event.state === "waiting") &&
-        event.stepCode !== "reply-sent" &&
-        event.stepCode !== "chat-sent" &&
-        event.stepCode !== "feedback-received",
+        event.stepCode === "plan-approved" ||
+        event.stepCode === "approval-acknowledged" ||
+        ((event.state === "live" || event.state === "waiting") &&
+          event.stepCode !== "reply-sent" &&
+          event.stepCode !== "chat-sent" &&
+          event.stepCode !== "feedback-received"),
     )
     .filter(
       (event, index, events) =>
@@ -232,6 +234,13 @@ export const RequestStatusStrip = ({
         (current.detail === undefined ? "" : ` — ${current.detail}`);
   const hasCurrentTooltip = currentText.length > 96;
   const isWorking = status.stage === "working";
+  const showHandoffActivity =
+    isWorking ||
+    meaningful.some(
+      (event) =>
+        event.stepCode === "plan-approved" ||
+        event.stepCode === "approval-acknowledged",
+    );
   const icon =
     status.stage === "waiting" ? (
       <Icon icon={HOURGLASS_ICON} />
@@ -277,7 +286,7 @@ export const RequestStatusStrip = ({
           Updating {commentCount} comment{commentCount === 1 ? "" : "s"}
         </p>
       ) : null}
-      {isWorking ? (
+      {showHandoffActivity ? (
         hasCurrentTooltip ? (
           <Tooltip
             label={currentText}
@@ -304,7 +313,7 @@ export const RequestStatusStrip = ({
           </p>
         )
       ) : null}
-      {isWorking && earlier.length > 0 ? (
+      {showHandoffActivity && earlier.length > 0 ? (
         <button
           type="button"
           className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-sm px-1 py-0.5 text-2xs text-muted hover:text-ink [&>svg]:size-3"
@@ -317,7 +326,7 @@ export const RequestStatusStrip = ({
             : `Show ${earlier.length} earlier update${earlier.length === 1 ? "" : "s"}`}
         </button>
       ) : null}
-      {isWorking && isExpanded && earlier.length > 0 ? (
+      {showHandoffActivity && isExpanded && earlier.length > 0 ? (
         <ol className="m-0 grid max-h-36 min-w-0 grid-cols-[minmax(0,1fr)] list-none overflow-y-auto pl-1 text-ink">
           {earlier.map((event) => (
             <li
