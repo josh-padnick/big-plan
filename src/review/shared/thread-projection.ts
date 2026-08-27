@@ -376,8 +376,15 @@ export const projectLatestAgentStatus = ({
       nowMs,
     });
   }
+  // The answer travels with the request here for the same reason it does on the
+  // thread: a refusal is a fact about the answer, and the step that narrates it
+  // is written best-effort and ages out of the progress window.
+  const answer = responses.find(
+    (candidate) => candidate.requestId === request.requestId,
+  );
   return projectRequestStatus({
     request,
+    ...(answer === undefined ? {} : { response: answer }),
     requests,
     progressEvents,
     presence: { ...presence, connected: agentConnected },

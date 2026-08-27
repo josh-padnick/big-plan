@@ -1471,6 +1471,99 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should settle an interrupted approval commit instead of blaming the reviewer", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-approve-journal-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nBegin after approval.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = approvalAgentRequest({
+      approvalId: "1819202122232425",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      planPath,
+      pinnedSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-13T17:41:00.000Z",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "This plan is approved and we are ready to begin.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a response file");
+      }
+      const edited = `${source}\nThe reviewer kept writing.\n`;
+      await writeFile(planPath, edited);
+      if (typeof pickup.candidate_plan !== "string") {
+        throw new Error("Pickup did not return a candidate plan");
+      }
+      await writeFile(
+        pickup.candidate_plan,
+        `${source}\nThe agent scribbled before stopping.\n`,
+      );
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        }),
+      );
+      // The commit is interrupted between writing its journal and clearing it,
+      // which is the window a killed process leaves behind.
+      const writeSnapshot = reviewStore.writeSnapshot;
+      let writes = 0;
+      const interrupted = vi
+        .spyOn(reviewStore, "writeSnapshot")
+        .mockImplementation(async (args) => {
+          writes += 1;
+          // The candidate's own snapshot still lands; the one that finishes the
+          // commit and clears its journal does not.
+          if (writes === 1) return writeSnapshot(args);
+          throw new Error("The store went away mid-commit");
+        });
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toThrow();
+      interrupted.mockRestore();
+      expect(
+        await readdir(review.store.agentMutationJournalDirectory),
+      ).toHaveLength(1);
+
+      // The next command settles that journal rather than reporting the
+      // reviewer's own edit as a writer from outside Big Plan.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({ pending: false });
+      await expect(readFile(planPath, "utf8")).resolves.toBe(edited);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should keep answering the reviewer turn after turn as one agent", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-turns-"));
     const planPath = join(directory, "plan.mdx");
