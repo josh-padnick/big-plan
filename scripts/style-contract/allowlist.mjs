@@ -85,8 +85,9 @@ export const STYLESHEET_BUDGETS = {
     // mark that names a verbatim string, the string itself truncating rather
     // than wrapping, and the control that copies it drawn inside that border
     // at the same mark size, keeping the touch floor only where a finger is
-    // the input.
-    declarations: 1121,
+    // the input. Raised for the Wireframe diff's Was/Now screen borders and
+    // frozen baseline-control treatment.
+    declarations: 1122,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,
