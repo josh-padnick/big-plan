@@ -395,7 +395,7 @@ login session ends.
   it again. Saved links do not open in between.
 - `service restart` stops and starts it.
 
-The service listens on `127.0.0.1` only and never makes an outbound request.
+The service listens on `127.0.0.1` only and never connects beyond loopback.
 
 Opening the port itself shows what the process is, when it started, and a
 `Stop the service` control that asks for confirmation and then does exactly what
@@ -411,12 +411,13 @@ report one, and keeps working with the session's direct address. Set
 old one stop resolving.
 
 `BIG_PLAN_PROXY=1` opts the service into forwarding a running review while the
-browser stays on the saved-link address. It is a startup escape hatch, not a
+browser stays on the saved-link address. It is a startup switch, not a
 persisted setting: the default is the existing redirect, and `BIG_PLAN_PROXY=0`
-explicitly keeps that behavior. The listening process took its answer at
-startup, and a command that finds a healthy service adopts it, so changing the
-variable only reaches a service you restart: run `service restart` after
-exporting it, or `service stop` before the next command that prints a link.
+is the reversible escape hatch that explicitly keeps that behavior. The
+listening process took its answer at startup, and a command that finds a healthy
+service adopts it, so changing the variable only reaches a service you restart:
+run `service restart` after exporting it, or `service stop` before the next
+command that prints a link.
 
 State lives under `~/.big-plan/service/`, owner-only, and honours
 `BIG_PLAN_STATE_DIR`: one small identity record per plan, the token that
