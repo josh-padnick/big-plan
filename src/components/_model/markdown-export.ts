@@ -564,7 +564,10 @@ export const markdownTableProse = (
   }
   const cell = inlineLead.source.replace(/\s*\n\s*/gu, " ").trim();
   return meaningful.length > inlineLead.consumed
-    ? { cell, blocks: markdownFromHast(nodes) }
+    ? {
+        cell,
+        blocks: markdownFromHast(meaningful.slice(inlineLead.consumed)),
+      }
     : { cell };
 };
 

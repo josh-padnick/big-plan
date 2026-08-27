@@ -322,7 +322,7 @@ describe("Markdown export primitives", () => {
       ]),
     ).toEqual({
       cell: "Lead sentence.",
-      blocks: "Lead sentence.\n\n```json\n{}\n```",
+      blocks: "```json\n{}\n```",
     });
     expect(markdownTableProse([fence("{}")])).toEqual({
       cell: "",
