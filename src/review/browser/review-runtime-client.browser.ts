@@ -43,17 +43,19 @@ export const runtimeIdentity = (): RuntimeIdentity | null => {
 export const isReadOnlyReview = (): boolean =>
   document.documentElement.hasAttribute("data-review-read-only");
 
-export const requestJson = async ({
+const requestRuntime = async <Result>({
   path,
   identity,
   method = "GET",
   body,
+  readResponse,
 }: {
   readonly path: string;
   readonly identity: RuntimeIdentity;
   readonly method?: "GET" | "PUT" | "POST";
   readonly body?: unknown;
-}): Promise<unknown> => {
+  readonly readResponse: (response: Response) => Promise<Result>;
+}): Promise<Result> => {
   const controller = new AbortController();
   const timeout = window.setTimeout(
     () => controller.abort(),
@@ -81,7 +83,7 @@ export const requestJson = async ({
         readBody: () => response.json(),
       });
     }
-    return await response.json();
+    return await readResponse(response);
   } catch (error) {
     throw normalizeReviewRuntimeRequestError({
       error,
@@ -90,6 +92,45 @@ export const requestJson = async ({
   } finally {
     window.clearTimeout(timeout);
   }
+};
+
+export const requestJson = async (input: {
+  readonly path: string;
+  readonly identity: RuntimeIdentity;
+  readonly method?: "GET" | "PUT" | "POST";
+  readonly body?: unknown;
+}): Promise<unknown> =>
+  requestRuntime({
+    ...input,
+    readResponse: (response) => response.json(),
+  });
+
+export type MarkdownExportDownload = {
+  readonly blob: Blob;
+  readonly filename: string;
+  readonly snapshot: string;
+};
+
+const attachmentFilename = (value: string | null): string => {
+  const match = value?.match(/(?:^|;)\s*filename="([^"]+)"(?:;|$)/iu);
+  return match?.[1] ?? "plan.md";
+};
+
+/** Downloads one authenticated runtime response without duplicating transport policy. */
+export const requestMarkdownExport = async ({
+  identity,
+}: {
+  readonly identity: RuntimeIdentity;
+}): Promise<MarkdownExportDownload> => {
+  return requestRuntime({
+    path: "/api/export-markdown",
+    identity,
+    readResponse: async (response) => ({
+      blob: await response.blob(),
+      filename: attachmentFilename(response.headers.get("content-disposition")),
+      snapshot: response.headers.get("x-big-plan-snapshot") ?? "",
+    }),
+  });
 };
 
 /**

@@ -326,6 +326,14 @@ export default tseslint.config(
         imports: ["**/components/*/view*.js"],
         mayImport: ["model", "icons", "sharedUi"],
       },
+      // Component-owned Markdown presentations are framework-free views over
+      // compiled models. Definitions pair them with the same model compiler
+      // that owns the React and diff presentations.
+      componentMarkdown: {
+        files: ["src/components/*/markdown.ts"],
+        imports: ["**/components/*/markdown.js"],
+        mayImport: ["model"],
+      },
       components: {
         files: [
           "src/components/_registration/**/*.ts",
@@ -339,7 +347,14 @@ export default tseslint.config(
           "**/components/*/definition.js",
           "**/render/markdown/component-pipeline/**",
         ],
-        mayImport: ["icons", "model", "planVocabulary", "sharedUi", "ui"],
+        mayImport: [
+          "componentMarkdown",
+          "icons",
+          "model",
+          "planVocabulary",
+          "sharedUi",
+          "ui",
+        ],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
@@ -473,7 +488,7 @@ export default tseslint.config(
       ["planVocabulary", "escapeHtml", "icons", "preferences", "shellQuoting"],
       ["model", "planLint"],
       ["page", "sharedUi"],
-      ["ui"],
+      ["componentMarkdown", "ui"],
       ["components"],
       ["markdown", "shell"],
       ["composer", "servicePage", "reviewShared"],

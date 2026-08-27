@@ -63,6 +63,7 @@ export type ReviewRouteResponse =
       readonly status: number;
       readonly contentType: string;
       readonly body: Uint8Array;
+      readonly headers?: Readonly<Record<string, string>>;
     };
 
 /** Everything a route learns about the request that reached it. */
@@ -129,11 +130,19 @@ export const binaryResponse = ({
   status,
   contentType,
   body,
+  headers,
 }: {
   readonly status: number;
   readonly contentType: string;
   readonly body: Uint8Array;
-}): ReviewRouteResponse => ({ kind: "binary", status, contentType, body });
+  readonly headers?: Readonly<Record<string, string>>;
+}): ReviewRouteResponse => ({
+  kind: "binary",
+  status,
+  contentType,
+  body,
+  ...(headers === undefined ? {} : { headers }),
+});
 
 /**
  * Renders the plan and answers the comment questions that only make sense

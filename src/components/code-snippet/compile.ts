@@ -27,6 +27,7 @@ export type CompiledCodeSnippetAnnotation = {
 export type CompiledCodeSnippet = {
   readonly filePath?: string;
   readonly source: string;
+  readonly language?: string;
   readonly highlightedLines: ReadonlyArray<HighlightedLine>;
   readonly startLine: number;
   readonly showLineNumbers: boolean;
@@ -194,6 +195,7 @@ export const compileCodeSnippetComponent = ({
   return {
     ...(validated.file === undefined ? {} : { filePath: validated.file }),
     source,
+    ...(fence?.language === undefined ? {} : { language: fence.language }),
     highlightedLines,
     startLine,
     showLineNumbers: showLineNumbersValue === true,

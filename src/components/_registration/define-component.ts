@@ -12,6 +12,7 @@ import type {
 } from "../_authoring/contract.js";
 import type { DocumentOutline } from "../_model/document-outline/document-outline.js";
 import { EMPTY_DOCUMENT_OUTLINE } from "../_model/document-outline/document-outline.js";
+import type { ComponentMarkdownRenderer } from "../_model/markdown-export.js";
 import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 import type {
   ComponentDiffInput,
@@ -39,6 +40,7 @@ export type OutlineMarker =
 export type CompiledComponent = {
   readonly model: unknown;
   readonly presentation: () => ReactNode;
+  readonly markdown: (outline: DocumentOutline) => string;
   // Present only on outline-aware components: how the instance joins the
   // document outline, and the presentation consuming the completed outline.
   readonly outline?: {
@@ -89,6 +91,7 @@ type ComponentOptions<Model, DiffModel> = ComponentDiffOptions<
 > & {
   readonly compile: ComponentModelCompiler<Model>;
   readonly view: ComponentType<{ readonly model: Model }>;
+  readonly markdown: ComponentMarkdownRenderer<Model>;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
 };
@@ -100,6 +103,7 @@ export const defineComponent = <
 >({
   compile,
   view,
+  markdown,
   diff,
   diffView,
   scopedChildren,
@@ -110,6 +114,7 @@ export const defineComponent = <
     return {
       model,
       presentation: () => createElement(view, { model }),
+      markdown: (outline) => markdown(model, { outline }),
     };
   },
   compileDiff: (input) => {
@@ -143,6 +148,7 @@ export const defineOutlineComponent = <
 >({
   compile,
   view,
+  markdown,
   diff,
   diffView,
   marker,
@@ -154,6 +160,7 @@ export const defineOutlineComponent = <
     readonly model: Model;
     readonly outline: DocumentOutline;
   }>;
+  readonly markdown: ComponentMarkdownRenderer<Model>;
   readonly marker: (model: Model) => OutlineMarker;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
@@ -165,6 +172,7 @@ export const defineOutlineComponent = <
         model,
         presentation: () =>
           createElement(view, { model, outline: EMPTY_DOCUMENT_OUTLINE }),
+        markdown: (outline) => markdown(model, { outline }),
         outline: {
           marker: marker(model),
           present: (outline) => createElement(view, { model, outline }),

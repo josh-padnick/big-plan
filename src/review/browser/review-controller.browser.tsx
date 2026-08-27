@@ -133,6 +133,7 @@ import {
 } from "./agent-roster.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
 import { InputsSurface, OPEN_INPUTS_EVENT } from "./inputs-surface.browser.js";
+import { PlanExportControl } from "./plan-export.browser.js";
 import {
   batchSectionTone,
   CommentsSurface,
@@ -7666,6 +7667,9 @@ export const ReviewController = () => {
                   isSelected={isOpen && sidebarView === "agent"}
                   onToggle={toggleAgentSidebar}
                 />
+              )}
+              {identity === null ? null : (
+                <PlanExportControl identity={identity} />
               )}
             </>,
             feedbackHost,

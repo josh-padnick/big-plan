@@ -4,11 +4,13 @@
 import { compileCodeDiffComponent } from "./compile.js";
 import { CodeDiff } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { codeDiffMarkdown } from "./markdown.js";
 
 /** Declares CodeDiff's renderer and direct-child Annotation contract. */
 export const CODE_DIFF_COMPONENT_DEFINITION = defineComponent({
   compile: compileCodeDiffComponent,
   view: CodeDiff,
+  markdown: codeDiffMarkdown,
   scopedChildren: {
     Annotation: {
       kind: "scoped-child",
