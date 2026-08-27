@@ -229,18 +229,19 @@ Choose a listed item to inspect it before approving, or choose **Edit in Setting
 
 Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message.
 It then writes one `approval` mailbox request whose `requestId` is the new approval id, carrying the absolute `planPath`, the pinned snapshot digest, the recorded answers, the unanswered decisions, and the covering message.
+If that mailbox write fails, the approval remains recorded, the confirmation reports that it was not delivered, and the approval details keep showing the delivery failure.
 The agent is expected to re-read that exact path, verify its digest equals `pinnedSnapshot`, and acknowledge without editing the plan.
 A missing path, a missing file, or a digest mismatch is a hard stop: the agent reports it through the response as a `hardStop` and must not search for another copy.
 A reported hard stop is not an acknowledgment: the review records it as a failed step, and **Agent Status** and the Chat thread both name it.
 An acknowledgment whose result digest does not match the pinned snapshot is refused.
-Revoking an approval that the agent has not yet acknowledged cancels that still-open request.
+Revoking an approval that the agent has not yet answered cancels that still-open request.
 
 Every critical decision must be answered first; non-critical decisions may remain unanswered and are recorded that way.
 The approval is refused if the plan changes while the confirmation is open, so the record never silently covers a different revision.
 
 After approval, the branding-bar control reads **Plan approved**, and an approval stamp appears just above the document title in the reading column.
 Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
-**Agent Status** and the plan-wide Chat thread show the two progress steps: **Plan approved**, then **Approval acknowledged** once the agent answers.
+**Agent Status** and the plan-wide Chat thread show **Plan approved**, followed by **Approval acknowledged** after a successful acknowledgment or a warning when the agent reports a hard stop.
 Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.
 If the plan source changes while an approval remains in force, the bar reports **Changed since approval** and offers **Re-approve** for the plan as it now reads.
 
