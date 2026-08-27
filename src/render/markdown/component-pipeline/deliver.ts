@@ -94,7 +94,13 @@ export type DeferredMarkdownPresentations = Array<
   }
 >;
 
-const nestedMarkdownPlaceholders = (model: unknown): ReadonlyArray<Element> => {
+const nestedMarkdownPlaceholders = ({
+  model,
+  presentations,
+}: {
+  readonly model: unknown;
+  readonly presentations: DeferredMarkdownPresentations;
+}): ReadonlyArray<Element> => {
   const placeholders: Array<Element> = [];
   const visit = (value: unknown): void => {
     if (Array.isArray(value)) {
@@ -112,7 +118,22 @@ const nestedMarkdownPlaceholders = (model: unknown): ReadonlyArray<Element> => {
           OUTLINE_PLACEHOLDER_ATTRIBUTE
         ] !== undefined)
     ) {
-      placeholders.push(structuredClone(value as Element));
+      const placeholder = structuredClone(value as Element);
+      const properties = record.properties as Record<string, unknown>;
+      const index = Number(
+        properties[OUTLINE_PLACEHOLDER_ATTRIBUTE] ??
+          properties[MARKDOWN_EXPORT_INDEX_ATTRIBUTE],
+      );
+      const deferred = presentations[index];
+      if (deferred !== undefined) {
+        placeholder.children.push(
+          ...nestedMarkdownPlaceholders({
+            model: deferred.model,
+            presentations,
+          }),
+        );
+      }
+      placeholders.push(placeholder);
       return;
     }
     Object.values(record).forEach(visit);
@@ -330,7 +351,12 @@ const renderFlowElement = ({
             ...(name === null ? {} : { component: name }),
             ...(stampedKey === undefined ? {} : { instanceKey: stampedKey }),
           });
-    placeholder.children.push(...nestedMarkdownPlaceholders(compiled.model));
+    placeholder.children.push(
+      ...nestedMarkdownPlaceholders({
+        model: compiled.model,
+        presentations: delivery.deferOutline,
+      }),
+    );
     return placeholder;
   }
   // An outline-aware component defers its presentation behind a placeholder

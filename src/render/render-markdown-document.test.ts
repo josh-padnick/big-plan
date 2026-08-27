@@ -318,6 +318,8 @@ The reader follows one more hop.
 
 <Callout type="note" title="Scope">
 
+<Callout type="tip" title="Deep scope">
+
 <Part title="Delivery" />
 
 </Callout>
@@ -360,15 +362,17 @@ The reader follows one more hop.
 
 </Callout>
 
+</Callout>
+
 ## Inside delivery
 `);
 
-    expect(result.markdown).toContain("> ## Part 1 — Delivery");
-    expect(result.markdown).toContain("> ### Plan outline");
+    expect(result.markdown).toContain("> > ## Part 1 — Delivery");
+    expect(result.markdown).toContain("> > ### Plan outline");
     expect(result.markdown).toContain(
-      "> - [Before delivery](#before-delivery) — Context before the act.",
+      "> > - [Before delivery](#before-delivery) — Context before the act.",
     );
-    expect(result.markdown).toContain("> #### Nested gates");
+    expect(result.markdown).toContain("> > #### Nested gates");
   });
 
   it("should demote component headings beneath the Part that owns them", () => {
