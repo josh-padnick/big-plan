@@ -193,14 +193,27 @@ const WireframeElement = ({
 }): JSX.Element => {
   // The Was side is evidence a reader may read, not a second prototype they
   // may drive: a Was screen that navigated on its own would leave the two
-  // sides showing different screens under one Was/Now toggle. `disabled`
-  // refuses focus and clicks while keeping the control and its label in the
-  // accessibility tree, which `inert` would not.
+  // sides showing different screens under one Was/Now toggle. Freezing is
+  // presentation-neutral, because the reader is being asked to compare these
+  // two renderings and any difference the plan did not propose reads as one
+  // it did. Every hook a stylesheet selects on therefore stays: navigation
+  // is refused by the viewer script and by taking the control out of the tab
+  // order, and a field's `disabled` is marked as the freeze's doing so the
+  // authored-disabled paint does not follow it.
   const frozen = useComponentDiffPresentation()?.side === "baseline";
   const navigation = (
     target: string | undefined,
   ): Readonly<Record<string, string>> =>
-    target === undefined || frozen ? {} : { "data-wireframe-navigate": target };
+    target === undefined ? {} : { "data-wireframe-navigate": target };
+  const unreachable: { readonly tabIndex?: number } = frozen
+    ? { tabIndex: -1 }
+    : {};
+  const frozenField = (
+    authoredDisabled: boolean,
+  ): Readonly<Record<string, string | boolean>> =>
+    frozen && !authoredDisabled
+      ? { disabled: true, "data-wireframe-frozen": "" }
+      : { disabled: authoredDisabled };
   switch (node.element) {
     case "Stack":
       return (
@@ -309,7 +322,7 @@ const WireframeElement = ({
               }
             : {})}
           {...navigation(node.navigateTo)}
-          disabled={frozen}
+          {...unreachable}
         >
           {node.icon === undefined ? null : <Glyph name={node.icon} />}
           {node.iconOnly ? null : (
@@ -438,7 +451,7 @@ const WireframeElement = ({
           className="wireframe-nav-item"
           {...(node.active ? { "aria-current": "page" } : {})}
           {...navigation(node.navigateTo)}
-          disabled={frozen}
+          {...unreachable}
         >
           {node.label}
         </button>
@@ -601,7 +614,7 @@ const WireframeElement = ({
           aria-checked={node.selected}
           {...(node.selected ? { "data-wireframe-selected": "" } : {})}
           {...navigation(node.navigateTo)}
-          disabled={frozen}
+          {...unreachable}
         >
           {node.emoji === undefined ? null : (
             <span className="wireframe-choice-icon" aria-hidden="true">
@@ -677,7 +690,7 @@ const WireframeElement = ({
               type="button"
               className="wireframe-list-row flex w-full min-w-0 flex-col gap-0.5"
               {...navigation(node.navigateTo)}
-              disabled={frozen}
+              {...unreachable}
             >
               {rowInner}
             </button>
@@ -726,7 +739,7 @@ const WireframeElement = ({
               ? {}
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
-            disabled={node.disabled || frozen}
+            {...frozenField(node.disabled)}
           />
         </Field>
       );
@@ -740,7 +753,7 @@ const WireframeElement = ({
               ? {}
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
-            disabled={node.disabled || frozen}
+            {...frozenField(node.disabled)}
           />
         </Field>
       );
@@ -750,7 +763,7 @@ const WireframeElement = ({
           {/* A wireframe shows the chosen option, not the whole menu. */}
           <select
             className="wireframe-input wireframe-select"
-            disabled={node.disabled || frozen}
+            {...frozenField(node.disabled)}
           >
             <option>{node.value}</option>
           </select>
@@ -763,7 +776,7 @@ const WireframeElement = ({
             className="wireframe-tick"
             type="checkbox"
             defaultChecked={node.checked}
-            disabled={frozen}
+            {...frozenField(false)}
           />
         </Field>
       );
@@ -775,7 +788,7 @@ const WireframeElement = ({
             type="checkbox"
             role="switch"
             defaultChecked={node.on}
-            disabled={frozen}
+            {...frozenField(false)}
           />
         </Field>
       );
@@ -824,7 +837,7 @@ const WireframeElement = ({
           type="button"
           className="wireframe-crumb wireframe-crumb-link"
           {...navigation(node.navigateTo)}
-          disabled={frozen}
+          {...unreachable}
         >
           {node.label}
         </button>

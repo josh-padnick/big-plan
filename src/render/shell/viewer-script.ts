@@ -1369,12 +1369,22 @@ const wireWireframes = () => {
       }
       if (current !== null) requestAnimationFrame(() => fit(current));
     };
+    // A prototype rendered as the Was side of a component diff is evidence,
+    // not a second prototype the reader drives: only its screen switcher
+    // navigates, so the two sides cannot end up on different screens under
+    // one Was/Now toggle. Its in-screen controls keep their markup, because
+    // stripping the navigation hook would relayout the screen the diff is
+    // asking the reader to compare.
+    const frozenPrototype =
+      root.closest('[data-component-diff-side="baseline"]') !== null;
     root.addEventListener("click", (event) => {
       const trigger =
         event.target instanceof Element
           ? event.target.closest("[data-wireframe-navigate]")
           : null;
       if (trigger === null || !root.contains(trigger)) return;
+      if (frozenPrototype && !trigger.hasAttribute("data-wireframe-switch"))
+        return;
       const id = trigger.getAttribute("data-wireframe-navigate");
       if (screenIds.includes(id)) show(id);
     });

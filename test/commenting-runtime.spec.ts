@@ -6390,15 +6390,32 @@ ${unrelatedWorkspace}
       });
       await wasSwitcher.getByRole("button", { name: /Queue/u }).click();
       const wasOpen = baseline.getByRole("button", { name: "Open triage" });
+      const wasCurrent = baseline.locator(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
       await expect(wasOpen).toBeVisible();
+      await expect(wasCurrent).toHaveAttribute(
+        "data-wireframe-screen",
+        "queue",
+      );
       // Evidence stays readable, but the Was prototype is not a second live
       // one: were it navigable, the two sides would sit on different screens
-      // under a single Was/Now toggle.
-      await expect(wasOpen).toBeDisabled();
+      // under a single Was/Now toggle. The freeze is presentation-neutral, so
+      // every hook a stylesheet selects on survives and only the behaviour
+      // goes: the control is out of the tab order and its click navigates
+      // nothing.
+      await expect(wasOpen).toHaveAttribute(
+        "data-wireframe-navigate",
+        "triage",
+      );
+      await expect(wasOpen).toHaveAttribute("tabindex", "-1");
+      await wasOpen.click();
+      await expect(wasCurrent).toHaveAttribute(
+        "data-wireframe-screen",
+        "queue",
+      );
       expect(
-        await wasOpen.evaluate((node) =>
-          node.hasAttribute("data-wireframe-navigate"),
-        ),
+        await wasOpen.evaluate((node) => node.matches(":focus-visible")),
       ).toBe(false);
 
       await now.click();
@@ -6408,7 +6425,7 @@ ${unrelatedWorkspace}
       });
       await nowSwitcher.getByRole("button", { name: /Queue/u }).click();
       const nowOpen = proposed.getByRole("button", { name: "Open triage" });
-      await expect(nowOpen).toBeEnabled();
+      await expect(nowOpen).not.toHaveAttribute("tabindex", "-1");
       await nowOpen.click();
       await expect(
         proposed.locator("[data-wireframe-screen][data-wireframe-current]"),

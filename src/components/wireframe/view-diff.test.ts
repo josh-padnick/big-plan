@@ -69,7 +69,9 @@ const switcherEntriesFor = (
   screenId: string,
 ): Array<Element> =>
   elementsWithin(node).filter(
-    (candidate) => candidate.properties["data-wireframe-navigate"] === screenId,
+    (candidate) =>
+      candidate.properties["data-wireframe-switch"] !== undefined &&
+      candidate.properties["data-wireframe-navigate"] === screenId,
   );
 
 const textWithin = (node: Element): string =>
@@ -212,11 +214,13 @@ describe("WireframeDiffView", () => {
     expect(first.some((identity) => second.includes(identity))).toBe(false);
   });
 
-  it("should freeze the Was prototype's own controls while keeping them readable", () => {
+  it("should freeze the Was prototype's own controls without changing how they draw", () => {
     // A navigable Was side would leave the two prototypes on different
-    // screens under one Was/Now toggle. `disabled` refuses focus and clicks
-    // and drops the navigation hook, while the control keeps its label in
-    // the accessibility tree - which is why the screen is not held inert.
+    // screens under one Was/Now toggle. The freeze takes the control out of
+    // the tab order and the viewer script refuses its navigation, but every
+    // hook a stylesheet selects on survives: the reader is comparing these
+    // two renderings, so a difference the plan never proposed reads as one
+    // it did.
     const withButton = () =>
       compileWireframeDiff({
         status: "changed",
@@ -255,11 +259,14 @@ describe("WireframeDiffView", () => {
     const nowButtons = prototypeButtonsOf(sideOf(root, "proposed"));
     expect(wasButtons).toHaveLength(1);
     expect(nowButtons).toHaveLength(1);
-    expect(wasButtons[0]?.properties.disabled).toBe(true);
-    expect(
-      wasButtons[0]?.properties["data-wireframe-navigate"],
-    ).toBeUndefined();
+    // Three stylesheet rules select on `data-wireframe-navigate`, including
+    // the phone top bar's push/dismiss layout, so dropping it on one side
+    // would relayout the screen under the toggle.
+    expect(wasButtons[0]?.properties["data-wireframe-navigate"]).toBe("triage");
+    expect(wasButtons[0]?.properties.tabIndex).toBe(-1);
+    expect(wasButtons[0]?.properties.disabled).toBeUndefined();
     expect(textWithin(wasButtons[0] as Element)).toContain("Open triage");
+    expect(nowButtons[0]?.properties.tabIndex).toBeUndefined();
     expect(nowButtons[0]?.properties.disabled).toBeUndefined();
     expect(nowButtons[0]?.properties["data-wireframe-navigate"]).toBe("triage");
     // The Was switcher is the one control that stays operable, so it keeps
@@ -268,6 +275,66 @@ describe("WireframeDiffView", () => {
     expect(wasSwitcher).toHaveLength(1);
     expect(wasSwitcher[0]?.properties.disabled).toBeUndefined();
     expect(wasSwitcher[0]?.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
+  });
+
+  it("should keep the authored disabled paint off a field it only froze", () => {
+    // `disabled` carries an authored design decision as well as the freeze.
+    // Only the authored one may take the disabled paint, or every Was field
+    // would grey and a revision that adds `disabled` would compare as no
+    // change at all.
+    const fields = (label: string): WireframeScreen => ({
+      id: "form",
+      name: "Form",
+      device: "desktop",
+      children: [
+        {
+          element: "TextField",
+          label: "Subject",
+          kind: "text",
+          disabled: false,
+        },
+        {
+          element: "TextField",
+          label,
+          kind: "text",
+          disabled: true,
+        },
+      ],
+    });
+    const root = reactToHast(
+      createElement(WireframeDiffView, {
+        model: compileWireframeDiff({
+          status: "changed",
+          baseline: wireframe({ screens: [fields("Digest hour")] }),
+          proposed: wireframe({ screens: [fields("Digest time")] }),
+          runs: [],
+        }),
+        controlId: "component-diff-fields",
+      }),
+    );
+
+    const inputsOn = (side: "baseline" | "proposed") =>
+      elementsWithin(sideOf(root, side)).filter((candidate) =>
+        classesOf(candidate).includes("wireframe-input"),
+      );
+    const was = inputsOn("baseline");
+    const now = inputsOn("proposed");
+    expect(was).toHaveLength(2);
+    expect(now).toHaveLength(2);
+    // Both Was fields are frozen, but only the one the plan disables carries
+    // the state the paint keys on.
+    expect(was.map((field) => field.properties.disabled)).toEqual([true, true]);
+    expect(
+      was.map((field) => field.properties["data-wireframe-frozen"]),
+    ).toEqual(["", undefined]);
+    // The Now side is untouched by the freeze.
+    expect(now.map((field) => field.properties.disabled)).toEqual([
+      undefined,
+      true,
+    ]);
+    expect(
+      now.map((field) => field.properties["data-wireframe-frozen"]),
+    ).toEqual([undefined, undefined]);
   });
 
   it("should leave a wholly removed wireframe's switcher unbadged but live", () => {

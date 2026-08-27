@@ -2656,7 +2656,11 @@ marks and a plan diff never jitters.
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
-  .wireframe-input:disabled {
+  /* The disabled paint states an authored design decision, so it must not
+     follow a field the Was side of a component diff froze to keep its
+     prototype from being driven. That freeze marks itself, and only an
+     unmarked disabled field is painted as the design says it is. */
+  .wireframe-input:disabled:not([data-wireframe-frozen]) {
     cursor: not-allowed;
     opacity: 0.58;
     background: var(--wf-fill);
