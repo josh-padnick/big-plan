@@ -502,16 +502,23 @@ export const approvePlan = async (
       requestId,
     });
   }
-  await writeApprovalBrief({
-    store: context.store,
-    approvalId: entry.approvalId,
-    createdAt: entry.at,
-    brief: buildApprovalBrief({
-      planPath: context.resolvedPlanPath,
-      entry,
-    }),
-  });
   await writeAgentRequest({ store: context.store, request: handoff });
+  try {
+    await writeApprovalBrief({
+      store: context.store,
+      approvalId: entry.approvalId,
+      createdAt: entry.at,
+      brief: buildApprovalBrief({
+        planPath: context.resolvedPlanPath,
+        entry,
+      }),
+    });
+  } catch (error: unknown) {
+    context.reportDiagnostic({
+      message: "The approval brief could not be written",
+      error,
+    });
+  }
   await emitProgress({
     context,
     stepCode: "plan-approved",
@@ -562,7 +569,12 @@ export const revokeApproval = async (
         now: at,
       });
     } catch (error: unknown) {
-      if (!(error instanceof AgentExchangeRejected)) throw error;
+      if (!(error instanceof AgentExchangeRejected)) {
+        context.reportDiagnostic({
+          message: "The approval handoff could not be canceled after revoking",
+          error,
+        });
+      }
     }
     await emitProgress({
       context,
