@@ -519,6 +519,49 @@ describe("review wire contract", () => {
     ]);
   });
 
+  it("should leave the approval's canonical-source contract off the wire", () => {
+    const encoded = encodeSnapshot({
+      currentSnapshot: "a".repeat(16),
+      presence: { connected: true, state: "working" },
+      requests: [
+        {
+          requestId: "d".repeat(16),
+          premiseSnapshot: "a".repeat(16),
+          createdAt: "2026-08-10T12:00:00.000Z",
+          kind: "approval",
+          approvalId: "d".repeat(16),
+          planPath: "/Users/reviewer/projects/retry-queue/plan.mdx",
+          pinnedSnapshot: "a".repeat(16),
+          recordedAnswers: [
+            {
+              decisionId: "decision-which-release-path",
+              optionId: "decision-which-release-path-option-gradual",
+            },
+          ],
+          unansweredDecisions: ["decision-what-should-trigger-rollback"],
+          message: "Start on it now.",
+        },
+      ],
+      responses: [],
+      connectionLog: [],
+      plan: "/tmp/plan.mdx",
+      agentCommand: "big-plan agent /tmp/plan.mdx",
+      recoveryPrompt: "Reconnect this review",
+    });
+
+    // Reading the contract is the agent's job and checking it is the server's,
+    // so none of it - least of all the reviewer's filesystem path - belongs in
+    // what the page polls.
+    const wire = JSON.stringify(encoded);
+    expect(wire).not.toContain("/Users/reviewer");
+    expect(wire).not.toContain("decision-which-release-path");
+    expect(wire).not.toContain("decision-what-should-trigger-rollback");
+    // Withholding it must not cost the browser the covering message it shows.
+    expect(decodeAgentSnapshot(encoded).requests).toMatchObject([
+      { requestId: "d".repeat(16), kind: "approval", body: "Start on it now." },
+    ]);
+  });
+
   // The pickup token is the capability that fences publication, and the
   // browser has no use for it. Membership goes the other way: the browser
   // cannot work it out from what it is allowed to know, so the server answers

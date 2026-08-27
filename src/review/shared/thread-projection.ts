@@ -436,6 +436,7 @@ export const projectRequestStatus = ({
   return deriveAgentStatus({
     runtime,
     request: requestIsTerminal(request) ? "answered" : "pending",
+    requestKind: request.kind,
     agentConnected: presence.connected,
     // Pickup, not lease freshness: a quiet turn has still been picked up, and
     // reporting it as queued described started work as waiting in line. The

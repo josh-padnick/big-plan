@@ -772,7 +772,6 @@ const ApprovalDetails = ({
   open,
   approval,
   canRevoke,
-  handoffFailed,
   unansweredDecisionIds,
   onClose,
   onRevoke,
@@ -782,8 +781,6 @@ const ApprovalDetails = ({
   readonly open: boolean;
   readonly approval: ApprovalSummary;
   readonly canRevoke: boolean;
-  /** Whether the approval was recorded without reaching the agent mailbox. */
-  readonly handoffFailed: boolean;
   readonly unansweredDecisionIds: ReadonlyArray<string>;
   readonly onClose: () => void;
   readonly onRevoke: () => void;
@@ -935,17 +932,17 @@ const ApprovalDetails = ({
               <p className="m-0 text-sm font-semibold text-ink">
                 Saved for your agent
               </p>
-              {handoffFailed ? (
+              {approval.delivered ? (
+                <p className="mt-1 mb-0 text-xs leading-normal text-muted">
+                  This message was sent to the agent.
+                </p>
+              ) : (
                 <p
                   className="mt-1 mb-0 text-xs leading-normal text-[var(--callout-warning-c)]"
                   data-review-approve-undelivered=""
                 >
                   This message did not reach the agent. The approval is
                   recorded; revoke it and approve again to hand it over.
-                </p>
-              ) : (
-                <p className="mt-1 mb-0 text-xs leading-normal text-muted">
-                  This message was sent to the agent.
                 </p>
               )}
               <blockquote className="mx-0 mt-2 mb-0 rounded-md border-l-2 border-edge bg-paper px-3 py-2 text-sm leading-normal text-ink not-italic">
@@ -1039,7 +1036,6 @@ export const ApproveControl = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [blockReason, setBlockReason] = useState<string | undefined>();
-  const [handoffFailed, setHandoffFailed] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const detailsId = useId();
   const isApproved = approval?.status === "approved";
@@ -1156,17 +1152,13 @@ export const ApproveControl = ({
             )
           : undefined;
       onApprovalChange(next);
-      /* The record is committed whatever the mailbox did, so a handoff that
-         did not land is carried back here rather than left as a claim of
-         delivery the reviewer would have to disprove. The details open on it,
-         because that popover is where the approval says what it sent. */
-      const undelivered =
-        typeof value === "object" &&
-        value !== null &&
-        (value as { readonly delivered?: unknown }).delivered === false;
-      setHandoffFailed(undelivered);
       closeDialog();
-      if (undelivered) setDetailsOpen(true);
+      /* The record is committed whatever the mailbox did, so an approval the
+         agent was never handed opens its own details rather than sitting behind
+         a stamp that reads like every other approval. What the popover then
+         says comes from the summary, so it survives the reload this moment
+         does not. */
+      if (next?.delivered === false) setDetailsOpen(true);
     } catch (error: unknown) {
       setBlockReason(
         error instanceof Error
@@ -1188,7 +1180,6 @@ export const ApproveControl = ({
         body: { approvalId: approval.approvalId },
       });
       onApprovalChange(undefined);
-      setHandoffFailed(false);
     } catch {
       setBlockReason("The approval could not be revoked.");
     }
@@ -1222,7 +1213,6 @@ export const ApproveControl = ({
           open={detailsOpen}
           approval={approval}
           canRevoke={canWrite}
-          handoffFailed={handoffFailed}
           unansweredDecisionIds={unansweredDecisionIds}
           onClose={() => setDetailsOpen(false)}
           onRevoke={() => {

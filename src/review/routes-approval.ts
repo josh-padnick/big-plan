@@ -44,7 +44,6 @@ import {
   buildApprovalBrief,
 } from "./approval-record.js";
 import {
-  approvalSummary,
   APPROVAL_ID,
   deriveApprovalStatus,
   inForceApproval,
@@ -72,6 +71,7 @@ import {
   commitApprovalFinalization,
   type ApprovalFinalization,
 } from "./approval-finalization.js";
+import { readApprovalSummary } from "./approval-view.js";
 
 const coveringMessage = (value: unknown): string => {
   if (typeof value !== "string") return DEFAULT_APPROVAL_MESSAGE;
@@ -105,7 +105,8 @@ const loadSummary = async (
   context: ReviewRouteContext,
   currentSnapshot: string,
 ): Promise<ApprovalSummary | undefined> =>
-  approvalSummary({
+  readApprovalSummary({
+    store: context.store,
     record: await context.approvals.read(),
     currentSnapshot,
   });
@@ -538,10 +539,7 @@ export const approvePlan = async (
     step: "Plan approved",
     requestId: entry.approvalId,
   });
-  const summary = approvalSummary({
-    record: await context.approvals.read(),
-    currentSnapshot: settledSource.digest,
-  });
+  const summary = await loadSummary(context, settledSource.digest);
   return jsonResponse({
     status: 200,
     value: {
@@ -604,7 +602,11 @@ export const revokeApproval = async (
     });
     const { digest } = await readCurrentSource(context);
     return summaryResponse(
-      approvalSummary({ record: next, currentSnapshot: digest }),
+      await readApprovalSummary({
+        store: context.store,
+        record: next,
+        currentSnapshot: digest,
+      }),
     );
   } catch (error: unknown) {
     if (error instanceof ApprovalRecordRejected) {

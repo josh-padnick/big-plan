@@ -993,6 +993,13 @@ export type AgentStatus = {
 export type AgentStatusInput = {
   readonly runtime: "static" | "online" | "offline";
   readonly request: "none" | "pending" | "answered";
+  /**
+   * What kind of work the request is, where the answer changes what an answer
+   * means. An acknowledgment is not a response the reviewer can read or reply
+   * to, so the settled reading for one cannot be the settled reading for a
+   * question (BIG-131).
+   */
+  readonly requestKind?: AgentActivityRequest["kind"];
   readonly agentConnected: boolean;
   readonly pickedUp: boolean;
   /**
@@ -1041,6 +1048,16 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     };
   }
   if (input.request === "answered") {
+    if (input.requestKind === "approval") {
+      return {
+        stage: "answered",
+        label: "Acknowledged",
+        headline: "Approval acknowledged",
+        detail:
+          "The agent has the approved plan and the decisions recorded with it.",
+        tone: "positive",
+      };
+    }
     return {
       stage: "answered",
       label: "Response ready",

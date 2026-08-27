@@ -11,7 +11,7 @@ import type {
 } from "./review-route-context.js";
 import { reviewSessionView } from "./session-authority.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
-import { approvalSummary } from "./shared/approval.js";
+import { readApprovalSummary } from "./approval-view.js";
 import { encodeRuntimeSession } from "./shared/review-wire.js";
 
 export const readRuntimeSession = async (
@@ -26,7 +26,8 @@ export const readRuntimeSession = async (
   const writesStalledMs = context.writeGate.stalledForMs();
   const expiresAtMs = context.activityClock.expiresAtMs();
   const source = await readFile(context.resolvedPlanPath, "utf8");
-  const approval = approvalSummary({
+  const approval = await readApprovalSummary({
+    store: context.store,
     record: await context.approvals.read(),
     currentSnapshot: deriveSnapshotDigest(source),
   });

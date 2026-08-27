@@ -1318,4 +1318,29 @@ describe("the threads a batch header still speaks for", () => {
   it("should release a thread it knows nothing about", () => {
     expect(awaiting(["unprojected0000"])).toEqual([]);
   });
+
+  it("should not offer a response to review when an approval is acknowledged", () => {
+    // An acknowledgment publishes nothing and opens no thread, so the settled
+    // reading for a question would point the reviewer at neither.
+    expect(
+      statusForOneRequest({
+        request: answeredRequest({
+          kind: "approval",
+          commentIds: undefined,
+          commentId: undefined,
+        }),
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        surface: "chat",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({
+      stage: "answered",
+      headline: "Approval acknowledged",
+      detail:
+        "The agent has the approved plan and the decisions recorded with it.",
+    });
+  });
 });
