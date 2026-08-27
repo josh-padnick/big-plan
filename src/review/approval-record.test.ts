@@ -143,4 +143,30 @@ describe("approval record", () => {
     expect(brief).toContain("never a fallback search");
     expect(brief).toContain("Acknowledge without editing the plan");
   });
+
+  it("should keep a pipe in an option title inside its own table cell", () => {
+    const brief = buildApprovalBrief({
+      planPath: "/Users/you/project/plans/retry-queue.mdx",
+      entry: approval({
+        recordedAnswers: [
+          {
+            decisionId: "decision-which-release-path",
+            optionId: "decision-which-release-path-option-roll-out-gradually",
+            optionTitle: "Roll out gradually | then flip",
+          },
+        ],
+      }),
+    });
+    const row = brief
+      .split("\n")
+      .find((line) => line.includes("decision-which-release-path"));
+    expect(row).toBeDefined();
+    expect(
+      (row ?? "")
+        .replace(/\\\|/gu, "")
+        .split("|")
+        .slice(1, -1),
+    ).toHaveLength(2);
+    expect(row).toContain("Roll out gradually \\| then flip");
+  });
 });
