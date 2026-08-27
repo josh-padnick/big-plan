@@ -13,7 +13,10 @@
 
 import { BOT_ICON } from "../../icons/lucide/bot.js";
 import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
-import type { AttachedAgent } from "../shared/agent-primacy.js";
+import {
+  agentLabelResolver,
+  type AttachedAgent,
+} from "../shared/agent-primacy.js";
 import type { PushArrival } from "../shared/push-arrival.js";
 import { relativeSignalLabel } from "../shared/time-label.js";
 import { AgentIdentityText } from "./agent-identity.browser.js";
@@ -39,10 +42,8 @@ export const pushArrivalTimeLabel = ({
   return label === "signal unavailable" ? "Pushed just now" : `Pushed ${label}`;
 };
 
-/** How the roster answers "which agent is this?", for one arrival. */
-export type PushArrivalLabelResolver = (
-  agent: Pick<AttachedAgent, "writerId" | "model">,
-) => string;
+/** One agent as both the roster and this entry need to name it. */
+export type NameableAgent = Pick<AttachedAgent, "writerId" | "model">;
 
 /**
  * How the entry names the agent that pushed.
@@ -53,22 +54,35 @@ export type PushArrivalLabelResolver = (
  * did not would leave the reader unable to say which of the two just changed
  * their plan. A push with no recorded claim has no id to spend, so it falls
  * back to whatever it declared.
+ *
+ * Resolved over the roster plus the pusher, because the pusher is the one
+ * agent that may already have left it: a connector that pushes and exits is
+ * gone from the next poll's attached set, and asking only what is left would
+ * answer "Claude Opus 5" beside the one remaining card that says exactly the
+ * same thing - the misattribution the id exists to prevent, and the reader has
+ * nothing to notice it with.
  */
 export const pushArrivalAgentLabel = ({
   arrival,
-  labelFor,
+  attached,
 }: {
   readonly arrival: PushArrival;
-  readonly labelFor: PushArrivalLabelResolver;
+  readonly attached: ReadonlyArray<NameableAgent>;
 }): string => {
   if (arrival.claimedBy === undefined) {
     const name = arrival.model?.name;
     return name === undefined ? "Agent" : agentModelDisplayName(name);
   }
-  return labelFor({
+  const pusher: NameableAgent = {
     writerId: arrival.claimedBy,
     ...(arrival.model === undefined ? {} : { model: arrival.model }),
-  });
+  };
+  const named = attached.some(
+    (candidate) => candidate.writerId === pusher.writerId,
+  )
+    ? attached
+    : [...attached, pusher];
+  return agentLabelResolver(named)(pusher);
 };
 
 /**
@@ -92,13 +106,14 @@ export const pushArrivalChangeLabel = (
 export const PushArrivalEntry = ({
   arrival,
   nowMs,
-  labelFor,
+  attached,
   onOpenThread,
   onDismiss,
 }: {
   readonly arrival: PushArrival;
   readonly nowMs: number;
-  readonly labelFor: PushArrivalLabelResolver;
+  /** Everyone the roster is currently naming, for the same disambiguation. */
+  readonly attached: ReadonlyArray<NameableAgent>;
   readonly onOpenThread: () => void;
   readonly onDismiss: () => void;
 }) => {
@@ -123,7 +138,7 @@ export const PushArrivalEntry = ({
       </p>
       <p className="mt-1.5 mb-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]">
         <AgentIdentityText
-          label={pushArrivalAgentLabel({ arrival, labelFor })}
+          label={pushArrivalAgentLabel({ arrival, attached })}
           client={arrival.model?.client}
         />
       </p>

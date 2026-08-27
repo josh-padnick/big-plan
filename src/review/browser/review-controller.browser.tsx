@@ -56,7 +56,6 @@ import {
   type AgentStatus,
 } from "../shared/agent-status.js";
 import {
-  agentLabelResolver,
   agentPrimacyHealth,
   selectPrimaryAgent,
 } from "../shared/agent-primacy.js";
@@ -1941,14 +1940,21 @@ const useWide = (): boolean => {
 };
 
 /**
- * Whether focus sits in a comment or thread card the reader is writing in.
+ * Whether the caret sits in a field inside a comment or thread card.
  *
  * Asked of focus rather than of draft state because an empty reply the reader
  * is about to type into is exactly as costly to remount as a half-typed one:
- * what a remount destroys is the caret, not the text.
+ * what a remount destroys is the caret, not the text. Asked of the field
+ * rather than of the card, because the card is also a chevron, a Resolve, and
+ * a reply toggle - a reader who clicked one of those and read on is not
+ * writing anything, and treating them as though they were would hold an
+ * affordance back until they happened to click somewhere else.
  */
 const isWritingInPlace = (): boolean =>
   document.activeElement instanceof Element &&
+  document.activeElement.matches(
+    'textarea, input, [contenteditable]:not([contenteditable="false"])',
+  ) &&
   document.activeElement.closest("[data-review-comment-ui]") !== null;
 
 const useInlineComposeHost = (
@@ -4403,13 +4409,10 @@ export const ReviewController = () => {
   /* The roster's own ambiguity set, so the arrival entry and the card the
      reviewer compares it against never disagree about how many words it takes
      to name one agent. Two connectors on the same model are two agents, and
-     only the roster's resolver spends the writer id that says which. */
-  const agentRosterLabel = useMemo(
+     only the writer id says which. */
+  const attachedAgents = useMemo(
     () =>
-      agentLabelResolver(
-        readAgentRosterFor({ agents: agent.agents, nowMs: statusNowMs })
-          .attached,
-      ),
+      readAgentRosterFor({ agents: agent.agents, nowMs: statusNowMs }).attached,
     [agent.agents, statusNowMs],
   );
   const pollIsOffline = reviewPollIsOffline(pollHealth);
@@ -6068,10 +6071,17 @@ export const ReviewController = () => {
       frame = requestAnimationFrame(openRail);
     };
     openRail();
+    document.addEventListener("focusin", recheck);
     document.addEventListener("focusout", recheck);
+    // A field that is removed while it holds the caret takes the caret to the
+    // body and reports nothing, so the one moment the island replaces plan DOM
+    // wholesale is asked again rather than assumed to be quiet.
+    document.addEventListener("bigplan:article-replaced", recheck);
     return () => {
       cancelAnimationFrame(frame);
+      document.removeEventListener("focusin", recheck);
       document.removeEventListener("focusout", recheck);
+      document.removeEventListener("bigplan:article-replaced", recheck);
     };
   }, [arrivalWantsRail, compose, isOpen, isWide, openFeedbackSidebar]);
 
@@ -7081,7 +7091,7 @@ export const ReviewController = () => {
       <PushArrivalEntry
         arrival={pushArrival}
         nowMs={statusNowMs}
-        labelFor={agentRosterLabel}
+        attached={attachedAgents}
         onOpenThread={() => {
           openPushedThread(pushArrival.threadId);
           setPushArrival(null);

@@ -11,6 +11,7 @@ import {
   pushArrivalAgentLabel,
   pushArrivalChangeLabel,
   pushArrivalTimeLabel,
+  type NameableAgent,
 } from "./push-arrival-entry.browser.js";
 import { agentLabelResolver } from "../shared/agent-primacy.js";
 import type { PushArrival } from "../shared/push-arrival.js";
@@ -77,14 +78,18 @@ describe("pushArrivalAgentLabel", () => {
     writerId: "bbbbbbbbbbbbb12c",
     model: { name: "claude-opus-5" },
   };
-  const labelFor = agentLabelResolver([opusA, opusB]);
-  const labelOf = (claimedBy: string): string =>
+  const attached = [opusA, opusB];
+  const labelOf = (
+    claimedBy: string,
+    roster: ReadonlyArray<NameableAgent> = attached,
+  ): string =>
     pushArrivalAgentLabel({
       arrival: arrival({ claimedBy, model: { name: "claude-opus-5" } }),
-      labelFor,
+      attached: roster,
     });
 
   it("should name each connector exactly as the roster names it", () => {
+    const labelFor = agentLabelResolver(attached);
     expect(labelOf(opusA.writerId)).toBe(labelFor(opusA));
     expect(labelOf(opusB.writerId)).toBe(labelFor(opusB));
   });
@@ -94,28 +99,30 @@ describe("pushArrivalAgentLabel", () => {
   });
 
   it("should spend no id when the model name already names the agent", () => {
-    expect(
-      pushArrivalAgentLabel({
-        arrival: arrival({
-          claimedBy: opusA.writerId,
-          model: { name: "claude-opus-5" },
-        }),
-        labelFor: agentLabelResolver([opusA]),
-      }),
-    ).toBe("Claude Opus 5");
+    expect(labelOf(opusA.writerId, [opusA])).toBe("Claude Opus 5");
+  });
+
+  it("should keep the id for a pusher that has since left the roster", () => {
+    // The connector that pushed exited, so only its same-model twin is still
+    // attached. Naming the push by model alone would point the reader at the
+    // one card left standing, which is the agent that did not push.
+    expect(labelOf(opusA.writerId, [opusB])).toBe(
+      agentLabelResolver(attached)(opusA),
+    );
+    expect(labelOf(opusA.writerId, [opusB])).not.toBe("Claude Opus 5");
   });
 
   it("should name a push with no recorded claim by what it declared", () => {
     expect(
       pushArrivalAgentLabel({
         arrival: arrival({ model: { name: "claude-opus-5" } }),
-        labelFor,
+        attached,
       }),
     ).toBe("Claude Opus 5");
   });
 
   it("should fall back to a generic name when the push declared nothing", () => {
-    expect(pushArrivalAgentLabel({ arrival: arrival(), labelFor })).toBe(
+    expect(pushArrivalAgentLabel({ arrival: arrival(), attached })).toBe(
       "Agent",
     );
   });
