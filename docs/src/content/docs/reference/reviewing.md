@@ -50,6 +50,8 @@ it: export the variable and then run `big-plan service restart` - or
 `big-plan service stop` before the next command - for the change to take
 effect. Each review still runs on its own unique session port so its process,
 custody, and write fences remain isolated—the service only supplies the hop.
+If that hop cannot reach a live runtime, it answers as a gateway with `502` or
+`504`; a live runtime's `503` remains its own refusal while a write is stalled.
 
 Opening it while a review is running takes you straight to the running session.
 Opening it afterwards gives a page saying what happened - stopped normally after
