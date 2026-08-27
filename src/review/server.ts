@@ -125,6 +125,7 @@ import {
   createDecisionAnswers,
   createPlanRenderer,
   createReaderProgress,
+  createSnapshotDiffs,
   createWriteGate,
 } from "./review-route-context.js";
 import type {
@@ -959,6 +960,7 @@ export const startReviewRuntime = async ({
       reportDiagnostic,
     }),
     changeVerdicts: createChangeVerdicts({ store }),
+    snapshotDiffs: createSnapshotDiffs(),
     approvals: createApprovals({ store, reportDiagnostic }),
     readerProgress: createReaderProgress({
       initialSnapshot,

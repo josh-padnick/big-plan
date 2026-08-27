@@ -6,7 +6,11 @@ import { fromHtml } from "hast-util-from-html";
 import type { Element, Root } from "hast";
 import { describe, expect, it } from "vitest";
 import { compileMarkdown } from "./markdown/compile-markdown.js";
-import { renderDiffView, renderIsolatedBlockView } from "./render-diff-view.js";
+import {
+  compileDiffDocuments,
+  renderDiffView,
+  renderIsolatedBlockView,
+} from "./render-diff-view.js";
 
 const decision = (option: string): string => `# Plan
 
@@ -50,6 +54,37 @@ const decisionBlockId = (markdown: string): string => {
 };
 
 describe("render diff view", () => {
+  it("should compile each document once when locations reuse the pair", () => {
+    const baselineMarkdown = decision("Ship now");
+    const proposedMarkdown = decision("Ship safely");
+    const compiledMarkdown: Array<string> = [];
+    const compiled = compileDiffDocuments({
+      baselineMarkdown,
+      proposedMarkdown,
+      compileDocument: ({ markdown }) => {
+        compiledMarkdown.push(markdown);
+        return compileMarkdown({ markdown });
+      },
+    });
+    const baselineBlockId = decisionBlockId(baselineMarkdown);
+    const proposedBlockId = decisionBlockId(proposedMarkdown);
+
+    for (const location of ["first", "copied"] as const) {
+      expect(
+        renderDiffView({
+          baselineDocument: compiled.baseline,
+          proposedDocument: compiled.proposed,
+          baselineBlockId,
+          proposedBlockId,
+          status: "changed",
+          runs: [{ op: "same", text: location }],
+        }),
+      ).not.toBeNull();
+    }
+
+    expect(compiledMarkdown).toEqual([baselineMarkdown, proposedMarkdown]);
+  });
+
   it("should render one addressed Decision root with an isolated baseline", () => {
     const baselineMarkdown = decision("Ship now");
     const proposedMarkdown = decision("Ship safely");

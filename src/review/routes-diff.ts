@@ -16,8 +16,11 @@ import type {
 } from "./review-route-context.js";
 import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
 import { readSnapshot } from "./store.js";
-import { encodeSnapshotDiff } from "./shared/review-wire.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
+import {
+  encodeSnapshotDiff,
+  type SnapshotDiff,
+} from "./shared/review-wire.js";
 
 // Honest rollout scaffolding. Every definition has compileDiff once the
 // contract exists, so presence cannot say which kinds have completed the
@@ -37,32 +40,20 @@ const MIGRATED_DIFF_KINDS: ReadonlySet<string> = new Set([
   "wireframe",
 ]);
 
-export const readSnapshotDiff = async (
-  context: ReviewRouteContext,
-  { query }: ReviewRouteRequest,
-): Promise<ReviewRouteResponse> => {
-  const { store } = context;
-  const from = query.get("from") ?? "";
-  const to = query.get("to") ?? "";
-  if (!SNAPSHOT_DIGEST.test(from) || !SNAPSHOT_DIGEST.test(to)) {
-    return refusal({
-      status: 400,
-      reason: "Snapshot diff requires hexadecimal from and to snapshots",
-    });
-  }
-  let beforeSource: string;
-  let afterSource: string;
-  try {
-    [beforeSource, afterSource] = await Promise.all([
-      readSnapshot({ store, snapshot: from }),
-      readSnapshot({ store, snapshot: to }),
-    ]);
-  } catch {
-    return refusal({
-      status: 404,
-      reason: "This diff's baseline or result snapshot is unavailable",
-    });
-  }
+class SnapshotDiffSourceUnavailable extends Error {}
+
+/** Compiles one immutable document pair and renders every location from it. */
+const compileSnapshotDiffPayload = ({
+  from,
+  to,
+  beforeSource,
+  afterSource,
+}: {
+  readonly from: string;
+  readonly to: string;
+  readonly beforeSource: string;
+  readonly afterSource: string;
+}): SnapshotDiff => {
   // One compilation per snapshot answers every question this route asks: the
   // block descriptors the alignment reads, the models a component diff pairs,
   // and the compiled markup a picture replays. Nothing here re-parses a
@@ -77,50 +68,94 @@ export const readSnapshotDiff = async (
     before: compiled.baseline.blocks,
     after: compiled.proposed.blocks,
   });
+  return encodeSnapshotDiff({
+    ...snapshotDiff,
+    locations: snapshotDiff.locations.map((location) => {
+      if (location.isComponentRoot && MIGRATED_DIFF_KINDS.has(location.kind)) {
+        const rendered = renderDiffView({
+          baselineDocument: compiled.baseline,
+          proposedDocument: compiled.proposed,
+          baselineBlockId: location.oldBlockId,
+          proposedBlockId: location.newBlockId,
+          status: location.status,
+          runs: location.runs,
+        });
+        // Only the rendered view crosses the wire. The compiled diff model
+        // describes exactly what that view already shows, and for a diagram
+        // it carries the same prepared artwork a second time, so sending it
+        // would restore the duplication this migration exists to remove. It
+        // stays available to the renderer for whoever first needs to read a
+        // change without reading its markup.
+        return rendered === null
+          ? location
+          : { ...location, view: rendered.view };
+      }
+      if (!usesRenderedSnapshot(location)) return location;
+      const oldView = renderIsolatedBlockView({
+        document: compiled.baseline,
+        blockId: location.oldBlockId,
+        key: `was-${from}`,
+      });
+      const newView = renderIsolatedBlockView({
+        document: compiled.proposed,
+        blockId: location.newBlockId,
+        key: `now-${to}`,
+      });
+      return {
+        ...location,
+        ...(oldView === undefined ? {} : { oldView }),
+        ...(newView === undefined ? {} : { newView }),
+      };
+    }),
+  });
+};
+
+export const readSnapshotDiff = async (
+  context: ReviewRouteContext,
+  { query }: ReviewRouteRequest,
+): Promise<ReviewRouteResponse> => {
+  const { snapshotDiffs, store } = context;
+  const from = query.get("from") ?? "";
+  const to = query.get("to") ?? "";
+  if (!SNAPSHOT_DIGEST.test(from) || !SNAPSHOT_DIGEST.test(to)) {
+    return refusal({
+      status: 400,
+      reason: "Snapshot diff requires hexadecimal from and to snapshots",
+    });
+  }
+  let snapshotDiff: SnapshotDiff;
+  try {
+    snapshotDiff = await snapshotDiffs.forPair({
+      from,
+      to,
+      build: async () => {
+        let beforeSource: string;
+        let afterSource: string;
+        try {
+          [beforeSource, afterSource] = await Promise.all([
+            readSnapshot({ store, snapshot: from }),
+            readSnapshot({ store, snapshot: to }),
+          ]);
+        } catch {
+          throw new SnapshotDiffSourceUnavailable();
+        }
+        return compileSnapshotDiffPayload({
+          from,
+          to,
+          beforeSource,
+          afterSource,
+        });
+      },
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof SnapshotDiffSourceUnavailable)) throw error;
+    return refusal({
+      status: 404,
+      reason: "This diff's baseline or result snapshot is unavailable",
+    });
+  }
   return jsonResponse({
     status: 200,
-    value: encodeSnapshotDiff({
-      ...snapshotDiff,
-      locations: snapshotDiff.locations.map((location) => {
-        if (
-          location.isComponentRoot &&
-          MIGRATED_DIFF_KINDS.has(location.kind)
-        ) {
-          const rendered = renderDiffView({
-            baselineDocument: compiled.baseline,
-            proposedDocument: compiled.proposed,
-            baselineBlockId: location.oldBlockId,
-            proposedBlockId: location.newBlockId,
-            status: location.status,
-            runs: location.runs,
-          });
-          // Only the rendered view crosses the wire. The compiled diff model
-          // describes exactly what that view already shows, and for a diagram
-          // it carries the same prepared artwork a second time, so sending it
-          // would restore the duplication this migration exists to remove. It
-          // stays available to the renderer for whoever first needs to read a
-          // change without reading its markup.
-          return rendered === null
-            ? location
-            : { ...location, view: rendered.view };
-        }
-        if (!usesRenderedSnapshot(location)) return location;
-        const oldView = renderIsolatedBlockView({
-          document: compiled.baseline,
-          blockId: location.oldBlockId,
-          key: `was-${from}`,
-        });
-        const newView = renderIsolatedBlockView({
-          document: compiled.proposed,
-          blockId: location.newBlockId,
-          key: `now-${to}`,
-        });
-        return {
-          ...location,
-          ...(oldView === undefined ? {} : { oldView }),
-          ...(newView === undefined ? {} : { newView }),
-        };
-      }),
-    }),
+    value: snapshotDiff,
   });
 };
