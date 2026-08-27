@@ -128,6 +128,37 @@ Details.
     expect(result.markdown).toContain("Navigation item: Open threads (active)");
   });
 
+  it("should preserve every semantic wireframe node and authored choice emoji", () => {
+    const result = render(`# Plan
+
+<Wireframe id="semantic-nodes" title="Semantic nodes">
+  <Screen id="main" name="Main" device="desktop">
+    <Group gap="lg" align="end">
+      <Reference icon="terminal" text="big-plan render plan.mdx" copyLabel="Copy command" />
+      <Icon name="tip" label="Tip" labelled size="sm" />
+    </Group>
+    <Overlay title="Confirm export" kind="alert" backdrop="dim">
+      <ChoiceGroup>
+        <ChoiceCard emoji="📦" title="Export" description="Save the plan" selected />
+        <ChoiceCard emoji="↩️" title="Cancel" description="Keep reviewing" />
+      </ChoiceGroup>
+      <Button label="Close" />
+    </Overlay>
+  </Screen>
+</Wireframe>
+`);
+
+    for (const meaning of [
+      "Group (gap: lg; align: end)",
+      "Reference: `big-plan render plan.mdx` (icon: terminal; copy action: Copy command)",
+      "Icon: Tip (name: tip; size: sm; label shown)",
+      "Overlay (title: Confirm export; kind: alert; backdrop: dim)",
+      "Choice: Export — Save the plan (emoji: 📦; selected)",
+    ]) {
+      expect(result.markdown).toContain(meaning);
+    }
+  });
+
   it("should return byte-identical output for identical inputs", () => {
     const source = readFileSync("examples/all-components.mdx", "utf8");
     expect(render(source).markdown).toBe(render(source).markdown);
