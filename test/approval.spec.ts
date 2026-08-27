@@ -968,6 +968,10 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
         .click();
       await expect(rail).toContainText("Plan approved");
       await expect(rail).toContainText("Approval acknowledged");
+      // Nothing was revised, so the session pill must not offer a re-review.
+      await expect(rail.locator("[data-review-agent-state]")).toHaveText(
+        "Approval acknowledged",
+      );
 
       await agentStatusTrigger(page).click();
       const status = agentSidebar(page);

@@ -50,7 +50,7 @@ There is no silent overwrite of user skill directories.
 5. Give the human the absolute path or `file://` URL of the HTML review document.
 6. Wait for the human to approve the plan in the live review.
 7. When the mailbox returns an `approval` request, re-read `planPath`, verify its digest equals `pinnedSnapshot`, acknowledge without editing the plan, and begin execution in your own harness.
-   A missing path, a missing file, or a digest mismatch is a hard stop: report it through the response and do not search for another copy.
+   A missing path, a missing file, or a digest mismatch is a hard stop: report it through the response by adding `hardStop` (one line naming what you found), and do not search for another copy.
 
 Details for render presentation live in [Render a plan](/for-agents/render-a-plan/).
 Authoring constraints live in [Authoring plans](/for-agents/authoring-plans/).

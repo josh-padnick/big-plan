@@ -1114,11 +1114,96 @@ describe("agent work loop lifecycle", () => {
           agentToken: pickup.agent_token,
         }),
       ).rejects.toThrow(
-        "An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot, then respond again.",
+        'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
       );
       expect(deriveSnapshotDigest(await readFile(planPath, "utf8"))).toBe(
         pinned,
       );
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report an approval hard stop where the reviewer can see it", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-approve-stop-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nBegin after approval.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const pinned = deriveSnapshotDigest(source);
+    const request = approvalAgentRequest({
+      approvalId: "c3d4e5f607181920",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      planPath,
+      pinnedSnapshot: pinned,
+      createdAt: "2026-08-13T17:41:00.000Z",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "This plan is approved and we are ready to begin.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      // The source moved after the approval was handed over, so the agent
+      // cannot reach the pinned digest and has nothing to acknowledge.
+      const moved = `${source}\nA later edit.\n`;
+      await writeFile(planPath, moved);
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a response file");
+      }
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({
+        responded: request.requestId,
+        kind: "approval",
+      });
+
+      // The reviewer's own record of what happened, and no claim that the
+      // approval was acknowledged.
+      const progress = await readProgress({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      expect(progress).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            stepCode: "approval-blocked",
+            state: "failed",
+            detail: "The plan no longer matches the pinned snapshot.",
+          }),
+        ]),
+      );
+      expect(
+        progress.some((event) => event.stepCode === "approval-acknowledged"),
+      ).toBe(false);
+      // A hard stop publishes nothing.
+      await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

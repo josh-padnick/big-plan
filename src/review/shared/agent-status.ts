@@ -286,7 +286,9 @@ const meaningfulWork = (
  *
  * It is read from the approval thread's own steps rather than from the approval
  * record, so a revoked approval simply stops being the latest word here, the
- * same way it stops being in force.
+ * same way it stops being in force, and an agent that reported a hard stop
+ * instead of acknowledging says so here rather than leaving the card waiting
+ * for an acknowledgment that is never coming.
  *
  * It is also the last word only until the agent has one: a later step the agent
  * itself posted on another request means it has moved on, and a card still
@@ -305,6 +307,7 @@ const approvalHandoffReading = ({
   const index = progressEvents.findLastIndex(
     (event) =>
       isApprovalHandoffStep(event.stepCode) ||
+      event.stepCode === "approval-blocked" ||
       event.stepCode === "approval-revoked",
   );
   const latest = index === -1 ? undefined : progressEvents[index];
@@ -333,7 +336,9 @@ const approvalHandoffReading = ({
     supporting:
       latest.stepCode === "approval-acknowledged"
         ? "Approval acknowledged. The agent has the approved plan and the decisions recorded with it."
-        : "Waiting for the agent to acknowledge the approval.",
+        : latest.stepCode === "approval-blocked"
+          ? `The agent stopped instead of acknowledging${latest.detail === undefined ? "" : `: ${latest.detail}`}`
+          : "Waiting for the agent to acknowledge the approval.",
     updatedAtMs: latest.atMs ?? 0,
   };
 };
@@ -1017,6 +1022,13 @@ export type AgentStatusInput = {
   readonly nowMs: number;
 };
 
+/**
+ * The settled label an acknowledgment wears, named once because two surfaces
+ * read it: the strip that prints it, and the session pill that must not
+ * summarize it as a response there is something to re-review (BIG-131).
+ */
+export const ACKNOWLEDGED_STATUS_LABEL = "Acknowledged";
+
 /** Derives status from observable runtime, request, and agent-channel facts. */
 export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
   if (input.runtime === "static") {
@@ -1051,7 +1063,7 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     if (input.requestKind === "approval") {
       return {
         stage: "answered",
-        label: "Acknowledged",
+        label: ACKNOWLEDGED_STATUS_LABEL,
         headline: "Approval acknowledged",
         detail:
           "The agent has the approved plan and the decisions recorded with it.",

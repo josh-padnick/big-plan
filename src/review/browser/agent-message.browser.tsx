@@ -12,6 +12,7 @@ import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { parseMessageMarkdown } from "../shared/message-markdown.js";
 import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
 import { messageTimeLabel } from "../shared/time-label.js";
+import { ACKNOWLEDGED_STATUS_LABEL } from "../shared/agent-status.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
@@ -380,7 +381,9 @@ export const AgentStatePill = ({
     status.stage === "working"
       ? ({ tone: "working", label: "Agent working" } as const)
       : status.stage === "answered"
-        ? ({ tone: "ready", label: "Ready to re-review" } as const)
+        ? status.label === ACKNOWLEDGED_STATUS_LABEL
+          ? ({ tone: "ready", label: "Approval acknowledged" } as const)
+          : ({ tone: "ready", label: "Ready to re-review" } as const)
         : status.stage === "failed"
           ? ({ tone: "failed", label: "Agent needs attention" } as const)
           : status.stage === "offline"

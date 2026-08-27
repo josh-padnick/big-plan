@@ -230,7 +230,8 @@ Choose a listed item to inspect it before approving, or choose **Edit in Setting
 Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message.
 It then writes one `approval` mailbox request whose `requestId` is the new approval id, carrying the absolute `planPath`, the pinned snapshot digest, the recorded answers, the unanswered decisions, and the covering message.
 The agent is expected to re-read that exact path, verify its digest equals `pinnedSnapshot`, and acknowledge without editing the plan.
-A missing path, a missing file, or a digest mismatch is a hard stop: the agent reports it through the response and must not search for another copy.
+A missing path, a missing file, or a digest mismatch is a hard stop: the agent reports it through the response as a `hardStop` and must not search for another copy.
+A reported hard stop is not an acknowledgment: the review records it as a failed step, and **Agent Status** and the Chat thread both name it.
 An acknowledgment whose result digest does not match the pinned snapshot is refused.
 Revoking an approval that the agent has not yet acknowledged cancels that still-open request.
 
