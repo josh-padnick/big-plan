@@ -18,7 +18,7 @@ const fieldTable = (
   if (fields.length === 0) return [];
   const rows = fields.map((field) => ({
     field,
-    prose: markdownTableProse(markdownFromHast(field.children)),
+    prose: markdownTableProse(field.children),
   }));
   return [
     title,
@@ -45,7 +45,7 @@ export const graphqlOperationMarkdown: ComponentMarkdownRenderer<
   const description = markdownFromHast(model.description);
   const args = model.args.map((argument) => ({
     argument,
-    prose: markdownTableProse(markdownFromHast(argument.children)),
+    prose: markdownTableProse(argument.children),
   }));
   return [
     markdownHeading({

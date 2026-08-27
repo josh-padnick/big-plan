@@ -57,8 +57,9 @@ export const PlanExportControl = ({
         menuRef.current?.contains(target) !== true &&
         triggerRef.current?.contains(target) !== true
       ) {
+        // Clicking elsewhere is intent to use that control, so the trigger is
+        // restored only by Escape or by choosing an item.
         setMenuOpen(false);
-        focusTrigger(triggerRef);
       }
     };
     document.addEventListener("pointerdown", outside);

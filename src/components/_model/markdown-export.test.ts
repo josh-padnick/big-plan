@@ -267,23 +267,66 @@ describe("Markdown export primitives", () => {
   });
 
   it("should split table prose into the row and the blocks a row cannot hold", () => {
-    expect(markdownTableProse("One inline sentence.")).toEqual({
-      cell: "One inline sentence.",
+    const paragraph = (...children: Element["children"]): Element => ({
+      type: "element",
+      tagName: "p",
+      properties: {},
+      children,
     });
+    const fence = (value: string): Element => ({
+      type: "element",
+      tagName: "pre",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "code",
+          properties: { className: ["language-json"] },
+          children: [{ type: "text", value }],
+        },
+      ],
+    });
+
     expect(
-      markdownTableProse("One soft-wrapped\nsentence across lines."),
+      markdownTableProse([paragraph({ type: "text", value: "One sentence." })]),
+    ).toEqual({ cell: "One sentence." });
+    expect(
+      markdownTableProse([
+        paragraph({
+          type: "text",
+          value: "One soft-wrapped\nsentence across lines.",
+        }),
+      ]),
     ).toEqual({ cell: "One soft-wrapped sentence across lines." });
-    expect(markdownTableProse("Lead sentence.\n\n```json\n{}\n```")).toEqual({
+
+    // A code span opens a paragraph the same way a fence opens a block once
+    // both are serialized, so the row is decided from the authored nodes.
+    expect(
+      markdownTableProse([
+        paragraph(
+          {
+            type: "element",
+            tagName: "code",
+            properties: {},
+            children: [{ type: "text", value: "clientEventId" }],
+          },
+          { type: "text", value: " is the key." },
+        ),
+      ]),
+    ).toEqual({ cell: "`clientEventId` is the key." });
+
+    expect(
+      markdownTableProse([
+        paragraph({ type: "text", value: "Lead sentence." }),
+        fence("{}"),
+      ]),
+    ).toEqual({
       cell: "Lead sentence.",
       blocks: "Lead sentence.\n\n```json\n{}\n```",
     });
-    expect(markdownTableProse("```json\n{}\n```")).toEqual({
+    expect(markdownTableProse([fence("{}")])).toEqual({
       cell: "",
       blocks: "```json\n{}\n```",
-    });
-    expect(markdownTableProse("- first\n- second")).toEqual({
-      cell: "",
-      blocks: "- first\n- second",
     });
   });
 

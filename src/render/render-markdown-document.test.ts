@@ -606,4 +606,44 @@ Restricts the result set. Example:
     expect(html).toContain("<td>approx ~5~ ms</td>");
     expect(html).not.toContain("<del>");
   });
+
+  it("should keep an authored hard line break inside its paragraph", () => {
+    const html = readerHtml(
+      render(`# Plan
+
+Strike ~~gone~~ and break here\\
+next line.
+
+Two spaces form:  
+second line here.
+`).markdown,
+    );
+
+    expect(html).toContain(
+      "<p>Strike <del>gone</del> and break here<br>\nnext line.</p>",
+    );
+    expect(html).toContain("<p>Two spaces form:<br>\nsecond line here.</p>");
+  });
+
+  it("should keep a description that opens with inline code in its row", () => {
+    const result = render(`# Plan
+
+<HttpEndpoint method="POST" path="/api/events">
+
+<Param name="clientEventId" in="body" type="string">
+
+\`clientEventId\` is the idempotency key for this
+append attempt.
+
+</Param>
+
+</HttpEndpoint>
+`);
+
+    expect(result.markdown).not.toContain("**clientEventId**\n");
+    const html = readerHtml(result.markdown);
+    expect(html).toContain(
+      "<td><code>clientEventId</code> is the idempotency key for this append attempt.</td>",
+    );
+  });
 });
