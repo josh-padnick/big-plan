@@ -27,14 +27,16 @@ const initialScreenDiff = (
 /** Renders a wireframe change as the real prototype plus per-screen badges. */
 export const WireframeDiffView = ({
   model,
+  controlId,
 }: {
   readonly model: CompiledWireframeDiff;
+  // The engine's per-instance key. Two wireframes may share an authored id,
+  // so the toggle's form identity comes from the engine rather than the
+  // model this view was handed.
+  readonly controlId: string;
 }) => {
   const hasBaseline = model.status !== "added";
   const hasProposed = model.status !== "removed";
-  const controlId = `wireframe-diff-${
-    model.status === "removed" ? model.baseline.id : model.proposed.id
-  }`;
   const baselineId = `${controlId}-baseline`;
   const proposedId = `${controlId}-proposed`;
   const initial = initialScreenDiff(model.screens);

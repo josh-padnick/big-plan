@@ -381,14 +381,15 @@ Component changes that use the component diff contract render the component's co
 The change replaces the component in the plan instead of sitting beside a hidden copy.
 When a **Now** side exists, it is the live, commentable component.
 It keeps its comment entry and any controls, including maximize.
-The **Was** side is inert evidence and carries no live plan identity.
+The **Was** side is inert evidence and carries no live plan identity, apart from the controls that reach evidence only it holds: a wireframe's screen switcher stays navigable there, so a screen marked as removed or moved can be opened on the side that still has it.
 Until the reviewer accepts an answerable **Now** Decision, a banner at the top of its card asks them to accept the change before answering.
 Its disabled **Confirm choice** control shows the same guidance in a hazard-icon tooltip.
 Diagram, file tree, and wireframe changes use the component's own maximize control and name.
 Their controls work inside the change: diagram theme and flow controls, tree copy controls, and wireframe screen switchers.
 A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle.
 Its own screen switcher marks screens that were added, removed, moved, or updated.
-A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer.
+A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer; a removed wireframe keeps its own screen switcher so its screens remain readable.
+A superseded change is replayed from its own record, which shows every wireframe screen stacked with no switcher and no per-screen marks.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,
