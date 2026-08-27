@@ -3,6 +3,7 @@
 
 import {
   markdownHeading,
+  markdownInlineCode,
   markdownInlineText,
   markdownTable,
   type ComponentMarkdownRenderer,
@@ -68,6 +69,12 @@ const nodeLines = (
           node.children,
           depth,
         );
+      case "Group":
+        return nested(
+          `Group${suffix([`gap: ${node.gap}`, `align: ${node.align}`])}`,
+          node.children,
+          depth,
+        );
       case "Panel":
         return nested(
           `Panel${suffix([text(node.eyebrow), text(node.title), `surface: ${node.surface}`, node.status === undefined ? undefined : `status: ${text(node.status)}`])}`,
@@ -84,6 +91,12 @@ const nodeLines = (
       case "Rail":
       case "Breadcrumbs":
         return nested(node.element, node.children, depth);
+      case "Overlay":
+        return nested(
+          `Overlay${suffix([node.title === undefined ? undefined : `title: ${text(node.title)}`, `kind: ${node.kind}`, `backdrop: ${node.backdrop}`])}`,
+          node.children,
+          depth,
+        );
       case "Sidebar":
         return nested(
           `Sidebar${suffix([node.brand === undefined ? undefined : `brand: ${text(node.brand)}`, node.mode === undefined ? undefined : `mode: ${node.mode}`])}`,
@@ -136,6 +149,14 @@ const nodeLines = (
         ];
       case "Badge":
         return [`${prefix}Badge: ${text(node.label)} (tone: ${node.tone})`];
+      case "Reference":
+        return [
+          `${prefix}Reference: ${markdownInlineCode(node.text)}${suffix([node.icon === undefined ? undefined : `icon: ${text(node.icon)}`, node.copyLabel === undefined ? undefined : `copy action: ${text(node.copyLabel)}`])}`,
+        ];
+      case "Icon":
+        return [
+          `${prefix}Icon: ${text(node.label)}${suffix([`name: ${text(node.name)}`, `size: ${node.size}`, node.labelled ? "label shown" : "label accessible only"])}`,
+        ];
       case "Divider":
         return [
           `${prefix}Divider${node.label === undefined ? "" : `: ${text(node.label)}`}`,
@@ -146,7 +167,7 @@ const nodeLines = (
         ];
       case "ChoiceCard":
         return [
-          `${prefix}Choice: ${text(node.title)} — ${text(node.description)}${suffix([`icon: ${text(node.icon)}`, node.selected ? "selected" : "not selected", navigation(node.navigateTo)])}`,
+          `${prefix}Choice: ${text(node.title)} — ${text(node.description)}${suffix([node.emoji === undefined ? undefined : `emoji: ${text(node.emoji)}`, node.selected ? "selected" : "not selected", navigation(node.navigateTo)])}`,
         ];
       case "ListItem":
         return [
