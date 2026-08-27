@@ -6213,6 +6213,7 @@ test("should render a changed wireframe as its own component diff", async ({
 <List>
 <ListItem label="${headline}" selected />
 </List>
+<Button label="Open triage" navigateTo="triage" />
 </Panel>
 </AppContent>
 </AppShell>
@@ -6380,6 +6381,39 @@ ${unrelatedWorkspace}
       );
       await now.click();
       await expect(proposed).toBeVisible();
+    });
+
+    await test.step("keep the Was prototype's own controls frozen", async () => {
+      await was.click();
+      const wasSwitcher = baseline.getByRole("navigation", {
+        name: "Prototype screens",
+      });
+      await wasSwitcher.getByRole("button", { name: /Queue/u }).click();
+      const wasOpen = baseline.getByRole("button", { name: "Open triage" });
+      await expect(wasOpen).toBeVisible();
+      // Evidence stays readable, but the Was prototype is not a second live
+      // one: were it navigable, the two sides would sit on different screens
+      // under a single Was/Now toggle.
+      await expect(wasOpen).toBeDisabled();
+      expect(
+        await wasOpen.evaluate((node) =>
+          node.hasAttribute("data-wireframe-navigate"),
+        ),
+      ).toBe(false);
+
+      await now.click();
+      await expect(proposed).toBeVisible();
+      const nowSwitcher = proposed.getByRole("navigation", {
+        name: "Prototype screens",
+      });
+      await nowSwitcher.getByRole("button", { name: /Queue/u }).click();
+      const nowOpen = proposed.getByRole("button", { name: "Open triage" });
+      await expect(nowOpen).toBeEnabled();
+      await nowOpen.click();
+      await expect(
+        proposed.locator("[data-wireframe-screen][data-wireframe-current]"),
+      ).toHaveAttribute("data-wireframe-screen", "triage");
+      await nowSwitcher.getByRole("button", { name: /Queue/u }).click();
     });
 
     await test.step("maximize under the component's own noun", async () => {

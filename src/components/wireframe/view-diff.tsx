@@ -40,6 +40,11 @@ export const WireframeDiffView = ({
   const baselineId = `${controlId}-baseline`;
   const proposedId = `${controlId}-proposed`;
   const initial = initialScreenDiff(model.screens);
+  // A wholly added or removed wireframe compares against nothing, so every
+  // screen would carry the same badge the figcaption already states once.
+  // Badging each entry there distinguishes nothing and, for a removal,
+  // strikes through the very control that keeps its screens readable.
+  const screenDiffs = model.status === "changed" ? model.screens : undefined;
   return (
     <figure
       className="my-4 grid w-full min-w-0 max-w-[var(--measure)] grid-cols-[minmax(0,1fr)] gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
@@ -119,7 +124,7 @@ export const WireframeDiffView = ({
           data-component-diff-side="baseline"
         >
           <ComponentDiffSide side="baseline" status={model.status}>
-            <Wireframe model={model.baseline} screenDiffs={model.screens} />
+            <Wireframe model={model.baseline} screenDiffs={screenDiffs} />
           </ComponentDiffSide>
         </div>
       ) : null}
@@ -129,7 +134,7 @@ export const WireframeDiffView = ({
           data-component-diff-side="proposed"
         >
           <ComponentDiffSide side="proposed" status={model.status}>
-            <Wireframe model={model.proposed} screenDiffs={model.screens} />
+            <Wireframe model={model.proposed} screenDiffs={screenDiffs} />
           </ComponentDiffSide>
         </div>
       ) : null}

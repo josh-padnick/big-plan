@@ -30,6 +30,7 @@ import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
+import { useComponentDiffPresentation } from "../_shared/component-diff/component-diff-context.js";
 import { DIFF_LIVE_ATTRIBUTE } from "../_model/component-diff/contract.js";
 import {
   BODY_ATTRIBUTE,
@@ -190,6 +191,16 @@ const WireframeElement = ({
   // detail beside it rather than leaving the screen.
   readonly selectsInPlace?: boolean;
 }): JSX.Element => {
+  // The Was side is evidence a reader may read, not a second prototype they
+  // may drive: a Was screen that navigated on its own would leave the two
+  // sides showing different screens under one Was/Now toggle. `disabled`
+  // refuses focus and clicks while keeping the control and its label in the
+  // accessibility tree, which `inert` would not.
+  const frozen = useComponentDiffPresentation()?.side === "baseline";
+  const navigation = (
+    target: string | undefined,
+  ): Readonly<Record<string, string>> =>
+    target === undefined || frozen ? {} : { "data-wireframe-navigate": target };
   switch (node.element) {
     case "Stack":
       return (
@@ -297,9 +308,8 @@ const WireframeElement = ({
                 title: node.label,
               }
             : {})}
-          {...(node.navigateTo === undefined
-            ? {}
-            : { "data-wireframe-navigate": node.navigateTo })}
+          {...navigation(node.navigateTo)}
+          disabled={frozen}
         >
           {node.icon === undefined ? null : <Glyph name={node.icon} />}
           {node.iconOnly ? null : (
@@ -427,9 +437,8 @@ const WireframeElement = ({
           type="button"
           className="wireframe-nav-item"
           {...(node.active ? { "aria-current": "page" } : {})}
-          {...(node.navigateTo === undefined
-            ? {}
-            : { "data-wireframe-navigate": node.navigateTo })}
+          {...navigation(node.navigateTo)}
+          disabled={frozen}
         >
           {node.label}
         </button>
@@ -591,9 +600,8 @@ const WireframeElement = ({
           role="radio"
           aria-checked={node.selected}
           {...(node.selected ? { "data-wireframe-selected": "" } : {})}
-          {...(node.navigateTo === undefined
-            ? {}
-            : { "data-wireframe-navigate": node.navigateTo })}
+          {...navigation(node.navigateTo)}
+          disabled={frozen}
         >
           {node.emoji === undefined ? null : (
             <span className="wireframe-choice-icon" aria-hidden="true">
@@ -668,7 +676,8 @@ const WireframeElement = ({
             <button
               type="button"
               className="wireframe-list-row flex w-full min-w-0 flex-col gap-0.5"
-              data-wireframe-navigate={node.navigateTo}
+              {...navigation(node.navigateTo)}
+              disabled={frozen}
             >
               {rowInner}
             </button>
@@ -717,7 +726,7 @@ const WireframeElement = ({
               ? {}
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
-            disabled={node.disabled}
+            disabled={node.disabled || frozen}
           />
         </Field>
       );
@@ -731,7 +740,7 @@ const WireframeElement = ({
               ? {}
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
-            disabled={node.disabled}
+            disabled={node.disabled || frozen}
           />
         </Field>
       );
@@ -741,7 +750,7 @@ const WireframeElement = ({
           {/* A wireframe shows the chosen option, not the whole menu. */}
           <select
             className="wireframe-input wireframe-select"
-            disabled={node.disabled}
+            disabled={node.disabled || frozen}
           >
             <option>{node.value}</option>
           </select>
@@ -754,6 +763,7 @@ const WireframeElement = ({
             className="wireframe-tick"
             type="checkbox"
             defaultChecked={node.checked}
+            disabled={frozen}
           />
         </Field>
       );
@@ -765,6 +775,7 @@ const WireframeElement = ({
             type="checkbox"
             role="switch"
             defaultChecked={node.on}
+            disabled={frozen}
           />
         </Field>
       );
@@ -812,7 +823,8 @@ const WireframeElement = ({
         <button
           type="button"
           className="wireframe-crumb wireframe-crumb-link"
-          data-wireframe-navigate={node.navigateTo}
+          {...navigation(node.navigateTo)}
+          disabled={frozen}
         >
           {node.label}
         </button>
@@ -1048,91 +1060,95 @@ export const Wireframe = ({
   screenDiffs,
 }: {
   readonly model: CompiledWireframe;
-  // Present only inside the component's own diff view. Omitted from ordinary
-  // plan rendering so that path stays byte-identical with a Wireframe that
-  // has never heard of a comparison.
+  // Present only where a comparison has something per-screen to say. Omitted
+  // from ordinary plan rendering, and from a wholly added or removed
+  // wireframe, whose status the diff already states once at the top.
   readonly screenDiffs?: ReadonlyArray<WireframeScreenDiff>;
-}) => (
-  <figure
-    className="wireframe my-8"
-    data-wireframe={model.id}
-    {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
-    {...(model.screens.some((screen) => screen.device === "desktop")
-      ? { "data-wireframe-desktop": "" }
-      : {})}
-  >
-    <div className="wireframe-header flex w-full flex-wrap items-center gap-3">
-      {model.title === undefined ? null : (
-        <figcaption className="wireframe-caption wireframe-figure-title text-sm font-semibold text-ink">
-          {model.title}
-        </figcaption>
-      )}
-      <div className="figure-control-bar wireframe-toolbar ml-auto flex shrink-0 items-center gap-2">
-        <MaximizeButton subject="wireframe" />
+}) => {
+  // Which side this rendering is, not whether it carries badges, decides what
+  // baseline isolation may hold inert: a removed wireframe carries no badges
+  // and its switcher still has to open the screens only it has.
+  const insideDiff = useComponentDiffPresentation() !== null;
+  const live: Readonly<Record<string, string>> = insideDiff
+    ? { [DIFF_LIVE_ATTRIBUTE]: "" }
+    : {};
+  return (
+    <figure
+      className="wireframe my-8"
+      data-wireframe={model.id}
+      {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
+      {...(model.screens.some((screen) => screen.device === "desktop")
+        ? { "data-wireframe-desktop": "" }
+        : {})}
+    >
+      <div className="wireframe-header flex w-full flex-wrap items-center gap-3">
+        {model.title === undefined ? null : (
+          <figcaption className="wireframe-caption wireframe-figure-title text-sm font-semibold text-ink">
+            {model.title}
+          </figcaption>
+        )}
+        <div className="figure-control-bar wireframe-toolbar ml-auto flex shrink-0 items-center gap-2">
+          <MaximizeButton subject="wireframe" />
+        </div>
       </div>
-    </div>
-    <div className="wireframe-content" {...{ [BODY_ATTRIBUTE]: "" }}>
-      {model.screens.length < 2 ? null : (
-        <nav className="wireframe-switcher" aria-label="Prototype screens">
-          {model.screens.map((screen) => {
-            const annotation = screenDiffFor(screen.id, screenDiffs);
-            return (
-              <button
-                key={screen.id}
-                type="button"
-                className={
-                  screenDiffs === undefined
-                    ? "wireframe-switch"
-                    : "wireframe-switch inline-flex min-h-11 min-w-11 items-center gap-2 wide:min-h-0 wide:min-w-0"
-                }
-                data-wireframe-navigate={screen.id}
-                data-wireframe-switch=""
-                {...(screenDiffs === undefined
-                  ? {}
-                  : { [DIFF_LIVE_ATTRIBUTE]: "" })}
-                {...(screen.id === model.initialScreenId
-                  ? { "aria-current": "true" }
-                  : {})}
-              >
-                {screenDiffs === undefined ? (
-                  screen.name
-                ) : (
-                  <>
-                    <span
-                      className={
-                        annotation?.status === "removed"
-                          ? "line-through decoration-2"
-                          : undefined
-                      }
-                    >
-                      {screen.name}
-                    </span>
-                    {annotation === undefined ? null : (
+      <div className="wireframe-content" {...{ [BODY_ATTRIBUTE]: "" }}>
+        {model.screens.length < 2 ? null : (
+          <nav className="wireframe-switcher" aria-label="Prototype screens">
+            {model.screens.map((screen) => {
+              const annotation = screenDiffFor(screen.id, screenDiffs);
+              return (
+                <button
+                  key={screen.id}
+                  type="button"
+                  className={
+                    screenDiffs === undefined
+                      ? "wireframe-switch"
+                      : "wireframe-switch inline-flex items-center gap-2"
+                  }
+                  data-wireframe-navigate={screen.id}
+                  data-wireframe-switch=""
+                  {...live}
+                  {...(screen.id === model.initialScreenId
+                    ? { "aria-current": "true" }
+                    : {})}
+                >
+                  {screenDiffs === undefined ? (
+                    screen.name
+                  ) : (
+                    <>
                       <span
-                        className={`rounded-md px-2 py-0.5 text-2xs font-bold ${screenStatusClasses(annotation.status)}`}
+                        className={
+                          annotation?.status === "removed"
+                            ? "line-through decoration-2"
+                            : undefined
+                        }
                       >
-                        {wireframeScreenStatusLabel(annotation)}
+                        {screen.name}
                       </span>
-                    )}
-                  </>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      )}
-      <div
-        className="wireframe-screens flex flex-col gap-6"
-        {...(screenDiffs === undefined ? {} : { [DIFF_LIVE_ATTRIBUTE]: "" })}
-      >
-        {model.screens.map((screen) => (
-          <Screen
-            key={screen.id}
-            screen={screen}
-            current={screen.id === model.initialScreenId}
-          />
-        ))}
+                      {annotation === undefined ? null : (
+                        <span
+                          className={`rounded-md px-2 py-0.5 text-2xs font-bold ${screenStatusClasses(annotation.status)}`}
+                        >
+                          {wireframeScreenStatusLabel(annotation)}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        )}
+        <div className="wireframe-screens flex flex-col gap-6" {...live}>
+          {model.screens.map((screen) => (
+            <Screen
+              key={screen.id}
+              screen={screen}
+              current={screen.id === model.initialScreenId}
+            />
+          ))}
+        </div>
       </div>
-    </div>
-  </figure>
-);
+    </figure>
+  );
+};

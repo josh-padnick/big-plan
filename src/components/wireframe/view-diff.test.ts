@@ -15,15 +15,29 @@ const screen = ({
   id,
   name,
   text,
+  navigateTo,
 }: {
   readonly id: string;
   readonly name: string;
   readonly text: string;
+  readonly navigateTo?: string;
 }): WireframeScreen => ({
   id,
   name,
   device: "desktop",
-  children: [{ element: "Text", text, role: "body" }],
+  children: [
+    { element: "Text", text, role: "body" },
+    ...(navigateTo === undefined
+      ? []
+      : [
+          {
+            element: "Button" as const,
+            label: "Open triage",
+            emphasis: "primary" as const,
+            navigateTo,
+          },
+        ]),
+  ],
 });
 
 const wireframe = ({
@@ -96,6 +110,41 @@ const changedQueue = () =>
     runs: [],
   });
 
+const sideOf = (
+  node: Root | Element | undefined,
+  side: "baseline" | "proposed",
+): Element | undefined =>
+  elementsWithin(node).find(
+    (candidate) => candidate.properties["data-component-diff-side"] === side,
+  );
+
+const classesOf = (node: Element): ReadonlyArray<string> => {
+  const value = node.properties.className;
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === "string");
+  }
+  return typeof value === "string" ? value.split(/\s+/u) : [];
+};
+
+const prototypeButtonsOf = (node: Element | undefined): Array<Element> =>
+  elementsWithin(node).filter(
+    (candidate) =>
+      candidate.tagName === "button" &&
+      classesOf(candidate).includes("wireframe-button"),
+  );
+
+const liveScreenRegionsOf = (
+  node: Root | Element | undefined,
+): Array<Element> =>
+  elementsWithin(node).filter(
+    (candidate) =>
+      candidate.properties[DIFF_LIVE_ATTRIBUTE] === "" &&
+      elementsWithin(candidate).some(
+        (descendant) =>
+          descendant.properties["data-wireframe-screen"] !== undefined,
+      ),
+  );
+
 describe("WireframeDiffView", () => {
   it("should badge an updated screen on the wireframe's own switcher", () => {
     const root = reactToHast(
@@ -161,6 +210,96 @@ describe("WireframeDiffView", () => {
       ]),
     );
     expect(first.some((identity) => second.includes(identity))).toBe(false);
+  });
+
+  it("should freeze the Was prototype's own controls while keeping them readable", () => {
+    // A navigable Was side would leave the two prototypes on different
+    // screens under one Was/Now toggle. `disabled` refuses focus and clicks
+    // and drops the navigation hook, while the control keeps its label in
+    // the accessibility tree - which is why the screen is not held inert.
+    const withButton = () =>
+      compileWireframeDiff({
+        status: "changed",
+        baseline: wireframe({
+          screens: [
+            screen({
+              id: "queue",
+              name: "Queue",
+              text: "before",
+              navigateTo: "triage",
+            }),
+            screen({ id: "triage", name: "Triage", text: "unchanged" }),
+          ],
+        }),
+        proposed: wireframe({
+          screens: [
+            screen({
+              id: "queue",
+              name: "Queue",
+              text: "after",
+              navigateTo: "triage",
+            }),
+            screen({ id: "triage", name: "Triage", text: "unchanged" }),
+          ],
+        }),
+        runs: [],
+      });
+    const root = reactToHast(
+      createElement(WireframeDiffView, {
+        model: withButton(),
+        controlId: "component-diff-frozen",
+      }),
+    );
+
+    const wasButtons = prototypeButtonsOf(sideOf(root, "baseline"));
+    const nowButtons = prototypeButtonsOf(sideOf(root, "proposed"));
+    expect(wasButtons).toHaveLength(1);
+    expect(nowButtons).toHaveLength(1);
+    expect(wasButtons[0]?.properties.disabled).toBe(true);
+    expect(
+      wasButtons[0]?.properties["data-wireframe-navigate"],
+    ).toBeUndefined();
+    expect(textWithin(wasButtons[0] as Element)).toContain("Open triage");
+    expect(nowButtons[0]?.properties.disabled).toBeUndefined();
+    expect(nowButtons[0]?.properties["data-wireframe-navigate"]).toBe("triage");
+    // The Was switcher is the one control that stays operable, so it keeps
+    // both its navigation hook and its live mark.
+    const wasSwitcher = switcherEntriesFor(sideOf(root, "baseline"), "triage");
+    expect(wasSwitcher).toHaveLength(1);
+    expect(wasSwitcher[0]?.properties.disabled).toBeUndefined();
+    expect(wasSwitcher[0]?.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
+  });
+
+  it("should leave a wholly removed wireframe's switcher unbadged but live", () => {
+    // The figcaption already says the whole component went; badging every
+    // entry adds nothing and strikes through the control the reader needs to
+    // read the screens that are gone.
+    const root = reactToHast(
+      createElement(WireframeDiffView, {
+        model: compileWireframeDiff({
+          status: "removed",
+          baseline: wireframe({
+            screens: [
+              screen({ id: "queue", name: "Queue", text: "gone" }),
+              screen({ id: "triage", name: "Triage", text: "also gone" }),
+            ],
+          }),
+          runs: [],
+        }),
+        controlId: "component-diff-removed",
+      }),
+    );
+
+    const entries = [
+      ...switcherEntriesFor(root, "queue"),
+      ...switcherEntriesFor(root, "triage"),
+    ];
+    expect(entries).toHaveLength(2);
+    for (const entry of entries) {
+      expect(textWithin(entry)).not.toContain("Removed from");
+      expect(entry.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
+    }
+    expect(liveScreenRegionsOf(root)).toHaveLength(1);
   });
 
   it("should omit the switcher when both sides have only one screen", () => {

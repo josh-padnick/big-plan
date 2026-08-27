@@ -3720,4 +3720,34 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics).toEqual([]);
     expect(html(render(compiled))).toContain("wireframe-top-bar-actions");
   });
+
+  it("should flag a pattern-only change as updated", () => {
+    const patterned = (pattern: string): CompiledWireframe => {
+      const { compiled, diagnostics } = compile({
+        scopedChildren: [
+          screen({
+            id: "workspace",
+            attributes: { pattern },
+            children: [
+              element({ name: "Panel", attributes: { title: "Queue" } }),
+              element({ name: "Panel", attributes: { title: "Detail" } }),
+            ],
+          }),
+        ],
+      });
+      expect(diagnostics).toEqual([]);
+      return compiled.model as CompiledWireframe;
+    };
+
+    const diff = WIREFRAME_COMPONENT_DEFINITION.compileDiff({
+      status: "changed",
+      baseline: patterned("create"),
+      proposed: patterned("settings"),
+      runs: [],
+    });
+
+    expect(diff.model).toMatchObject({
+      screens: [{ key: "screen:workspace", status: "updated" }],
+    });
+  });
 });
