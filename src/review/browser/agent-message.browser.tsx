@@ -218,6 +218,7 @@ export const RequestStatusStrip = ({
       (event) =>
         event.stepCode === "plan-approved" ||
         event.stepCode === "approval-acknowledged" ||
+        event.stepCode === "approval-blocked" ||
         ((event.state === "live" || event.state === "waiting") &&
           event.stepCode !== "reply-sent" &&
           event.stepCode !== "chat-sent" &&
@@ -243,7 +244,8 @@ export const RequestStatusStrip = ({
     meaningful.some(
       (event) =>
         event.stepCode === "plan-approved" ||
-        event.stepCode === "approval-acknowledged",
+        event.stepCode === "approval-acknowledged" ||
+        event.stepCode === "approval-blocked",
     );
   const icon =
     status.stage === "waiting" ? (

@@ -1221,6 +1221,7 @@ describe("disconnecting the attached agent", () => {
       "stalled",
       "errored",
       "handoff",
+      "handoff-blocked",
       "idle",
     ] as const) {
       expect(agentActivityIsAttached({ state })).toBe(true);
@@ -1250,6 +1251,7 @@ describe("disconnecting the attached agent", () => {
     for (const state of [
       "waiting",
       "handoff",
+      "handoff-blocked",
       "idle",
       "disconnected",
     ] as const) {
@@ -1274,6 +1276,7 @@ describe("the approval handoff on the status card", () => {
     "plan-approved": "Plan approved",
     "approval-acknowledged": "Approval acknowledged",
     "approval-revoked": "Approval revoked",
+    "approval-blocked": "Approval not acknowledged",
     "response-ready": "Agent response ready",
     "request-canceled": "Request canceled",
   } as const;
@@ -1365,6 +1368,30 @@ describe("the approval handoff on the status card", () => {
         ],
       }),
     ).toMatchObject({ state: "waiting", requestId: "1111111111111111" });
+  });
+
+  it("should lead with the stop when the agent refuses the handoff", () => {
+    const activity = activityFor({
+      requests: [approvalRequest({ answeredAt: "2026-08-08T20:00:00.000Z" })],
+      progressEvents: [
+        step("plan-approved", NOW - 2_000),
+        step("approval-blocked", NOW - 1_000),
+      ],
+    });
+    expect(activity).toMatchObject({
+      state: "handoff-blocked",
+      tone: "warning",
+      headline: "Approval not acknowledged",
+    });
+    // The card asks the reviewer to act rather than reading as connected.
+    expect(
+      deriveAgentHealth({
+        activity,
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: true,
+      }),
+    ).toMatchObject({ indicator: "stalled" });
   });
 
   it("should hand the card back once the agent answers later work", () => {

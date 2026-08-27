@@ -1319,6 +1319,37 @@ describe("the threads a batch header still speaks for", () => {
     expect(awaiting(["unprojected0000"])).toEqual([]);
   });
 
+  // The step that narrates a refusal is written best-effort after the answer
+  // commits, so the answer itself has to be able to say it refused.
+  it("should read a refused approval from the answer when its step is lost", () => {
+    const request = answeredRequest({
+      kind: "approval",
+      commentIds: undefined,
+      commentId: undefined,
+    });
+    const status = statusForOneRequest({
+      request,
+      response: {
+        requestId: request.requestId,
+        resultSnapshot: "2222222222222222",
+        createdAt: "2026-08-10T19:02:00Z",
+        kind: "approval",
+        hardStop: "The plan no longer matches the pinned snapshot.",
+      },
+      progressEvents: [],
+      presence,
+      runtime: "online",
+      surface: "chat",
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set(),
+    });
+    expect(status).toMatchObject({
+      stage: "failed",
+      detail: "The plan no longer matches the pinned snapshot.",
+    });
+    expect(status.headline).not.toBe("Approval acknowledged");
+  });
+
   it("should not offer a response to review when an approval is acknowledged", () => {
     // An acknowledgment publishes nothing and opens no thread, so the settled
     // reading for a question would point the reviewer at neither.

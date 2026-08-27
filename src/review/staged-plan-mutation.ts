@@ -820,7 +820,16 @@ export const commitStagedPlanMutation = async ({
             }),
             value: journal,
           });
-          if (resultSnapshot !== baseSnapshot) {
+          /*
+          An approval answer publishes nothing, whatever its candidate holds.
+          Acknowledging is a statement about the revision the reviewer pinned,
+          not an edit of it, and a hard stop is a refusal to start - so neither
+          may reach the source. Left to the digest alone, an agent that wrote to
+          its candidate would swap the plan through a kind that records no
+          revision and no change set, and the bytes would land with nothing
+          naming them (BIG-131).
+          */
+          if (resultSnapshot !== baseSnapshot && response.kind !== "approval") {
             await replacePlanSource({ path: planPath, source: resultSource });
           }
         },

@@ -930,6 +930,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
             ...(typeof response.summary === "string"
               ? { summary: response.summary }
               : {}),
+            ...(typeof response.hardStop === "string"
+              ? { hardStop: response.hardStop }
+              : {}),
           },
         ];
       })

@@ -988,6 +988,86 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
   }
 });
 
+test("should report an approval the agent refused to acknowledge", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-stop-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const approved = page.waitForResponse((response) =>
+      response.url().endsWith("/api/approve"),
+    );
+    await dialog.getByRole("button", { name: "Approve plan" }).click();
+    expect((await approved).ok()).toBe(true);
+
+    // The plan moves after the handoff, so the agent cannot reach the digest
+    // it was pinned to and has a real stop to report.
+    await writeFile(planPath, `${PLAN}\nThe reviewer kept writing.\n`);
+    const claim = await runAgentCli(["next", planPath]);
+    const draft = /response_file: (\S+)/u.exec(claim.stdout)?.[1];
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const approval = exchange.requests.find(
+      (request) => request.kind === "approval",
+    );
+    if (draft === undefined || approval === undefined) {
+      throw new Error(`The agent CLI did not hand over the approval:\n${claim.stdout}`);
+    }
+    await writeFile(
+      draft,
+      JSON.stringify({
+        requestId: approval.requestId,
+        hardStop: "The plan no longer matches the pinned snapshot.",
+      }),
+      "utf8",
+    );
+    await runAgentCli([
+      "respond",
+      planPath,
+      draft,
+      "--agent",
+      agentIdOf(claim.stdout, "agent_token"),
+    ]);
+
+    await page.reload();
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    // The refusal is what the thread says, with the agent's own reason, and
+    // never that the agent holds the approved plan.
+    await expect(rail).toContainText(
+      "Approval not acknowledged \u2014 The plan no longer matches the pinned snapshot.",
+    );
+    await expect(rail).not.toContainText(
+      "The agent has the approved plan and the decisions recorded with it.",
+    );
+    await expect(rail.locator("[data-review-agent-state]")).not.toHaveText(
+      "Approval acknowledged",
+    );
+
+    await agentStatusTrigger(page).click();
+    const status = agentSidebar(page);
+    await expect(
+      status.locator("[data-review-current-activity]"),
+    ).toHaveAttribute("data-review-current-activity", "handoff-blocked");
+    await expect(status).toContainText("Approval not acknowledged");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should close the approve dialog when Edit in Settings is chosen", async ({
   page,
 }) => {

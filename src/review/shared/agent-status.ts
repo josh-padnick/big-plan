@@ -122,6 +122,17 @@ export type CurrentAgentActivity =
       readonly supporting: string;
       readonly updatedAtMs: number;
     } & ActivityRequestFacts)
+  // The handoff the agent refused. It is settled like the other two and reads
+  // nothing like them: the plan is approved and nobody is acting on it, which
+  // is the reviewer's move to make, so it carries the warning register and
+  // leads with the stop rather than with the approval.
+  | ({
+      readonly state: "handoff-blocked";
+      readonly tone: "warning";
+      readonly headline: "Approval not acknowledged";
+      readonly supporting: string;
+      readonly updatedAtMs: number;
+    } & ActivityRequestFacts)
   | {
       readonly state: "idle";
       readonly tone: "neutral";
@@ -206,6 +217,9 @@ export const deriveAgentHealth = ({
   }
   if (activity.state === "errored") {
     return { indicator: "error", label: "Agent error" };
+  }
+  if (activity.state === "handoff-blocked") {
+    return { indicator: "stalled", label: "Approval not acknowledged" };
   }
   if (activity.state === "stalled") {
     return { indicator: "stalled", label: "Agent not responding" };
@@ -328,6 +342,19 @@ const approvalHandoffReading = ({
       candidate.kind === "approval" && candidate.requestId === latest.requestId,
   );
   if (request === undefined) return undefined;
+  if (latest.stepCode === "approval-blocked") {
+    return {
+      ...requestFacts(request),
+      state: "handoff-blocked",
+      tone: "warning",
+      headline: "Approval not acknowledged",
+      supporting:
+        latest.detail === undefined
+          ? "The agent stopped instead of acknowledging the approval. The plan is still approved and nobody is acting on it."
+          : `The agent stopped instead of acknowledging: ${latest.detail}`,
+      updatedAtMs: latest.atMs ?? 0,
+    };
+  }
   return {
     ...requestFacts(request),
     state: "handoff",
@@ -336,9 +363,7 @@ const approvalHandoffReading = ({
     supporting:
       latest.stepCode === "approval-acknowledged"
         ? "Approval acknowledged. The agent has the approved plan and the decisions recorded with it."
-        : latest.stepCode === "approval-blocked"
-          ? `The agent stopped instead of acknowledging${latest.detail === undefined ? "" : `: ${latest.detail}`}`
-          : "Waiting for the agent to acknowledge the approval.",
+        : "Waiting for the agent to acknowledge the approval.",
     updatedAtMs: latest.atMs ?? 0,
   };
 };

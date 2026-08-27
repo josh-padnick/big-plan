@@ -61,6 +61,8 @@ export type ThreadResponse = {
   readonly outcomes?: ReadonlyArray<ThreadOutcome>;
   readonly message?: string;
   readonly summary?: string;
+  /** Present exactly when an approval answer refused to acknowledge. */
+  readonly hardStop?: string;
 };
 
 export type ThreadProgress = {
@@ -402,6 +404,7 @@ export const projectRequestStatus = ({
   nowMs,
   cancelPendingRequestIds,
   queuedAhead,
+  response,
 }: {
   readonly request: ThreadRequest;
   /** Every request on the plan, so this one can tell a queue from an absence. */
@@ -413,6 +416,8 @@ export const projectRequestStatus = ({
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly queuedAhead?: number;
+  /** The answer this request settled with, where the caller has it. */
+  readonly response?: ThreadResponse;
 }): AgentStatus => {
   if (
     requestIsCanceled({
@@ -432,6 +437,17 @@ export const projectRequestStatus = ({
   const failed = [...activity]
     .reverse()
     .find((event) => event.state === "failed");
+  /*
+  A refusal to acknowledge is a reported failure, and it is read from the answer
+  itself rather than only from the step that narrates it. The step is written
+  best-effort after the answer commits, so a review that lost it would otherwise
+  fall through to the settled reading and tell the reviewer the agent holds an
+  approval it explicitly refused to start (BIG-131).
+  */
+  const reportedFailure =
+    failed === undefined
+      ? response?.hardStop
+      : (failed.detail ?? failed.step);
   const lastSignalAtMs = claimSignalAtMs(request) ?? 0;
   return deriveAgentStatus({
     runtime,
@@ -450,7 +466,7 @@ export const projectRequestStatus = ({
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
-    ...(failed === undefined ? {} : { failure: failed.detail ?? failed.step }),
+    ...(reportedFailure === undefined ? {} : { failure: reportedFailure }),
     nowMs,
   });
 };
