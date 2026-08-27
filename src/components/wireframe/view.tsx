@@ -557,6 +557,7 @@ const WireframeElement = ({
               type="button"
               className="wireframe-reference-copy"
               aria-label={node.copyLabel}
+              {...frozenControl}
             >
               <Glyph name="copy" />
             </button>

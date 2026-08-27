@@ -135,6 +135,13 @@ const prototypeButtonsOf = (node: Element | undefined): Array<Element> =>
       classesOf(candidate).includes("wireframe-button"),
   );
 
+const referenceCopyButtonsOf = (node: Element | undefined): Array<Element> =>
+  elementsWithin(node).filter(
+    (candidate) =>
+      candidate.tagName === "button" &&
+      classesOf(candidate).includes("wireframe-reference-copy"),
+  );
+
 const liveScreenRegionsOf = (
   node: Root | Element | undefined,
 ): Array<Element> =>
@@ -229,28 +236,41 @@ describe("WireframeDiffView", () => {
     // hook a stylesheet selects on survives: the reader is comparing these
     // two renderings, so a difference the plan never proposed reads as one
     // it did.
+    const controlsScreen = ({
+      text,
+    }: {
+      readonly text: string;
+    }): WireframeScreen => {
+      const queue = screen({
+        id: "queue",
+        name: "Queue",
+        text,
+        navigateTo: "triage",
+      });
+      return {
+        ...queue,
+        children: [
+          ...queue.children,
+          {
+            element: "Reference",
+            text: "BIG-195",
+            copyLabel: "Copy reference",
+          },
+        ],
+      };
+    };
     const withButton = () =>
       compileWireframeDiff({
         status: "changed",
         baseline: wireframe({
           screens: [
-            screen({
-              id: "queue",
-              name: "Queue",
-              text: "before",
-              navigateTo: "triage",
-            }),
+            controlsScreen({ text: "before" }),
             screen({ id: "triage", name: "Triage", text: "unchanged" }),
           ],
         }),
         proposed: wireframe({
           screens: [
-            screen({
-              id: "queue",
-              name: "Queue",
-              text: "after",
-              navigateTo: "triage",
-            }),
+            controlsScreen({ text: "after" }),
             screen({ id: "triage", name: "Triage", text: "unchanged" }),
           ],
         }),
@@ -278,6 +298,16 @@ describe("WireframeDiffView", () => {
     expect(nowButtons[0]?.properties.tabIndex).toBeUndefined();
     expect(nowButtons[0]?.properties.disabled).toBeUndefined();
     expect(nowButtons[0]?.properties["data-wireframe-navigate"]).toBe("triage");
+    const wasCopyButtons = referenceCopyButtonsOf(sideOf(root, "baseline"));
+    const nowCopyButtons = referenceCopyButtonsOf(sideOf(root, "proposed"));
+    expect(wasCopyButtons).toHaveLength(1);
+    expect(wasCopyButtons[0]?.properties.tabIndex).toBe(-1);
+    expect(wasCopyButtons[0]?.properties["data-wireframe-frozen"]).toBe("");
+    expect(nowCopyButtons).toHaveLength(1);
+    expect(nowCopyButtons[0]?.properties.tabIndex).toBeUndefined();
+    expect(
+      nowCopyButtons[0]?.properties["data-wireframe-frozen"],
+    ).toBeUndefined();
     // The Was switcher is the one control that stays operable, so it keeps
     // both its navigation hook and its live mark.
     const wasSwitcher = switcherEntriesFor(sideOf(root, "baseline"), "triage");
