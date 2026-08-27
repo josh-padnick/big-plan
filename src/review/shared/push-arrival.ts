@@ -114,22 +114,24 @@ export const scanPushArrivals = ({
 /**
  * The blocks a settle belongs on for the revision a swap is about to show.
  *
- * Asked of the revision rather than of the arrival because the swap is the
- * moment the reader can see a change at all, and a swap the reader triggered
- * later for the same revision is still showing push-changed blocks. An empty
- * answer means this revision was not pushed, which is how the swap tells a
- * push apart from every other reason plan DOM is replaced.
+ * Asked of the arrival this reader was actually told about rather than of
+ * whichever push happens to share the snapshot, because a snapshot does not
+ * identify a transition. A revert restores the request's baseline, and that
+ * baseline is the previous push's result: answering by snapshot alone would
+ * wash the blocks that earlier push changed and leave the blocks that just
+ * moved unmarked, with nothing anywhere reporting the mismatch. An empty
+ * answer means this swap was not a push landing, which is how it is told apart
+ * from every other reason plan DOM is replaced.
  */
 export const pushSettleTargets = ({
-  responses,
+  arrival,
   resultSnapshot,
 }: {
-  readonly responses: ReadonlyArray<AgentResponse>;
+  readonly arrival: PushArrival | null;
   readonly resultSnapshot: string;
-}): ReadonlyArray<string> => {
-  if (resultSnapshot === "") return [];
-  const response = pushResponses(responses).find(
-    (candidate) => candidate.resultSnapshot === resultSnapshot,
-  );
-  return response === undefined ? [] : changedBlocks(response);
-};
+}): ReadonlyArray<string> =>
+  arrival === null ||
+  resultSnapshot === "" ||
+  arrival.resultSnapshot !== resultSnapshot
+    ? []
+    : arrival.changeTargets;

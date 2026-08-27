@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   pushSettleTargets,
   scanPushArrivals,
+  type PushArrival,
   type PushArrivalScan,
 } from "./push-arrival.js";
 import type { AgentRequest, AgentResponse } from "./review-wire.js";
@@ -163,19 +164,41 @@ describe("scanPushArrivals", () => {
 });
 
 describe("pushSettleTargets", () => {
-  it("should name the blocks the pushed revision changed", () => {
+  const arrival = (
+    overrides: Partial<PushArrival> & { readonly resultSnapshot: string },
+  ): PushArrival => ({
+    requestId: "one",
+    threadId: "thread-one",
+    arrivedAt: "2026-08-21T00:00:01.000Z",
+    changeTargets: ["section/retries/paragraph-1"],
+    ...overrides,
+  });
+
+  it("should name the blocks the arriving push changed", () => {
     expect(
       pushSettleTargets({
-        responses: [response({ requestId: "one" })],
+        arrival: arrival({ resultSnapshot: "snapshot-one" }),
         resultSnapshot: "snapshot-one",
       }),
     ).toEqual(["section/retries/paragraph-1"]);
   });
 
-  it("should stay empty for a revision no push produced", () => {
+  it("should stay empty for a swap no arrival is waiting on", () => {
+    expect(
+      pushSettleTargets({ arrival: null, resultSnapshot: "snapshot-one" }),
+    ).toEqual([]);
+  });
+
+  it("should stay empty when a revert lands on an earlier push's snapshot", () => {
+    // Reverting the second push restores the first push's result, so a settle
+    // keyed on the snapshot alone would wash the blocks that push changed
+    // rather than the ones the reviewer just watched change back.
     expect(
       pushSettleTargets({
-        responses: [response({ requestId: "one", kind: "reply" })],
+        arrival: arrival({
+          resultSnapshot: "snapshot-two",
+          changeTargets: ["section/delivery/paragraph-1"],
+        }),
         resultSnapshot: "snapshot-one",
       }),
     ).toEqual([]);
@@ -184,7 +207,7 @@ describe("pushSettleTargets", () => {
   it("should stay empty before any revision is displayed", () => {
     expect(
       pushSettleTargets({
-        responses: [response({ requestId: "one", resultSnapshot: "" })],
+        arrival: arrival({ resultSnapshot: "" }),
         resultSnapshot: "",
       }),
     ).toEqual([]);

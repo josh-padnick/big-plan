@@ -71,13 +71,23 @@ export const pushArrivalAgentLabel = ({
   });
 };
 
-/** How the entry summarises what the revision touched. */
+/**
+ * How the entry summarises what the revision touched, or nothing at all.
+ *
+ * A push may open a thread about a block without revising the plan, which is
+ * what `push --about` is for. There is no count to give for one of those, and
+ * "0 blocks changed in the plan" is a sentence that describes nothing while
+ * occupying the line the reader looks at to find out what happened - so the
+ * line is dropped and the arrival is announced by who pushed and when.
+ */
 export const pushArrivalChangeLabel = (
   changeTargets: ReadonlyArray<string>,
-): string =>
-  changeTargets.length === 1
-    ? "1 block changed in the plan."
-    : `${changeTargets.length} blocks changed in the plan.`;
+): string | null =>
+  changeTargets.length === 0
+    ? null
+    : changeTargets.length === 1
+      ? "1 block changed in the plan."
+      : `${changeTargets.length} blocks changed in the plan.`;
 
 export const PushArrivalEntry = ({
   arrival,
@@ -92,6 +102,7 @@ export const PushArrivalEntry = ({
   readonly onOpenThread: () => void;
   readonly onDismiss: () => void;
 }) => {
+  const changeLabel = pushArrivalChangeLabel(arrival.changeTargets);
   return (
     <Card
       density="compact"
@@ -116,9 +127,9 @@ export const PushArrivalEntry = ({
           client={arrival.model?.client}
         />
       </p>
-      <p className="mt-1 mb-0 text-2xs text-muted">
-        {pushArrivalChangeLabel(arrival.changeTargets)}
-      </p>
+      {changeLabel === null ? null : (
+        <p className="mt-1 mb-0 text-2xs text-muted">{changeLabel}</p>
+      )}
       <div className="mt-2 flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={onOpenThread}>
           Open thread

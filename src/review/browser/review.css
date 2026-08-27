@@ -10,17 +10,26 @@ here; all values use the document theme's closed token vocabulary.
    There is deliberately no reduced-motion arm: the island skips the mark
    entirely for a reader who asked for less motion, because a brief wash that
    fades is the whole effect and a stilled version of it would be a permanent
-   highlight the reader never dismissed. */
+   highlight the reader never dismissed.
+
+   It paints a ring and nothing else, for the same reason the comment marks
+   below do. A settled block may be a callout, a code block, or a table, and
+   every one of those declares its own fill; an animated background beats that
+   declaration for as long as it runs, so washing the block itself would drain
+   the component's own colour and pop it back rather than say "this one is
+   new". The ring is a shadow rather than an outline so it cannot displace the
+   outline a comment mark may be drawing on the very same block. */
 @keyframes review-push-settle {
   from {
-    background-color: color-mix(in srgb, var(--accent-c) 16%, transparent);
-    box-shadow: 0 0 0 0.35rem
-      color-mix(in srgb, var(--accent-c) 16%, transparent);
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--accent-c) 55%, var(--bg)),
+      0 0 0 0.35rem color-mix(in srgb, var(--accent-c) 16%, transparent);
   }
 
   to {
-    background-color: transparent;
-    box-shadow: 0 0 0 0.35rem transparent;
+    box-shadow:
+      0 0 0 2px transparent,
+      0 0 0 0.35rem transparent;
   }
 }
 
@@ -30,7 +39,6 @@ here; all values use the document theme's closed token vocabulary.
      changed, so it paints the arriving blocks once; the island removes the
      attribute when the animation ends. */
   [data-block-id][data-review-settled] {
-    border-radius: 0.25rem;
     animation: review-push-settle 1.6s ease-out 1;
   }
   [data-block-id]:not([data-block-kind="part"]),

@@ -43,9 +43,13 @@ export const settleChangedBlocks = (
     const element = target.found;
     // A second push landing on the same block would otherwise inherit the
     // running animation and show nothing. Clearing the attribute and forcing
-    // the pending style change to flush restarts it.
-    element.removeAttribute(SETTLE_ATTRIBUTE);
-    void element.offsetWidth;
+    // the pending style change to flush restarts it - and only a block that
+    // still carries the mark can be mid-animation, so the swap path, whose
+    // blocks the parser built moments ago, pays no layout for it.
+    if (element.hasAttribute(SETTLE_ATTRIBUTE)) {
+      element.removeAttribute(SETTLE_ATTRIBUTE);
+      void element.offsetWidth;
+    }
     element.setAttribute(SETTLE_ATTRIBUTE, "");
     // `animationend` bubbles, so any animation finishing beneath this block -
     // including a nested block the same revision settled - would otherwise

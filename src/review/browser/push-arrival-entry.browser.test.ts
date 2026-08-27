@@ -62,6 +62,10 @@ describe("pushArrivalChangeLabel", () => {
       "2 blocks changed in the plan.",
     );
   });
+
+  it("should say nothing at all for a push that revised nothing", () => {
+    expect(pushArrivalChangeLabel([])).toBeNull();
+  });
 });
 
 describe("pushArrivalAgentLabel", () => {

@@ -2,7 +2,7 @@
 // runtime state and request turns; this surface owns the empty, compose, and
 // conversation presentation states.
 
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import type { AgentStatus } from "../shared/agent-status.js";
 import { AgentStatePill } from "./agent-message.browser.js";
 import { ComposeImages } from "./compose-images.browser.js";
@@ -31,12 +31,12 @@ export type ChatSurfaceModel = {
   readonly resolvedPushedThreads: ReactNode;
   readonly resolvedPushedThreadCount: number;
   /**
-   * Whether a resolved thread is currently open in the rail. A push can land
-   * in a thread the reviewer already resolved, and the entry announcing it
-   * offers to open that thread - which would otherwise open it inside a
-   * collapsed disclosure and read as a control that does nothing.
+   * The Resolved disclosure, so the controller can reveal it at the moment a
+   * reader asks to open a thread inside it. A push can land in a thread the
+   * reviewer already resolved, and opening that thread while the disclosure
+   * stays shut mounts a card nobody can see.
    */
-  readonly resolvedPushedThreadsOpen: boolean;
+  readonly resolvedThreadsRef: RefObject<HTMLDetailsElement | null>;
   readonly archivedExchanges: ReactNode;
   readonly archivedCount: number;
   readonly onBodyChange: (body: string) => void;
@@ -162,8 +162,8 @@ export const ChatSurface = ({
           )}
           {model.resolvedPushedThreadCount === 0 ? null : (
             <details
+              ref={model.resolvedThreadsRef}
               className="group border-t border-edge pt-3"
-              open={model.resolvedPushedThreadsOpen}
             >
               <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                 Resolved ({model.resolvedPushedThreadCount})

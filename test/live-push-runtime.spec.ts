@@ -29,6 +29,9 @@ import {
   type Page,
 } from "./fixtures";
 
+/** What the settle probe records into the page, so the spec can read it back. */
+type SettleRecord = { readonly settledBlockIds: ReadonlyArray<string> };
+
 const PLAN = `# Live push runtime probe
 
 The reviewer keeps reading while an agent prepares a revision.
@@ -1077,9 +1080,34 @@ test("should open the rail, name the agent, and settle the changed blocks when a
     ).toBeHidden();
 
     // Armed before the push commits, so the one-shot settle cannot finish
-    // between the swap landing and the assertion being made.
+    // between the swap landing and the assertion being made. The mark clears
+    // itself when its animation ends, so what is asserted later is this
+    // record of the blocks that took it rather than the live attribute, which
+    // is only true for as long as the wash is still running.
     const settled = page.waitForSelector("[data-review-settled]", {
       timeout: 20_000,
+    });
+    await page.evaluate(() => {
+      const taken: Array<string> = [];
+      Object.defineProperty(window, "settledBlockIds", { value: taken });
+      new MutationObserver((records) => {
+        for (const record of records) {
+          const element = record.target as HTMLElement;
+          const blockId = element.getAttribute("data-block-id");
+          if (
+            blockId === null ||
+            !element.hasAttribute("data-review-settled") ||
+            taken.includes(blockId)
+          ) {
+            continue;
+          }
+          taken.push(blockId);
+        }
+      }).observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["data-review-settled"],
+      });
     });
     const { threadId } = await pushRevisionFrom({
       planPath,
@@ -1117,10 +1145,8 @@ test("should open the rail, name the agent, and settle the changed blocks when a
     // exactly the blocks the outcome named and nothing else.
     await expect
       .poll(() =>
-        page.evaluate(() =>
-          [...document.querySelectorAll("[data-review-settled]")].map(
-            (element) => element.getAttribute("data-block-id"),
-          ),
+        page.evaluate(
+          () => (window as unknown as SettleRecord).settledBlockIds,
         ),
       )
       .toEqual([

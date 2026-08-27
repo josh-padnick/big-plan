@@ -4259,11 +4259,15 @@ export const ReviewController = () => {
   // before the swap a push drove and consumed by the announcement it makes, so
   // a lens replacing plan DOM for the same revision cannot inherit them.
   const armedSettleTargets = useRef<ReadonlyArray<string> | null>(null);
-  // What the swap reads to arm that settle. A ref because the poll rebuilds
-  // this array every interval whether or not anything in it changed, and a
-  // refresh that restarted on each rebuild would cancel its own in-flight
-  // fetch for as long as the pushes kept coming.
-  const agentResponsesRef = useRef<ReadonlyArray<AgentResponse>>([]);
+  // The arrival the next swap is showing, which is what decides whether that
+  // swap settles anything at all. A ref because the swap reads it from inside
+  // an in-flight fetch, and making it a dependency would restart that fetch on
+  // every poll; consumed by the swap so a later revert onto the same snapshot
+  // finds nothing to settle.
+  const pendingSettleArrival = useRef<PushArrival | null>(null);
+  // The Chat tab's Resolved disclosure, so a thread inside it can be revealed
+  // when the reader asks for it.
+  const resolvedThreadsRef = useRef<HTMLDetailsElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [sidebarView, setSidebarView] = useState<SidebarView>("feedback");
   const [isHydrated, setIsHydrated] = useState(false);
@@ -4827,7 +4831,6 @@ export const ReviewController = () => {
   );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
-    agentResponsesRef.current = snapshot.responses;
     setAgent(snapshot);
     setCancelPendingRequestIds((current) =>
       reconcilePendingCancellations({
@@ -6004,6 +6007,7 @@ export const ReviewController = () => {
     const latest = scan.arrivals.at(-1);
     if (latest === undefined) return;
     setPushArrival(latest);
+    pendingSettleArrival.current = latest;
     if (isOpen || !isWide) return;
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
@@ -6057,9 +6061,10 @@ export const ReviewController = () => {
       .then((html) => {
         if (!current) return;
         armedSettleTargets.current = pushSettleTargets({
-          responses: agentResponsesRef.current,
+          arrival: pendingSettleArrival.current,
           resultSnapshot: agent.currentSnapshot,
         });
+        pendingSettleArrival.current = null;
         replacePlanArticle(new DOMParser().parseFromString(html, "text/html"));
         setDisplayedSnapshot(agent.currentSnapshot);
         window.scrollTo({ left: scrollX, top: scrollY });
@@ -6956,6 +6961,30 @@ export const ReviewController = () => {
     );
   };
   /*
+  A pushed thread the reviewer already resolved sits inside a disclosure that
+  is collapsed until they ask for it, so opening that thread without opening
+  the disclosure mounts a card nobody can see - the control that appears to do
+  nothing. Revealed imperatively at the moment the reader asks rather than by
+  driving `open` from state, because a native toggle is invisible to React: a
+  reader who collapsed the disclosure by hand would leave a controlled prop
+  stuck at its old value, and the next request to open it would write nothing.
+  */
+  const openPushedThread = (threadId: string) => {
+    setThreadOpenState((state) =>
+      setThreadOpen({
+        state,
+        commentId: threadId,
+        kind: "sent",
+        surface: "rail",
+        isRailOpen: isOpen,
+        open: true,
+      }),
+    );
+    if (!resolvedCommentIds.has(threadId)) return;
+    const disclosure = resolvedThreadsRef.current;
+    if (disclosure !== null) disclosure.open = true;
+  };
+  /*
   The entry names one arrival and stops as soon as that arrival has been acted
   on: both controls clear it, and so does resolving the thread it points at,
   because a reader looking at the thread does not need to be told there is one.
@@ -6978,16 +7007,7 @@ export const ReviewController = () => {
         nowMs={statusNowMs}
         labelFor={agentRosterLabel}
         onOpenThread={() => {
-          setThreadOpenState((state) =>
-            setThreadOpen({
-              state,
-              commentId: pushArrival.threadId,
-              kind: "sent",
-              surface: "rail",
-              isRailOpen: isOpen,
-              open: true,
-            }),
-          );
+          openPushedThread(pushArrival.threadId);
           setPushArrival(null);
         }}
         onDismiss={() => setPushArrival(null)}
@@ -7158,17 +7178,7 @@ export const ReviewController = () => {
       request?.kind === "push" &&
       request.threadId !== undefined
     ) {
-      const threadId = request.threadId;
-      setThreadOpenState((current) =>
-        setThreadOpen({
-          state: current,
-          commentId: threadId,
-          kind: "sent",
-          surface: "rail",
-          isRailOpen: isOpen,
-          open: true,
-        }),
-      );
+      openPushedThread(request.threadId);
       openFeedbackSidebar("chat");
       return;
     }
@@ -7833,14 +7843,7 @@ export const ReviewController = () => {
                 resolvedPushedThreadCount: resolvedPushedThreadComments.length,
                 resolvedPushedThreads:
                   resolvedPushedThreadComments.map(renderPushedThread),
-                resolvedPushedThreadsOpen: resolvedPushedThreadComments.some(
-                  (comment) =>
-                    threadIsOpen({
-                      commentId: comment.id,
-                      kind: "sent",
-                      surface: "rail",
-                    }),
-                ),
+                resolvedThreadsRef,
                 archivedCount: archivedChatRequests.length,
                 archivedExchanges: archivedChatRequests.map(renderChatExchange),
                 onBodyChange: setChatBody,
