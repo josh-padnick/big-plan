@@ -141,6 +141,9 @@ const requestLabel = (request: {
   readonly kind: string;
   readonly targetLabel?: string;
 }): string => {
+  // The approval always carries a covering message, and quoting it here named
+  // the reviewer's own words where every other row names the work.
+  if (request.kind === "approval") return "Plan approval";
   const body = request.body?.trim() ?? "";
   if (body !== "") {
     const firstLine = body.split("\n", 1)[0] ?? body;
@@ -150,7 +153,6 @@ const requestLabel = (request: {
     return request.targetLabel;
   }
   if (request.kind === "chat") return "Plan-wide question";
-  if (request.kind === "approval") return "Plan approval";
   return "Pending request";
 };
 

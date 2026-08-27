@@ -239,7 +239,7 @@ The approval is refused if the plan changes while the confirmation is open, so t
 
 After approval, the branding-bar control reads **Plan approved**, and an approval stamp appears just above the document title in the reading column.
 Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
-**Agent Status** reports the handoff while the agent holds it, as **Acknowledging a plan approval**, and the plan-wide Chat thread shows the two progress steps: **Plan approved**, then **Approval acknowledged** once the agent answers.
+**Agent Status** and the plan-wide Chat thread show the two progress steps: **Plan approved**, then **Approval acknowledged** once the agent answers.
 Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.
 If the plan source changes while an approval remains in force, the bar reports **Changed since approval** and offers **Re-approve** for the plan as it now reads.
 

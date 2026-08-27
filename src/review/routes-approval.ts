@@ -502,7 +502,14 @@ export const approvePlan = async (
       requestId,
     });
   }
-  await writeAgentRequest({ store: context.store, request: handoff });
+  try {
+    await writeAgentRequest({ store: context.store, request: handoff });
+  } catch (error: unknown) {
+    context.reportDiagnostic({
+      message: "The approval could not be delivered to the agent mailbox",
+      error,
+    });
+  }
   try {
     await writeApprovalBrief({
       store: context.store,

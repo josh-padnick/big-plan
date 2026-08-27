@@ -19,7 +19,15 @@ import {
   commitRequestTerminal,
 } from "../src/review/request-mailbox.js";
 import { writeSnapshot } from "../src/review/store.js";
-import { agentIdOf, expect, runAgentCli, test, type Page } from "./fixtures";
+import {
+  agentIdOf,
+  agentSidebar,
+  agentStatusTrigger,
+  expect,
+  runAgentCli,
+  test,
+  type Page,
+} from "./fixtures";
 
 const PLAN = `# Durable decision answers
 
@@ -960,6 +968,15 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
         .click();
       await expect(rail).toContainText("Plan approved");
       await expect(rail).toContainText("Approval acknowledged");
+
+      await agentStatusTrigger(page).click();
+      const status = agentSidebar(page);
+      await expect(status.locator("[data-review-current-activity]")).toHaveAttribute(
+        "data-review-current-activity",
+        "handoff",
+      );
+      await expect(status).toContainText("Plan approved");
+      await expect(status).toContainText("Approval acknowledged");
     });
   } finally {
     await runtime.close();
