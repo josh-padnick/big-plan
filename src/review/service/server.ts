@@ -180,6 +180,18 @@ const forwardLiveRequest = ({
   readonly runtimeUrl: string;
 }): Promise<void> =>
   new Promise((settle, fail) => {
+    // Whichever end of the hop finishes first decides the relay, and it does
+    // so once. Either side going away has to tear the other down: an upstream
+    // left streaming into a response nobody is reading never ends, so the
+    // request that opened it would stay open for as long as the runtime kept
+    // writing - and a shutdown that force-closes the connection is exactly
+    // when that happens.
+    let concluded = false;
+    const conclude = (act: () => void): void => {
+      if (concluded) return;
+      concluded = true;
+      act();
+    };
     const destination = new URL(
       `${target.pathname}${target.search}`,
       runtimeUrl,
@@ -192,13 +204,23 @@ const forwardLiveRequest = ({
       },
       (upstream) => {
         response.writeHead(upstream.statusCode ?? 502, upstream.headers);
-        upstream.once("error", fail);
-        upstream.once("end", settle);
+        upstream.once("error", (error: unknown) => {
+          conclude(() => fail(error));
+        });
+        upstream.once("end", () => conclude(settle));
         upstream.pipe(response);
       },
     );
-    forwarded.once("error", fail);
-    request.once("aborted", () => forwarded.destroy());
+    forwarded.once("error", (error: unknown) => {
+      conclude(() => fail(error));
+    });
+    const abandon = (): void =>
+      conclude(() => {
+        forwarded.destroy();
+        settle();
+      });
+    request.once("aborted", abandon);
+    response.once("close", abandon);
     request.pipe(forwarded);
   });
 
@@ -305,19 +327,42 @@ export const startService = async ({
     );
     if ((method === "GET" || proxyEnabled) && planRoute !== null) {
       const planId = planRoute[1] ?? "";
+      const planRoot = `/plan/${planId}`;
+      // The plan address itself is the only thing here a person reads. Under
+      // the hop everything deeper is a request the served document makes for
+      // itself, so a status page would arrive at it as a 200 it parses as
+      // data: the poll would see success, the parse would throw something the
+      // browser's runtime boundary does not recognise, and the outage the
+      // reader should have been shown would never appear.
+      const readablePage =
+        method === "GET" &&
+        (target.pathname === planRoot || target.pathname === `${planRoot}/`);
       // A malformed id is answered like an unknown one rather than with a
       // validation error, because the visitor clicked a link and cannot act
       // on the difference.
       const answer = isServicePlanId(planId)
         ? await answerForPlan({ planId })
         : ({ kind: "unknown" } as const);
+      if (answer.kind !== "live" && !readablePage) {
+        if (answer.kind === "unknown") {
+          refuse({ response, status: 404, reason: "No such route" });
+        } else {
+          // A gateway with nothing behind it, which is what the browser's
+          // existing retry and outage handling already knows how to read.
+          refuse({
+            response,
+            status: 502,
+            reason: "No live review session",
+          });
+        }
+        return;
+      }
       switch (answer.kind) {
         case "live": {
           if (!proxyEnabled) {
             sendRedirect({ response, status: 302, location: answer.url });
             return;
           }
-          const planRoot = `/plan/${planId}`;
           if (method === "GET" && target.pathname === planRoot) {
             sendRedirect({ response, status: 302, location: `${planRoot}/` });
             return;
@@ -331,7 +376,6 @@ export const startService = async ({
           return;
         }
         case "ended":
-          if (method !== "GET") break;
           sendHtml({
             response,
             status: 200,
@@ -343,7 +387,6 @@ export const startService = async ({
           });
           return;
         case "interrupted":
-          if (method !== "GET") break;
           sendHtml({
             response,
             status: 200,
@@ -354,7 +397,6 @@ export const startService = async ({
           });
           return;
         case "never-started":
-          if (method !== "GET") break;
           sendHtml({
             response,
             status: 200,
@@ -362,7 +404,6 @@ export const startService = async ({
           });
           return;
         case "unknown":
-          if (method !== "GET") break;
           sendHtml({ response, status: 404, html: renderPlanUnknownPage() });
           return;
       }

@@ -44,7 +44,11 @@ address the command printed rather than one you assembled from the default port:
 `BIG_PLAN_PROXY=1` makes the service keep a live review on that stable address
 instead of redirecting the browser to the session port. The switch is read once
 when the service starts; unset it or set it to `0` to retain the default
-redirect. Each review still runs on its own unique session port so its process,
+redirect. Setting it changes nothing while a service started without it is
+still running, because later commands adopt that process rather than replacing
+it: export the variable and then run `big-plan service restart` - or
+`big-plan service stop` before the next command - for the change to take
+effect. Each review still runs on its own unique session port so its process,
 custody, and write fences remain isolated—the service only supplies the hop.
 
 Opening it while a review is running takes you straight to the running session.

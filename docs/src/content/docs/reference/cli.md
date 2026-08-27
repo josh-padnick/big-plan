@@ -412,7 +412,10 @@ old one stop resolving.
 `BIG_PLAN_PROXY=1` opts the service into forwarding a running review while the
 browser stays on the saved-link address. It is a startup escape hatch, not a
 persisted setting: the default is the existing redirect, and `BIG_PLAN_PROXY=0`
-explicitly keeps that behavior.
+explicitly keeps that behavior. The listening process took its answer at
+startup, and a command that finds a healthy service adopts it, so changing the
+variable only reaches a service you restart: run `service restart` after
+exporting it, or `service stop` before the next command that prints a link.
 
 State lives under `~/.big-plan/service/`, owner-only, and honours
 `BIG_PLAN_STATE_DIR`: one small identity record per plan, the token that

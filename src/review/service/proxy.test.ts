@@ -158,4 +158,36 @@ describe("the opt-in review proxy", () => {
     );
     expect(write.status).toBe(200);
   });
+
+  it("should refuse a document's own requests once the session it was served by is gone", async () => {
+    process.env["BIG_PLAN_PROXY"] = "1";
+    const running = await startPair();
+    delete process.env["BIG_PLAN_PROXY"];
+    const planPrefix = `/plan/${running.review.planId}/`;
+    await running.review.close();
+
+    const [page, poll, image] = await Promise.all([
+      fetch(`${running.service.origin}${planPrefix}`, { redirect: "manual" }),
+      fetch(`${running.service.origin}${planPrefix}api/drafts`, {
+        headers: {
+          "x-big-plan-review-token": running.token,
+          "sec-fetch-site": "same-origin",
+        },
+      }),
+      fetch(`${running.service.origin}${planPrefix}review-images/anything`),
+    ]);
+
+    // The address a person saved still explains what happened to the review.
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html");
+
+    // What the open page asks for itself must not read as a successful answer,
+    // or the document parses a status page as data instead of showing that its
+    // runtime is gone.
+    for (const answer of [poll, image]) {
+      expect(answer.ok).toBe(false);
+      expect(answer.status).toBe(502);
+      expect(answer.headers.get("content-type")).not.toContain("text/html");
+    }
+  });
 });
