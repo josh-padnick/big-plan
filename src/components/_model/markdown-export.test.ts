@@ -270,6 +270,9 @@ describe("Markdown export primitives", () => {
     expect(markdownTableProse("One inline sentence.")).toEqual({
       cell: "One inline sentence.",
     });
+    expect(
+      markdownTableProse("One soft-wrapped\nsentence across lines."),
+    ).toEqual({ cell: "One soft-wrapped sentence across lines." });
     expect(markdownTableProse("Lead sentence.\n\n```json\n{}\n```")).toEqual({
       cell: "Lead sentence.",
       blocks: "Lead sentence.\n\n```json\n{}\n```",

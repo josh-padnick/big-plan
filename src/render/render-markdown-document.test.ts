@@ -462,4 +462,148 @@ Restricts the result set. Example:
       "<p>Wireframe reason: The queue is the product.</p>",
     );
   });
+
+  it("should keep an authored bullet's inline markup in one list item", () => {
+    const result = render(`# Plan
+
+- Do **this** now and [read](https://example.com) it
+- Second item with \`code\` inline
+- Parent item
+  - Nested child
+- [x] Done task
+- [ ] Open task
+
+1. First **step**
+2. Second step
+`);
+
+    const html = readerHtml(result.markdown);
+    expect(html).toContain(
+      '<li>Do <strong>this</strong> now and <a href="https://example.com">read</a> it</li>',
+    );
+    expect(html).toContain(
+      "<li>Second item with <code>code</code> inline</li>",
+    );
+    expect(html).toContain("<li>First <strong>step</strong></li>");
+    expect(html).toContain("<li>Second step</li>");
+    expect(html).toContain("<li>Nested child</li>");
+    expect(html).toContain("Done task");
+    expect(html).toContain("Open task");
+    // A tight item never wraps its own sentence in a paragraph.
+    expect(html).not.toMatch(/<li>\s*<p>Do /u);
+    expect(html).not.toMatch(/<li>\s*<p>Parent item<\/p>/u);
+  });
+
+  it("should keep a QuickSummary bullet's inline markup in one item", () => {
+    const html = readerHtml(
+      render(`# Plan
+
+<QuickSummary>
+
+<Why>
+
+- The **retry queue** must survive a restart.
+
+</Why>
+
+<What>
+
+- Persist every [attempt](https://example.com/audit).
+
+</What>
+
+<How>
+
+- Move retries into a worker.
+
+</How>
+
+</QuickSummary>
+`).markdown,
+    );
+
+    expect(html).toContain(
+      "<li>The <strong>retry queue</strong> must survive a restart.</li>",
+    );
+    expect(html).toContain(
+      '<li>Persist every <a href="https://example.com/audit">attempt</a>.</li>',
+    );
+  });
+
+  it("should keep a multi-paragraph authored item loose as authored", () => {
+    const html = readerHtml(
+      render(`# Plan
+
+- One paragraph
+
+  Second paragraph inside the item
+
+- Another item
+`).markdown,
+    );
+
+    expect(html).toContain("<p>One paragraph</p>");
+    expect(html).toContain("<p>Second paragraph inside the item</p>");
+    expect(html).toContain("<p>Another item</p>");
+  });
+
+  it("should keep a soft-wrapped description in its row without repeating it", () => {
+    const result = render(`# Plan
+
+<HttpEndpoint method="POST" path="/api/events">
+
+<Param name="anchor" in="body" type="SourceAnchor">
+
+Source location the event refers to, captured against the current plan
+revision.
+
+</Param>
+
+<Param name="filter" in="query" type="string">
+
+Restricts the result set. Example:
+
+\`\`\`json
+{ "status": "open" }
+\`\`\`
+
+</Param>
+
+</HttpEndpoint>
+`);
+
+    expect(
+      result.markdown.match(/Source location the event refers to/gu),
+    ).toHaveLength(1);
+    expect(result.markdown).not.toContain("**anchor**");
+    const html = readerHtml(result.markdown);
+    expect(html).toContain(
+      "<td>Source location the event refers to, captured against the current plan revision.</td>",
+    );
+    // The description that genuinely carries a block still keeps it.
+    expect(html).toContain("<p><strong>filter</strong></p>");
+    expect(html).toContain(
+      '<pre><code class="language-json">{ "status": "open" }\n</code></pre>',
+    );
+  });
+
+  it("should keep a tilde in authored component text literal", () => {
+    const html = readerHtml(
+      render(`# Plan
+
+<DataTable title="Latency">
+
+\`\`\`table
+| Stage | Budget |
+| --- | --- |
+| Capture | approx ~5~ ms |
+\`\`\`
+
+</DataTable>
+`).markdown,
+    );
+
+    expect(html).toContain("<td>approx ~5~ ms</td>");
+    expect(html).not.toContain("<del>");
+  });
 });
