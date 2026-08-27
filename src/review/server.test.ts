@@ -4,6 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { constants } from "node:fs";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   open,
@@ -6704,6 +6705,7 @@ describe("review runtime approval", () => {
         expect(body).toMatchObject({
           pinnedSnapshot: digest,
           canceledRequests: 0,
+          delivered: true,
           approval: { status: "approved", pinnedSnapshot: digest },
         });
 
@@ -6870,6 +6872,105 @@ describe("review runtime approval", () => {
           )?.canceledAt,
         ).toBeDefined();
         expect(outstandingAgentRequests(exchange)).toEqual([]);
+      },
+    );
+  });
+
+  it("reports an undelivered handoff instead of implying the agent has it", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        // A mailbox nothing can be written into: the record still commits, so
+        // the answer has to say the agent was never handed the approval.
+        await chmod(target.store.agentRequestDirectory, 0o500);
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        try {
+          const approved = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          expect(approved.status).toBe(200);
+          await expect(approved.json()).resolves.toMatchObject({
+            delivered: false,
+            approval: { status: "approved" },
+          });
+        } finally {
+          stderr.mockRestore();
+          await chmod(target.store.agentRequestDirectory, 0o700);
+        }
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests).toEqual([]);
+      },
+    );
+  });
+
+  it("settles a revoke of an approval the agent already answered", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        const { approvalId } = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+        const claimed = await claimAgentRequest({
+          store: target.store,
+          requestId: approvalId,
+          claimedBy: target.sessionId,
+          baselineSnapshot: digest,
+          now: new Date().toISOString(),
+        });
+        await commitRequestTerminal({
+          store: target.store,
+          claimedBy: target.sessionId,
+          response: validateAgentResponseDraft({
+            value: { requestId: approvalId },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set(),
+            currentSnapshot: digest,
+            now: new Date().toISOString(),
+          }),
+          now: new Date().toISOString(),
+        });
+        const reported: Array<string> = [];
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation((chunk: unknown) => {
+            reported.push(String(chunk));
+            return true;
+          });
+        try {
+          const revoked = await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/revoke-approval",
+            method: "POST",
+            body: { approvalId },
+          });
+          expect(revoked.status).toBe(200);
+        } finally {
+          stderr.mockRestore();
+        }
+        // Nothing failed: the acknowledgment is in, so there was never a
+        // handoff left to withdraw.
+        expect(reported.join("")).not.toContain(
+          "The approval handoff could not be canceled after revoking",
+        );
+        const settled = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          settled.requests.find((request) => request.requestId === approvalId),
+        ).toMatchObject({ answeredAt: expect.any(String) });
       },
     );
   });

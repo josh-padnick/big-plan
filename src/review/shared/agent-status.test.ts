@@ -1275,6 +1275,7 @@ describe("the approval handoff on the status card", () => {
     "approval-acknowledged": "Approval acknowledged",
     "approval-revoked": "Approval revoked",
     "response-ready": "Agent response ready",
+    "request-canceled": "Request canceled",
   } as const;
   const step = (
     stepCode: keyof typeof STEP_TEXT,
@@ -1382,6 +1383,23 @@ describe("the approval handoff on the status card", () => {
     ).toMatchObject({
       state: "idle",
       headline: "Agent connected",
+    });
+  });
+
+  it("should keep the handoff through the reviewer's own queue bookkeeping", () => {
+    // Canceling a message queued behind the approval says nothing about where
+    // the agent is, so it must not retire the reading the approval owns.
+    expect(
+      activityFor({
+        requests: [approvalRequest()],
+        progressEvents: [
+          step("plan-approved", NOW - 3_000),
+          step("request-canceled", NOW - 1_000, "1111111111111111"),
+        ],
+      }),
+    ).toMatchObject({
+      state: "handoff",
+      supporting: "Waiting for the agent to acknowledge the approval.",
     });
   });
 

@@ -288,10 +288,12 @@ const meaningfulWork = (
  * record, so a revoked approval simply stops being the latest word here, the
  * same way it stops being in force.
  *
- * It is also the last word only until the review has one: any later step on
- * another request means the agent has moved on, and a card still headlining an
- * acknowledgment - timestamped before the answer the agent has since published
- * - would report the wrong moment as the current one.
+ * It is also the last word only until the agent has one: a later step the agent
+ * itself posted on another request means it has moved on, and a card still
+ * headlining an acknowledgment - timestamped before the answer the agent has
+ * since published - would report the wrong moment as the current one. The
+ * reviewer's own bookkeeping about queued work moves nothing here, because
+ * canceling a message says nothing about where the agent is.
  */
 const approvalHandoffReading = ({
   requests,
@@ -313,7 +315,9 @@ const approvalHandoffReading = ({
     .slice(index + 1)
     .some(
       (event) =>
-        event.requestId !== undefined && event.requestId !== latest.requestId,
+        event.requestId !== undefined &&
+        event.requestId !== latest.requestId &&
+        progressStepCodeIsAgentOwned(event.stepCode),
     );
   if (movedOn) return undefined;
   const request = requests.find(
