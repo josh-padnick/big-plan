@@ -43,6 +43,112 @@ export const WIREFRAME_EMPHASES: ReadonlyArray<WireframeEmphasis> = [
   "destructive",
 ];
 
+/**
+ * The meanings a wireframe can draw as a mark.
+ *
+ * The set is named by what an icon means rather than by what it looks like,
+ * because an author writing a screen is thinking "close this panel" rather than
+ * "draw an x", and because one meaning drawing one mark on every screen of
+ * every plan is the repetition that makes a drawing read as one system.
+ *
+ * It is a vocabulary rather than a constraint: an author may write any name,
+ * and one this set does not hold draws a labelled placeholder instead. A
+ * nearby-looking substitute would be the single dishonest option, because a
+ * reviewer reads the drawing and cannot see that the mark is wrong.
+ */
+export type WireframeIconName =
+  | "add"
+  | "back"
+  | "chevron"
+  | "close"
+  | "collapse"
+  | "comment"
+  | "copy"
+  | "database"
+  | "delete"
+  | "done"
+  | "down"
+  | "drag"
+  | "edit"
+  | "error"
+  | "expand"
+  | "file"
+  | "folder"
+  | "help"
+  | "inbox"
+  | "info"
+  | "lock"
+  | "more"
+  | "refresh"
+  | "remove"
+  | "search"
+  | "settings"
+  | "star"
+  | "table"
+  | "terminal"
+  | "tip"
+  | "undo"
+  | "up"
+  | "waiting"
+  | "warning";
+
+export const WIREFRAME_ICON_NAMES: ReadonlyArray<WireframeIconName> = [
+  "add",
+  "back",
+  "chevron",
+  "close",
+  "collapse",
+  "comment",
+  "copy",
+  "database",
+  "delete",
+  "done",
+  "down",
+  "drag",
+  "edit",
+  "error",
+  "expand",
+  "file",
+  "folder",
+  "help",
+  "inbox",
+  "info",
+  "lock",
+  "more",
+  "refresh",
+  "remove",
+  "search",
+  "settings",
+  "star",
+  "table",
+  "terminal",
+  "tip",
+  "undo",
+  "up",
+  "waiting",
+  "warning",
+];
+
+/**
+ * How big a standalone icon is drawn.
+ *
+ * The steps borrow the space scale's own words, so an author who already knows
+ * `gap="sm"` knows `size="sm"`, and each one is a multiple of the artboard's
+ * body type rather than a fixed pixel size: an icon drawn on a phone at 1:1 and
+ * the same icon on a desktop artboard painted at five-eighths both land beside
+ * text of their own device's size. Three steps, not five, because an icon has
+ * exactly three jobs - riding a line of metadata, standing with body copy, or
+ * being the thing a finger reaches for - and a fourth step would only invite
+ * hand-tuning a mark that should match the type beside it.
+ */
+export type WireframeIconSize = "sm" | "md" | "lg";
+
+export const WIREFRAME_ICON_SIZES: ReadonlyArray<WireframeIconSize> = [
+  "sm",
+  "md",
+  "lg",
+];
+
 export type WireframeMediaShape = "square" | "wide" | "tall";
 
 export const WIREFRAME_MEDIA_SHAPES: ReadonlyArray<WireframeMediaShape> = [
@@ -90,6 +196,35 @@ export const WIREFRAME_MEASURES: ReadonlyArray<WireframeMeasure> = [
   "prose",
   "wide",
 ];
+
+/**
+ * What an overlay is.
+ *
+ * A modal and an alert are not the same surface. An alert interrupts to ask
+ * about something the reader is about to do and cannot be dismissed by
+ * ignoring it; a dialog is an ordinary task surface that happens to sit above
+ * the page. Drawing both the same way is how a wireframe ends up arguing for a
+ * destructive confirmation that nobody can tell apart from a settings sheet.
+ */
+export type WireframeOverlayKind = "dialog" | "alert";
+
+export const WIREFRAME_OVERLAY_KINDS: ReadonlyArray<WireframeOverlayKind> = [
+  "dialog",
+  "alert",
+];
+
+/**
+ * Whether the page beneath an overlay is dimmed.
+ *
+ * Dimming says the page is unavailable until this surface is answered. A clear
+ * backdrop says the opposite: the surface is layered over content the reader is
+ * still meant to see and use, as a popover, menu, or toast is. The choice is
+ * the author's because it is a product decision, not a drawing style.
+ */
+export type WireframeOverlayBackdrop = "dim" | "clear";
+
+export const WIREFRAME_OVERLAY_BACKDROPS: ReadonlyArray<WireframeOverlayBackdrop> =
+  ["dim", "clear"];
 
 /**
  * How much chrome a region draws around itself.
@@ -258,6 +393,16 @@ export type WireframeNode =
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
+      // A run of elements that travel together as one item of a Row. Without
+      // it a Row clusters its loose children at the start, and justify
+      // "between" spreads every one of them evenly, so a title and its
+      // actions never settle at the two ends the product puts them at.
+      readonly element: "Group";
+      readonly gap: WireframeSpace;
+      readonly align: WireframeAlign;
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
       readonly element: "Panel";
       readonly title?: string;
       readonly eyebrow?: string;
@@ -280,8 +425,18 @@ export type WireframeNode =
     }
   | {
       readonly element: "Button";
+      // What the control does, always. An icon-only control still carries it,
+      // because the label is what reaches a screen reader and what a reviewer
+      // needs in order to argue about the action rather than about the picture.
       readonly label: string;
       readonly emphasis: WireframeEmphasis;
+      // A named glyph drawn before the label. Product toolbars are full of
+      // controls a person recognizes by their mark, and a wireframe that spells
+      // every one of them out in words stops depicting the product.
+      readonly icon?: string;
+      // Whether the glyph stands alone. The label stays the accessible name and
+      // the tooltip, so hiding the words never hides the meaning.
+      readonly iconOnly: boolean;
       // The screen this button moves the prototype to. Every target is
       // resolved against the wireframe's own screens before rendering, so a
       // rendered document can never offer a dead action.
@@ -291,6 +446,17 @@ export type WireframeNode =
       // Mutually exclusive modes presented as one control. Children stay
       // buttons so the selected mode remains explicit in the authored model.
       readonly element: "SegmentedControl";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      // A surface drawn on top of the page rather than in it. It is the only
+      // element that leaves the screen's own flow, which is why it belongs to
+      // the screen directly: an overlay covers a page, so there has to be a
+      // page under it.
+      readonly element: "Overlay";
+      readonly title?: string;
+      readonly kind: WireframeOverlayKind;
+      readonly backdrop: WireframeOverlayBackdrop;
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
@@ -357,6 +523,35 @@ export type WireframeNode =
       readonly label: string;
       readonly tone: WireframeTone;
     }
+  | {
+      // A verbatim string the reader is meant to copy or type exactly: a
+      // command, a path, a URL, an identifier. It is drawn as one bordered
+      // object so the mark that types it, the string itself, and the control
+      // that copies it read as one thing. Loose beside a paragraph, a copy
+      // control floats away from the words it belongs to and sizes itself
+      // against nothing.
+      readonly element: "Reference";
+      readonly text: string;
+      // The optional leading mark, naming what kind of reference this is.
+      readonly icon?: string;
+      // What the copy control means. Its presence is what draws the control,
+      // so a reference is copyable only where the author said what copying it
+      // does, and the control is never drawn without a name.
+      readonly copyLabel?: string;
+    }
+  | {
+      // A glyph standing on its own, as a mark rather than a control. Anything
+      // a person clicks is a Button carrying the same named glyph, so one
+      // drawn affordance never has two ways to be authored.
+      readonly element: "Icon";
+      readonly name: string;
+      // What the mark means. Always present, and always reaching assistive
+      // technology, because a glyph nobody has named is a decision nobody made.
+      readonly label: string;
+      // Whether the meaning is also drawn as words beside the mark.
+      readonly labelled: boolean;
+      readonly size: WireframeIconSize;
+    }
   | { readonly element: "Divider"; readonly label?: string }
   | {
       readonly element: "ImagePlaceholder";
@@ -375,7 +570,7 @@ export type WireframeNode =
     }
   | {
       readonly element: "ChoiceCard";
-      readonly icon: string;
+      readonly emoji?: string;
       readonly title: string;
       readonly description: string;
       readonly selected: boolean;

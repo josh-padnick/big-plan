@@ -99,6 +99,31 @@ const render = (compiled: CompiledComponent): Element => {
 
 const html = (node: Element): string => JSON.stringify(node);
 
+// Finds one rendered element by the class it carries, so a test can assert on
+// the properties that element actually holds rather than on the order a
+// serialized tree happens to print them in.
+const elementWithClass = ({
+  node,
+  className,
+}: {
+  readonly node: Element;
+  readonly className: string;
+}): Element | undefined => {
+  const classes = node.properties["className"];
+  if (Array.isArray(classes) && classes.includes(className)) {
+    return node;
+  }
+  for (const child of node.children) {
+    if (child.type === "element") {
+      const found = elementWithClass({ node: child, className });
+      if (found !== undefined) {
+        return found;
+      }
+    }
+  }
+  return undefined;
+};
+
 const HOME = screen({
   id: "home",
   name: "Wallet home",
@@ -132,7 +157,7 @@ const choiceGroup = (selected?: ChoiceName): ScopedChild =>
       element({
         name: "ChoiceCard",
         attributes: {
-          icon: "⚽",
+          emoji: "⚽",
           title: "Ask about a purchase",
           description: "See how much money I would have left",
           ...(selected === "purchase"
@@ -143,7 +168,7 @@ const choiceGroup = (selected?: ChoiceName): ScopedChild =>
       element({
         name: "ChoiceCard",
         attributes: {
-          icon: "💵",
+          emoji: "💵",
           title: "Ask about my loan",
           description: "See what I owe and ask a question",
           ...(selected === "loan"
@@ -200,6 +225,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                   element: "Button",
                   label: "Start lesson",
                   emphasis: "secondary",
+                  iconOnly: false,
                   navigateTo: "lesson",
                 },
               ],
@@ -1370,6 +1396,53 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should still accept a toolbar Row whose two Groups hold only controls", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          attributes: { device: "desktop" },
+          children: [
+            element({
+              name: "Row",
+              attributes: { justify: "between" },
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({ name: "Heading", attributes: { text: "Plans" } }),
+                  ],
+                }),
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Search plans",
+                        icon: "search",
+                        iconOnly: true,
+                      },
+                    }),
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Workspace settings",
+                        icon: "settings",
+                        iconOnly: true,
+                      },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+  });
+
   it("should reject author-owned pane widths now that Rail owns the invariant", () => {
     const { diagnostics } = compile({
       scopedChildren: [
@@ -1756,7 +1829,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics).toEqual([]);
   });
 
-  it("should count a composer send button as the screen's filled action", () => {
+  it("should count a composer send button as the page layer's filled action", () => {
     const { diagnostics } = compile({
       scopedChildren: [
         screen({
@@ -2074,7 +2147,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         element({
           name: "ChoiceCard",
           attributes: {
-            icon: "⚽",
+            emoji: "⚽",
             title: "Ask about a purchase",
             description: "See how much money I would have left",
             navigateTo: "purchase-selected",
@@ -2083,7 +2156,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         element({
           name: "ChoiceCard",
           attributes: {
-            icon: "💵",
+            emoji: "💵",
             title: "Ask about my loan",
             description: "See what I owe and ask a question",
             navigateTo: "purchase-selected",
@@ -2107,6 +2180,274 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics[0]?.message).toContain(
       "every option needs its own truthful visible outcome",
     );
+  });
+
+  it("should draw a choice card's art only when the author wrote it", () => {
+    // Every card in the plan carries art, or none does, so the assertion about
+    // the drawn art slot is about the whole rendered wireframe.
+    const cards = (art: boolean, selected?: ChoiceName): ScopedChild =>
+      element({
+        name: "ChoiceGroup",
+        children: [
+          element({
+            name: "ChoiceCard",
+            attributes: {
+              ...(art ? { emoji: "⚽" } : {}),
+              title: "Ask about a purchase",
+              description: "See how much money I would have left",
+              ...(selected === "purchase"
+                ? { selected: true }
+                : { navigateTo: "purchase-selected" }),
+            },
+          }),
+          element({
+            name: "ChoiceCard",
+            attributes: {
+              ...(art ? { emoji: "💵" } : {}),
+              title: "Ask about my loan",
+              description: "See what I owe and ask a question",
+              ...(selected === "loan"
+                ? { selected: true }
+                : { navigateTo: "loan-selected" }),
+            },
+          }),
+        ],
+      });
+    const plan = (art: boolean) =>
+      compile({
+        scopedChildren: [
+          screen({
+            id: "choose",
+            attributes: { device: "tablet" },
+            children: [cards(art)],
+          }),
+          ...(["purchase", "loan"] as const).map((selected) =>
+            screen({
+              id: `${selected}-selected`,
+              name: `${selected} selected`,
+              attributes: { device: "tablet" },
+              children: [
+                cards(art, selected),
+                element({
+                  name: "Button",
+                  attributes: { label: "Continue", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ),
+        ],
+      });
+
+    const withArt = plan(true);
+    expect(withArt.diagnostics).toEqual([]);
+    const drawn = elementWithClass({
+      node: render(withArt.compiled),
+      className: "wireframe-choice-icon",
+    });
+    expect(drawn).toBeDefined();
+    expect(html(drawn as Element)).toContain("⚽");
+
+    // Card art is optional, and a card without it draws no art slot at all
+    // rather than an empty one a reader would take for a missing mark.
+    const withoutArt = plan(false);
+    expect(withoutArt.diagnostics).toEqual([]);
+    expect(
+      elementWithClass({
+        node: render(withoutArt.compiled),
+        className: "wireframe-choice-icon",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should refuse an option whose reveal drops the card art it carried", () => {
+    const plan = (destinationArt: boolean) =>
+      compile({
+        scopedChildren: [
+          screen({
+            id: "choose",
+            attributes: { device: "tablet" },
+            children: [choiceGroup()],
+          }),
+          ...(["purchase", "loan"] as const).map((selected) =>
+            screen({
+              id: `${selected}-selected`,
+              name: `${selected} selected`,
+              attributes: { device: "tablet" },
+              children: [
+                element({
+                  name: "ChoiceGroup",
+                  children: (
+                    [
+                      [
+                        "purchase",
+                        "⚽",
+                        "Ask about a purchase",
+                        "See how much money I would have left",
+                      ],
+                      [
+                        "loan",
+                        "💵",
+                        "Ask about my loan",
+                        "See what I owe and ask a question",
+                      ],
+                    ] as const
+                  ).map(([name, emoji, title, description]) =>
+                    element({
+                      name: "ChoiceCard",
+                      attributes: {
+                        ...(destinationArt ? { emoji } : {}),
+                        title,
+                        description,
+                        ...(name === selected
+                          ? { selected: true }
+                          : { navigateTo: `${name}-selected` }),
+                      },
+                    }),
+                  ),
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Continue", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ),
+        ],
+      });
+
+    // The initial cards carry art, so a reveal that drops it redraws the very
+    // option the reader just tapped.
+    expect(plan(false).diagnostics.map((entry) => entry.message)).toContain(
+      'ChoiceCard "Ask about a purchase" on Screen "choose" navigates to "purchase-selected" without selecting that same title, consequence, and card art; every option needs its own truthful visible outcome',
+    );
+    expect(plan(true).diagnostics).toEqual([]);
+  });
+
+  it("should refuse a choice group that gives only some options card art", () => {
+    const group = (art: ReadonlyArray<boolean>): ScopedChild =>
+      element({
+        name: "ChoiceGroup",
+        children: [
+          element({
+            name: "ChoiceCard",
+            attributes: {
+              ...(art[0] === true ? { emoji: "⚽" } : {}),
+              title: "Ask about a purchase",
+              description: "See how much money I would have left",
+              navigateTo: "purchase-selected",
+            },
+          }),
+          element({
+            name: "ChoiceCard",
+            attributes: {
+              ...(art[1] === true ? { emoji: "💵" } : {}),
+              title: "Ask about my loan",
+              description: "See what I owe and ask a question",
+              navigateTo: "loan-selected",
+            },
+          }),
+        ],
+      });
+    const plan = (art: ReadonlyArray<boolean>) =>
+      compile({
+        scopedChildren: [
+          screen({
+            id: "choose",
+            attributes: { device: "tablet" },
+            children: [group(art)],
+          }),
+          ...(["purchase", "loan"] as const).map((selected, index) =>
+            screen({
+              id: `${selected}-selected`,
+              name: `${selected} selected`,
+              attributes: { device: "tablet" },
+              children: [
+                element({
+                  name: "ChoiceGroup",
+                  children: [
+                    element({
+                      name: "ChoiceCard",
+                      attributes: {
+                        ...(art[0] === true ? { emoji: "⚽" } : {}),
+                        title: "Ask about a purchase",
+                        description: "See how much money I would have left",
+                        ...(index === 0
+                          ? { selected: true }
+                          : { navigateTo: "purchase-selected" }),
+                      },
+                    }),
+                    element({
+                      name: "ChoiceCard",
+                      attributes: {
+                        ...(art[1] === true ? { emoji: "💵" } : {}),
+                        title: "Ask about my loan",
+                        description: "See what I owe and ask a question",
+                        ...(index === 1
+                          ? { selected: true }
+                          : { navigateTo: "loan-selected" }),
+                      },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Continue", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ),
+        ],
+      });
+
+    expect(
+      plan([true, false]).diagnostics.map((entry) => entry.message),
+    ).toContain(
+      'Screen "choose" gives some ChoiceCards card art and not others, starting with "Ask about my loan"; options in one group are read as parallels, so give every option an emoji or give none',
+    );
+    expect(plan([true, true]).diagnostics).toEqual([]);
+    expect(plan([false, false]).diagnostics).toEqual([]);
+  });
+
+  it("should refuse a glyph-set name written as a choice card icon", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "ChoiceGroup",
+              children: [
+                element({
+                  name: "ChoiceCard",
+                  attributes: {
+                    icon: "star",
+                    emoji: "⚽",
+                    title: "Ask about a purchase",
+                    description: "See how much money I would have left",
+                    navigateTo: "purchase-selected",
+                  },
+                }),
+                element({
+                  name: "ChoiceCard",
+                  attributes: {
+                    emoji: "💵",
+                    title: "Ask about my loan",
+                    description: "See what I owe and ask a question",
+                    navigateTo: "loan-selected",
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Unknown attribute "icon" on ChoiceCard',
+    ]);
   });
 
   it("should reject preselection on the initial consequential choice", () => {
@@ -2155,6 +2496,100 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics[0]?.message).toContain(
       "shows a primary continuation before any ChoiceCard is selected",
     );
+  });
+
+  it("should read a choice reveal from the destination layer that selects it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [choiceGroup()],
+        }),
+        ...(["purchase", "loan"] as const).map((selected) =>
+          screen({
+            id: `${selected}-selected`,
+            name: `${selected} selected`,
+            attributes: { device: "tablet" },
+            children: [
+              choiceGroup(selected),
+              element({
+                name: "Button",
+                attributes: { label: "Continue", emphasis: "primary" },
+              }),
+              element({
+                name: "Overlay",
+                attributes: { title: "One more thing" },
+                children: [
+                  element({
+                    name: "ChoiceGroup",
+                    children: [
+                      element({
+                        name: "ChoiceCard",
+                        attributes: {
+                          title: "Remind me later",
+                          description: "Ask again next week",
+                          selected: true,
+                        },
+                      }),
+                      element({
+                        name: "ChoiceCard",
+                        attributes: {
+                          title: "Do not ask again",
+                          description: "Keep this setting for good",
+                          navigateTo: `${selected}-selected`,
+                        },
+                      }),
+                    ],
+                  }),
+                  element({
+                    name: "Button",
+                    attributes: { label: "Got it", emphasis: "primary" },
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ),
+      ],
+    });
+    // The overlay draws its own decision, so the page layer is where the
+    // tapped option is revealed; counting both layers together would report a
+    // text mismatch that is not there.
+    expect(diagnostics.map((entry) => entry.message)).not.toContain(
+      'ChoiceCard "Ask about a purchase" on Screen "choose" navigates to "purchase-selected" without selecting that same title, consequence, and card art; every option needs its own truthful visible outcome',
+    );
+  });
+
+  it("should judge a choice apart from the overlay drawn over it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            choiceGroup(),
+            element({
+              name: "Overlay",
+              attributes: { title: "Before you choose" },
+              children: [
+                element({
+                  name: "Text",
+                  attributes: { text: "Both options are reversible." },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Got it", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
   });
 
   it("should ignore selected navigation state before a deliberate choice", () => {
@@ -2329,5 +2764,960 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"tagName":"button"');
     expect(rendered).toContain('"tagName":"h4"');
     expect(rendered).toContain('"type":"button"');
+  });
+  it("should draw a reference as one bordered object holding its copy control", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Reference",
+              attributes: {
+                icon: "terminal",
+                text: "big-plan render plan.mdx review.html",
+                copyLabel: "Copy command",
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-reference");
+    expect(rendered).toContain("big-plan render plan.mdx review.html");
+    expect(rendered).toContain('"data-lucide":"terminal"');
+    // The control that copies the string sits inside the object that holds it,
+    // which is the whole point of drawing a reference rather than a loose row.
+    expect(rendered).toContain("wireframe-reference-copy");
+    expect(rendered).toContain('"data-lucide":"copy"');
+    expect(rendered).toContain("Copy command");
+  });
+
+  it("should leave a reference without a copy label uncopyable", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Reference",
+              attributes: { text: "~/.config/big-plan/config.toml" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("~/.config/big-plan/config.toml");
+    // No copy control, and no leading mark, because the author asked for
+    // neither. A reference draws only what it was given.
+    expect(rendered).not.toContain("wireframe-reference-copy");
+    expect(rendered).not.toContain('"data-lucide":"copy"');
+  });
+
+  it("should refuse a reference with no text to show", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Reference", attributes: { icon: "terminal" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.length).toBeGreaterThan(0);
+    expect(diagnostics.map((entry) => entry.message).join(" ")).toContain(
+      "text",
+    );
+  });
+
+  it("should draw a named glyph for a mark and keep its meaning readable", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Icon",
+              attributes: { name: "settings", label: "Workspace settings" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-lucide":"settings"');
+    expect(rendered).toContain("Workspace settings");
+    // A drawn mark still reaches a screen reader as nothing at all.
+    expect(rendered).toContain('"ariaHidden":"true"');
+    expect(rendered).not.toContain("data-wireframe-icon-unnamed");
+  });
+
+  it("should draw the placeholder carrying the name when the set has no such glyph", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Icon",
+              attributes: { name: "rocket", label: "Ship it" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const root = render(compiled);
+    const rendered = html(root);
+    expect(rendered).toContain('"data-lucide":"wireframe-placeholder"');
+    expect(rendered).toContain('"data-wireframe-icon-unnamed":""');
+    expect(rendered).toContain('"value":"rocket"');
+    // The drawn mark hides itself, but the name beside it must not be hidden
+    // too: a reader who cannot see the drawing has no other way to learn that
+    // this glyph was never drawn.
+    const glyph = elementWithClass({
+      node: root,
+      className: "wireframe-glyph",
+    });
+    expect(glyph?.properties["ariaHidden"]).toBeUndefined();
+    const drawn = glyph?.children.find(
+      (child) => child.type === "element" && child.tagName === "svg",
+    );
+    expect(
+      drawn?.type === "element" ? drawn.properties["ariaHidden"] : undefined,
+    ).toBe("true");
+  });
+
+  it("should keep an icon-only control's words as its name and tooltip", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Button",
+              attributes: {
+                label: "Copy command",
+                icon: "copy",
+                iconOnly: true,
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-lucide":"copy"');
+    expect(rendered).toContain('"ariaLabel":"Copy command"');
+    expect(rendered).toContain('"title":"Copy command"');
+    expect(rendered).not.toContain("wireframe-button-label");
+  });
+
+  it("should report an icon-only control that would draw nothing", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Button",
+              attributes: { label: "Copy command", iconOnly: true },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Button "Copy command" is iconOnly with no icon, so it would draw nothing; give it icon="..." or remove iconOnly',
+    ]);
+  });
+  it("should refuse a pane wrapped in a Group inside a Row", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Panel",
+                      attributes: { title: "Queue" },
+                      children: [
+                        element({
+                          name: "Text",
+                          attributes: { text: "Billing refund" },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home": a Group holds a Panel, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Panes are direct children of a Row: write the Panel as a child of a Row and use the Row gap and justify to space the panes',
+    ]);
+  });
+
+  it("should refuse a collection in a Group with no Row around it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { device: "phone" },
+          children: [
+            element({
+              name: "Group",
+              children: [
+                element({
+                  name: "List",
+                  children: [
+                    element({
+                      name: "ListItem",
+                      attributes: { label: "One" },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "List",
+                  children: [
+                    element({
+                      name: "ListItem",
+                      attributes: { label: "Two" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home": a Group holds a List, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Write the List directly in the Stack or Row that should lay it out instead of wrapping it in a Group',
+    ]);
+  });
+
+  it("should refuse a pane in a Group with no Row around it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { device: "phone" },
+          children: [
+            element({
+              name: "Group",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "A" },
+                  children: [
+                    element({ name: "Text", attributes: { text: "One" } }),
+                  ],
+                }),
+                element({
+                  name: "Panel",
+                  attributes: { title: "B" },
+                  children: [
+                    element({ name: "Text", attributes: { text: "Two" } }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home": a Group holds a Panel, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Panes are direct children of a Row: write the Panel as a child of a Row and use the Row gap and justify to space the panes',
+    ]);
+  });
+
+  it("should refuse a pane reached through a nested Group inside a Row", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Group",
+                      children: [
+                        element({
+                          name: "Stack",
+                          children: [
+                            element({
+                              name: "Button",
+                              attributes: { label: "New plan" },
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home": a Group holds a Stack, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. Panes are direct children of a Row: write the Stack as a child of a Row and use the Row gap and justify to space the panes',
+    ]);
+  });
+
+  it("should draw an overlay over the page with alert semantics", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Text", attributes: { text: "The page" } }),
+            element({
+              name: "Overlay",
+              attributes: { kind: "alert", title: "Delete this plan?" },
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Keep the plan" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-overlay":"alert"');
+    expect(rendered).toContain('"data-wireframe-backdrop":"dim"');
+    expect(rendered).toContain('"role":"alertdialog"');
+    expect(rendered).toContain('"ariaLabel":"Delete this plan?"');
+    // A drawing of a modal must not hide the plan around it from a reader
+    // using assistive technology, so the instruction to do that is never set.
+    expect(rendered).not.toContain("ariaModal");
+  });
+
+  it("should judge a page header apart from the overlay drawn over it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "plans",
+          children: [
+            element({ name: "PageHeader", attributes: { title: "Plans" } }),
+            element({
+              name: "Panel",
+              attributes: { title: "Plans" },
+              children: [
+                element({ name: "Text", attributes: { text: "One" } }),
+              ],
+            }),
+            element({
+              name: "Overlay",
+              attributes: { title: "Rename" },
+              children: [
+                element({
+                  name: "PageHeader",
+                  attributes: { title: "Rename this plan" },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Rename", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("should report an overlay with no page under it and no way out", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Overlay",
+              attributes: { title: "Nowhere" },
+              children: [
+                element({ name: "Text", attributes: { text: "Trapped" } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      "Overlay needs at least one Button that acts so the surface it opens has a visible way out; SegmentedControl and BottomBar options switch mode rather than leave",
+      'Screen "home" is an Overlay with no page under it; draw the screen it interrupts so a reviewer can see what the interruption covers',
+    ]);
+  });
+
+  it("should report an overlay whose only buttons switch mode", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Text", attributes: { text: "The page" } }),
+            element({
+              name: "Overlay",
+              attributes: { title: "Filters" },
+              children: [
+                element({
+                  name: "SegmentedControl",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: { label: "All", emphasis: "primary" },
+                    }),
+                    element({ name: "Button", attributes: { label: "Mine" } }),
+                  ],
+                }),
+                element({
+                  name: "Text",
+                  attributes: { text: "Narrow the queue" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toContain(
+      "Overlay needs at least one Button that acts so the surface it opens has a visible way out; SegmentedControl and BottomBar options switch mode rather than leave",
+    );
+  });
+
+  it("should report a second overlay because one screen shows one moment", () => {
+    const overlay = (title: string): ScopedChild =>
+      element({
+        name: "Overlay",
+        attributes: { title },
+        children: [element({ name: "Button", attributes: { label: "Close" } })],
+      });
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Text", attributes: { text: "The page" } }),
+            overlay("First"),
+            overlay("Second"),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "home" draws 2 Overlays; one screen shows one moment, so give the second one its own Screen',
+    ]);
+  });
+
+  it("should count an overlay's filled action as its own layer", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Button",
+              attributes: { label: "Accept plan", emphasis: "primary" },
+            }),
+            element({
+              name: "Overlay",
+              attributes: { kind: "alert", title: "Delete this plan?" },
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Keep it", emphasis: "tertiary" },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Delete it", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+  });
+  it("should draw a push chevron on a list row that names a screen", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "List",
+              children: [
+                element({
+                  name: "ListItem",
+                  attributes: {
+                    label: "Checkout freeze",
+                    meta: "Northwind",
+                    navigateTo: "ticket",
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Checkout freeze" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const disclosure = elementWithClass({
+      node: render(compiled),
+      className: "wireframe-list-disclosure",
+    });
+    expect(disclosure).toBeDefined();
+    // The mark rides the primary line, and it is the chevron the named set
+    // already holds rather than a second drawing of the same meaning.
+    expect(
+      elementWithClass({
+        node: render(compiled),
+        className: "wireframe-list-row-primary",
+      })?.children.some(
+        (child) =>
+          child.type === "element" &&
+          Array.isArray(child.properties["className"]) &&
+          child.properties["className"].includes("wireframe-list-disclosure"),
+      ),
+    ).toBe(true);
+    expect(
+      elementWithClass({
+        node: disclosure as Element,
+        className: "wireframe-glyph",
+      })?.properties["data-wireframe-icon"],
+    ).toBe("chevron");
+  });
+
+  it("should draw no chevron on a master row whose detail is already beside it", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "Open" },
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: {
+                            label: "Checkout freeze",
+                            meta: "Northwind",
+                            selected: true,
+                            navigateTo: "ticket",
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Panel",
+                  attributes: { title: "Checkout freeze" },
+                  children: [
+                    element({
+                      name: "Text",
+                      attributes: { text: "Raised two hours ago" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Checkout freeze" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // The row is the collection of a master/detail workspace, so navigateTo
+    // selects in place; the detail pane beside it already shows that record.
+    const rendered = render(compiled);
+    expect(
+      elementWithClass({ node: rendered, className: "wireframe-list-item" }),
+    ).toBeDefined();
+    expect(
+      elementWithClass({
+        node: rendered,
+        className: "wireframe-list-disclosure",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should read a detail pane through a loose item between the panes", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "Queue" },
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: {
+                            label: "Checkout freeze",
+                            selected: true,
+                            navigateTo: "ticket",
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({ name: "Divider" }),
+                element({
+                  name: "Panel",
+                  attributes: { title: "Selected ticket" },
+                  children: [
+                    element({ name: "Text", attributes: { text: "Body" } }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Checkout freeze" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // A divider between the collection and its detail is spacing, not the end
+    // of the workspace, so the row still selects in place and draws no mark.
+    expect(
+      elementWithClass({
+        node: render(compiled),
+        className: "wireframe-list-disclosure",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should keep the push chevron on a collection row with no detail beside it", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "Inbox" },
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: {
+                            label: "Checkout freeze",
+                            navigateTo: "ticket",
+                          },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "New ticket" },
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Checkout freeze" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // Nothing is drawn beside this row, so naming a screen is a real push and
+    // the mark stays.
+    expect(
+      elementWithClass({
+        node: render(compiled),
+        className: "wireframe-list-disclosure",
+      }),
+    ).toBeDefined();
+  });
+
+  it("should draw no chevron on a list row that names no screen", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "List",
+              children: [
+                element({
+                  name: "ListItem",
+                  attributes: { label: "Quiet hours", meta: "Off" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(
+      elementWithClass({
+        node: render(compiled),
+        className: "wireframe-list-disclosure",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should let a Row anchor one Group at each end", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Row",
+              attributes: { justify: "between" },
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({ name: "Heading", attributes: { text: "Plans" } }),
+                  ],
+                }),
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Workspace settings",
+                        icon: "settings",
+                        iconOnly: true,
+                      },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // A Group carrying no pane still travels as one item, so the row settles
+    // exactly two ends and never reads as a workspace.
+    const row = elementWithClass({
+      node: render(compiled),
+      className: "wireframe-row",
+    });
+    expect(row?.properties["data-wireframe-workspace"]).toBeUndefined();
+    expect(
+      (row?.children ?? []).filter(
+        (child) =>
+          child.type === "element" &&
+          Array.isArray(child.properties["className"]) &&
+          child.properties["className"].includes("wireframe-group"),
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("should draw a top bar's Group ahead of its title and loose controls after", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { device: "phone" },
+          children: [
+            element({
+              name: "TopBar",
+              attributes: { title: "#4821" },
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: { label: "Inbox", icon: "back" },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Button",
+                  attributes: {
+                    label: "More actions",
+                    icon: "more",
+                    iconOnly: true,
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    // The back control has to reach the reader before the title, which is the
+    // only thing this slot exists for.
+    expect(rendered.indexOf("wireframe-top-bar-leading")).toBeLessThan(
+      rendered.indexOf("wireframe-brand"),
+    );
+    expect(rendered.indexOf("wireframe-brand")).toBeLessThan(
+      rendered.indexOf("wireframe-top-bar-actions"),
+    );
+  });
+
+  it("should split a top bar's two Groups to its two ends", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "TopBar",
+              attributes: { title: "Plans" },
+              children: [
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: { label: "Back", icon: "back" },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Group",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Workspace settings",
+                        icon: "settings",
+                        iconOnly: true,
+                      },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    // Only the Group written first claims the leading slot; the second one is
+    // the bar's other end, so it has to reach the reader after the title.
+    const bar = elementWithClass({
+      node: render(compiled),
+      className: "wireframe-top-bar",
+    });
+    const leading = elementWithClass({
+      node: bar as Element,
+      className: "wireframe-top-bar-leading",
+    });
+    const trailing = elementWithClass({
+      node: bar as Element,
+      className: "wireframe-top-bar-actions",
+    });
+    expect(html(leading as Element)).toContain("Back");
+    expect(html(leading as Element)).not.toContain("Workspace settings");
+    expect(html(trailing as Element)).toContain("Workspace settings");
+    const rendered = html(bar as Element);
+    expect(rendered.indexOf("wireframe-top-bar-leading")).toBeLessThan(
+      rendered.indexOf("wireframe-brand"),
+    );
+    expect(rendered.indexOf("wireframe-brand")).toBeLessThan(
+      rendered.indexOf("wireframe-top-bar-actions"),
+    );
+  });
+
+  it("should keep a top bar's controls away from its title", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "TopBar",
+              attributes: { title: "Checkout rewrite" },
+              children: [
+                element({
+                  name: "Button",
+                  attributes: {
+                    label: "Search this plan",
+                    icon: "search",
+                    iconOnly: true,
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(html(render(compiled))).toContain("wireframe-top-bar-actions");
   });
 });

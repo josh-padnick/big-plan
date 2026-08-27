@@ -82,6 +82,17 @@ describe("lintPlan wireframe-envelope-fit", () => {
       ].join("\n"),
     ],
     [
+      "a toolbar of Groups, which hold controls rather than columns",
+      [
+        '<Screen id="s" name="Plans" device="desktop">',
+        '<Row justify="between">',
+        '<Group><Heading text="Plans" /></Group>',
+        '<Group><Button label="Settings" icon="settings" iconOnly /><Button label="New plan" icon="add" /></Group>',
+        "</Row>",
+        "</Screen>",
+      ].join("\n"),
+    ],
+    [
       "a single phone column",
       [
         '<Screen id="s" name="Inbox" device="phone">',

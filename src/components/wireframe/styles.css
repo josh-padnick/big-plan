@@ -429,6 +429,11 @@ marks and a plan diff never jitters.
   .wireframe-artboard {
     display: flex;
     box-sizing: border-box;
+    /* An Overlay is the one element that leaves the screen's own flow, and the
+       page it covers is the artboard - not the canvas, whose height follows its
+       content. Anchoring here is what makes a dimmed backdrop reach the frame's
+       edges on a screen whose content stops short of them. */
+    position: relative;
     width: var(--wf-width);
     /* Letterforms carry the sketch; the strokes only frame it. The font stops
        at the artboard's edge: the caption, the screen switcher, and the
@@ -490,6 +495,23 @@ marks and a plan diff never jitters.
     > .wireframe-canvas {
     height: 100%;
     min-height: 0;
+  }
+
+  /* A run of elements that travels together hugs what it holds, which is the
+     whole point of it: a Row keeps loose children at their natural width and
+     clusters them at its start, and justify="between" spreads all of them
+     evenly rather than settling two ends. Wrapping each side in a Group makes
+     the row exactly two items, and those two do settle at the two ends the
+     product puts them at, with nothing in between invented. */
+  .wireframe-group {
+    flex: 0 0 auto;
+  }
+  /* A two-group bar keeps its trailing group at the end even when the bar has
+     to wrap. Space-between distributes within each line, so a wrapped trailing
+     group would otherwise snap back to the start - which reads as a layout
+     that gave up rather than as the toolbar the author declared. */
+  .wireframe-row.justify-between > .wireframe-group:nth-child(2):last-child {
+    margin-inline-start: auto;
   }
 
   /* Regions share a row; controls and copy keep their own size. Authors never
@@ -629,6 +651,30 @@ marks and a plan diff never jitters.
   .wireframe .items-end > .wireframe-badge {
     align-self: flex-end;
   }
+  /* A control that carries a mark keeps the mark and the words on one line,
+     with the glyph slightly tighter to the label than the label is to the
+     control's edge, so the pair reads as one action rather than as two
+     things sharing a box. */
+  .wireframe-button[data-wireframe-has-icon] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+  /* An icon-only control is square, because a wide box around one mark reads as
+     a button whose label failed to render. It keeps the same 44px floor every
+     other touch target keeps, so a toolbar of marks on tablet or phone is
+     reachable rather than merely drawn. */
+  .wireframe-button[data-wireframe-icon-only] {
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0.3rem;
+  }
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    .wireframe-button[data-wireframe-icon-only] {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
   .wireframe-button:hover {
     background: var(--wf-fill);
   }
@@ -690,6 +736,11 @@ marks and a plan diff never jitters.
     mask-size: 24px 2px;
     mask-repeat: repeat-x;
     mask-position: bottom left;
+  }
+  /* A quiet control drawn as one mark has no words for that line to sit
+     under, so the link stroke becomes a rule beneath a glyph. */
+  .wireframe-button[data-wireframe-icon-only]::before {
+    content: none;
   }
   .wireframe-button[data-wireframe-emphasis="destructive"] {
     border-color: var(--callout-danger-c);
@@ -1072,6 +1123,7 @@ marks and a plan diff never jitters.
       :is(
         .wireframe-app-shell,
         .wireframe-center,
+        .wireframe-overlay,
         .wireframe-page-header,
         .wireframe-list,
         .wireframe-table,
@@ -1087,6 +1139,7 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-text:not(
       .wireframe-center *,
+      .wireframe-overlay *,
       .wireframe-row[data-wireframe-workspace] *
     ) {
     max-width: var(--wf-prose-measure);
@@ -1224,6 +1277,13 @@ marks and a plan diff never jitters.
       [data-wireframe-device="tablet"],
       [data-wireframe-device="tablet-portrait"]
     )
+    .wireframe-choice-card:not(:has(> .wireframe-choice-icon)) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
     .wireframe-choice-icon {
     width: 3.75rem;
     height: 3.75rem;
@@ -1242,14 +1302,6 @@ marks and a plan diff never jitters.
     )
     .wireframe-choice-description {
     font-size: 1rem;
-  }
-  .wireframe-artboard:is(
-      [data-wireframe-device="tablet"],
-      [data-wireframe-device="tablet-portrait"]
-    )
-    .wireframe-top-bar
-    > :last-child:not(.wireframe-brand) {
-    margin-left: auto;
   }
   .wireframe-artboard:is(
       [data-wireframe-device="tablet"],
@@ -1603,33 +1655,52 @@ marks and a plan diff never jitters.
     border-radius: 0;
     background: transparent;
   }
-  .wireframe-artboard[data-wireframe-device="phone"]
-    .wireframe-top-bar
-    > :last-child:not(.wireframe-brand) {
-    margin-left: auto;
-  }
   /* A bar with a navigable leading action is a push/dismiss header:
-     back or cancel on the left, title centered, overflow on the right. */
+     back or cancel on the left, title centered, overflow on the right. The
+     leading control sits in the bar's leading slot, so that slot is what says
+     the bar is this kind of header. The three slots share the bar's width
+     equally, because a title centered in what the controls left over is not
+     centered in the bar the reader sees. */
   .wireframe-artboard[data-wireframe-device="phone"]
-    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
+    .wireframe-top-bar:has(
+      > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
+    )
+    > .wireframe-top-bar-leading {
+    order: 1;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-top-bar:has(
+      > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
+    )
     > .wireframe-brand {
     order: 2;
-    flex: 1;
+    flex: 1 1 0;
     min-width: 0;
     text-align: center;
   }
   .wireframe-artboard[data-wireframe-device="phone"]
-    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
-    > .wireframe-button[data-wireframe-navigate] {
-    order: 1;
-    margin-left: 0;
-  }
-  .wireframe-artboard[data-wireframe-device="phone"]
-    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
-    > :last-child:not(.wireframe-brand):not(
-      .wireframe-button[data-wireframe-navigate]
-    ) {
+    .wireframe-top-bar:has(
+      > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
+    )
+    > .wireframe-top-bar-actions {
     order: 3;
+    flex: 1 1 0;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+  /* The trailing slot is drawn only when the author wrote loose controls, and
+     a title centred between two slots sits at three quarters of the bar. This
+     stands in for the slot that is not there, so the title is centred in the
+     bar whether or not the header carries anything trailing. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-top-bar:has(
+      > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
+    ):not(:has(> .wireframe-top-bar-actions))::after {
+    content: "";
+    order: 3;
+    flex: 1 1 0;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-brand {
     font-size: 1.125rem;
@@ -1985,6 +2056,137 @@ marks and a plan diff never jitters.
   .wireframe-status-mark[data-wireframe-status="blocked"] {
     color: var(--callout-danger-c);
   }
+  /* A glyph, at the size of the type it stands with.
+
+     Every icon in the drawing is sized in `em` against the artboard's own body
+     step, which is redeclared per device, so one authored size draws correctly
+     on a phone at 1:1 and on a desktop artboard painted at five-eighths without
+     an author ever thinking about it. Three steps, each a ratio a reader sees:
+     riding a metadata line, standing with body copy, and being the thing a
+     finger reaches for. */
+  .wireframe-glyph {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.35em;
+    /* The stroke is a shade lighter than the copy beside it: a mark drawn at
+       full ink weight beside 14px letterforms reads as the loudest thing on
+       the screen, which is almost never what an icon is for. */
+    color: color-mix(in srgb, currentColor 78%, transparent);
+  }
+  .wireframe-glyph > svg {
+    width: 1.5em;
+    height: 1.5em;
+  }
+  /* A meaning the set does not draw. The crossed box is the same language
+     ImagePlaceholder uses one size up, and the requested name rides beside it,
+     so the drawing says what it is missing instead of showing a mark that is
+     quietly wrong. */
+  .wireframe-glyph[data-wireframe-icon-unnamed] {
+    color: var(--color-muted);
+  }
+  .wireframe-glyph-name {
+    font-size: var(--wf-text-meta);
+    letter-spacing: 0.02em;
+  }
+  .wireframe-icon {
+    display: inline-flex;
+    flex: none;
+    align-self: center;
+    align-items: center;
+    gap: 0.4em;
+    font-size: var(--wf-text-body);
+  }
+  .wireframe-icon[data-wireframe-size="sm"] > .wireframe-glyph > svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+  .wireframe-icon[data-wireframe-size="lg"] > .wireframe-glyph > svg {
+    width: 2.25em;
+    height: 2.25em;
+  }
+  .wireframe-icon-label {
+    min-width: 0;
+  }
+  /* A stack aligns its children to its own edge, and a mark standing alone in
+     one is a mark, not a full-width row. */
+  .wireframe-stack > .wireframe-icon,
+  .wireframe-panel-body > .wireframe-icon,
+  .wireframe-canvas > .wireframe-icon {
+    align-self: flex-start;
+  }
+
+  /* A reference is one drawn object, not a row of three. The border is what
+     makes the mark, the string, and the copy control read as belonging to each
+     other; without it the copy control is just the next thing along the row and
+     sizes itself against the row rather than against the string it copies. */
+  .wireframe-reference {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0.25rem 0.3rem 0.25rem 0.5rem;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: var(--wf-sketch);
+    background: var(--wf-fill);
+    font-size: var(--wf-text-meta);
+  }
+  /* Both marks in one object are drawn at one size. The copy glyph is nested
+     inside its control, so it needs saying separately or it falls back to the
+     default and outweighs the mark naming the reference. */
+  .wireframe-reference > .wireframe-glyph > svg,
+  .wireframe-reference-copy > .wireframe-glyph > svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+  .wireframe-reference-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Sized against the string it copies rather than against a bare touch floor,
+     because inside the border it is a part of this object. The floor still
+     applies where a finger is the input. */
+  .wireframe-reference-copy {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 1.75em;
+    height: 1.75em;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--wf-sketch-alt);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  .wireframe-reference-copy:hover {
+    border-color: var(--wf-stroke-soft);
+  }
+  .wireframe-reference-copy:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="phone"],
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-reference-copy {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  /* A stack aligns its children to its own edge, and one reference in a column
+     is an object, not a full-width band. */
+  .wireframe-stack > .wireframe-reference,
+  .wireframe-panel-body > .wireframe-reference,
+  .wireframe-canvas > .wireframe-reference {
+    align-self: flex-start;
+  }
+
   .wireframe-badge[data-wireframe-tone="info"] {
     border-color: var(--callout-note-c);
     color: var(--callout-note-c);
@@ -2015,6 +2217,76 @@ marks and a plan diff never jitters.
     border: 0;
     border-top: 2px dashed var(--wf-stroke-soft);
     margin: 0;
+  }
+
+  /* A surface drawn over the page.
+
+     It is positioned against the artboard rather than the canvas so the
+     backdrop always reaches the frame's edges, and it is the only element in
+     the drawing that leaves the flow - which is exactly what a modal does in
+     the product it depicts. A dimmed backdrop says the page underneath is
+     unavailable; a clear one says the reader may still see and use it. */
+  .wireframe-overlay {
+    z-index: 2;
+    padding: 1.5rem;
+  }
+  /* The shared neutral-black backdrop, so a dim darkens in both themes. An ink
+     wash would lighten the page in dark mode, which is the opposite of a
+     scrim. It is lighter than the product's own modal backdrop on purpose: a
+     reviewer has to keep seeing what the interruption covers, which is the
+     whole reason the page is drawn under it. */
+  .wireframe-overlay[data-wireframe-backdrop="dim"] {
+    background: color-mix(in srgb, var(--color-backdrop) 45%, transparent);
+  }
+  /* A clear backdrop says the page stays usable, so the sheet of nothing over
+     it must not swallow the taps that prove it. The dim variant keeps them on
+     purpose: there, being unable to reach the page is the point. */
+  .wireframe-overlay[data-wireframe-backdrop="clear"] {
+    pointer-events: none;
+  }
+  /* The dialog itself is opaque paper on top of that dim, and it is bounded to
+     a readable measure: a confirmation stretched across a 1200px artboard stops
+     reading as an interruption and starts reading as another page region. */
+  .wireframe-overlay-surface {
+    /* The surface itself is always reachable, including inside a clear overlay
+       whose backdrop passes input through. */
+    pointer-events: auto;
+    box-sizing: border-box;
+    /* Sized to what it holds, then clamped. A confirmation that is two lines
+       long should not draw the same box a form does, and neither should reach
+       across a 1200px artboard: past a readable measure an interruption stops
+       reading as an interruption and starts reading as another page region. */
+    width: max-content;
+    max-width: min(30rem, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 1rem 1.25rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch-alt);
+    background: var(--color-paper);
+    box-shadow: 5px 7px 0 -1px var(--wf-stroke-soft);
+  }
+  .wireframe-overlay[data-wireframe-overlay="alert"]
+    > .wireframe-overlay-surface {
+    border-color: var(--callout-danger-c);
+  }
+  .wireframe-overlay-title {
+    font-size: var(--wf-text-title);
+  }
+  .wireframe-overlay-mark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    color: var(--callout-danger-c);
+  }
+  .wireframe-overlay-mark > svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+  /* An overlay's own actions end the interruption, so they sit together at its
+     end rather than at the start of the surface the way page content does. */
+  .wireframe-overlay-surface > .wireframe-row {
+    margin-top: 0.25rem;
   }
 
   /* The crossed rectangle every wireframe uses for art nobody has drawn yet. */
@@ -2126,6 +2398,22 @@ marks and a plan diff never jitters.
     font-variant-numeric: tabular-nums;
     color: var(--color-muted);
   }
+  /* A row that pushes to another screen carries the mark a product puts at its
+     trailing edge: quieter than the label it follows, riding the primary line
+     rather than the metadata beneath it, and sized on the metadata step of the
+     icon scale so it never competes with the trailing value beside it. */
+  .wireframe-list-disclosure {
+    display: inline-flex;
+    flex: none;
+    align-self: center;
+    margin-left: 0.15rem;
+    color: var(--color-muted);
+  }
+  .wireframe-list-disclosure > .wireframe-glyph > svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+
   /* Whole-row tappable list entries (mobile inbox). */
   .wireframe-list-row {
     min-width: 0;
@@ -2173,6 +2461,12 @@ marks and a plan diff never jitters.
     background: var(--color-paper);
     text-align: left;
     cursor: pointer;
+  }
+  /* A card with no art is two columns, not three with an empty first one, so
+     the copy starts at the card's leading edge and the selection control
+     stays at its end. */
+  .wireframe-choice-card:not(:has(> .wireframe-choice-icon)) {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
   .wireframe-choice-card:hover {
     border-color: var(--wf-stroke);

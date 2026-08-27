@@ -15,6 +15,11 @@ import type {
   WireframeStatus,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
+import { holdsRecordCollection, masterPaneIn } from "./nodes.js";
+import {
+  WIREFRAME_PLACEHOLDER_GLYPH,
+  wireframeGlyphFor,
+} from "./view-glyphs.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
@@ -91,21 +96,44 @@ const StatusMark = ({
 const statusMarkFor = (status: WireframeStatus | undefined): ReactNode =>
   status === undefined ? null : <StatusMark status={status} />;
 
+// A named glyph, or the crossed placeholder for a meaning the set does not
+// hold. Every icon in the drawing goes through here, so a standalone mark and
+// the same mark inside a button can never drift apart.
+const Glyph = ({ name }: { readonly name: string }): JSX.Element => {
+  const glyph = wireframeGlyphFor(name);
+  return (
+    // The drawn mark hides itself from assistive technology, so this wrapper
+    // deliberately does not: hiding it too would take the placeholder's name
+    // below with it, and "this glyph is not drawn yet" is exactly the fact a
+    // reader who cannot see the drawing has no other way to learn.
+    <span
+      className="wireframe-glyph"
+      data-wireframe-icon={name}
+      {...(glyph === undefined ? { "data-wireframe-icon-unnamed": "" } : {})}
+    >
+      {lucideIconToReact({
+        icon: glyph ?? WIREFRAME_PLACEHOLDER_GLYPH,
+        hidden: false,
+      })}
+      {/* A glyph nobody drew says so, in the words the author asked for.
+          Substituting a nearby mark would put a wrong screen in front of a
+          reviewer who reads the drawing rather than the source. */}
+      {glyph === undefined ? (
+        <span className="wireframe-glyph-name">{name}</span>
+      ) : null}
+    </span>
+  );
+};
+
 // A direct record collection makes its Panel the master pane. Rail is the only
 // authored width primitive; the Row owns every other workspace proportion.
-const holdsCollection = (node: WireframeNode): boolean =>
-  node.element === "Panel" &&
-  node.children.some(
-    (child) => child.element === "List" || child.element === "Table",
-  );
-
 // Exactly one pane in a row is the collection: the first one. A detail pane
 // often holds a list too - properties, context, a checklist - and reading that
 // as a second collection is what produces two equally bounded panes with no
 // primary surface between them. Reading order decides, because the collection
 // is what the reader came through to reach the record.
 const masterIndexIn = (children: ReadonlyArray<WireframeNode>): number =>
-  children.length > 1 ? children.findIndex(holdsCollection) : -1;
+  children.length > 1 ? children.findIndex(holdsRecordCollection) : -1;
 
 const isWorkspaceRow = (children: ReadonlyArray<WireframeNode>): boolean =>
   children.some((child) => child.element === "Rail") ||
@@ -142,11 +170,20 @@ const conversationPartsFor = (
 const WireframeElement = ({
   node,
   isMasterPane = false,
+  detailBeside = false,
+  selectsInPlace = false,
 }: {
   readonly node: WireframeNode;
   // Set only by the Row that owns this pane, because whether a panel is the
   // collection is a fact about its siblings, not about the panel alone.
   readonly isMasterPane?: boolean;
+  // Set by the same Row when the detail that collection fills is really drawn
+  // beside it, which is what makes the pane a workspace master rather than an
+  // ordinary list that happens to lead the row.
+  readonly detailBeside?: boolean;
+  // Set only inside that collection pane, where picking a record fills the
+  // detail beside it rather than leaving the screen.
+  readonly selectsInPlace?: boolean;
 }): JSX.Element => {
   switch (node.element) {
     case "Stack":
@@ -168,7 +205,16 @@ const WireframeElement = ({
           <WireframeElements
             nodes={node.children}
             masterIndex={masterIndexIn(node.children)}
+            detailBeside={masterPaneIn(node.children) !== undefined}
           />
+        </div>
+      );
+    case "Group":
+      return (
+        <div
+          className={`wireframe-group flex flex-wrap ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]}`}
+        >
+          <WireframeElements nodes={node.children} />
         </div>
       );
     case "Panel": {
@@ -199,7 +245,10 @@ const WireframeElement = ({
               : { "data-wireframe-conversation": "" })}
           >
             {conversation === undefined ? (
-              <WireframeElements nodes={node.children} />
+              <WireframeElements
+                nodes={node.children}
+                selectsInPlace={isMasterPane && detailBeside}
+              />
             ) : (
               <>
                 <div className="wireframe-thread flex flex-col gap-3">
@@ -230,11 +279,27 @@ const WireframeElement = ({
           type="button"
           className="wireframe-button"
           data-wireframe-emphasis={node.emphasis}
+          {...(node.icon === undefined
+            ? {}
+            : { "data-wireframe-has-icon": "" })}
+          {...(node.iconOnly
+            ? // An icon-only control keeps its words where the product keeps
+              // them: as the accessible name and the hover tooltip. Hiding the
+              // label from the drawing never hides it from the reader.
+              {
+                "data-wireframe-icon-only": "",
+                "aria-label": node.label,
+                title: node.label,
+              }
+            : {})}
           {...(node.navigateTo === undefined
             ? {}
             : { "data-wireframe-navigate": node.navigateTo })}
         >
-          {node.label}
+          {node.icon === undefined ? null : <Glyph name={node.icon} />}
+          {node.iconOnly ? null : (
+            <span className="wireframe-button-label">{node.label}</span>
+          )}
         </button>
       );
     case "SegmentedControl":
@@ -270,15 +335,43 @@ const WireframeElement = ({
           <WireframeElements nodes={node.children} />
         </div>
       );
-    case "TopBar":
+    case "TopBar": {
+      // Position decides the slot, not element type: the bar has one leading
+      // slot, and the author claims it by writing a Group first. Reading every
+      // Group as leading would put a two-ended bar's trailing cluster on the
+      // left, which is the one arrangement the author plainly did not write.
+      const [firstBarItem, ...laterBarItems] = node.children;
+      const leadsBar =
+        firstBarItem !== undefined && firstBarItem.element === "Group";
+      const leadingBarItems = leadsBar ? [firstBarItem] : [];
+      const trailingBarItems = leadsBar ? laterBarItems : node.children;
       return (
         <div className="wireframe-top-bar flex flex-wrap items-center gap-3">
+          {/* A product's top bar names where the reader is on the left and
+              keeps its controls on the right, and clustering everything
+              against the title is the one arrangement no real application
+              uses. But a bar has two leading jobs, not one: a phone puts its
+              back control before the title, which no amount of trailing
+              placement can express. So a Group written first leads and
+              everything after it trails - grouped items travel with the
+              identity, which is what a Group means everywhere else in the
+              vocabulary. */}
+          {leadingBarItems.length === 0 ? null : (
+            <div className="wireframe-top-bar-leading flex flex-wrap items-center gap-2">
+              <WireframeElements nodes={leadingBarItems} />
+            </div>
+          )}
           {node.title === undefined ? null : (
             <p className="wireframe-brand">{node.title}</p>
           )}
-          <WireframeElements nodes={node.children} />
+          {trailingBarItems.length === 0 ? null : (
+            <div className="wireframe-top-bar-actions ml-auto flex flex-wrap items-center gap-2">
+              <WireframeElements nodes={trailingBarItems} />
+            </div>
+          )}
         </div>
       );
+    }
     case "BottomBar":
       return (
         <div
@@ -368,6 +461,79 @@ const WireframeElement = ({
           )}
         </div>
       );
+    case "Overlay":
+      return (
+        <div
+          className="wireframe-overlay absolute inset-0 flex items-center justify-center"
+          data-wireframe-overlay={node.kind}
+          data-wireframe-backdrop={node.backdrop}
+        >
+          {/* The role says what is drawn, the way every other primitive here
+              names the control it depicts. aria-modal deliberately is not set:
+              it is not a description but an instruction to hide the rest of
+              the document, and a drawing of a modal must not take the plan
+              around it away from a reader using assistive technology. */}
+          <div
+            className="wireframe-overlay-surface flex flex-col gap-3"
+            role={node.kind === "alert" ? "alertdialog" : "dialog"}
+            aria-label={
+              node.title ?? (node.kind === "alert" ? "Alert dialog" : "Dialog")
+            }
+          >
+            {node.title === undefined ? null : (
+              <h4 className="wireframe-overlay-title flex min-w-0 items-center gap-2">
+                {node.kind === "alert" ? (
+                  <span className="wireframe-overlay-mark" aria-hidden="true">
+                    {lucideIconToReact({
+                      icon: TRIANGLE_ALERT_ICON,
+                      hidden: false,
+                    })}
+                  </span>
+                ) : null}
+                <span className="min-w-0">{node.title}</span>
+              </h4>
+            )}
+            <WireframeElements nodes={node.children} />
+          </div>
+        </div>
+      );
+    case "Icon":
+      return (
+        <span
+          className="wireframe-icon"
+          data-wireframe-size={node.size}
+          {...(node.labelled ? { "data-wireframe-labelled": "" } : {})}
+        >
+          <Glyph name={node.name} />
+          {node.labelled ? (
+            <span className="wireframe-icon-label">{node.label}</span>
+          ) : (
+            <span className="sr-only">{node.label}</span>
+          )}
+        </span>
+      );
+    case "Reference": {
+      // One bordered object: the mark that names the reference, the verbatim
+      // string, and the control that copies it. The control sits inside the
+      // border because a copy affordance outside it belongs to the row rather
+      // than to the string, which is the drawing that sent a reviewer looking
+      // for what the mark applied to.
+      return (
+        <span className="wireframe-reference">
+          {node.icon === undefined ? null : <Glyph name={node.icon} />}
+          <span className="wireframe-reference-text">{node.text}</span>
+          {node.copyLabel === undefined ? null : (
+            <button
+              type="button"
+              className="wireframe-reference-copy"
+              aria-label={node.copyLabel}
+            >
+              <Glyph name="copy" />
+            </button>
+          )}
+        </span>
+      );
+    }
     case "Badge":
       return (
         <span className="wireframe-badge" data-wireframe-tone={node.tone}>
@@ -396,7 +562,10 @@ const WireframeElement = ({
     case "List":
       return (
         <ul className="wireframe-list flex flex-col">
-          <WireframeElements nodes={node.children} />
+          <WireframeElements
+            nodes={node.children}
+            selectsInPlace={selectsInPlace}
+          />
         </ul>
       );
     case "ChoiceGroup":
@@ -421,9 +590,11 @@ const WireframeElement = ({
             ? {}
             : { "data-wireframe-navigate": node.navigateTo })}
         >
-          <span className="wireframe-choice-icon" aria-hidden="true">
-            {node.icon}
-          </span>
+          {node.emoji === undefined ? null : (
+            <span className="wireframe-choice-icon" aria-hidden="true">
+              {node.emoji}
+            </span>
+          )}
           <span className="wireframe-choice-copy">
             <span className="wireframe-choice-title">{node.title}</span>
             <span className="wireframe-choice-description">
@@ -454,12 +625,26 @@ const WireframeElement = ({
         node.value === undefined ? null : (
           <span className="wireframe-list-value">{node.value}</span>
         );
+      // A row that pushes to another screen says so with the mark a product
+      // puts there. navigateTo is the author declaring the push, so the mark
+      // reports intent already written rather than inventing an affordance:
+      // a row without one never gets it. Inside the collection pane of a
+      // master/detail workspace navigateTo means select in place - the detail
+      // for that record is already drawn beside the row - so a push mark there
+      // would contradict the pane next to it.
+      const disclosure =
+        node.navigateTo === undefined || selectsInPlace ? null : (
+          <span className="wireframe-list-disclosure">
+            <Glyph name="chevron" />
+          </span>
+        );
       const rowInner = (
         <>
           <span className="wireframe-list-row-primary flex w-full min-w-0 flex-nowrap items-baseline gap-2">
             {statusMarkFor(node.status)}
             <span className="wireframe-list-label grow">{node.label}</span>
             {valueOnMetaLine ? null : value}
+            {disclosure}
           </span>
           {node.meta === undefined ? null : (
             <span className="wireframe-list-row-secondary flex w-full min-w-0 flex-nowrap items-baseline justify-between gap-2">
@@ -719,9 +904,13 @@ const Field = ({
 const WireframeElements = ({
   nodes,
   masterIndex = -1,
+  detailBeside = false,
+  selectsInPlace = false,
 }: {
   readonly nodes: ReadonlyArray<WireframeNode>;
   readonly masterIndex?: number;
+  readonly detailBeside?: boolean;
+  readonly selectsInPlace?: boolean;
 }) => (
   <>
     {nodes.map((node, index) => (
@@ -729,6 +918,8 @@ const WireframeElements = ({
         key={index}
         node={node}
         isMasterPane={index === masterIndex}
+        detailBeside={detailBeside}
+        selectsInPlace={selectsInPlace}
       />
     ))}
   </>

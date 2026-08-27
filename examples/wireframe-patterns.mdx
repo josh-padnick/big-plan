@@ -22,13 +22,13 @@ Seven proven layouts provide copyable starting points for common product screens
         />
         <ChoiceGroup>
           <ChoiceCard
-            icon="⚽"
+            emoji="⚽"
             title="Ask about a purchase"
             description="See how much money I would have left"
             navigateTo="purchase-selected"
           />
           <ChoiceCard
-            icon="💵"
+            emoji="💵"
             title="Ask about my loan"
             description="See what I owe and ask a question"
             navigateTo="loan-selected"
@@ -53,13 +53,13 @@ Seven proven layouts provide copyable starting points for common product screens
         />
         <ChoiceGroup>
           <ChoiceCard
-            icon="⚽"
+            emoji="⚽"
             title="Ask about a purchase"
             description="See how much money I would have left"
             selected
           />
           <ChoiceCard
-            icon="💵"
+            emoji="💵"
             title="Ask about my loan"
             description="See what I owe and ask a question"
             navigateTo="loan-selected"
@@ -89,13 +89,13 @@ Seven proven layouts provide copyable starting points for common product screens
         />
         <ChoiceGroup>
           <ChoiceCard
-            icon="⚽"
+            emoji="⚽"
             title="Ask about a purchase"
             description="See how much money I would have left"
             navigateTo="purchase-selected"
           />
           <ChoiceCard
-            icon="💵"
+            emoji="💵"
             title="Ask about my loan"
             description="See what I owe and ask a question"
             selected
@@ -335,7 +335,9 @@ Run | State | Cost
   <Screen id="ticket" name="Ticket" device="phone">
     <Stack gap="sm">
       <TopBar title="Ticket">
-        <Button label="‹ Inbox" navigateTo="inbox" />
+        <Group>
+          <Button label="Inbox" icon="back" navigateTo="inbox" />
+        </Group>
       </TopBar>
       <Heading text="Checkout freeze" level="2" />
       <Message

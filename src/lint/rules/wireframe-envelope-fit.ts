@@ -44,14 +44,20 @@ const COLUMN_BUDGETS: Readonly<Record<string, number>> = {
   phone: 1,
 };
 
+const isColumnElement = (node: Node): boolean => {
+  for (const name of COLUMN_ELEMENTS) {
+    if (isNamedFlowElement(node, name)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+// A Group is a run of loose controls that travels together as one item, and
+// compilation refuses one that holds a pane or a collection, so a Group never
+// contributes a column and is not looked through here.
 const columnChildren = (node: Parent): ReadonlyArray<Node> =>
-  node.children.filter(
-    (child) =>
-      child.type === "mdxJsxFlowElement" &&
-      "name" in child &&
-      typeof child.name === "string" &&
-      COLUMN_ELEMENTS.has(child.name),
-  );
+  node.children.filter(isColumnElement);
 
 const checkScreen = ({
   screen,

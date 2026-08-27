@@ -24,7 +24,7 @@ const EXPECTED_DIAGNOSTICS: Readonly<Record<string, string>> = {
   "tablet-choice-workspace.mdx":
     'Tablet Screen "choose" puts a ChoiceGroup beside a competing region; the decision must dominate one centered column, never a miniature list-and-inspector workspace',
   "tablet-false-choice-outcome.mdx":
-    'ChoiceCard "Ask about my loan" on Screen "choose" navigates to "purchase-selected" without selecting that same title and consequence; every option needs its own truthful visible outcome',
+    'ChoiceCard "Ask about my loan" on Screen "choose" navigates to "purchase-selected" without selecting that same title, consequence, and card art; every option needs its own truthful visible outcome',
   "tablet-premature-choice-continuation.mdx":
     'Screen "choose" shows a primary continuation before any ChoiceCard is selected; hide it until a deliberate tap reveals the selected state',
   "tablet-preselected-choice.mdx":

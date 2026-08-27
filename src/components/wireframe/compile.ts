@@ -15,6 +15,16 @@ import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import { wireframeElementFor } from "./catalog.js";
 import type { WireframeElementDefinition } from "./catalog.js";
 import {
+  COLLECTIONS,
+  FLEXIBLE_PANES,
+  NEVER_GROUPED,
+  childNodes,
+  flattenNodes,
+  masterPaneIn,
+  paneSiblings,
+  workActionButtons,
+} from "./nodes.js";
+import {
   WIREFRAME_DEVICES,
   WIREFRAME_PATTERNS,
   type CompiledWireframe,
@@ -193,14 +203,6 @@ const compileNodes = ({
     return [node];
   });
 
-/** Every node in one screen, in authored order, at any depth. */
-const flatten = (
-  nodes: ReadonlyArray<WireframeNode>,
-): ReadonlyArray<WireframeNode> =>
-  nodes.flatMap((node) =>
-    "children" in node ? [node, ...flatten(node.children)] : [node],
-  );
-
 // A pattern is a convenience expansion into the same open vocabulary authors
 // can write by hand. It never introduces a closed region model.
 const patternedRow = ({
@@ -333,9 +335,6 @@ const expandPattern = ({
   );
 };
 
-const childNodes = (node: WireframeNode): ReadonlyArray<WireframeNode> =>
-  "children" in node ? node.children : [];
-
 const containsElement = ({
   node,
   element,
@@ -345,32 +344,6 @@ const containsElement = ({
 }): boolean =>
   node.element === element ||
   childNodes(node).some((child) => containsElement({ node: child, element }));
-
-const containsRecordCollection = (node: WireframeNode): boolean =>
-  node.element === "Panel" &&
-  node.children.some(
-    (candidate) =>
-      candidate.element === "List" || candidate.element === "Table",
-  );
-
-/** Returns authored buttons that perform work, excluding navigation and mode state. */
-const workActionButtons = (
-  nodes: ReadonlyArray<WireframeNode>,
-): ReadonlyArray<WireframeNode> => {
-  const all = flatten(nodes);
-  const stateButtons = new Set(
-    all
-      .filter(
-        (node) =>
-          node.element === "BottomBar" || node.element === "SegmentedControl",
-      )
-      .flatMap((node) => flatten(node.children))
-      .filter((node) => node.element === "Button"),
-  );
-  return all.filter(
-    (node) => node.element === "Button" && !stateButtons.has(node),
-  );
-};
 
 /** A detail pane that shows content must name the selected record beside it. */
 const checkSelection = ({
@@ -385,19 +358,9 @@ const checkSelection = ({
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
       if (node.element === "Row") {
-        const source = node.children.find(containsRecordCollection);
-        const sourceIndex =
-          source === undefined ? -1 : node.children.indexOf(source);
-        const following = node.children.slice(sourceIndex + 1);
-        const dependent =
-          following.find((child) => child.element !== "Rail") ??
-          following.find((child) => child.element === "Rail");
-        if (
-          source !== undefined &&
-          dependent !== undefined &&
-          flatten(childNodes(dependent)).length > 0
-        ) {
-          const sourceNodes = flatten([source]);
+        const source = masterPaneIn(node.children);
+        if (source !== undefined) {
+          const sourceNodes = flattenNodes([source]);
           const hasRecords = sourceNodes.some(
             (candidate) =>
               candidate.element === "List" || candidate.element === "Table",
@@ -425,12 +388,58 @@ const checkSelection = ({
   visit(screen.children);
 };
 
-const FLEXIBLE_PANES: ReadonlySet<WireframeNode["element"]> = new Set([
-  "Panel",
-  "Stack",
-  "Center",
-  "Row",
-]);
+/**
+ * A Group clusters loose controls; it never holds a pane or a collection.
+ *
+ * A Group is a run of items that travel together as one item of a row, so a
+ * Group holding a region would have to be both that one travelling item and
+ * the region itself. Only the first meaning survives, wherever the Group
+ * stands: a Group with no Row around it draws its contents side by side with
+ * none of the row rules and none of the device column budget that keep them
+ * readable, which is the same layout refused here for the same reason. The
+ * outermost Group reports, because a region reached through several Groups is
+ * still one mistake.
+ */
+const checkGroupedPanes = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const visit = ({
+    nodes,
+    insideGroup,
+  }: {
+    readonly nodes: ReadonlyArray<WireframeNode>;
+    readonly insideGroup: boolean;
+  }): void => {
+    for (const node of nodes) {
+      if (node.element === "Group") {
+        const region = insideGroup
+          ? undefined
+          : paneSiblings(node.children).find((candidate) =>
+              NEVER_GROUPED.has(candidate.element),
+            );
+        if (region !== undefined) {
+          const remedy = COLLECTIONS.has(region.element)
+            ? `Write the ${region.element} directly in the Stack or Row that should lay it out instead of wrapping it in a Group`
+            : `Panes are direct children of a Row: write the ${region.element} as a child of a Row and use the Row gap and justify to space the panes`;
+          diagnostics.add({
+            message: `Screen "${screen.id}": a Group holds a ${region.element}, but a Group clusters loose controls - buttons, text, badges - so they travel together as one item of a row. ${remedy}`,
+            position,
+          });
+        }
+        visit({ nodes: node.children, insideGroup: true });
+        continue;
+      }
+      visit({ nodes: childNodes(node), insideGroup: false });
+    }
+  };
+  visit({ nodes: screen.children, insideGroup: false });
+};
 
 /** Three flexible desktop panes create equal thirds; a Rail owns secondary width. */
 const checkEqualThirds = ({
@@ -491,6 +500,33 @@ const checkOutlinedSiblingBudget = ({
 };
 
 /**
+ * The layers a screen draws: the page, then each overlay over it.
+ *
+ * An overlay is judged on its own rather than with the page it covers, because
+ * only one of the two layers is answerable at a time: the page's primary
+ * action is exactly what the overlay took away. Counting them together would
+ * force an author to demote the confirm button on a dialog, or would read a
+ * dialog's control as a continuation for a decision drawn on the page, which
+ * is the opposite of the honest drawing. Every rule that counts controls
+ * across a whole screen reads them through here, so no two of those rules can
+ * disagree about where a layer ends.
+ */
+const screenLayers = (
+  screen: WireframeScreen,
+): ReadonlyArray<{
+  readonly where: string;
+  readonly nodes: ReadonlyArray<WireframeNode>;
+}> => [
+  {
+    where: "",
+    nodes: screen.children.filter((node) => node.element !== "Overlay"),
+  },
+  ...screen.children
+    .filter((node) => node.element === "Overlay")
+    .map((overlay) => ({ where: " Overlay", nodes: childNodes(overlay) })),
+];
+
+/**
  * A small choice is one dominant touch interaction, not a record workspace.
  *
  * ChoiceGroup is deliberately a deep primitive: once an author names this
@@ -506,46 +542,76 @@ const checkChoiceComposition = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const all = flatten(screen.children);
-  const groups = all.filter((node) => node.element === "ChoiceGroup");
-  if (groups.length === 0) {
+  if (
+    !flattenNodes(screen.children).some(
+      (node) => node.element === "ChoiceGroup",
+    )
+  ) {
     return;
   }
-  const selected = groups.flatMap((group) =>
-    group.children.filter(
-      (node) => node.element === "ChoiceCard" && node.selected,
-    ),
-  );
-  if (selected.length > 1) {
-    diagnostics.add({
-      message: `Screen "${screen.id}" selects ${selected.length} ChoiceCards; a simple decision shows at most one deliberate selection`,
-      position,
-    });
-  }
-  const primaryActions = workActionButtons(screen.children).filter(
-    (node) => node.element === "Button" && node.emphasis === "primary",
-  );
-  if (selected.length === 0 && primaryActions.length > 0) {
-    diagnostics.add({
-      message: `Screen "${screen.id}" shows a primary continuation before any ChoiceCard is selected; hide it until a deliberate tap reveals the selected state`,
-      position,
-    });
-  }
-  if (selected.length === 1 && primaryActions.length === 0) {
-    diagnostics.add({
-      message: `Screen "${screen.id}" selects a ChoiceCard but offers no primary continuation; add one short next action after the deliberate choice`,
-      position,
-    });
+  for (const layer of screenLayers(screen)) {
+    const groups = flattenNodes(layer.nodes).filter(
+      (node) => node.element === "ChoiceGroup",
+    );
+    if (groups.length === 0) {
+      continue;
+    }
+    const selected = groups.flatMap((group) =>
+      group.children.filter(
+        (node) => node.element === "ChoiceCard" && node.selected,
+      ),
+    );
+    if (selected.length > 1) {
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} selects ${selected.length} ChoiceCards; a simple decision shows at most one deliberate selection`,
+        position,
+      });
+    }
+    for (const group of groups) {
+      const cards = group.children.filter(
+        (node) => node.element === "ChoiceCard",
+      );
+      const first = cards[0];
+      const odd =
+        first === undefined
+          ? undefined
+          : cards.find(
+              (card) =>
+                (card.emoji === undefined) !== (first.emoji === undefined),
+            );
+      if (odd !== undefined && odd !== first) {
+        diagnostics.add({
+          message: `Screen "${screen.id}"${layer.where} gives some ChoiceCards card art and not others, starting with "${odd.title}"; options in one group are read as parallels, so give every option an emoji or give none`,
+          position,
+        });
+      }
+    }
+    const primaryActions = workActionButtons(layer.nodes).filter(
+      (node) => node.element === "Button" && node.emphasis === "primary",
+    );
+    if (selected.length === 0 && primaryActions.length > 0) {
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} shows a primary continuation before any ChoiceCard is selected; hide it until a deliberate tap reveals the selected state`,
+        position,
+      });
+    }
+    if (selected.length === 1 && primaryActions.length === 0) {
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} selects a ChoiceCard but offers no primary continuation; add one short next action after the deliberate choice`,
+        position,
+      });
+    }
   }
   if (screen.device !== "tablet" && screen.device !== "tablet-portrait") {
     return;
   }
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
+      const siblings =
+        node.element === "Row" ? paneSiblings(node.children) : [];
       if (
-        node.element === "Row" &&
-        node.children.length > 1 &&
-        node.children.some((child) =>
+        siblings.length > 1 &&
+        siblings.some((child) =>
           containsElement({ node: child, element: "ChoiceGroup" }),
         )
       ) {
@@ -583,7 +649,7 @@ const checkChoiceNavigation = ({
     fallbackPosition;
 
   for (const screen of screens) {
-    const groups = flatten(screen.children).filter(
+    const groups = flattenNodes(screen.children).filter(
       (node) => node.element === "ChoiceGroup",
     );
     for (const group of groups) {
@@ -602,17 +668,21 @@ const checkChoiceNavigation = ({
         if (destination === undefined) {
           continue;
         }
-        const selectedChoices = flatten(destination.children).flatMap((node) =>
-          node.element === "ChoiceCard" && node.selected ? [node] : [],
-        );
-        const selectedChoice = selectedChoices[0];
-        if (
-          selectedChoices.length !== 1 ||
-          selectedChoice?.title !== choice.title ||
-          selectedChoice?.description !== choice.description
-        ) {
+        const reveals = screenLayers(destination).some((layer) => {
+          const selectedChoices = flattenNodes(layer.nodes).flatMap((node) =>
+            node.element === "ChoiceCard" && node.selected ? [node] : [],
+          );
+          const selectedChoice = selectedChoices[0];
+          return (
+            selectedChoices.length === 1 &&
+            selectedChoice?.title === choice.title &&
+            selectedChoice?.description === choice.description &&
+            selectedChoice?.emoji === choice.emoji
+          );
+        });
+        if (!reveals) {
           diagnostics.add({
-            message: `ChoiceCard "${choice.title}" on Screen "${screen.id}" navigates to "${choice.navigateTo}" without selecting that same title and consequence; every option needs its own truthful visible outcome`,
+            message: `ChoiceCard "${choice.title}" on Screen "${screen.id}" navigates to "${choice.navigateTo}" without selecting that same title, consequence, and card art; every option needs its own truthful visible outcome`,
             position: positionFor(screen),
           });
         }
@@ -621,7 +691,7 @@ const checkChoiceNavigation = ({
   }
 };
 
-/** Multiple page-level headers make one screen claim more than one clear job. */
+/** Two page-level headers on one layer claim more than one clear job. */
 const checkOneClearJob = ({
   screen,
   position,
@@ -631,14 +701,16 @@ const checkOneClearJob = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const pageHeaders = flatten(screen.children).filter(
-    (node) => node.element === "PageHeader",
-  );
-  if (pageHeaders.length > 1) {
-    diagnostics.add({
-      message: `Screen "${screen.id}" draws ${pageHeaders.length} PageHeaders; keep one page-level job and move the other task into another Screen`,
-      position,
-    });
+  for (const layer of screenLayers(screen)) {
+    const pageHeaders = flattenNodes(layer.nodes).filter(
+      (node) => node.element === "PageHeader",
+    );
+    if (pageHeaders.length > 1) {
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} draws ${pageHeaders.length} PageHeaders; keep one page-level job and move the other task into another Screen`,
+        position,
+      });
+    }
   }
 };
 
@@ -652,7 +724,7 @@ const checkStepperState = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const steppers = flatten(screen.children).filter(
+  const steppers = flattenNodes(screen.children).filter(
     (node) => node.element === "Stepper",
   );
   for (const stepper of steppers) {
@@ -687,6 +759,42 @@ const checkStepperState = ({
   }
 };
 
+/**
+ * An overlay covers a page, and exactly one at a time.
+ *
+ * Two stacked modals is not a design a reviewer can judge; it is what a
+ * drawing shows when a screen tried to depict two moments at once, and each of
+ * those moments is its own Screen. An overlay with nothing under it is the same
+ * mistake from the other side: the page it is meant to interrupt was never
+ * drawn, so the reviewer cannot see what the interruption costs.
+ */
+const checkOverlay = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const overlays = screen.children.filter((node) => node.element === "Overlay");
+  if (overlays.length === 0) {
+    return;
+  }
+  if (overlays.length > 1) {
+    diagnostics.add({
+      message: `Screen "${screen.id}" draws ${overlays.length} Overlays; one screen shows one moment, so give the second one its own Screen`,
+      position,
+    });
+  }
+  if (overlays.length === screen.children.length) {
+    diagnostics.add({
+      message: `Screen "${screen.id}" is an Overlay with no page under it; draw the screen it interrupts so a reviewer can see what the interruption covers`,
+      position,
+    });
+  }
+};
+
 /** A phone uses its compact shell primitives, never a stacked desktop shell. */
 const checkPhoneShell = ({
   screen,
@@ -700,7 +808,7 @@ const checkPhoneShell = ({
   if (screen.device !== "phone") {
     return;
   }
-  const forbidden = flatten(screen.children).filter(
+  const forbidden = flattenNodes(screen.children).filter(
     (node) => node.element === "AppShell" || node.element === "Sidebar",
   );
   if (forbidden.length > 0) {
@@ -711,7 +819,59 @@ const checkPhoneShell = ({
   }
 };
 
-/** A screen has one filled action; a send action beside a composer counts. */
+/** The filled actions one layer draws; a send action beside a composer counts. */
+const filledActionsIn = (
+  nodes: ReadonlyArray<WireframeNode>,
+): ReadonlySet<WireframeNode> => {
+  const filled = new Set<WireframeNode>(
+    workActionButtons(nodes).filter(
+      (node) => node.element === "Button" && node.emphasis === "primary",
+    ),
+  );
+  const sendActions = (
+    candidates: ReadonlyArray<WireframeNode>,
+  ): ReadonlyArray<WireframeNode> =>
+    workActionButtons(candidates).filter(
+      (node) => node.element === "Button" && /^send(?:\s|$)/iu.test(node.label),
+    );
+  const markComposerSends = ({
+    nodes: layer,
+    ancestors,
+  }: {
+    readonly nodes: ReadonlyArray<WireframeNode>;
+    readonly ancestors: ReadonlyArray<ReadonlyArray<WireframeNode>>;
+  }): void => {
+    if (layer.some((candidate) => candidate.element === "TextArea")) {
+      const container = [layer, ...ancestors].find(
+        (candidate) => sendActions(candidate).length > 0,
+      );
+      sendActions(container ?? []).forEach((candidate) =>
+        filled.add(candidate),
+      );
+    }
+    for (const node of layer) {
+      const children = childNodes(node);
+      if (children.length > 0) {
+        markComposerSends({
+          nodes: children,
+          ancestors: [layer, ...ancestors],
+        });
+      }
+    }
+  };
+  if (nodes.some((candidate) => candidate.element === "TextArea")) {
+    sendActions(nodes).forEach((candidate) => filled.add(candidate));
+  }
+  nodes.forEach((node) => {
+    const children = childNodes(node);
+    if (children.length > 0) {
+      markComposerSends({ nodes: children, ancestors: [] });
+    }
+  });
+  return filled;
+};
+
+/** Each layer of a screen has one filled action. */
 const checkOneFilledAction = ({
   screen,
   position,
@@ -721,59 +881,17 @@ const checkOneFilledAction = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const filled = new Set<WireframeNode>(
-    workActionButtons(screen.children).filter(
-      (node) => node.element === "Button" && node.emphasis === "primary",
-    ),
-  );
-  const sendActions = (
-    nodes: ReadonlyArray<WireframeNode>,
-  ): ReadonlyArray<WireframeNode> =>
-    workActionButtons(nodes).filter(
-      (node) => node.element === "Button" && /^send(?:\s|$)/iu.test(node.label),
-    );
-  const markComposerSends = ({
-    nodes,
-    ancestors,
-  }: {
-    readonly nodes: ReadonlyArray<WireframeNode>;
-    readonly ancestors: ReadonlyArray<ReadonlyArray<WireframeNode>>;
-  }): void => {
-    if (nodes.some((candidate) => candidate.element === "TextArea")) {
-      const container = [nodes, ...ancestors].find(
-        (candidate) => sendActions(candidate).length > 0,
+  for (const layer of screenLayers(screen)) {
+    const filled = filledActionsIn(layer.nodes);
+    if (filled.size > 1) {
+      const labels = [...filled].flatMap((node) =>
+        node.element === "Button" ? [node.label] : [],
       );
-      sendActions(container ?? []).forEach((candidate) =>
-        filled.add(candidate),
-      );
+      diagnostics.add({
+        message: `Screen "${screen.id}"${layer.where} draws ${filled.size} filled actions (${labels.join(", ")}); keep one primary action, counting a composer's Send button`,
+        position,
+      });
     }
-    for (const node of nodes) {
-      const children = childNodes(node);
-      if (children.length > 0) {
-        markComposerSends({
-          nodes: children,
-          ancestors: [nodes, ...ancestors],
-        });
-      }
-    }
-  };
-  if (screen.children.some((candidate) => candidate.element === "TextArea")) {
-    sendActions(screen.children).forEach((candidate) => filled.add(candidate));
-  }
-  screen.children.forEach((node) => {
-    const children = childNodes(node);
-    if (children.length > 0) {
-      markComposerSends({ nodes: children, ancestors: [] });
-    }
-  });
-  if (filled.size > 1) {
-    const labels = [...filled].flatMap((node) =>
-      node.element === "Button" ? [node.label] : [],
-    );
-    diagnostics.add({
-      message: `Screen "${screen.id}" draws ${filled.size} filled actions (${labels.join(", ")}); keep one primary action, counting a composer's Send button`,
-      position,
-    });
   }
 };
 
@@ -841,6 +959,7 @@ const compileScreen = ({
       : { url: validated.url }),
     children,
   };
+  checkGroupedPanes({ screen, position: child.position, diagnostics });
   checkSelection({ screen, position: child.position, diagnostics });
   checkEqualThirds({ screen, position: child.position, diagnostics });
   checkOutlinedSiblingBudget({
@@ -852,6 +971,7 @@ const compileScreen = ({
   checkOneClearJob({ screen, position: child.position, diagnostics });
   checkStepperState({ screen, position: child.position, diagnostics });
   checkPhoneShell({ screen, position: child.position, diagnostics });
+  checkOverlay({ screen, position: child.position, diagnostics });
   checkOneFilledAction({ screen, position: child.position, diagnostics });
   return screen;
 };
@@ -966,7 +1086,7 @@ export const compileWireframe = ({
   const selectedInitialChoices =
     initialScreen === undefined
       ? []
-      : flatten(initialScreen.children).filter(
+      : flattenNodes(initialScreen.children).filter(
           (node) => node.element === "ChoiceCard" && node.selected,
         );
   if (selectedInitialChoices.length > 0) {

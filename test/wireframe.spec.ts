@@ -712,3 +712,164 @@ test("should keep short page-header actions at the trailing edge", async ({
   expect(geometry.actionsLeft).toBeGreaterThan(geometry.textRight);
   expect(geometry.actionsRight).toBeCloseTo(geometry.headerRight, 1);
 });
+
+// The icon, overlay, and grouping vocabulary is proven in the component slice;
+// what only a browser can answer is whether the CSS behind it still holds.
+// Each assertion below fences a failure that is silent in the source: a mark
+// that keeps its size when the artboard scales, a bar whose two ends stop being
+// two ends, a surface that stops covering the page it says is unavailable, and
+// an icon-only control that shrinks below the target a finger can hit.
+test("should draw marks, a two-ended toolbar, and a surface that covers the page", async ({
+  page,
+  wireframeChromeViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(wireframeChromeViewerUrl);
+
+  const review = page.locator('[data-wireframe-screen="review"]');
+
+  await test.step("a named mark draws its glyph and a missing one would say so", async () => {
+    await expect(
+      review.locator('[data-wireframe-icon="terminal"] svg'),
+    ).toBeVisible();
+    await expect(review.locator("[data-wireframe-icon-unnamed]")).toHaveCount(
+      0,
+    );
+  });
+
+  await test.step("an icon-only control keeps its words for a screen reader", async () => {
+    const copy = review.getByRole("button", { name: "Copy command" });
+    await expect(copy).toBeVisible();
+    await expect(copy).toHaveText("");
+  });
+
+  await test.step("a top bar puts its title at one end and its controls at the other", async () => {
+    const bar = review.locator(".wireframe-top-bar");
+    const title = boxOf(bar.locator(".wireframe-brand"));
+    const actions = boxOf(bar.locator(".wireframe-top-bar-actions"));
+    const [titleBox, actionsBox, barBox] = await Promise.all([
+      title,
+      actions,
+      boxOf(bar),
+    ]);
+    expect(titleBox.x - barBox.x).toBeLessThan(barBox.width / 4);
+    expect(actionsBox.x + actionsBox.width).toBeGreaterThan(
+      barBox.x + barBox.width * 0.75,
+    );
+  });
+
+  await test.step("two groups in one row settle at the row's two ends", async () => {
+    const row = review.locator(".wireframe-row.justify-between").first();
+    const groups = row.locator("> .wireframe-group");
+    const [rowBox, first, second] = await Promise.all([
+      boxOf(row),
+      boxOf(groups.nth(0)),
+      boxOf(groups.nth(1)),
+    ]);
+    expect(first.x - rowBox.x).toBeLessThan(4);
+    expect(rowBox.x + rowBox.width - (second.x + second.width)).toBeLessThan(4);
+  });
+
+  await test.step("a dimmed overlay covers the page it makes unavailable", async () => {
+    await page
+      .locator("[data-wireframe-switch]", { hasText: "Delete confirmation" })
+      .click();
+    const screen = page.locator('[data-wireframe-screen="confirm-delete"]');
+    const overlay = screen.locator(".wireframe-overlay");
+    await expect(overlay).toHaveAttribute("data-wireframe-backdrop", "dim");
+    const [overlayBox, artboardBox] = await Promise.all([
+      boxOf(overlay),
+      boxOf(screen.locator(".wireframe-artboard")),
+    ]);
+    // Size alone would pass an overlay the right shape sitting off to one
+    // side, which leaves part of the page it calls unavailable exposed.
+    expect(overlayBox.width).toBeGreaterThanOrEqual(artboardBox.width - 2);
+    expect(overlayBox.height).toBeGreaterThanOrEqual(artboardBox.height - 2);
+    expect(overlayBox.x).toBeLessThanOrEqual(artboardBox.x + 2);
+    expect(overlayBox.y).toBeLessThanOrEqual(artboardBox.y + 2);
+    expect(overlayBox.x + overlayBox.width).toBeGreaterThanOrEqual(
+      artboardBox.x + artboardBox.width - 2,
+    );
+    expect(overlayBox.y + overlayBox.height).toBeGreaterThanOrEqual(
+      artboardBox.y + artboardBox.height - 2,
+    );
+    await expect(
+      screen.getByRole("alertdialog", { name: "Delete Checkout rewrite?" }),
+    ).toBeVisible();
+  });
+});
+
+// A push header centres its title in the bar, not in whatever the controls
+// left over. Measuring the painted text rather than the box around it is what
+// makes this fail when the slot sizing or the alignment goes, which is how the
+// pattern was lost silently once already.
+const expectCentredTitle = async (bar: TestLocator): Promise<void> => {
+  const barBox = await boxOf(bar);
+  const titleCentre = await bar.locator(".wireframe-brand").evaluate((node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const painted = range.getBoundingClientRect();
+    return painted.left + painted.width / 2;
+  });
+  expect(
+    Math.abs(titleCentre - (barBox.x + barBox.width / 2)),
+  ).toBeLessThanOrEqual(barBox.width * 0.02);
+};
+
+// A control drawn as one mark has no words to give it size, so its target is
+// whatever the stylesheet last said - and a padding change that shrinks it
+// below what a finger can hit looks identical in the source and nearly
+// identical in the drawing.
+test("should hold the touch floor and the leading control on a phone bar", async ({
+  page,
+  wireframeFormFactorsViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(wireframeFormFactorsViewerUrl);
+
+  const screen = page.locator('[data-wireframe-screen="m-ticket"]');
+
+  await test.step("an icon-only control stays reachable by a finger", async () => {
+    const control = screen.locator("[data-wireframe-icon-only]").first();
+    const box = await boxOf(control);
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    // The quiet emphasis draws a link stroke under its words; a control with
+    // no words must not draw a rule under its mark instead.
+    expect(
+      await control.evaluate(
+        (node) => getComputedStyle(node, "::before").content,
+      ),
+    ).toBe("none");
+  });
+
+  await test.step("the back control is drawn before the title, as a phone puts it", async () => {
+    const bar = screen.locator(".wireframe-top-bar");
+    const [leading, title, actions] = await Promise.all([
+      boxOf(bar.locator(".wireframe-top-bar-leading")),
+      boxOf(bar.locator(".wireframe-brand")),
+      boxOf(bar.locator(".wireframe-top-bar-actions")),
+    ]);
+    expect(leading.x + leading.width).toBeLessThanOrEqual(title.x);
+    expect(title.x + title.width).toBeLessThanOrEqual(actions.x);
+  });
+
+  await test.step("the title is centred in the bar the reader sees", async () => {
+    await expectCentredTitle(screen.locator(".wireframe-top-bar"));
+  });
+
+  // The trailing slot is drawn only when the author wrote loose controls, so
+  // a bar that carries none is laid out from two slots rather than three. A
+  // title centred against its siblings instead of against the bar lands at
+  // three quarters of it, and this is the shape that catches that.
+  await test.step("a bar carrying nothing trailing centres its title too", async () => {
+    await page
+      .locator("[data-wireframe-switch]", { hasText: "Phone · Notifications" })
+      .click();
+    await expectCentredTitle(
+      page.locator(
+        '[data-wireframe-screen="m-notifications"] .wireframe-top-bar',
+      ),
+    );
+  });
+});

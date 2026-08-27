@@ -43,7 +43,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 **Reject:** small choices drawn as list/detail; repeated instructions; unearned detail panes; mixed jobs; future-facing titles; actions that exit instead of advance; duplicate routes; redundant panes; doubled completion headlines; receipt-like endings; inescapable temporary surfaces; duplicate comment routes; ambiguous component ownership; list/preview pairs that repeat the same facts.
 
-**Mechanics:** compilation blocks multiple page headers and multiple filled work actions. Wording still requires review.
+**Mechanics:** compilation blocks a second page header or a second filled work action within one layer, counting an overlay as its own layer, and blocks a second overlay on a screen, an overlay with no page under it, and an overlay with no button to leave by. Wording still requires review.
 
 ## L · Layout follows attention
 
@@ -69,7 +69,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 **Simple touch decisions**
 
 - Make the tablet decision itself the focal surface: one centered column of complete option cards, never a left list competing with a right inspector.
-- Make the whole option look touchable with border or fill, comfortable padding, hand-drawn icon, title, one-line consequence, and a clear state target.
+- Make the whole option look touchable with border or fill, comfortable padding, title, one-line consequence, whatever card art the group carries, and a clear state target.
 - Use the iPad canvas through larger type, taller cards, grouped spacing, and decisive contrast; never shrink a desktop form and float it in the frame.
 - Quiet graph paper behind the interactive region with a light surface so the grid never competes with the words.
 
@@ -108,7 +108,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 **Deliberate choice**
 
 - Never preselect a consequential choice. The initial decision screen starts unselected; a deliberate tap reveals the selected state and only then reveals or enables continuation.
-- Give every unselected choice its own selected-state destination. The destination selects the same title and consequence; polished options may never collapse into one generic outcome.
+- Give every unselected choice its own selected-state destination. The destination selects the same title, consequence, and card art; polished options may never collapse into one generic outcome.
 - Make selected touch state unmistakable with several signals together: filled radio, stronger border, changed background, and checkmark or an equally explicit mark. Tint or a thin left line is insufficient.
 
 **Risk and persistence**
@@ -167,7 +167,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 **Operational language**
 
-- Keep saved views—reusable queues such as `All`, `Mine`, and `Unassigned`—separate from temporary filters such as `Waiting ×`, `SLA risk ×`, and `+ Add filter`.
+- Keep saved views and temporary filters visibly apart: reusable queues such as `All`, `Mine`, and `Unassigned` sit welded together as the options of one segmented control, while temporary filters such as `Waiting`, `SLA risk`, and `Add filter` stand in their own row as separate chips, each one droppable on its own.
 - Prefer time-to-act over arithmetic: `First response due in 4m`, `Breached by 6m`, or `Waiting 2h`; never require elapsed/target calculation or color alone.
 
 **Reject:** terminology drift after selection; naming an unsubmitted choice a request; unnatural outcome copy; a trapped flow without identity or escape; abstract labels where plain language exists; mixed audiences; branchless summaries; repeated comment excerpts or block paths; stale or ambiguous count labels; ordinary-action styling for state toggles; inconsistent definition treatments; saved-view/filter ambiguity; elapsed/target arithmetic; generic reassurance; technical badges; unverified praise.
@@ -469,19 +469,19 @@ The fixed-ratio iPad flow gives each decision its own screen, makes progress mea
         />
         <ChoiceGroup>
           <ChoiceCard
-            icon="⚽"
+            emoji="⚽"
             title="Ask about a purchase"
             description="See how much money I would have left"
             navigateTo="quality-tablet-purchase-selected"
           />
           <ChoiceCard
-            icon="💵"
+            emoji="💵"
             title="Ask about my loan"
             description="See what I owe and ask a question"
             navigateTo="quality-tablet-loan-selected"
           />
           <ChoiceCard
-            icon="💬"
+            emoji="💬"
             title="Ask about something I don't understand"
             description="Explain what is confusing me"
             navigateTo="quality-tablet-help-selected"
@@ -517,19 +517,19 @@ The fixed-ratio iPad flow gives each decision its own screen, makes progress mea
         />
         <ChoiceGroup>
           <ChoiceCard
-            icon="⚽"
+            emoji="⚽"
             title="Ask about a purchase"
             description="See how much money I would have left"
             selected
           />
           <ChoiceCard
-            icon="💵"
+            emoji="💵"
             title="Ask about my loan"
             description="See what I owe and ask a question"
             navigateTo="quality-tablet-loan-selected"
           />
           <ChoiceCard
-            icon="💬"
+            emoji="💬"
             title="Ask about something I don't understand"
             description="Explain what is confusing me"
             navigateTo="quality-tablet-help-selected"
@@ -574,19 +574,19 @@ The fixed-ratio iPad flow gives each decision its own screen, makes progress mea
         />
         <ChoiceGroup>
           <ChoiceCard
-            icon="⚽"
+            emoji="⚽"
             title="Ask about a purchase"
             description="See how much money I would have left"
             navigateTo="quality-tablet-purchase-selected"
           />
           <ChoiceCard
-            icon="💵"
+            emoji="💵"
             title="Ask about my loan"
             description="See what I owe and ask a question"
             selected
           />
           <ChoiceCard
-            icon="💬"
+            emoji="💬"
             title="Ask about something I don't understand"
             description="Explain what is confusing me"
             navigateTo="quality-tablet-help-selected"
@@ -631,19 +631,19 @@ The fixed-ratio iPad flow gives each decision its own screen, makes progress mea
         />
         <ChoiceGroup>
           <ChoiceCard
-            icon="⚽"
+            emoji="⚽"
             title="Ask about a purchase"
             description="See how much money I would have left"
             navigateTo="quality-tablet-purchase-selected"
           />
           <ChoiceCard
-            icon="💵"
+            emoji="💵"
             title="Ask about my loan"
             description="See what I owe and ask a question"
             navigateTo="quality-tablet-loan-selected"
           />
           <ChoiceCard
-            icon="💬"
+            emoji="💬"
             title="Ask about something I don't understand"
             description="Explain what is confusing me"
             selected
@@ -972,9 +972,9 @@ The phone uses a one-column list-to-detail push with compact navigation, comfort
         />
       </List>
       <BottomBar>
-        <Button label="▤ Inbox" emphasis="primary" />
-        <Button label="＋ New" />
-        <Button label="⚙ Settings" />
+        <Button label="Inbox" icon="inbox" emphasis="primary" />
+        <Button label="New" icon="add" />
+        <Button label="Settings" icon="settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -982,12 +982,20 @@ The phone uses a one-column list-to-detail push with compact navigation, comfort
   <Screen id="quality-phone-ticket" name="Phone · Ticket" device="phone">
     <Stack gap="sm">
       <TopBar title="#4821">
+        <Group>
+          <Button
+            label="Inbox"
+            icon="back"
+            emphasis="tertiary"
+            navigateTo="quality-phone-inbox"
+          />
+        </Group>
         <Button
-          label="‹ Inbox"
+          label="More actions"
+          icon="more"
+          iconOnly
           emphasis="tertiary"
-          navigateTo="quality-phone-inbox"
         />
-        <Button label="•••" emphasis="tertiary" />
       </TopBar>
       <Heading text="Cannot complete checkout" level="2" />
       <Text text="Northwind · Priority · Open" role="helper" />
@@ -1007,12 +1015,13 @@ The phone uses a one-column list-to-detail push with compact navigation, comfort
       <Button label="Send reply" emphasis="primary" />
       <BottomBar>
         <Button
-          label="▤ Inbox"
+          label="Inbox"
+          icon="inbox"
           emphasis="primary"
           navigateTo="quality-phone-inbox"
         />
-        <Button label="＋ New" />
-        <Button label="⚙ Settings" />
+        <Button label="New" icon="add" />
+        <Button label="Settings" icon="settings" />
       </BottomBar>
     </Stack>
   </Screen>

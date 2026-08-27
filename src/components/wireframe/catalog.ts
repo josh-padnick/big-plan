@@ -13,15 +13,20 @@ import {
 } from "../_authoring/contract.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import type { WireframeTableCell } from "./model.js";
+import { workActionButtons } from "./nodes.js";
 import {
   WIREFRAME_ALIGNMENTS,
   WIREFRAME_EMPHASES,
   WIREFRAME_HEADING_LEVELS,
+  WIREFRAME_ICON_NAMES,
+  WIREFRAME_ICON_SIZES,
   WIREFRAME_JUSTIFICATIONS,
   WIREFRAME_MEASURES,
   WIREFRAME_DIRECTIONS,
   WIREFRAME_FIELD_KINDS,
   WIREFRAME_MEDIA_SHAPES,
+  WIREFRAME_OVERLAY_BACKDROPS,
+  WIREFRAME_OVERLAY_KINDS,
   WIREFRAME_SPACES,
   WIREFRAME_STATUSES,
   WIREFRAME_STEP_STATES,
@@ -87,6 +92,11 @@ const ROW_SCHEMA = {
   justify: { kind: "enum", values: WIREFRAME_JUSTIFICATIONS },
 } satisfies ComponentAttributeSchema;
 
+const GROUP_SCHEMA = {
+  gap: { kind: "enum", values: WIREFRAME_SPACES },
+  align: { kind: "enum", values: WIREFRAME_ALIGNMENTS },
+} satisfies ComponentAttributeSchema;
+
 const PANEL_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
   eyebrow: { kind: "string", nonEmpty: true },
@@ -107,7 +117,40 @@ const TEXT_SCHEMA = {
 const BUTTON_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
   emphasis: { kind: "enum", values: WIREFRAME_EMPHASES },
+  icon: { kind: "string", nonEmpty: true },
+  iconOnly: { kind: "booleanShorthand" },
   navigateTo: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+// The named glyphs, read as prose so one authoring message can list them.
+const ICON_NAME_LIST = WIREFRAME_ICON_NAMES.join(", ");
+
+const ICON_SCHEMA = {
+  name: { kind: "string", required: true, nonEmpty: true },
+  label: { kind: "string", required: true, nonEmpty: true },
+  labelled: { kind: "booleanShorthand" },
+  size: { kind: "enum", values: WIREFRAME_ICON_SIZES },
+} satisfies ComponentAttributeSchema;
+
+const REFERENCE_SCHEMA = {
+  text: { kind: "string", required: true, nonEmpty: true },
+  icon: { kind: "string", nonEmpty: true },
+  copyLabel: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+// An overlay's exit is often a Button inside a Row of actions rather than a
+// direct child, so the search reaches the whole surface. It counts only the
+// buttons that act: a segmented control's options and a bottom bar's
+// destinations are drawn as buttons but only change what the surface shows,
+// so reading one as the way out leaves the reader in exactly the trap this
+// check exists to refuse.
+const holdsExit = (nodes: ReadonlyArray<WireframeNode>): boolean =>
+  workActionButtons(nodes).length > 0;
+
+const OVERLAY_SCHEMA = {
+  title: { kind: "string", nonEmpty: true },
+  kind: { kind: "enum", values: WIREFRAME_OVERLAY_KINDS },
+  backdrop: { kind: "enum", values: WIREFRAME_OVERLAY_BACKDROPS },
 } satisfies ComponentAttributeSchema;
 
 const EMPTY_SCHEMA = {} satisfies ComponentAttributeSchema;
@@ -174,7 +217,7 @@ const LIST_ITEM_SCHEMA = {
 } satisfies ComponentAttributeSchema;
 
 const CHOICE_CARD_SCHEMA = {
-  icon: { kind: "string", required: true, nonEmpty: true },
+  emoji: { kind: "string", nonEmpty: true },
   title: { kind: "string", required: true, nonEmpty: true },
   description: { kind: "string", required: true, nonEmpty: true },
   selected: { kind: "booleanShorthand" },
@@ -338,6 +381,29 @@ const CATALOG = {
       };
     },
   },
+  Group: {
+    category: "layout",
+    acceptsChildren: true,
+    summary:
+      'A run of loose controls that travel together as one item of a Row; it never holds a Panel, Stack, Row, Center, Rail, List, or Table. Two Groups inside <Row justify="between"> put one set at the start and the other at the end, which is how a real toolbar carries its title on the left and its controls on the right.',
+    example:
+      '<Row justify="between"><Group><Heading text="Plans" /></Group><Group><Button icon="settings" label="Settings" iconOnly /></Group></Row>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Group",
+        attributes,
+        position,
+        diagnostics,
+        schema: GROUP_SCHEMA,
+      });
+      return {
+        element: "Group",
+        gap: validated.gap ?? "sm",
+        align: validated.align ?? "center",
+        children,
+      };
+    },
+  },
   Panel: {
     category: "surface",
     acceptsChildren: true,
@@ -417,8 +483,7 @@ const CATALOG = {
   Button: {
     category: "content",
     acceptsChildren: false,
-    summary:
-      "An action. Give it navigateTo to move the prototype to another screen.",
+    summary: `An action. icon draws a named glyph before the label, and iconOnly draws that glyph alone while label stays the accessible name and the tooltip. Give it navigateTo to move the prototype to another screen. Named glyphs: ${ICON_NAME_LIST}.`,
     example: '<Button label="Start lesson" navigateTo="loan-lesson" />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
@@ -428,13 +493,70 @@ const CATALOG = {
         diagnostics,
         schema: BUTTON_SCHEMA,
       });
+      // A control drawn with neither words nor a mark is a blank box, which is
+      // the one thing an author cannot have meant. The label is never dropped,
+      // so this is only ever about what the button draws.
+      if (validated.iconOnly === true && validated.icon === undefined) {
+        diagnostics.add({
+          message: `Button "${validated.label ?? ""}" is iconOnly with no icon, so it would draw nothing; give it icon="..." or remove iconOnly`,
+          position,
+        });
+      }
       return {
         element: "Button",
         label: validated.label ?? "",
         emphasis: validated.emphasis ?? "secondary",
+        ...(validated.icon === undefined ? {} : { icon: validated.icon }),
+        iconOnly: validated.iconOnly === true && validated.icon !== undefined,
         ...(validated.navigateTo === undefined
           ? {}
           : { navigateTo: validated.navigateTo }),
+      };
+    },
+  },
+  Icon: {
+    category: "content",
+    acceptsChildren: false,
+    summary: `A glyph standing on its own as a mark - a tip marker, a lock beside a field, a chevron at the end of a row. label always says what it means and always reaches assistive technology; labelled also draws those words beside it. Anything a person clicks is a Button with the same icon, never this. A name outside the set draws a crossed placeholder carrying that name rather than a nearby glyph that would be wrong. Named glyphs: ${ICON_NAME_LIST}.`,
+    example: '<Icon name="tip" label="Tip" size="sm" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Icon",
+        attributes,
+        position,
+        diagnostics,
+        schema: ICON_SCHEMA,
+      });
+      return {
+        element: "Icon",
+        name: validated.name ?? "",
+        label: validated.label ?? "",
+        labelled: validated.labelled === true,
+        size: validated.size ?? "md",
+      };
+    },
+  },
+  Reference: {
+    category: "content",
+    acceptsChildren: false,
+    summary: `A verbatim string the reader copies or types exactly - a command, a path, a URL, an identifier - drawn as one bordered object. icon names an optional leading mark, and copyLabel says what copying it does and is what draws the copy control inside the border. Reach for this instead of putting a copy Button loose beside a Text: a loose copy control drifts away from the words it belongs to and sizes itself against nothing around it. Named glyphs: ${ICON_NAME_LIST}.`,
+    example:
+      '<Reference icon="terminal" text="big-plan render plan.mdx review.html" copyLabel="Copy command" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Reference",
+        attributes,
+        position,
+        diagnostics,
+        schema: REFERENCE_SCHEMA,
+      });
+      return {
+        element: "Reference",
+        text: validated.text ?? "",
+        ...(validated.icon === undefined ? {} : { icon: validated.icon }),
+        ...(validated.copyLabel === undefined
+          ? {}
+          : { copyLabel: validated.copyLabel }),
       };
     },
   },
@@ -455,6 +577,41 @@ const CATALOG = {
         schema: EMPTY_SCHEMA,
       });
       return { element: "SegmentedControl", children };
+    },
+  },
+  Overlay: {
+    category: "surface",
+    acceptsChildren: true,
+    allowedParents: ["Screen"],
+    summary:
+      'A surface drawn over the page: a dialog, a confirmation, a menu, a toast. kind="alert" is the interruption that guards a destructive or irreversible action and draws its own alert mark; kind="dialog" is an ordinary task surface. backdrop="dim" says the page is unavailable until this is answered, and backdrop="clear" says it is not. It holds any drawing elements, belongs directly to a Screen, and needs the page it covers beside it.',
+    example:
+      '<Overlay kind="alert" title="Delete this view?">...<Button label="Delete view" emphasis="destructive" />...</Overlay>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Overlay",
+        attributes,
+        position,
+        diagnostics,
+        schema: OVERLAY_SCHEMA,
+      });
+      // Every opened surface owes the reader a way out, and an overlay is the
+      // surface where forgetting it traps them: the page underneath is covered,
+      // so a drawing with no control on top is a screen nobody can leave.
+      if (!holdsExit(children)) {
+        diagnostics.add({
+          message:
+            "Overlay needs at least one Button that acts so the surface it opens has a visible way out; SegmentedControl and BottomBar options switch mode rather than leave",
+          position,
+        });
+      }
+      return {
+        element: "Overlay",
+        ...(validated.title === undefined ? {} : { title: validated.title }),
+        kind: validated.kind ?? "dialog",
+        backdrop: validated.backdrop ?? "dim",
+        children,
+      };
     },
   },
   AppShell: {
@@ -522,8 +679,9 @@ const CATALOG = {
     // Stack is allowed so authors can group the bar with the page body.
     allowedParents: ["AppShell", "Screen", "Stack"],
     summary:
-      "A strip across the top of a shell or a screen for the title and actions.",
-    example: '<TopBar title="Dashboard">...</TopBar>',
+      "A strip across the top of a shell or a screen. The title leads and loose controls trail, which is how a desktop or tablet bar reads. A Group written first leads, before the title, which is how a phone draws the back control iOS puts there; every later child trails.",
+    example:
+      '<TopBar title="Dashboard"><Button label="Settings" icon="settings" iconOnly /></TopBar>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "TopBar",
@@ -759,9 +917,9 @@ const CATALOG = {
     acceptsChildren: true,
     allowedChildren: ["ChoiceCard"],
     summary:
-      "Two to five simple alternatives as one dominant touch decision; each option supplies an icon, title, and one-line consequence.",
+      "Two to five simple alternatives as one dominant touch decision; each option supplies a title and a one-line consequence, plus optional card art that every option in the group either carries or leaves off.",
     example:
-      '<ChoiceGroup><ChoiceCard icon="⚽" title="Ask about a purchase" description="See how much money I would have left" /></ChoiceGroup>',
+      '<ChoiceGroup><ChoiceCard emoji="⚽" title="Ask about a purchase" description="See how much money I would have left" /></ChoiceGroup>',
     compile: ({ attributes, children, position, diagnostics }) => {
       validateComponentAttributes({
         component: "ChoiceGroup",
@@ -784,9 +942,9 @@ const CATALOG = {
     acceptsChildren: false,
     allowedParents: ["ChoiceGroup"],
     summary:
-      "One whole-surface touch option. selected adds radio, check, border, and fill signals; navigateTo may reveal the deliberate selected state.",
+      "One whole-surface touch option. Optional emoji draws card art for the option - a card without it reads fine, and a glyph-set name never belongs here. selected adds radio, check, border, and fill signals; navigateTo may reveal the deliberate selected state.",
     example:
-      '<ChoiceCard icon="⚽" title="Ask about a purchase" description="See how much money I would have left" navigateTo="purchase-selected" />',
+      '<ChoiceCard emoji="⚽" title="Ask about a purchase" description="See how much money I would have left" navigateTo="purchase-selected" />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "ChoiceCard",
@@ -797,7 +955,7 @@ const CATALOG = {
       });
       return {
         element: "ChoiceCard",
-        icon: validated.icon ?? "",
+        ...(validated.emoji === undefined ? {} : { emoji: validated.emoji }),
         title: validated.title ?? "",
         description: validated.description ?? "",
         selected: validated.selected === true,
@@ -812,7 +970,7 @@ const CATALOG = {
     acceptsChildren: false,
     allowedParents: ["List"],
     summary:
-      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen. status draws a state mark (done, attention, waiting, blocked) so a checklist is scannable without reading every line.",
+      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen and draws a trailing push chevron, except in a collection pane whose detail is drawn beside it, where it selects the record in place instead. status draws a state mark (done, attention, waiting, blocked) so a checklist is scannable without reading every line.",
     example:
       '<ListItem label="Checkout freeze" meta="Northwind · Priority" value="14m · #4821" navigateTo="ticket" />',
     compile: ({ attributes, position, diagnostics }) => {

@@ -120,8 +120,12 @@ Tablet screens reject `url`.
 Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single content column, and `BottomBar` instead.
 
 `navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
-The compiler blocks multiple `PageHeader`s on one screen, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, more than one filled work action per screen, and ambiguous Stepper progress.
-A `ChoiceGroup` is the mechanically owned simple-decision path: it holds two to five `ChoiceCard`s, starts unselected on the initial screen, gives every option its own destination that visibly selects the same title and consequence, reveals a primary continuation only after selection, and cannot share a tablet row with a competing region.
+
+A `Screen` holds at most one `Overlay`, needs page content beside it, and the overlay needs at least one `Button` to leave by.
+The one-filled-action and one-page-header rules each count an overlay as its own layer, so a dialog may carry its own primary action and its own header while the page beneath keeps one of each too.
+`TopBar` puts its title at the start and loose children at the end. A `Group` written first leads, drawn before the title, which is how a phone bar carries the back control iOS puts there; every later child trails, so use `Group`s inside a `Row` for any other split.
+The compiler blocks a second `PageHeader` or a second filled work action within one layer, a pane or collection wrapped in a `Group`, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, and ambiguous Stepper progress.
+A `ChoiceGroup` is the mechanically owned simple-decision path: it holds two to five `ChoiceCard`s, starts unselected on the initial screen, gives every option its own destination that visibly selects the same title, consequence, and card art, reveals a primary continuation only after selection, and cannot share a tablet row with a competing region.
 A Stepper must contain exactly one current step in `done` → `current` → `todo` order, while each Step label names only the task because the primitive draws its own number or completion mark.
 A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
 A direct workspace `Row` derives its columns rather than splitting evenly: the first pane holding a `List` or `Table` becomes the bounded record collection, `Rail` owns secondary width, and the remaining surface becomes the dominant primary. Exactly one collection is named per row, so a detail pane that also holds a list stays primary. The derivation applies on every device, and a browser geometry test requires the primary surface to be at least a third wider than any pane beside it.
@@ -155,12 +159,14 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Stack`            | `gap="none\|xs\|sm\|md\|lg\|xl"` and `align="start\|center\|end\|stretch"`.                                                                       |
 | `Row`              | `gap`, `align`, and `justify="start\|center\|end\|between"`; a direct record collection derives a master pane while remaining content dominates. |
 | `Panel`            | Optional `title`, `eyebrow`, `surface="plain\|filled\|outlined"`, and `status="done\|attention\|waiting\|blocked"`; defaults to a plain, unboxed region.        |
+| `Group`            | A run of loose controls that travels together as one item of a `Row`; two of them inside `<Row justify="between">` anchor one set at the start and the other at the end. It may not hold a `Panel`, `Stack`, `Row`, `Center`, `Rail`, `List`, or `Table` anywhere - a pane is a direct child of a `Row`, and a collection goes directly in the `Stack` or `Row` that lays it out. Optional `gap` and `align`. |
+| `Overlay`          | A surface drawn over the page. Optional `title`, `kind="dialog\|alert"`, and `backdrop="dim\|clear"`; holds any drawing elements; valid only directly in `Screen`.                              |
 | `Rail`             | The only secondary-width primitive; owns a readable fixed width and wraps rather than squeezing the primary pane.                            |
 | `Center`           | `measure="narrow\|prose\|wide"` for horizontally centered, bounded content; as the only direct child of a screen canvas or desktop `AppContent`, it also fills the available height and centers its content vertically. |
 | `AppShell`         | Holds only `Sidebar`, optional `TopBar`, and `AppContent`; unavailable on phone.                                                           |
 | `Sidebar`          | Optional `brand` and `mode`; valid only directly in `AppShell`.                                                                           |
 | `AppContent`       | Main product region; valid only directly in `AppShell`.                                                                                   |
-| `TopBar`           | Optional `title`; valid in `AppShell`, `Screen`, or `Stack`.                                                                               |
+| `TopBar`           | Optional `title`; valid in `AppShell`, `Screen`, or `Stack`. A `Group` written first leads, before the title; every later child trails.     |
 | `BottomBar`        | Phone tab strip; valid in `Screen` or `Stack`.                                                                                            |
 | `PageHeader`       | Required `title`, optional `description` and `badge`.                                                                                      |
 | `SegmentedControl` | Holds only `Button` children; mark its selected mode with `emphasis="primary"`.                                                          |
@@ -173,7 +179,9 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | `Heading`          | Required `text`; optional `level="1\|2\|3"`.                                                                        |
 | `Text`             | Required `text`; optional `role="body\|helper\|muted\|section"`.                                                      |
-| `Button`           | Required `label`; optional `emphasis="primary\|secondary\|tertiary\|destructive"` and `navigateTo`.                  |
+| `Button`           | Required `label`; optional `icon`, `iconOnly`, `emphasis="primary\|secondary\|tertiary\|destructive"`, and `navigateTo`. `iconOnly` draws the glyph alone while `label` stays the accessible name and tooltip, so it needs an `icon` to draw. |
+| `Icon`             | Required `name` and `label`; optional `labelled` and `size="sm\|md\|lg"`. A mark, never a control. `label` always reaches assistive technology; `labelled` also draws those words beside the glyph. |
+| `Reference`        | Required `text`; optional `icon` and `copyLabel`. A verbatim string the reader copies or types exactly, drawn as one bordered object. `copyLabel` draws the copy control inside the border and is its accessible name. Prefer it over a `Text` with a copy `Button` beside it. |
 | `Nav`              | Optional `label`; holds only `NavItem`.                                                                             |
 | `NavItem`          | Required `label`; optional `active` and `navigateTo`; valid only in `Nav`.                                           |
 | `Metric`           | Required `label` and `value`; optional `note`.                                                                      |
@@ -182,9 +190,9 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Divider`          | Optional `label`.                                                                                                   |
 | `ImagePlaceholder` | Required `label`; optional `shape="square\|wide\|tall"`.                                                            |
 | `List`             | Holds only `ListItem`.                                                                                              |
-| `ListItem`         | Required `label`; optional `meta`, `value`, `status="done\|attention\|waiting\|blocked"`, `selected`, and `navigateTo`; valid only in `List`. |
-| `ChoiceGroup`      | Holds two to five `ChoiceCard` options as one dominant simple-decision surface.                                     |
-| `ChoiceCard`       | Required `icon`, `title`, and one-line `description`; optional `selected` and `navigateTo`; valid only in `ChoiceGroup`. |
+| `ListItem`         | Required `label`; optional `meta`, `value`, `status="done\|attention\|waiting\|blocked"`, `selected`, and `navigateTo`; valid only in `List`. A row with `navigateTo` draws a trailing push chevron on its own, except in a collection pane whose detail is drawn beside it, where it selects in place. |
+| `ChoiceGroup`      | Holds two to five `ChoiceCard` options as one dominant simple-decision surface. Its options are parallels, so either every card carries `emoji` or none does. |
+| `ChoiceCard`       | Required `title` and one-line `description`; optional `emoji`, `selected`, and `navigateTo`; valid only in `ChoiceGroup`. Its `emoji` is large card art identifying that one option, never a glyph from the named set below; a card without it reads fine. |
 | `Message`          | Required `author`, `time`, and `text`; optional `kind="customer\|agent\|internal"`.                                  |
 
 ### Forms and flows
@@ -199,6 +207,15 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Stepper`   | Holds only `Step`.                                                                                                           |
 | `Step`      | Required `label`; optional `state="done\|current\|todo"`; valid only in `Stepper`.                                            |
 | `Connector` | Optional `direction="right\|down"` and `label`.                                                                             |
+
+### Named glyphs
+
+`Icon`'s `name` and the `icon` on `Button` and `Reference` share one named set, keyed by what a mark means rather than by what it looks like:
+
+`add`, `back`, `chevron`, `close`, `collapse`, `comment`, `copy`, `database`, `delete`, `done`, `down`, `drag`, `edit`, `error`, `expand`, `file`, `folder`, `help`, `inbox`, `info`, `lock`, `more`, `refresh`, `remove`, `search`, `settings`, `star`, `table`, `terminal`, `tip`, `undo`, `up`, `waiting`, `warning`.
+
+A name outside the set draws a crossed placeholder carrying that name, so a drawing says what it is missing rather than showing a nearby glyph that would be wrong.
+`Icon` sizes on `sm`, `md`, and `lg`, each a multiple of the artboard's own body type, so one authored size is correct on every device.
 
 ### Tables
 

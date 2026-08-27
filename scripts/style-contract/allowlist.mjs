@@ -63,7 +63,31 @@ export const STYLESHEET_BUDGETS = {
   "src/components/database-table-schema/styles.css": { declarations: 47 },
   "src/components/flow-diagram/styles.css": { declarations: 467 },
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },
-  "src/components/wireframe/styles.css": { declarations: 1012 },
+  "src/components/wireframe/styles.css": {
+    // Raised for the icon vocabulary, the overlay, and row grouping: a glyph
+    // sized on the artboard's own type ramp in three steps, the placeholder a
+    // meaning outside the named set draws, icon-carrying and icon-only
+    // controls with their touch floor, a surface drawn over the page with its
+    // dim or clear backdrop and its alert variant, and the run of elements
+    // that hugs its contents so a toolbar can anchor two ends. Raised again
+    // to give a phone's push header its three equal slots - one of them drawn
+    // for a bar that carries nothing trailing - so a back control leads while
+    // the title stays centred in the bar rather than in what the controls left
+    // over, and to keep the quiet link stroke off a control drawn as one mark.
+    // Paid back down by dropping the bar's own trailing-edge margins, which
+    // the trailing slot's utility already carries from a later layer. Raised
+    // once more for the disclosure mark a list row draws when it names the
+    // screen it pushes to: the mark itself, and the metadata step of the icon
+    // ramp it is drawn at so it never competes with the value beside it. Two
+    // more for the choice card whose art the author left off, which drops to
+    // two columns on both its device scales rather than leading with an empty
+    // one. Raised last for the reference: one bordered object carrying the
+    // mark that names a verbatim string, the string itself truncating rather
+    // than wrapping, and the control that copies it drawn inside that border
+    // at the same mark size, keeping the touch floor only where a finger is
+    // the input.
+    declarations: 1118,
+  },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,
     // and the general edges its controls take. BIG-214 adds dedicated subtle
