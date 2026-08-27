@@ -144,11 +144,11 @@ When the agent continues a pushed thread, Big Plan adds another exchange to the 
 The card keeps the opener's presentation.
 
 A push that lands while you are reading announces itself.
-The **Chat** tab leads with a **Pushed just now** entry naming the agent's model and client, and how many blocks the revision changed.
-**Open thread** takes you to the conversation, and **Dismiss** clears the entry; either way the entry names one arrival, and a newer push replaces it.
-On a wide screen, where the sidebar sits beside the plan rather than over it, an arrival opens the sidebar on **Chat** for you, unless you are part-way through writing a comment or a reply: reserving the sidebar's gutter would move the composer out from under your caret, so the arrival waits until you are done.
+The **Chat** tab leads with a **Pushed just now** entry naming the agent's model and client, plus how many blocks changed when the push revised the plan.
+**Open thread** takes you to the conversation, and **Dismiss** clears the entry; either way the entry names the newest arrival, and a newer push replaces it.
+On a wide screen, where the sidebar sits beside the plan rather than over it, an arrival opens the sidebar on **Chat** for you, unless you are part-way through writing a comment or reply or a pointer press is in flight: reserving the sidebar's gutter would move or recreate the control you are using, so the arrival waits until that interaction finishes.
 On a narrower screen it waits as well, because the sidebar would cover the sentence you are reading.
-Whenever it waits, the entry is on the **Chat** tab and that tab carries a mark, so opening the sidebar yourself shows you what arrived.
+The entry waits on **Chat** without adding a closed-sidebar toolbar indicator; once the sidebar is open on another tab, **Chat** carries a mark until you view the entry.
 Your reading position is kept either way.
 
 The blocks the revision changed settle briefly in place, so you can see what moved without hunting for it.
