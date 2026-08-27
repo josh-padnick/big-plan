@@ -936,7 +936,8 @@ test("should approve with a message that settings could not save", async ({
   const runtime = await startCompiledReviewRuntime(planPath);
   try {
     await openWritableReview(page, runtime.url);
-    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
     await page.getByRole("tab", { name: "Approval message" }).click();
     const note = "Start with the migration, then report back.";
     await page

@@ -3874,7 +3874,7 @@ test("should restore and submit staged comments through the local review runtime
     name: "Feedback",
     exact: true,
   });
-  const settingsAction = page.getByRole("button", { name: "Open settings" });
+  const moreActions = page.getByRole("button", { name: "More actions" });
   await expect(agentStatus).toBeVisible();
   // The control draws exactly one state mark, and with no agent connected it is
   // not the working one. Asserting the mark exists first keeps the second
@@ -3888,7 +3888,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(feedbackAction).toBeVisible();
   const approveAction = page.getByRole("button", { name: "Approve plan" });
   await expect(approveAction).toBeVisible();
-  await expect(settingsAction).toBeVisible();
+  await expect(moreActions).toBeVisible();
   await expect(
     page.locator('input[type="range"], input[type="color"]'),
   ).toHaveCount(0);
@@ -3904,19 +3904,19 @@ test("should restore and submit staged comments through the local review runtime
     approveAction.boundingBox(),
     feedbackAction.boundingBox(),
     agentStatus.boundingBox(),
-    settingsAction.boundingBox(),
-  ]).then(([approve, feedback, status, settings]) => {
+    moreActions.boundingBox(),
+  ]).then(([approve, feedback, status, more]) => {
     if (
       status === null ||
       feedback === null ||
       approve === null ||
-      settings === null
+      more === null
     )
       throw new Error("The review toolbar actions were not rendered");
     return [
       feedback.x - approve.x - approve.width,
       status.x - feedback.x - feedback.width,
-      settings.x - status.x - status.width,
+      more.x - status.x - status.width,
     ];
   });
   expect(toolbarGaps).toEqual([8, 8, 8]);
