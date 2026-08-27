@@ -6410,6 +6410,7 @@ ${unrelatedWorkspace}
         "triage",
       );
       await expect(wasOpen).toHaveAttribute("tabindex", "-1");
+      await expect(wasOpen).toHaveAttribute("inert", "");
       // `disabled` is a design decision this component already spends, so the
       // freeze must not borrow it: the control still reports exactly the state
       // the plan gave it, and refuses pointers instead.
