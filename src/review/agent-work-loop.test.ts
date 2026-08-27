@@ -1334,6 +1334,143 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should take an approval answer after the plan moved under the claim", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-approve-moved-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nBegin after approval.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = approvalAgentRequest({
+      approvalId: "f607181920212223",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      planPath,
+      pinnedSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-13T17:41:00.000Z",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "This plan is approved and we are ready to begin.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a response file");
+      }
+      // The reviewer edits between the pickup and the answer, which is the
+      // very thing the agent has to be able to report.
+      const edited = `${source}\nThe reviewer kept writing.\n`;
+      await writeFile(planPath, edited);
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: request.requestId });
+      await expect(
+        readProgress({ store: review.store, sessionId: review.sessionId }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            stepCode: "approval-blocked",
+            state: "failed",
+          }),
+        ]),
+      );
+      // The reviewer's newer text is still theirs.
+      await expect(readFile(planPath, "utf8")).resolves.toBe(edited);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should acknowledge after the plan moved under the claim", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-approve-moved-ack-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nBegin after approval.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = approvalAgentRequest({
+      approvalId: "0718192021222324",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      planPath,
+      pinnedSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-13T17:41:00.000Z",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "This plan is approved and we are ready to begin.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a response file");
+      }
+      const edited = `${source}\nThe reviewer kept writing.\n`;
+      await writeFile(planPath, edited);
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId: request.requestId }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: request.requestId });
+      await expect(
+        readProgress({ store: review.store, sessionId: review.sessionId }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            stepCode: "approval-acknowledged",
+          }),
+        ]),
+      );
+      await expect(readFile(planPath, "utf8")).resolves.toBe(edited);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should keep answering the reviewer turn after turn as one agent", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-turns-"));
     const planPath = join(directory, "plan.mdx");
