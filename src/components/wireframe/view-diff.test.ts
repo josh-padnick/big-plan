@@ -264,6 +264,7 @@ describe("WireframeDiffView", () => {
     // would relayout the screen under the toggle.
     expect(wasButtons[0]?.properties["data-wireframe-navigate"]).toBe("triage");
     expect(wasButtons[0]?.properties.tabIndex).toBe(-1);
+    expect(wasButtons[0]?.properties["data-wireframe-frozen"]).toBe("");
     expect(wasButtons[0]?.properties.disabled).toBeUndefined();
     expect(textWithin(wasButtons[0] as Element)).toContain("Open triage");
     expect(nowButtons[0]?.properties.tabIndex).toBeUndefined();
@@ -277,11 +278,11 @@ describe("WireframeDiffView", () => {
     expect(wasSwitcher[0]?.properties[DIFF_LIVE_ATTRIBUTE]).toBe("");
   });
 
-  it("should keep the authored disabled paint off a field it only froze", () => {
-    // `disabled` carries an authored design decision as well as the freeze.
-    // Only the authored one may take the disabled paint, or every Was field
-    // would grey and a revision that adds `disabled` would compare as no
-    // change at all.
+  it("should freeze a Was field without borrowing the authored disabled state", () => {
+    // `disabled` is a design decision the plan states, in paint and in what a
+    // screen reader announces. If the freeze borrowed it, every Was field
+    // would grey and announce as unavailable, and a revision that adds
+    // `disabled` to a field would compare as no change at all.
     const fields = (label: string): WireframeScreen => ({
       id: "form",
       name: "Form",
@@ -321,20 +322,44 @@ describe("WireframeDiffView", () => {
     const now = inputsOn("proposed");
     expect(was).toHaveLength(2);
     expect(now).toHaveLength(2);
-    // Both Was fields are frozen, but only the one the plan disables carries
-    // the state the paint keys on.
-    expect(was.map((field) => field.properties.disabled)).toEqual([true, true]);
-    expect(
-      was.map((field) => field.properties["data-wireframe-frozen"]),
-    ).toEqual(["", undefined]);
-    // The Now side is untouched by the freeze.
+    // Both Was fields are frozen and both report exactly the disabled state
+    // the plan authored, so the two sides still compare on that state.
+    expect(was.map((field) => field.properties.disabled)).toEqual([
+      undefined,
+      true,
+    ]);
     expect(now.map((field) => field.properties.disabled)).toEqual([
       undefined,
       true,
     ]);
+    // The freeze is carried by its own mark: out of the tab order, refusing
+    // pointers through the rule that mark keys, and read-only so a reader
+    // who reaches it another way still cannot edit the evidence.
+    expect(
+      was.map((field) => field.properties["data-wireframe-frozen"]),
+    ).toEqual(["", ""]);
+    expect(was.map((field) => field.properties.tabIndex)).toEqual([-1, -1]);
+    expect(was.map((field) => field.properties.readOnly)).toEqual([true, true]);
+    // The label forwards a click to the control it wraps, so it is marked too.
+    expect(
+      elementsWithin(sideOf(root, "baseline")).filter(
+        (candidate) =>
+          candidate.tagName === "label" &&
+          candidate.properties["data-wireframe-frozen"] === "",
+      ),
+    ).toHaveLength(2);
+    // The Now side is untouched by the freeze.
     expect(
       now.map((field) => field.properties["data-wireframe-frozen"]),
     ).toEqual([undefined, undefined]);
+    expect(now.map((field) => field.properties.tabIndex)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(now.map((field) => field.properties.readOnly)).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 
   it("should leave a wholly removed wireframe's switcher unbadged but live", () => {

@@ -193,27 +193,25 @@ const WireframeElement = ({
 }): JSX.Element => {
   // The Was side is evidence a reader may read, not a second prototype they
   // may drive: a Was screen that navigated on its own would leave the two
-  // sides showing different screens under one Was/Now toggle. Freezing is
-  // presentation-neutral, because the reader is being asked to compare these
-  // two renderings and any difference the plan did not propose reads as one
-  // it did. Every hook a stylesheet selects on therefore stays: navigation
-  // is refused by the viewer script and by taking the control out of the tab
-  // order, and a field's `disabled` is marked as the freeze's doing so the
-  // authored-disabled paint does not follow it.
+  // sides showing different screens under one Was/Now toggle. Freezing says
+  // nothing else. It is presentation-neutral, because the reader is being
+  // asked to compare two renderings and any difference the plan did not
+  // propose reads as one it did, so every hook a stylesheet selects on
+  // stays. It is state-neutral too: `disabled` is a design decision this
+  // component already spends, in paint and in what a screen reader
+  // announces, so the freeze may not borrow it. What is left is the
+  // behaviour - out of the tab order, refusing pointers, and refused again
+  // by the viewer script's baseline gate.
   const frozen = useComponentDiffPresentation()?.side === "baseline";
   const navigation = (
     target: string | undefined,
   ): Readonly<Record<string, string>> =>
     target === undefined ? {} : { "data-wireframe-navigate": target };
-  const unreachable: { readonly tabIndex?: number } = frozen
-    ? { tabIndex: -1 }
+  const frozenControl: Readonly<Record<string, string | number>> = frozen
+    ? { tabIndex: -1, "data-wireframe-frozen": "" }
     : {};
-  const frozenField = (
-    authoredDisabled: boolean,
-  ): Readonly<Record<string, string | boolean>> =>
-    frozen && !authoredDisabled
-      ? { disabled: true, "data-wireframe-frozen": "" }
-      : { disabled: authoredDisabled };
+  const frozenEntry: Readonly<Record<string, string | number | boolean>> =
+    frozen ? { ...frozenControl, readOnly: true } : {};
   switch (node.element) {
     case "Stack":
       return (
@@ -322,7 +320,7 @@ const WireframeElement = ({
               }
             : {})}
           {...navigation(node.navigateTo)}
-          {...unreachable}
+          {...frozenControl}
         >
           {node.icon === undefined ? null : <Glyph name={node.icon} />}
           {node.iconOnly ? null : (
@@ -451,7 +449,7 @@ const WireframeElement = ({
           className="wireframe-nav-item"
           {...(node.active ? { "aria-current": "page" } : {})}
           {...navigation(node.navigateTo)}
-          {...unreachable}
+          {...frozenControl}
         >
           {node.label}
         </button>
@@ -614,7 +612,7 @@ const WireframeElement = ({
           aria-checked={node.selected}
           {...(node.selected ? { "data-wireframe-selected": "" } : {})}
           {...navigation(node.navigateTo)}
-          {...unreachable}
+          {...frozenControl}
         >
           {node.emoji === undefined ? null : (
             <span className="wireframe-choice-icon" aria-hidden="true">
@@ -690,7 +688,7 @@ const WireframeElement = ({
               type="button"
               className="wireframe-list-row flex w-full min-w-0 flex-col gap-0.5"
               {...navigation(node.navigateTo)}
-              {...unreachable}
+              {...frozenControl}
             >
               {rowInner}
             </button>
@@ -739,7 +737,8 @@ const WireframeElement = ({
               ? {}
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
-            {...frozenField(node.disabled)}
+            disabled={node.disabled}
+            {...frozenEntry}
           />
         </Field>
       );
@@ -753,7 +752,8 @@ const WireframeElement = ({
               ? {}
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
-            {...frozenField(node.disabled)}
+            disabled={node.disabled}
+            {...frozenEntry}
           />
         </Field>
       );
@@ -763,7 +763,8 @@ const WireframeElement = ({
           {/* A wireframe shows the chosen option, not the whole menu. */}
           <select
             className="wireframe-input wireframe-select"
-            {...frozenField(node.disabled)}
+            disabled={node.disabled}
+            {...frozenControl}
           >
             <option>{node.value}</option>
           </select>
@@ -776,7 +777,7 @@ const WireframeElement = ({
             className="wireframe-tick"
             type="checkbox"
             defaultChecked={node.checked}
-            {...frozenField(false)}
+            {...frozenControl}
           />
         </Field>
       );
@@ -788,7 +789,7 @@ const WireframeElement = ({
             type="checkbox"
             role="switch"
             defaultChecked={node.on}
-            {...frozenField(false)}
+            {...frozenControl}
           />
         </Field>
       );
@@ -837,7 +838,7 @@ const WireframeElement = ({
           type="button"
           className="wireframe-crumb wireframe-crumb-link"
           {...navigation(node.navigateTo)}
-          {...unreachable}
+          {...frozenControl}
         >
           {node.label}
         </button>
@@ -921,7 +922,13 @@ const Field = ({
   readonly inline?: boolean;
   readonly children: JSX.Element;
 }) => (
-  <label className="wireframe-field" data-wireframe-inline={String(inline)}>
+  <label
+    className="wireframe-field"
+    data-wireframe-inline={String(inline)}
+    {...(useComponentDiffPresentation()?.side === "baseline"
+      ? { "data-wireframe-frozen": "" }
+      : {})}
+  >
     {inline ? children : null}
     <span className="wireframe-field-label">{label}</span>
     {inline ? null : children}

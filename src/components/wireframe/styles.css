@@ -2656,14 +2656,18 @@ marks and a plan diff never jitters.
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
-  /* The disabled paint states an authored design decision, so it must not
-     follow a field the Was side of a component diff froze to keep its
-     prototype from being driven. That freeze marks itself, and only an
-     unmarked disabled field is painted as the design says it is. */
-  .wireframe-input:disabled:not([data-wireframe-frozen]) {
+  .wireframe-input:disabled {
     cursor: not-allowed;
     opacity: 0.58;
     background: var(--wf-fill);
+  }
+  /* A control the Was side of a component diff froze is evidence, not an
+     affordance. It keeps every hook a stylesheet selects on and every state
+     a screen reader announces, and gives up only the behaviour - including
+     through the field label, whose click would otherwise forward to the
+     control it wraps. */
+  [data-wireframe-frozen] {
+    pointer-events: none;
   }
   .wireframe-textarea {
     resize: vertical;

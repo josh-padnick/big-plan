@@ -6409,14 +6409,23 @@ ${unrelatedWorkspace}
         "triage",
       );
       await expect(wasOpen).toHaveAttribute("tabindex", "-1");
-      await wasOpen.click();
+      // `disabled` is a design decision this component already spends, so the
+      // freeze must not borrow it: the control still reports exactly the state
+      // the plan gave it, and refuses pointers instead.
+      await expect(wasOpen).toBeEnabled();
+      expect(
+        await wasOpen.evaluate(
+          (node) => getComputedStyle(node).pointerEvents === "none",
+        ),
+      ).toBe(true);
+      // Dispatched rather than clicked, because a pointer never reaches this
+      // control: that is what proves the viewer script refuses the navigation
+      // rather than the stylesheet hiding the click.
+      await wasOpen.dispatchEvent("click");
       await expect(wasCurrent).toHaveAttribute(
         "data-wireframe-screen",
         "queue",
       );
-      expect(
-        await wasOpen.evaluate((node) => node.matches(":focus-visible")),
-      ).toBe(false);
 
       await now.click();
       await expect(proposed).toBeVisible();
@@ -7711,6 +7720,20 @@ The current plan contains no slides.
         screensHidden: 0,
         screens: 4,
       });
+    // Taking the wiring hook off makes this the one wireframe surface the
+    // viewer script no longer fits, and the replay host is inert, so an
+    // unfitted desktop artboard would paint past the right edge of a box
+    // nothing can scroll.
+    await expect
+      .poll(() =>
+        archived.evaluate(
+          (node) =>
+            Array.from(node.querySelectorAll("[data-wireframe-screen]")).filter(
+              (screen) => screen.scrollWidth > screen.clientWidth + 1,
+            ).length,
+        ),
+      )
+      .toBe(0);
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
