@@ -6791,6 +6791,33 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("writes the approval brief beside the feedback briefs", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+          message: "Start on it now.",
+        });
+        expect(approved.status).toBe(200);
+        const { approvalId } = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+        const written = (await readdir(target.store.feedbackDirectory)).filter(
+          (name) => name.endsWith(`-approval-${approvalId}.md`),
+        );
+        expect(written).toHaveLength(1);
+        const brief = await readFile(
+          join(target.store.feedbackDirectory, written[0] ?? ""),
+          "utf8",
+        );
+        expect(brief).toContain(planPath);
+        expect(brief).toContain(digest);
+        expect(brief).toContain("Start on it now.");
+      },
+    );
+  });
+
   it("refuses a second approve of the same snapshot", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,

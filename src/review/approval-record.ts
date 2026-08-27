@@ -248,6 +248,16 @@ export const validateApprovalRecord = (value: unknown): ApprovalRecord => {
   };
 };
 
+/*
+Authored plan text reaches the brief's table, and a table cell is the one place
+a raw pipe stops being text: GitHub-flavored Markdown splits the row on it,
+inside a code span as much as outside one, so an option title carrying a pipe
+would deal its own id into a phantom column and read as a different answer than
+the one recorded. A newline ends the row outright, so it collapses to a space.
+*/
+const tableCell = (value: string): string =>
+  value.replace(/\r?\n/gu, " ").replace(/\|/gu, "\\|");
+
 /** Human-readable mailbox brief written beside feedback briefs on approve. */
 export const buildApprovalBrief = ({
   planPath,
@@ -264,7 +274,7 @@ export const buildApprovalBrief = ({
           "| --- | --- |",
           ...entry.recordedAnswers.map(
             (answer) =>
-              `| \`${answer.decisionId}\` | ${answer.optionTitle} (\`${answer.optionId}\`) |`,
+              `| \`${tableCell(answer.decisionId)}\` | ${tableCell(answer.optionTitle)} (\`${tableCell(answer.optionId)}\`) |`,
           ),
         ].join("\n");
   const unanswered =
