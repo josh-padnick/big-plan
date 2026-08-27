@@ -310,6 +310,10 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
   process.env.BIG_PLAN_AGENT_MODEL = "live-push-review-model";
 
   try {
+    // The auto-open is a wide-viewport promise, and the default Desktop Chrome
+    // width is the breakpoint exactly - a scrollbar or a nudged breakpoint
+    // would make this journey fail as though the product were broken.
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(runtime.url);
     const opened = await runAgentCli([
       "push",
@@ -1105,9 +1109,21 @@ test("should open the rail, name the agent, and settle the changed blocks when a
     // why the auto-open is a wide-viewport promise and is proven as one.
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(runtime.url);
-    await page.evaluate(() =>
-      window.scrollBy({ top: 240, behavior: "instant" }),
-    );
+
+    // The reader is left mid-comment across the push on purpose. Reserving the
+    // rail's gutter moves an open composer out of the margin and into the
+    // reading column, and React remounts it on the way, which takes their
+    // caret with it - so the arrival, which nobody asked for, has to wait for
+    // them to finish rather than take the sentence away.
+    const deliverySlide = page.locator("[data-slide]").filter({
+      has: page.getByRole("heading", { name: "Delivery boundary" }),
+    });
+    await deliverySlide.hover();
+    await deliverySlide
+      .getByRole("button", { name: "Comment on slide" })
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/u });
+    await composer.getByLabel("Add a comment").fill("Half a sentence");
     const scrollY = await page.evaluate(() => window.scrollY);
     expect(scrollY).toBeGreaterThan(0);
     await expect(
@@ -1126,6 +1142,19 @@ test("should open the rail, name the agent, and settle the changed blocks when a
     });
 
     const rail = page.getByRole("complementary", { name: "Feedback" });
+    // The swap has landed, so the arrival has been seen - and the rail is
+    // still shut, with the half-written sentence where the reader left it.
+    await expect(page.locator("article")).toContainText(
+      "publishes the arriving candidate atomically",
+      { timeout: 15_000 },
+    );
+    await expect(composer.getByLabel("Add a comment")).toHaveValue(
+      "Half a sentence",
+    );
+    await expect(rail).toBeHidden();
+
+    // Done writing, so the offer is taken up.
+    await composer.getByRole("button", { name: "Cancel" }).click();
     await expect(rail).toBeVisible({ timeout: 15_000 });
     await expect(rail.getByRole("tab", { name: "Chat" })).toHaveAttribute(
       "aria-selected",
@@ -1145,11 +1174,6 @@ test("should open the rail, name the agent, and settle the changed blocks when a
     await expect(entry).toContainText("Claude Opus 5");
     await expect(entry).toContainText("Claude Code");
     await expect(entry).toContainText("2 blocks changed in the plan.");
-
-    await expect(page.locator("article")).toContainText(
-      "publishes the arriving candidate atomically",
-      { timeout: 15_000 },
-    );
 
     await expect(settled).resolves.toBeTruthy();
     // Both changed blocks are laid out in this plan, so the settle reaches

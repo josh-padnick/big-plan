@@ -1940,6 +1940,17 @@ const useWide = (): boolean => {
   return isWide;
 };
 
+/**
+ * Whether focus sits in a comment or thread card the reader is writing in.
+ *
+ * Asked of focus rather than of draft state because an empty reply the reader
+ * is about to type into is exactly as costly to remount as a half-typed one:
+ * what a remount destroys is the caret, not the text.
+ */
+const isWritingInPlace = (): boolean =>
+  document.activeElement instanceof Element &&
+  document.activeElement.closest("[data-review-comment-ui]") !== null;
+
 const useInlineComposeHost = (
   compose: ComposeState | null,
   isOpen: boolean,
@@ -4254,6 +4265,7 @@ export const ReviewController = () => {
   // what counts as new. The seed is a ref because it is bookkeeping the reader
   // never sees: writing it must not repaint the plan.
   const [pushArrival, setPushArrival] = useState<PushArrival | null>(null);
+  const [arrivalWantsRail, setArrivalWantsRail] = useState(false);
   const seenPushResponseIds = useRef<ReadonlySet<string> | null>(null);
   // The blocks the next plan-DOM replacement should settle. Armed immediately
   // before the swap a push drove and consumed by the announcement it makes, so
@@ -6010,23 +6022,58 @@ export const ReviewController = () => {
     setPushArrival(latest);
     pendingSettleArrival.current = latest;
     if (isOpen || !isWide) return;
-    const scrollX = window.scrollX;
-    const scrollY = window.scrollY;
-    openFeedbackSidebar("chat");
-    // Reserving the rail's gutter reflows the reading column. Restoring the
-    // reader's position afterwards is the same continuity the article swap
-    // already keeps, for the same reason: they did not ask to be moved.
-    requestAnimationFrame(() =>
-      window.scrollTo({ left: scrollX, top: scrollY }),
-    );
+    setArrivalWantsRail(true);
   }, [
     agent.requests,
     agent.responses,
     hasObservedAgentSnapshot,
     isOpen,
     isWide,
-    openFeedbackSidebar,
   ]);
+
+  /*
+  The rail opens on the reader's behalf only once opening it costs them
+  nothing. Reserving the gutter moves an open composer and every floating
+  thread out of the margin and into the reading column, and React remounts
+  them on the way: the text survives in review state, the caret and the
+  selection do not. A reader who opened the rail themselves accepted that
+  trade; an arrival did not ask, so it holds the intent and spends it the
+  moment they stop writing. Until then the Chat tab carries its mark and the
+  entry is waiting on the tab when they get there.
+  */
+  useEffect(() => {
+    if (!arrivalWantsRail) return;
+    if (isOpen || !isWide) {
+      setArrivalWantsRail(false);
+      return;
+    }
+    let frame = 0;
+    const openRail = () => {
+      if (compose !== null || isWritingInPlace()) return;
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      setArrivalWantsRail(false);
+      openFeedbackSidebar("chat");
+      // Reserving the rail's gutter reflows the reading column. Restoring the
+      // reader's position afterwards is the same continuity the article swap
+      // already keeps, for the same reason: they did not ask to be moved.
+      requestAnimationFrame(() =>
+        window.scrollTo({ left: scrollX, top: scrollY }),
+      );
+    };
+    // Focus has not reached its new element while `focusout` is dispatching,
+    // so the question is asked a frame later, once it has.
+    const recheck = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(openRail);
+    };
+    openRail();
+    document.addEventListener("focusout", recheck);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("focusout", recheck);
+    };
+  }, [arrivalWantsRail, compose, isOpen, isWide, openFeedbackSidebar]);
 
   useEffect(() => {
     const settleReplacement = () => {
@@ -6082,7 +6129,18 @@ export const ReviewController = () => {
           resultSnapshot: agent.currentSnapshot,
         });
         pendingSettleArrival.current = null;
-        replacePlanArticle(new DOMParser().parseFromString(html, "text/html"));
+        try {
+          replacePlanArticle(
+            new DOMParser().parseFromString(html, "text/html"),
+          );
+        } catch (error: unknown) {
+          // A replacement that threw dispatched nothing, so nobody consumed
+          // the arming. Left in place it would be spent by the next plan-DOM
+          // replacement from any source - a lens open, say - painting arrival
+          // rings on blocks that arrival never touched.
+          armedSettleTargets.current = null;
+          throw error;
+        }
         setDisplayedSnapshot(agent.currentSnapshot);
         window.scrollTo({ left: scrollX, top: scrollY });
         setStatus(
