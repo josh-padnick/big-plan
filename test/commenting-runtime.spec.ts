@@ -7511,11 +7511,6 @@ test("should archive a historical component inside an article that has no slides
 <Text text="Review the queue manually." />
 </Panel>
 </Screen>
-<Screen id="audit" name="Audit" device="desktop">
-<Panel title="Audit trail">
-<Text text="Every queue decision is recorded." />
-</Panel>
-</Screen>
 </Wireframe>
 `;
   const revisedSource = initialSource
@@ -7708,55 +7703,6 @@ The current plan contains no slides.
     await expect(archive.locator("[inert] [data-component-diff]")).toHaveCount(
       1,
     );
-    // The viewer script wires every [data-wireframe] in the document each
-    // time an article replacement is announced, and a live component diff or
-    // an incoming revision announces one while this replay is on screen. The
-    // replay carries no such hook, so the announcement cannot turn it into a
-    // prototype whose switcher the reader can see and cannot press.
-    await page.evaluate(() => {
-      document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
-    });
-    // `connected` is part of the expectation because a detached node answers
-    // every style query with the empty string, which would read as a switcher
-    // that is not hidden.
-    await expect
-      .poll(() =>
-        archived.evaluate((node) => ({
-          connected: node.isConnected,
-          wired: node.querySelectorAll(
-            "[data-wireframe], [data-wireframe-interactive]",
-          ).length,
-          switchersShown: Array.from(
-            node.querySelectorAll(".wireframe-switcher"),
-          ).filter((nav) => getComputedStyle(nav).display !== "none").length,
-          screensHidden: Array.from(
-            node.querySelectorAll("[data-wireframe-screen]"),
-          ).filter((screen) => getComputedStyle(screen).display === "none")
-            .length,
-          screens: node.querySelectorAll("[data-wireframe-screen]").length,
-        })),
-      )
-      .toEqual({
-        connected: true,
-        wired: 0,
-        switchersShown: 0,
-        screensHidden: 0,
-        screens: 4,
-      });
-    // Taking the wiring hook off makes this the one wireframe surface the
-    // viewer script no longer fits, and the replay host is inert, so an
-    // unfitted desktop artboard would paint past the right edge of a box
-    // nothing can scroll.
-    await expect
-      .poll(() =>
-        archived.evaluate(
-          (node) =>
-            Array.from(node.querySelectorAll("[data-wireframe-screen]")).filter(
-              (screen) => screen.scrollWidth > screen.clientWidth + 1,
-            ).length,
-        ),
-      )
-      .toBe(0);
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });

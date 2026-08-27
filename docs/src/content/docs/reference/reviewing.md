@@ -390,8 +390,8 @@ Diagram, file tree, and wireframe changes use the component's own maximize contr
 Their controls work inside the change: diagram theme and flow controls, tree copy controls, and wireframe screen switchers.
 A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle.
 Its own screen switcher marks screens that were added, removed, moved, or updated.
-A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer; a removed wireframe keeps its own screen switcher so its screens remain readable.
-A superseded change is replayed from its own record, which shows every wireframe screen stacked with no switcher and no per-screen marks.
+A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer.
+A removed wireframe keeps its own screen switcher, so the screens the change took away stay readable.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,

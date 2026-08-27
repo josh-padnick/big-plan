@@ -10,12 +10,6 @@
 // re-wires on article replacement. Do not re-implement a fit effect in
 // the diff view; that is the path this module exists to retire.
 //
-// The archive replay is the one surface that imports this directly, in
-// `ReplayedComponentDiff`. It strips `data-wireframe` so a later article
-// replacement cannot wire a switcher inside its inert host, and that same
-// strip is what the viewer script selects on, so the fit has to be called
-// rather than inherited. Calling this is the opposite of re-implementing it.
-//
 // SELF-CONTAINED. The viewer script embeds this through `.toString()`, which
 // carries the function body and nothing else. A module-level constant,
 // helper, or import referenced from inside it is therefore undefined in the

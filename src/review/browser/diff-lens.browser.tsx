@@ -23,7 +23,6 @@ import type {
   DiffRun,
   SnapshotDiff,
 } from "../shared/review-wire.js";
-import { fitWireframeScreen } from "../../components/wireframe/wireframe-fit.js";
 import type { LensPlacement } from "./diff-anchor.js";
 import { Icon } from "./icon.browser.js";
 import {
@@ -598,20 +597,6 @@ const SnapshotSideContent = ({
  * complete rather than defensive: an address the plan still holds - which the
  * superseded path proves is not hypothetical - must never appear twice in one
  * document. Held inert for the same reason, since neither path is answerable.
- *
- * The wiring hooks come off the whole replay for a second reason. The viewer
- * script wires every `[data-wireframe]` in the document each time an article
- * replacement fires, and a replay mounted without that event is wired anyway
- * by the next one. That would light up a switcher inside an inert host: a
- * control the reader can see and cannot press. Without the hook the replay
- * stays what it claims to be - every screen stacked, nothing to press.
- *
- * Taking that hook away makes this the one wireframe surface the shared
- * viewer script no longer reaches, so the fit it would have run has to run
- * here. A device artboard is laid out at its true width and only ever
- * painted smaller by that fit; unfitted, a desktop screen overflows its box
- * and the inert host is not hit-testable, so the evidence past the right
- * edge is both cut off and unreachable.
  */
 const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -624,33 +609,8 @@ const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
     for (const attribute of root.getAttributeNames()) {
       if (attribute.startsWith("data-block-")) root.removeAttribute(attribute);
     }
-    for (const wired of [
-      root,
-      ...root.querySelectorAll(
-        "[data-wireframe], [data-wireframe-interactive]",
-      ),
-    ]) {
-      wired.removeAttribute("data-wireframe");
-      wired.removeAttribute("data-wireframe-interactive");
-    }
     host.replaceChildren(document.importNode(root, true));
-    const screens = Array.from(
-      host.querySelectorAll<HTMLElement>("[data-wireframe-screen]"),
-    );
-    const resized = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target instanceof HTMLElement)
-          fitWireframeScreen(entry.target);
-      }
-    });
-    for (const screen of screens) {
-      fitWireframeScreen(screen);
-      resized.observe(screen);
-    }
-    return () => {
-      resized.disconnect();
-      host.replaceChildren();
-    };
+    return () => host.replaceChildren();
   }, [view]);
   return <div className="min-w-0" inert ref={hostRef} />;
 };

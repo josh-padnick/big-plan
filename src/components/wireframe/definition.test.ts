@@ -3721,17 +3721,31 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(html(render(compiled))).toContain("wireframe-top-bar-actions");
   });
 
-  it("should flag a pattern-only change as updated", () => {
+  it("should flag a pattern change that lays the same panels out differently", () => {
+    // The comparison never reads `pattern`; it compares the children a
+    // pattern expanded into. `create` and `settings` arrange the same two
+    // panels differently, so those children differ and the screen is
+    // flagged - a pattern change whose expansion left the children alone
+    // would not be.
+    const panels = [
+      element({
+        name: "Panel",
+        attributes: { title: "Queue" },
+        children: [element({ name: "Text", attributes: { text: "Items" } })],
+      }),
+      element({
+        name: "Panel",
+        attributes: { title: "Detail" },
+        children: [element({ name: "Text", attributes: { text: "One item" } })],
+      }),
+    ];
     const patterned = (pattern: string): CompiledWireframe => {
       const { compiled, diagnostics } = compile({
         scopedChildren: [
           screen({
             id: "workspace",
             attributes: { pattern },
-            children: [
-              element({ name: "Panel", attributes: { title: "Queue" } }),
-              element({ name: "Panel", attributes: { title: "Detail" } }),
-            ],
+            children: panels,
           }),
         ],
       });

@@ -4,12 +4,10 @@
 // an initial-screen change.
 //
 // `updated` means the authored `WireframeScreen.children` trees differ, not
-// that the rendered markup would. A name, device, or url change with
-// identical children is therefore not `updated`; a `pattern` change is,
-// because a pattern expands into the screen's children at compile time.
-// Position is the 1-based index in `screens` so status labels match the
-// per-screen badges ("Added at 2", "Moved 4 to 3") the comparison has
-// always shown.
+// that the rendered markup would. A name, device, url, or pattern change
+// with identical children is therefore not `updated`. Position is the
+// 1-based index in `screens` so status labels match the per-screen badges
+// ("Added at 2", "Moved 4 to 3") the comparison has always shown.
 
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import type {
