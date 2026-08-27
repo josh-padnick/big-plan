@@ -77,7 +77,9 @@ export const markdownTableProse = (
     first.trim(),
   );
   const cell = opensBlock ? "" : first.replace(/\s*\n\s*/gu, " ").trim();
-  return rest.length === 0 && cell === first.trim()
+  // One soft-wrapped paragraph fits a row whole, so repeating it below the
+  // table would say the same thing twice.
+  return rest.length === 0 && !opensBlock
     ? { cell }
     : { cell, blocks: markdown };
 };
@@ -125,7 +127,9 @@ export const markdownFence = ({
 
 export const markdownInlineText = (value: string): string =>
   value
-    .replace(/([\\`*_[\]<>#])/gu, "\\$1")
+    // GFM reads a flanking single tilde as strikethrough, so authored text
+    // carrying one has to escape it like every other emphasis delimiter.
+    .replace(/([\\`*_[\]<>#~])/gu, "\\$1")
     .replace(/(^|\n)(\s*)([-+])(?=\s)/gu, "$1$2\\$3")
     // CommonMark only honours a backslash before ASCII punctuation, so an
     // ordered marker has to escape its delimiter rather than its digits.
@@ -229,7 +233,9 @@ const listItem = ({
   readonly marker: string;
   readonly headingOffset: number;
 }): string => {
-  const body = blocks(node.children, headingOffset).trim();
+  const body = blocks(node.children, headingOffset, {
+    insideListItem: true,
+  }).trim();
   const checkbox = node.children.find(
     (child): child is Element =>
       isElement(child) &&
@@ -242,7 +248,9 @@ const listItem = ({
       : checkbox.properties.checked === true
         ? "[x] "
         : "[ ] ";
-  return `${marker} ${task}${indent(body, "  ")}`.trimEnd();
+  // A continuation line belongs at the item's content column, which an
+  // ordered marker pushes past the two spaces a bullet needs.
+  return `${marker} ${task}${indent(body, " ".repeat(marker.length + 1))}`.trimEnd();
 };
 
 const tableFromElement = (table: Element): string => {
@@ -313,38 +321,103 @@ const footnotesFromSection = (
     .join("\n\n");
 };
 
+// A tight list item holds phrasing content directly: mdast-util-to-hast drops
+// the paragraph wrapper. Treating each of those children as its own block
+// would break one sentence into several paragraphs, so consecutive phrasing
+// nodes are serialized as one inline run wherever they appear.
+const PHRASING_TAG_NAMES: ReadonlySet<string> = new Set([
+  "a",
+  "abbr",
+  "b",
+  "bdi",
+  "bdo",
+  "br",
+  "cite",
+  "code",
+  "data",
+  "del",
+  "dfn",
+  "em",
+  "i",
+  "img",
+  "input",
+  "ins",
+  "kbd",
+  "mark",
+  "q",
+  "s",
+  "samp",
+  "small",
+  "span",
+  "strong",
+  "sub",
+  "sup",
+  "time",
+  "u",
+  "var",
+  "wbr",
+]);
+
+type EmittedBlock = {
+  readonly value: string;
+  readonly phrasing: boolean;
+  readonly list: boolean;
+};
+
 const blocks = (
   nodes: ReadonlyArray<RootContent | ElementContent>,
   headingOffset: number,
+  { insideListItem = false }: { readonly insideListItem?: boolean } = {},
 ): string => {
-  const rendered: Array<string> = [];
+  const emitted: Array<EmittedBlock> = [];
+  const add = (
+    value: string,
+    kind: { readonly phrasing?: boolean; readonly list?: boolean } = {},
+  ): void => {
+    if (value.trim() === "") return;
+    emitted.push({
+      value,
+      phrasing: kind.phrasing === true,
+      list: kind.list === true,
+    });
+  };
+  let run: Array<ElementContent> = [];
+  const flushRun = (): void => {
+    if (run.length === 0) return;
+    const value = inline(run).trim();
+    run = [];
+    add(value, { phrasing: true });
+  };
   for (const node of nodes) {
-    if (node.type === "text") {
-      if (node.value.trim() !== "")
-        rendered.push(markdownInlineText(node.value));
+    if (
+      node.type === "text" ||
+      (node.type === "element" && PHRASING_TAG_NAMES.has(node.tagName))
+    ) {
+      run.push(node);
       continue;
     }
+    flushRun();
     if (!isElement(node)) continue;
     if (node.tagName === MARKDOWN_EXPORT_PLACEHOLDER) {
-      rendered.push(textOf(node.children));
+      add(textOf(node.children));
       continue;
     }
     if (/^h[1-6]$/u.test(node.tagName)) {
       const authoredLevel = Number(node.tagName.slice(1));
       const level = Math.min(6, authoredLevel + headingOffset);
-      rendered.push(`${"#".repeat(level)} ${inline(node.children).trim()}`);
+      add(`${"#".repeat(level)} ${inline(node.children).trim()}`);
       continue;
     }
     if (
       node.tagName === "section" &&
       node.properties.dataFootnotes !== undefined
     ) {
-      rendered.push(footnotesFromSection(node, headingOffset));
+      add(footnotesFromSection(node, headingOffset));
       continue;
     }
     switch (node.tagName) {
       case "p":
-        rendered.push(inline(node.children).trim());
+        add(inline(node.children).trim());
         break;
       case "pre": {
         const code = node.children.find(
@@ -360,7 +433,7 @@ const blocks = (
               )
               ?.slice("language-".length)
           : undefined;
-        rendered.push(
+        add(
           markdownFence({
             source:
               code === undefined
@@ -372,7 +445,7 @@ const blocks = (
         break;
       }
       case "blockquote":
-        rendered.push(
+        add(
           blocks(node.children, headingOffset)
             .trim()
             .split("\n")
@@ -381,7 +454,7 @@ const blocks = (
         );
         break;
       case "ul":
-        rendered.push(
+        add(
           node.children
             .filter(isElement)
             .filter((child) => child.tagName === "li")
@@ -389,12 +462,13 @@ const blocks = (
               listItem({ node: child, marker: "-", headingOffset }),
             )
             .join("\n"),
+          { list: true },
         );
         break;
       case "ol": {
         const start =
           typeof node.properties.start === "number" ? node.properties.start : 1;
-        rendered.push(
+        add(
           node.children
             .filter(isElement)
             .filter((child) => child.tagName === "li")
@@ -406,14 +480,15 @@ const blocks = (
               }),
             )
             .join("\n"),
+          { list: true },
         );
         break;
       }
       case "table":
-        rendered.push(tableFromElement(node));
+        add(tableFromElement(node));
         break;
       case "hr":
-        rendered.push("---");
+        add("---");
         break;
       case "section":
       case "div":
@@ -422,18 +497,27 @@ const blocks = (
       case "figcaption":
       case "details":
       case "summary":
-        rendered.push(blocks(node.children, headingOffset));
+        add(blocks(node.children, headingOffset));
         break;
       case "li":
-        rendered.push(blocks(node.children, headingOffset));
+        add(blocks(node.children, headingOffset));
         break;
       default: {
-        const value = inline([node]);
-        if (value.trim() !== "") rendered.push(value.trim());
+        add(inline([node]).trim());
       }
     }
   }
-  return rendered.filter((value) => value.trim() !== "").join("\n\n");
+  flushRun();
+  // A sublist directly under an item's own sentence stays tight: a blank line
+  // there would make every item in the surrounding list a paragraph.
+  return emitted.reduce((document, entry, index) => {
+    if (index === 0) return entry.value;
+    const separator =
+      insideListItem && entry.list && emitted[index - 1]?.phrasing === true
+        ? "\n"
+        : "\n\n";
+    return `${document}${separator}${entry.value}`;
+  }, "");
 };
 
 /** Converts authored rich HAST and semantic component placeholders to Markdown. */
