@@ -36,11 +36,18 @@ export const settleChangedBlocks = (
   blockIds: ReadonlyArray<string>,
 ): number => {
   if (blockIds.length === 0 || prefersReducedMotion()) return 0;
-  let settled = 0;
+  // Every block is resolved before any of them is marked, because resolving
+  // measures and marking dirties layout. Interleaved, each block after the
+  // first forces a fresh relayout of an article the parser inserted
+  // milliseconds ago - a cost paid once per changed block, synchronously,
+  // during the one swap this product works to keep quiet.
+  const elements: Array<HTMLElement> = [];
   for (const blockId of blockIds) {
     const target = liveVisibleBlock(blockId);
     if ("missing" in target) continue;
-    const element = target.found;
+    elements.push(target.found);
+  }
+  for (const element of elements) {
     // A second push landing on the same block would otherwise inherit the
     // running animation and show nothing. Clearing the attribute and forcing
     // the pending style change to flush restarts it - and only a block that
@@ -60,7 +67,6 @@ export const settleChangedBlocks = (
       element.removeAttribute(SETTLE_ATTRIBUTE);
     };
     element.addEventListener("animationend", clear);
-    settled += 1;
   }
-  return settled;
+  return elements.length;
 };

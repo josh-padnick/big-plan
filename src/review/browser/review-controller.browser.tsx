@@ -4273,6 +4273,10 @@ export const ReviewController = () => {
   // never sees: writing it must not repaint the plan.
   const [pushArrival, setPushArrival] = useState<PushArrival | null>(null);
   const [arrivalWantsRail, setArrivalWantsRail] = useState(false);
+  // Whether a pointer button is down anywhere on the page right now. Held
+  // across effect instances because a press already in flight when an arrival
+  // lands is exactly the one that must not be interrupted.
+  const pointerPressed = useRef(false);
   const seenPushResponseIds = useRef<ReadonlySet<string> | null>(null);
   // The blocks the next plan-DOM replacement should settle. Armed immediately
   // before the swap a push drove and consumed by the announcement it makes, so
@@ -6036,6 +6040,42 @@ export const ReviewController = () => {
   ]);
 
   /*
+  A press is an intent already in flight, and the reader is owed its result.
+  Pressing a control inside a thread card focuses it, which takes focus off the
+  reply field beside it and answers the rail deferral's question below - so
+  without this the rail could open between the press and the release, and
+  opening it re-creates every floating card. The button the pointer is still
+  down on is detached, the browser then dispatches the click at whatever
+  ancestor survived, and the Resolve or the Reply the reader asked for never
+  runs and never says so.
+
+  Tracked at mount rather than inside the effect that consults it, because an
+  arrival can land on a press that began long before it and an effect that only
+  subscribes when the arrival does would never have seen that press start. Read
+  from the buttons each event reports rather than latched by event type, so a
+  release the page never received - the pointer let go past the window edge -
+  is corrected by the next move over the page instead of holding the rail shut
+  for good.
+  */
+  useEffect(() => {
+    const notePointer = (event: PointerEvent) => {
+      pointerPressed.current =
+        event.type === "pointerdown" || event.buttons !== 0;
+    };
+    const options = { capture: true, passive: true } as const;
+    document.addEventListener("pointerdown", notePointer, options);
+    document.addEventListener("pointerup", notePointer, options);
+    document.addEventListener("pointercancel", notePointer, options);
+    document.addEventListener("pointermove", notePointer, options);
+    return () => {
+      document.removeEventListener("pointerdown", notePointer, options);
+      document.removeEventListener("pointerup", notePointer, options);
+      document.removeEventListener("pointercancel", notePointer, options);
+      document.removeEventListener("pointermove", notePointer, options);
+    };
+  }, []);
+
+  /*
   The rail opens on the reader's behalf only once opening it costs them
   nothing. Reserving the gutter moves an open composer and every floating
   thread out of the margin and into the reading column, and React remounts
@@ -6052,9 +6092,10 @@ export const ReviewController = () => {
       return;
     }
     let frame = 0;
-    let pressing = false;
     const openRail = () => {
-      if (pressing || compose !== null || isWritingInPlace()) return;
+      if (pointerPressed.current || compose !== null || isWritingInPlace()) {
+        return;
+      }
       const scrollX = window.scrollX;
       const scrollY = window.scrollY;
       setArrivalWantsRail(false);
@@ -6072,28 +6113,11 @@ export const ReviewController = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(openRail);
     };
-    /*
-    A press is an intent already in flight, and the reader is owed its result.
-    Pressing a control inside a thread card focuses it, which takes focus off
-    the reply field beside it and answers this effect's question - so without
-    this the rail could open between the press and the release, and opening it
-    re-creates every floating card. The button the pointer is still down on is
-    detached, the browser then dispatches the click at whatever ancestor
-    survived, and the Resolve or the Reply the reader asked for never runs and
-    never says so. Held from the press and re-asked after the release, which
-    the next frame puts safely after the click.
-    */
-    const holdForPress = () => {
-      pressing = true;
-    };
-    const releasePress = () => {
-      pressing = false;
-      recheck();
-    };
     openRail();
-    document.addEventListener("pointerdown", holdForPress, true);
-    document.addEventListener("pointerup", releasePress, true);
-    document.addEventListener("pointercancel", releasePress, true);
+    // The press itself is tracked at mount, above; these only re-ask once it
+    // ends, because a release is the moment the reader is owed an answer.
+    document.addEventListener("pointerup", recheck, true);
+    document.addEventListener("pointercancel", recheck, true);
     document.addEventListener("focusin", recheck);
     document.addEventListener("focusout", recheck);
     // A field that is removed while it holds the caret takes the caret to the
@@ -6102,9 +6126,8 @@ export const ReviewController = () => {
     document.addEventListener("bigplan:article-replaced", recheck);
     return () => {
       cancelAnimationFrame(frame);
-      document.removeEventListener("pointerdown", holdForPress, true);
-      document.removeEventListener("pointerup", releasePress, true);
-      document.removeEventListener("pointercancel", releasePress, true);
+      document.removeEventListener("pointerup", recheck, true);
+      document.removeEventListener("pointercancel", recheck, true);
       document.removeEventListener("focusin", recheck);
       document.removeEventListener("focusout", recheck);
       document.removeEventListener("bigplan:article-replaced", recheck);
