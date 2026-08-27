@@ -333,10 +333,16 @@ const renderFlowElement = ({
     });
     const index = delivery.deferOutline.length - 1;
     if (materializeModel) {
-      return deferredMarkdownPlaceholder({
-        index,
-        ...(node.position === undefined ? {} : { position: node.position }),
-      });
+      return compiled.outline === undefined
+        ? deferredMarkdownPlaceholder({
+            index,
+            ...(node.position === undefined ? {} : { position: node.position }),
+          })
+        : createOutlinePlaceholder({
+            index,
+            marker: compiled.outline.marker,
+            ...(node.position === undefined ? {} : { position: node.position }),
+          });
     }
     const placeholder =
       compiled.outline === undefined

@@ -324,6 +324,8 @@ The reader follows one more hop.
 
 </Callout>
 
+</Callout>
+
 ## After the part
 `);
 
@@ -341,13 +343,13 @@ The reader follows one more hop.
 
 <Callout type="note" title="Scope">
 
+<Callout type="tip" title="Deep scope">
+
 <Part title="Delivery" />
 
 <TableOfContents>
-
-- [Before delivery](#before-delivery) — Context before the act.
-- [Inside delivery](#inside-delivery) — Work owned by the act.
-
+<Entry section="Before delivery" gist="Context before the act" />
+<Entry section="Inside delivery" gist="Work owned by the act" />
 </TableOfContents>
 
 <DataTable title="Nested gates">
@@ -370,7 +372,7 @@ The reader follows one more hop.
     expect(result.markdown).toContain("> > ## Part 1 — Delivery");
     expect(result.markdown).toContain("> > ### Plan outline");
     expect(result.markdown).toContain(
-      "> > - [Before delivery](#before-delivery) — Context before the act.",
+      "> > - [Before delivery](#before-delivery) — Context before the act",
     );
     expect(result.markdown).toContain("> > #### Nested gates");
   });
