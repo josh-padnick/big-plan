@@ -3,16 +3,15 @@
 //
 // It holds no review state. Given a plan id it reads the registry for where
 // that plan lives, reads that plan's own session files for what happened, and
-// either redirects to the live session or explains the ending. Redirecting
-// rather than proxying is deliberate: the session runtime authenticates every
-// request against its own host and origin, so putting a second process in the
-// path would mean moving that protection into this one.
+// either reaches the live session or explains the ending. BIG_PLAN_PROXY=1
+// keeps a live request on this stable address; its default-off escape hatch
+// preserves the original redirect while that hop is being proved.
 //
 // The request rules below are the session runtime's rules, copied on purpose
 // rather than approximated, because this process is reachable by any page the
 // reviewer's browser happens to be showing.
 
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
@@ -27,11 +26,12 @@ import {
 import { drainAndCloseServer } from "../http-shutdown.js";
 import { answerForPlan } from "./plan-status.js";
 import { readFormNonce } from "./stop-form.js";
-import { servicePort } from "./paths.js";
+import { servicePort, serviceProxyEnabled } from "./paths.js";
 import { isServicePlanId } from "./registry.js";
 
 const TOKEN_HEADER = "x-big-plan-service-token";
 const PLAN_ROUTE = /^\/plan\/([a-z0-9]+)\/?$/;
+const PROXIED_PLAN_ROUTE = /^\/plan\/([a-z0-9]+)(?:\/.*)?$/;
 
 // A stop posted from the identity page carries this instead of the owner
 // token. The browser must never hold the token that authorizes the CLI, but
@@ -160,6 +160,48 @@ const refuse = ({
   response.end(`${reason}\n`);
 };
 
+/**
+ * Relays one live request without rewriting the browser's identity headers.
+ *
+ * The runtime independently validates the service Host and Origin, so the hop
+ * preserves both rather than replacing them with its ephemeral destination.
+ * Session processes stay separate: this only crosses the HTTP boundary and
+ * does not consolidate their custody, isolation, or write fences.
+ */
+const forwardLiveRequest = ({
+  request,
+  response,
+  target,
+  runtimeUrl,
+}: {
+  readonly request: IncomingMessage;
+  readonly response: ServerResponse;
+  readonly target: URL;
+  readonly runtimeUrl: string;
+}): Promise<void> =>
+  new Promise((settle, fail) => {
+    const destination = new URL(
+      `${target.pathname}${target.search}`,
+      runtimeUrl,
+    );
+    const forwarded = httpRequest(
+      destination,
+      {
+        method: request.method,
+        headers: request.headers,
+      },
+      (upstream) => {
+        response.writeHead(upstream.statusCode ?? 502, upstream.headers);
+        upstream.once("error", fail);
+        upstream.once("end", settle);
+        upstream.pipe(response);
+      },
+    );
+    forwarded.once("error", fail);
+    request.once("aborted", () => forwarded.destroy());
+    request.pipe(forwarded);
+  });
+
 const constantTimeEquals = (supplied: string, expected: string): boolean => {
   const a = Buffer.from(supplied);
   const b = Buffer.from(expected);
@@ -180,12 +222,15 @@ export const startService = async ({
   version,
   port = servicePort(),
   now = Date.now(),
+  proxyEnabled = serviceProxyEnabled(),
   onClosed,
 }: {
   readonly readToken: () => Promise<string | undefined>;
   readonly version: string;
   readonly port?: number;
   readonly now?: number;
+  /** Read once at startup; changing the environment cannot move this listener. */
+  readonly proxyEnabled?: boolean;
   /**
    * Runs once after the listener closes, however the stop arrived.
    *
@@ -255,8 +300,10 @@ export const startService = async ({
       return;
     }
 
-    const planRoute = PLAN_ROUTE.exec(target.pathname);
-    if (method === "GET" && planRoute !== null) {
+    const planRoute = (proxyEnabled ? PROXIED_PLAN_ROUTE : PLAN_ROUTE).exec(
+      target.pathname,
+    );
+    if ((method === "GET" || proxyEnabled) && planRoute !== null) {
       const planId = planRoute[1] ?? "";
       // A malformed id is answered like an unknown one rather than with a
       // validation error, because the visitor clicked a link and cannot act
@@ -265,10 +312,26 @@ export const startService = async ({
         ? await answerForPlan({ planId })
         : ({ kind: "unknown" } as const);
       switch (answer.kind) {
-        case "live":
-          sendRedirect({ response, status: 302, location: answer.url });
+        case "live": {
+          if (!proxyEnabled) {
+            sendRedirect({ response, status: 302, location: answer.url });
+            return;
+          }
+          const planRoot = `/plan/${planId}`;
+          if (method === "GET" && target.pathname === planRoot) {
+            sendRedirect({ response, status: 302, location: `${planRoot}/` });
+            return;
+          }
+          await forwardLiveRequest({
+            request,
+            response,
+            target,
+            runtimeUrl: answer.url,
+          });
           return;
+        }
         case "ended":
+          if (method !== "GET") break;
           sendHtml({
             response,
             status: 200,
@@ -280,6 +343,7 @@ export const startService = async ({
           });
           return;
         case "interrupted":
+          if (method !== "GET") break;
           sendHtml({
             response,
             status: 200,
@@ -290,6 +354,7 @@ export const startService = async ({
           });
           return;
         case "never-started":
+          if (method !== "GET") break;
           sendHtml({
             response,
             status: 200,
@@ -297,6 +362,7 @@ export const startService = async ({
           });
           return;
         case "unknown":
+          if (method !== "GET") break;
           sendHtml({ response, status: 404, html: renderPlanUnknownPage() });
           return;
       }

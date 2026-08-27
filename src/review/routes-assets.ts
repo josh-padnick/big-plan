@@ -139,8 +139,9 @@ export const reviewImageResponse = async (
   context: ReviewRouteContext,
   { pathname }: { readonly pathname: string },
 ): Promise<ReviewRouteResponse | undefined> => {
-  if (!pathname.startsWith(REVIEW_IMAGE_ROUTE)) return undefined;
-  const id = pathname.slice(REVIEW_IMAGE_ROUTE.length);
+  const routePath = `/${REVIEW_IMAGE_ROUTE}`;
+  if (!pathname.startsWith(routePath)) return undefined;
+  const id = pathname.slice(routePath.length);
   if (!isReviewImageId(id)) {
     return refusal({ status: 404, reason: "Unknown review image" });
   }

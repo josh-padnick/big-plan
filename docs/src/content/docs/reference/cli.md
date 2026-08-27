@@ -409,6 +409,11 @@ report one, and keeps working with the session's direct address. Set
 `BIG_PLAN_PORT` to choose a different port, remembering that links saved at the
 old one stop resolving.
 
+`BIG_PLAN_PROXY=1` opts the service into forwarding a running review while the
+browser stays on the saved-link address. It is a startup escape hatch, not a
+persisted setting: the default is the existing redirect, and `BIG_PLAN_PROXY=0`
+explicitly keeps that behavior.
+
 State lives under `~/.big-plan/service/`, owner-only, and honours
 `BIG_PLAN_STATE_DIR`: one small identity record per plan, the token that
 authorizes stopping, and an advisory record of the running process. No file

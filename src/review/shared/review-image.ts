@@ -53,7 +53,7 @@ export const reviewImageId = (value: string): ReviewImageId => {
 // review session that accepted it: any later review server for the same plan
 // serves the same path, and a reference minted in one session still resolves
 // in the next.
-export const REVIEW_IMAGE_ROUTE = "/review-images/";
+export const REVIEW_IMAGE_ROUTE = "review-images/";
 
 /** Builds the durable, session-independent source path for one stored image. */
 export const reviewImageSource = (id: string): string =>

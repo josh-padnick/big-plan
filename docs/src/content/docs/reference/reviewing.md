@@ -41,6 +41,12 @@ the same plan, and it keeps answering after the session ends. Save or share the
 address the command printed rather than one you assembled from the default port:
 `BIG_PLAN_PORT` moves the service, and every link with it.
 
+`BIG_PLAN_PROXY=1` makes the service keep a live review on that stable address
+instead of redirecting the browser to the session port. The switch is read once
+when the service starts; unset it or set it to `0` to retain the default
+redirect. Each review still runs on its own unique session port so its process,
+custody, and write fences remain isolated—the service only supplies the hop.
+
 Opening it while a review is running takes you straight to the running session.
 Opening it afterwards gives a page saying what happened - stopped normally after
 inactivity, stopped by the reviewer, or stopped unexpectedly - along with the
