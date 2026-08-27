@@ -7,6 +7,11 @@ import { describe, expect, it } from "vitest";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
 import { defineComponent, defineOutlineComponent } from "./define-component.js";
 
+const EMPTY_OUTLINES = {
+  baseline: { parts: [], sections: [] },
+  proposed: { parts: [], sections: [] },
+};
+
 const elements = (node: Root | Element): ReadonlyArray<Element> =>
   node.children.flatMap((child) =>
     child.type === "element" ? [child, ...elements(child)] : [],
@@ -38,7 +43,7 @@ describe("component diff definition", () => {
     },
   ])("should render the free default for a $status component", (input) => {
     const compiled = definition.compileDiff(input);
-    const root = reactToHast(compiled.presentation("example"));
+    const root = reactToHast(compiled.presentation("example", EMPTY_OUTLINES));
 
     expect(compiled.model).toEqual(input);
     expect(root?.properties["data-component-diff"]).toBe("");
@@ -51,8 +56,8 @@ describe("component diff definition", () => {
       proposed: { label: "Now" },
       runs: [],
     });
-    const first = reactToHast(compiled.presentation("first"));
-    const second = reactToHast(compiled.presentation("second"));
+    const first = reactToHast(compiled.presentation("first", EMPTY_OUTLINES));
+    const second = reactToHast(compiled.presentation("second", EMPTY_OUTLINES));
     const firstInput =
       first === undefined
         ? undefined
@@ -83,34 +88,56 @@ describe("component diff definition", () => {
 
     expect(compiled.model).toEqual({ label: "added" });
     expect(
-      reactToHast(compiled.presentation("example"))?.properties["data-bespoke"],
+      reactToHast(compiled.presentation("example", EMPTY_OUTLINES))?.properties[
+        "data-bespoke"
+      ],
     ).toBe("");
   });
 
-  it("should render an outline component diff with the empty outline", () => {
+  it("should render an outline component diff with each document's outline", () => {
     const outlined = defineOutlineComponent({
       compile: () => ({ label: "compiled" }),
       view: ({ model, outline }) =>
         createElement(
           "div",
-          { "data-outline-sections": outline.sections.length },
+          {
+            "data-outline-parts": outline.parts.length,
+            "data-outline-sections": outline.sections.length,
+          },
           model.label,
         ),
       marker: () => ({ kind: "boundary" }),
     });
     const compiled = outlined.compileDiff({
-      status: "added",
+      status: "changed",
+      baseline: { label: "Was" },
       proposed: { label: "Now" },
       runs: [],
     });
-    const root = reactToHast(compiled.presentation("example"));
+    const root = reactToHast(
+      compiled.presentation("example", {
+        baseline: {
+          parts: [{ number: 1, title: "Was", id: "part-was" }],
+          sections: [],
+        },
+        proposed: {
+          parts: [
+            { number: 1, title: "First", id: "part-first" },
+            { number: 2, title: "Now", id: "part-now" },
+          ],
+          sections: [],
+        },
+      }),
+    );
 
-    expect(
+    const outlinedSides =
       root === undefined
-        ? undefined
-        : elements(root).find(
-            (element) => element.properties["data-outline-sections"] === "0",
-          ),
-    ).toBeDefined();
+        ? []
+        : elements(root).filter(
+            (element) => element.properties["data-outline-parts"] !== undefined,
+          );
+    expect(
+      outlinedSides.map((side) => side.properties["data-outline-parts"]),
+    ).toEqual(["1", "2"]);
   });
 });

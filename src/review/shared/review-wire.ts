@@ -210,10 +210,13 @@ export type DiffLocation = {
   readonly newTableHeaders?: ReadonlyArray<string>;
   readonly isTableHeader?: boolean;
   readonly runs: ReadonlyArray<DiffRun>;
-  readonly oldHtml?: string;
-  readonly newHtml?: string;
-  /** Component-owned diff data, present only on migrated component roots. */
-  readonly diffModel?: unknown;
+  /**
+   * Trusted inert markup the engine replays for a block whose change no words
+   * can evidence. A picture is the only such block: everything a component
+   * owns is answered by `view` instead.
+   */
+  readonly oldView?: string;
+  readonly newView?: string;
   /** Trusted inert component-owned markup for the diff-state root. */
   readonly view?: string;
 };
@@ -1203,14 +1206,11 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
           ...(typeof location.afterBlockId === "string"
             ? { afterBlockId: location.afterBlockId }
             : {}),
-          ...(typeof location.oldHtml === "string"
-            ? { oldHtml: location.oldHtml }
+          ...(typeof location.oldView === "string"
+            ? { oldView: location.oldView }
             : {}),
-          ...(typeof location.newHtml === "string"
-            ? { newHtml: location.newHtml }
-            : {}),
-          ...(Object.hasOwn(location, "diffModel")
-            ? { diffModel: location.diffModel }
+          ...(typeof location.newView === "string"
+            ? { newView: location.newView }
             : {}),
           ...(typeof location.view === "string" ? { view: location.view } : {}),
           runs,

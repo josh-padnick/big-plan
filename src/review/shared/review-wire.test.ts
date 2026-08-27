@@ -582,8 +582,8 @@ describe("review wire contract", () => {
             source: "./assets/after.png",
             alt: "Retry dashboard",
           },
-          oldHtml: '<img src="./assets/before.png" alt="Retry dashboard">',
-          newHtml: '<img src="./assets/after.png" alt="Retry dashboard">',
+          oldView: '<img src="./assets/before.png" alt="Retry dashboard">',
+          newView: '<img src="./assets/after.png" alt="Retry dashboard">',
           runs: [],
         },
         {
@@ -613,7 +613,7 @@ describe("review wire contract", () => {
     expect(decoded?.locations[0]).toMatchObject({
       oldPresentation: { aspect: "image", source: "./assets/before.png" },
       newPresentation: { aspect: "image", alt: "Retry dashboard" },
-      newHtml: '<img src="./assets/after.png" alt="Retry dashboard">',
+      newView: '<img src="./assets/after.png" alt="Retry dashboard">',
     });
     expect(decoded?.locations[1]?.newPresentation).toBeUndefined();
     expect(decoded?.places[0]?.note).toBe("replaced");

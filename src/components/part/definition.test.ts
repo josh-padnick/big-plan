@@ -118,4 +118,37 @@ describe("PART_COMPONENT_DEFINITION", () => {
     );
     expect(numberSlot).toMatchObject({ children: [] });
   });
+
+  it("should number each diff side from its own document outline", () => {
+    const compiled = PART_COMPONENT_DEFINITION.compileDiff({
+      status: "changed",
+      baseline: { title: "Architecture", id: "part-architecture" },
+      proposed: { title: "Architecture", id: "part-architecture" },
+      runs: [],
+    });
+    const element = reactToHast(
+      compiled.presentation("part-moved", {
+        baseline: {
+          parts: [
+            { number: 1, title: "Context", id: "part-context" },
+            { number: 2, title: "Architecture", id: "part-architecture" },
+          ],
+          sections: [],
+        },
+        proposed: {
+          parts: [
+            { number: 1, title: "Context", id: "part-context" },
+            { number: 2, title: "Delivery", id: "part-delivery" },
+            { number: 3, title: "Validation", id: "part-validation" },
+            { number: 4, title: "Architecture", id: "part-architecture" },
+          ],
+          sections: [],
+        },
+      }),
+    );
+    const rendered = JSON.stringify(element);
+
+    expect(rendered).toContain('"value":"Part 2"');
+    expect(rendered).toContain('"value":"Part 4"');
+  });
 });

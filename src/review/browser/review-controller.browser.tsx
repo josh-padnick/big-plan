@@ -480,7 +480,7 @@ const rootElement = document.documentElement;
  * own. A diagram collects notes locally and hands them over only when the
  * reviewer submits the batch from the diagram itself, so the review island
  * cannot be told about them; it watches for the one marker the diagram paints
- * per commented element, skipping snapshot copies inside a What-changed lens.
+ * per commented element, skipping replayed evidence inside a What-changed lens.
  */
 const hasComponentBatchNotes = (): boolean =>
   Array.from(
@@ -6201,10 +6201,9 @@ export const ReviewController = () => {
               foundElement(liveFlowAnchor(payload.anchor ?? ""))
             : payload.anchor === undefined || payload.anchor === null
               ? null
-              : // A decision anchor is a document id raised by the live viewer
-                // script, and every id inside a lens snapshot is namespaced
-                // when the server scrubs it, so a copy cannot answer here and
-                // this needs no resolver.
+              : // A decision anchor comes from a live viewer control. Replayed
+                // evidence is inert and cannot raise this callback, so this
+                // lookup does not need a separate resolver.
                 document.getElementById(payload.anchor);
         const block = source?.closest<HTMLElement>("[data-block-id]") ?? null;
         const subject =

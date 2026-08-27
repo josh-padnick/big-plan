@@ -162,21 +162,6 @@ marks and a plan diff never jitters.
   [data-wireframe-interactive] .wireframe-switcher {
     display: flex;
   }
-  /* The Was/Now diff lens reuses this exact switcher so its own screen
-     selector reads as the same control as the non-diff view's, but it sits
-     outside a `.wireframe` root (the switcher belongs to review chrome, not
-     the snapshot markup it selects between), so the hand-drawn fill and
-     stroke tokens `.wireframe` normally provides are redeclared here at the
-     same values, and the interactive-only display gate does not apply - the
-     diff lens is always interactive React, never the inert script-free
-     page. The direct-child combinator keeps this from also revealing the
-     embedded snapshot's own original switcher, which diff-lens.browser.tsx
-     still hides on purpose so the two switchers never both show. */
-  [data-review-component-diff] > .wireframe-switcher {
-    display: flex;
-    --wf-fill: color-mix(in srgb, var(--color-ink) 6%, transparent);
-    --wf-stroke: color-mix(in srgb, var(--color-ink) 55%, transparent);
-  }
   /* A conventional rectangle, not the hand-drawn sketch radius: the switcher
      is big-plan review chrome, the same call already made for its keyboard
      focus treatment. Every entry carries a subtle resting border so it reads

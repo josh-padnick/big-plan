@@ -1,12 +1,12 @@
 // Owns every "which live element is this semantic target?" question the review
 // island asks of plan DOM. A block id or diagram anchor is a name, not a node:
-// the same name can sit on a snapshot copy inside a What-changed lens, on the
+// the same name can sit on replayed evidence inside a What-changed lens, on the
 // hidden theme variant of a diagram, or on a block whose content drifted since
 // the id was minted. Resolving those names in one place keeps the discipline
-// mandatory - scoped to the live article, never an inert snapshot copy,
+// mandatory - scoped to the live article, never inert replayed evidence,
 // visible copy preferred - and makes a miss say why it missed instead of
 // degrading to a plausible default. A compiler-addressed component diff root
-// is live plan DOM, not a snapshot copy. Where a lens belongs relative to the
+// is live plan DOM, not replayed evidence. Where a lens belongs relative to the
 // blocks it finds stays pure in diff-anchor.ts; this module is the DOM half of
 // that decision, which is why it carries the browser-only suffix.
 
@@ -23,10 +23,10 @@ export type LiveTargetMissReason =
   // Nothing in the live article carries the name: the block was removed, or an
   // id minted for an older revision no longer exists.
   | "unknown-id"
-  // The only matches sit inside a lens snapshot, which is a copy of the plan
-  // rather than the plan. Anchoring there would nest a lens inside a lens or
-  // attach a comment to a snapshot, and an identity attribute surviving into a
-  // clone is an internal defect rather than something the author changed.
+  // The only matches sit inside replayed lens evidence rather than the plan.
+  // Anchoring there would nest a lens inside a lens or attach a comment to
+  // evidence. An identity attribute surviving into a replay is an internal
+  // defect rather than something the author changed.
   | "clone-only"
   // A name resolved but the block no longer holds the content the diff
   // recorded, so a structural path now points at different words.
@@ -82,13 +82,16 @@ export const lensMissReason = (
   return "unknown-id";
 };
 
-// A legacy lens renders a scrubbed copy of plan content. A component-owned
-// diff root is the live plan block itself, so its lens frame is deliberately
-// excluded until the legacy copy vocabulary leaves with the remaining waves.
+// A lens still shows content that is not the plan: a picture replayed as
+// evidence, and, in the historical archive, a component card whose block the
+// plan no longer holds. A component-owned diff root that replaced a live block
+// is the plan, so its own frame is deliberately excluded from this selector;
+// the archive's host carries the host marker instead, which is what keeps a
+// dead change out of every identity answer.
 const LENS_COPY_SELECTOR =
   "[data-review-diff-lens]:not([data-component-diff]), [data-review-diff-lens-host]";
 
-/** True when the element is a snapshot copy inside a What-changed lens. */
+/** True when the element is replayed evidence inside a What-changed lens. */
 export const isLensCopy = (element: Element): boolean =>
   element.closest(LENS_COPY_SELECTOR) !== null;
 
@@ -156,9 +159,9 @@ export const displayedStandIn = (element: HTMLElement): HTMLElement | null => {
 };
 
 /**
- * Lists the pictures the reader is reading. A lens now replays a changed
- * picture as a scrubbed copy, so decorating every match in the document would
- * hang a comment affordance on a snapshot of the plan rather than the plan.
+ * Lists the pictures the reader is reading. A lens replays a changed picture
+ * as an isolated, identity-free rendering, so decorating every match in the
+ * document would hang a comment affordance on evidence rather than the plan.
  */
 export const livePictures = (): ReadonlyArray<HTMLElement> => {
   const article = liveArticle();
@@ -177,8 +180,8 @@ export const liveBlock = (blockId: string): LiveTargetResult => {
 
 /**
  * Resolves a diagram flow anchor to the element the reader can actually see.
- * Snapshot scrubbing removes block ids from a lens copy but keeps its flow
- * anchors, so the clone exclusion is load-bearing here rather than defensive.
+ * A diagram ships one copy per theme variant with only one shown, so the
+ * visible-copy preference is load-bearing here rather than defensive.
  */
 export const liveFlowAnchor = (anchor: string): LiveTargetResult => {
   const article = liveArticle();
@@ -218,7 +221,7 @@ export const candidateMatchesLivePicture = ({
     candidate.expectedPicture.source === livePicture.source &&
     candidate.expectedPicture.alt === livePicture.alt);
 
-/** Resolves a decision id to its live card, never an inert snapshot copy. */
+/** Resolves a decision id to its live card, never inert replayed evidence. */
 export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };

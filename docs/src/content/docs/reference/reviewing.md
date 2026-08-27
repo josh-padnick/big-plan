@@ -377,13 +377,18 @@ happen.
 validated result snapshot. Each changed answer carries its own attributed
 places; plan-wide chat carries a grouped digest.
 The in-place lens shows word-level edits for close rewrites and stacked **Was**/**Now** bands for larger rewrites, additions, removals, tables, and code.
-Decision changes use the component diff contract: **Was** and **Now** each render the compiled Decision presentation instead of flattening it into prose.
-When a **Now** side exists, it is the one live, commentable Decision, while **Was** is inert evidence and carries no live plan identity.
+Component changes that use the component diff contract render the component's compiled presentation on both **Was** and **Now** sides.
+The change replaces the component in the plan instead of sitting beside a hidden copy.
+When a **Now** side exists, it is the live, commentable component.
+It keeps its comment entry and any controls, including maximize.
+The **Was** side is inert evidence and carries no live plan identity.
 Until the reviewer accepts an answerable **Now** Decision, a banner at the top of its card asks them to accept the change before answering.
 Its disabled **Confirm choice** control shows the same guidance in a hazard-icon tooltip.
-Diagram and file-tree changes continue to retain their compiled component presentation behind **Was**/**Now** switches.
-When either revision contains multiple screens, wireframe changes add a per-screen selector for **Added**, **Removed**, **Updated**, **Moved**, and **Initial screen** changes.
-They keep the full device frame visible behind interactive **Was**/**Now** controls and carry the shared maximize control into the diff lens.
+Diagram, file tree, and wireframe changes use the component's own maximize control and name.
+Their controls work inside the change: diagram theme and flow controls, tree copy controls, and wireframe screen switchers.
+A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle.
+The wireframe diff does not mark individual screens as added, removed, moved, or updated.
+A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,

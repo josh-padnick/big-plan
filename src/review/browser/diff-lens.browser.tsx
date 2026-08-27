@@ -9,15 +9,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import {
-  BODY_ATTRIBUTE,
-  MAXIMIZABLE_ATTRIBUTE,
-} from "../../components/_model/figure-controls/figure-controls.js";
-import { MaximizeButton } from "../../components/_shared/figure-controls/maximize-button.js";
-import { fitWireframeScreen } from "../../components/wireframe/wireframe-fit.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
@@ -42,16 +35,6 @@ import {
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import { replacePlanDom } from "./plan-dom.browser.js";
-import {
-  compareWireframeScreens,
-  wireframeScreenIdForSide,
-  wireframeScreenStatusLabel,
-  type WireframeScreenDiff,
-  type WireframeScreenSnapshot,
-} from "./wireframe-screen-diff.js";
-
-const DIFF_TOGGLE_OPTION_CLASSES =
-  "relative z-10 min-h-11 min-w-11 cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 wide:min-h-0 wide:min-w-0";
 
 const placeLocations = ({
   diff,
@@ -91,10 +74,10 @@ const runsWithChanges = (runs: ReadonlyArray<DiffRun>): ReactNode =>
 const sideText = (location: DiffLocation, side: "old" | "new"): string =>
   side === "old" ? location.oldText : location.newText;
 
-const sideHtml = (
+const sideView = (
   location: DiffLocation,
   side: "old" | "new",
-): string | undefined => (side === "old" ? location.oldHtml : location.newHtml);
+): string | undefined => (side === "old" ? location.oldView : location.newView);
 
 // A picture is evidence, not words: its extracted text is empty, so a lens
 // that shows only text drops the very block the reviewer asked about. The
@@ -105,24 +88,20 @@ const isRenderedPicture = (location: DiffLocation): boolean =>
 /** Whether one side of a location has anything at all to show. */
 const hasSideContent = (location: DiffLocation, side: "old" | "new"): boolean =>
   sideText(location, side).trim() !== "" ||
-  (isRenderedPicture(location) && sideHtml(location, side) !== undefined);
+  (isRenderedPicture(location) && sideView(location, side) !== undefined);
 
-// The plan's own markup, replayed inert: a snapshot is evidence to read, never
-// a second copy of the document to interact with. A picture stands in for the
-// words a text side would carry, so it also claims the diff-content marker the
-// rest of the lens vocabulary uses.
-const RenderedSnapshot = ({
-  html,
-  isDiffContent = false,
-}: {
-  readonly html: string | undefined;
-  readonly isDiffContent?: boolean;
-}) => (
+// A picture replayed inert. It is the last block the lens shows as markup, and
+// it needs none of the machinery a component copy once needed: a picture has
+// no controls to neutralise and no identity to scrub, because the engine
+// isolated the side before it reached the wire. It stands in for the words a
+// text side would carry, so it claims the diff-content marker the rest of the
+// lens vocabulary uses.
+const PictureEvidence = ({ view }: { readonly view: string | undefined }) => (
   <div
-    className="pointer-events-none min-w-0 [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_[data-flow-controls]]:hidden"
+    className="pointer-events-none min-w-0"
     inert
-    {...(isDiffContent ? { "data-review-diff-content": "" } : {})}
-    dangerouslySetInnerHTML={{ __html: html ?? "" }}
+    data-review-diff-content=""
+    dangerouslySetInnerHTML={{ __html: view ?? "" }}
   />
 );
 
@@ -525,7 +504,7 @@ const SnapshotBlock = ({
     // that changed with it, and the plan itself holds the full-size version.
     return (
       <div className="[&_img]:my-0 [&_img]:max-h-48 [&_img]:w-auto">
-        <RenderedSnapshot html={sideHtml(location, side)} isDiffContent />
+        <PictureEvidence view={sideView(location, side)} />
       </div>
     );
   }
@@ -606,351 +585,34 @@ const SnapshotSideContent = ({
   });
 };
 
-const wireframeScreenMarkup = (
-  html: string | undefined,
-): Map<string, WireframeScreenSnapshot> => {
-  const screens = new Map<string, WireframeScreenSnapshot>();
-  if (html === undefined) return screens;
-  const document = new DOMParser().parseFromString(html, "text/html");
-  const renderedScreens = document.querySelectorAll<HTMLElement>(
-    "[data-wireframe-screen]",
-  );
-  for (const [index, screen] of [...renderedScreens].entries()) {
-    const id = screen.dataset.wireframeScreen;
-    if (id === undefined) continue;
-    const name = (
-      screen.querySelector<HTMLElement>(".wireframe-screen-name")
-        ?.textContent ??
-      screen.getAttribute("aria-label")?.split(",")[0] ??
-      id
-    ).trim();
-    const isCurrent = screen.hasAttribute("data-wireframe-current");
-    screen.removeAttribute("data-wireframe-current");
-    screens.set(id, {
-      id,
-      isCurrent,
-      markup: screen.outerHTML,
-      name,
-      position: index + 1,
-    });
-  }
-  return screens;
-};
-
-const screenStatusClasses = (status: WireframeScreenDiff["status"]): string => {
-  if (status === "added") {
-    return "bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]";
-  }
-  if (status === "removed") {
-    return "bg-[var(--diff-remove-bg)] text-[var(--diff-remove-c)]";
-  }
-  return "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,var(--callout-warning-bg))] text-[var(--callout-warning-c)]";
-};
-
-const screenStatusBorder = (status: WireframeScreenDiff["status"]): string => {
-  if (status === "added") {
-    return "color-mix(in srgb, var(--diff-add-c) 30%, var(--diff-add-bg))";
-  }
-  if (status === "removed") {
-    return "color-mix(in srgb, var(--diff-remove-c) 30%, var(--diff-remove-bg))";
-  }
-  return "color-mix(in srgb, var(--callout-warning-c) 30%, var(--callout-warning-bg))";
-};
-
-const SNAPSHOT_CONTROL_SELECTOR =
-  'a[href], button, input, select, summary, textarea, [contenteditable]:not([contenteditable="false"]), [data-wireframe-navigate], [role="button"], [tabindex]';
-
-const sanitizeRenderedSnapshot = (html: string | undefined): string => {
-  if (html === undefined) return "";
-  const document = new DOMParser().parseFromString(html, "text/html");
-  for (const control of document.querySelectorAll<HTMLElement>(
-    SNAPSHOT_CONTROL_SELECTOR,
-  )) {
-    control.tabIndex = -1;
-    control.setAttribute("aria-disabled", "true");
-    control.removeAttribute("contenteditable");
-    if (
-      control instanceof HTMLButtonElement ||
-      control instanceof HTMLInputElement ||
-      control instanceof HTMLSelectElement ||
-      control instanceof HTMLTextAreaElement
-    ) {
-      control.disabled = true;
-    } else if (control instanceof HTMLAnchorElement) {
-      control.removeAttribute("href");
-    } else {
-      control.inert = true;
+/**
+ * Replays a component's own diff view where the lens shows a change beside the
+ * plan rather than in place of it. Two paths reach here: the historical
+ * archive, where the block is gone, and a superseded change, where the block
+ * survives but the lens hides it and stands in front of it, because a revision
+ * the plan has already moved past is evidence rather than a live question.
+ *
+ * Both paths need the same thing. The view's only review identity is what
+ * `inheritProposedRootIdentity` copied onto its root, so removing it there is
+ * complete rather than defensive: an address the plan still holds - which the
+ * superseded path proves is not hypothetical - must never appear twice in one
+ * document. Held inert for the same reason, since neither path is answerable.
+ */
+const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
+  const hostRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const host = hostRef.current;
+    if (host === null) return;
+    const parsed = new DOMParser().parseFromString(view, "text/html");
+    const root = parsed.body.firstElementChild;
+    if (root === null) return;
+    for (const attribute of root.getAttributeNames()) {
+      if (attribute.startsWith("data-block-")) root.removeAttribute(attribute);
     }
-  }
-  return document.body.innerHTML;
-};
-
-const preventSnapshotControlClick = (
-  event: ReactMouseEvent<HTMLDivElement>,
-): void => {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  const control = target.closest(`${SNAPSHOT_CONTROL_SELECTOR}, label`);
-  if (control === null || !event.currentTarget.contains(control)) return;
-  event.preventDefault();
-  event.stopPropagation();
-};
-
-const ComponentSnapshotComparison = ({
-  location,
-}: {
-  readonly location: DiffLocation;
-}) => {
-  const initialSide = location.newHtml === undefined ? "old" : "new";
-  const oldScreens = useMemo(
-    () => wireframeScreenMarkup(location.oldHtml),
-    [location.oldHtml],
-  );
-  const newScreens = useMemo(
-    () => wireframeScreenMarkup(location.newHtml),
-    [location.newHtml],
-  );
-  const screenDiffs = useMemo(
-    () => compareWireframeScreens({ oldScreens, newScreens }),
-    [oldScreens, newScreens],
-  );
-  // A wireframe with only one screen, ever, has nothing to switch between -
-  // the non-diff view never draws a switcher for it either, so the diff view
-  // does not grow one just because that lone screen changed.
-  const hasMultipleScreens = useMemo(
-    () => oldScreens.size > 1 || newScreens.size > 1,
-    [oldScreens, newScreens],
-  );
-  const [side, setSide] = useState<"old" | "new">(initialSide);
-  const [selectedScreenKey, setSelectedScreenKey] = useState(
-    screenDiffs[0]?.key,
-  );
-  const contentRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    setSide(initialSide);
-    setSelectedScreenKey(screenDiffs[0]?.key);
-  }, [initialSide, location.oldHtml, location.newHtml, screenDiffs]);
-  const selectedScreen = screenDiffs.find(
-    (screen) => screen.key === selectedScreenKey,
-  );
-  const canShowOld =
-    location.oldHtml !== undefined &&
-    (selectedScreen === undefined ||
-      wireframeScreenIdForSide(selectedScreen, "old") !== undefined);
-  const canShowNew =
-    location.newHtml !== undefined &&
-    (selectedScreen === undefined ||
-      wireframeScreenIdForSide(selectedScreen, "new") !== undefined);
-  const renderedSide =
-    (side === "old" && canShowOld) || !canShowNew ? "old" : "new";
-  const renderedHtml =
-    renderedSide === "old" ? location.oldHtml : location.newHtml;
-  const sanitizedRenderedHtml = useMemo(
-    () => sanitizeRenderedSnapshot(renderedHtml),
-    [renderedHtml],
-  );
-  const renderedPresentation = sidePresentation(location, renderedSide);
-  const visibleScreenId =
-    selectedScreen === undefined
-      ? renderedPresentation?.aspect === "wireframe"
-        ? renderedPresentation.currentScreenId
-        : undefined
-      : wireframeScreenIdForSide(selectedScreen, renderedSide);
-  const isWireframe = useMemo(
-    () =>
-      wireframeScreenMarkup(location.oldHtml).size > 0 ||
-      wireframeScreenMarkup(location.newHtml).size > 0,
-    [location.newHtml, location.oldHtml],
-  );
-  const maximizeSubject = isWireframe ? "wireframe diff" : "component diff";
-  useEffect(() => {
-    const content = contentRef.current;
-    if (content === null) return;
-    const fitWireframes = (): void => {
-      for (const screen of content.querySelectorAll<HTMLElement>(
-        "[data-wireframe-screen]",
-      )) {
-        fitWireframeScreen(screen);
-      }
-      for (const screen of content.querySelectorAll<HTMLElement>(
-        "[data-wireframe-screen]",
-      )) {
-        const selected =
-          visibleScreenId === undefined ||
-          screen.dataset.wireframeScreen === visibleScreenId;
-        screen.hidden = visibleScreenId !== undefined && !selected;
-        // The border always names the side currently shown - remove tones on
-        // Was, add tones on Now - because that is the emphasis the Was/Now
-        // toggle promises: which state the reader is looking at. A
-        // three-way added/removed/updated palette would wash the border to
-        // an unrelated warning amber for the common case of a screen whose
-        // content simply changed, which is exactly the "border competes
-        // with the diff" the border must not do; the switcher badge still
-        // names that three-way status, since which kind of change this
-        // screen represents is useful there.
-        screen.style.border = selected
-          ? `10px solid ${screenStatusBorder(renderedSide === "old" ? "removed" : "added")}`
-          : "";
-        screen.style.borderRadius = selected ? "0.75rem" : "";
-        screen.style.padding = selected ? "1rem" : "";
-        const name = screen.querySelector<HTMLElement>(
-          ".wireframe-screen-name",
-        );
-        if (name !== null && selectedScreen?.status === "removed") {
-          name.style.textDecoration = "line-through";
-          name.style.textDecorationThickness = "2px";
-          name.style.textDecorationColor = "var(--diff-remove-c)";
-        }
-      }
-    };
-    fitWireframes();
-    // The diff edge changes the available width. Refit once after applying
-    // it so the desktop frame stays fully inside its card.
-    fitWireframes();
-    const observer = new ResizeObserver(fitWireframes);
-    observer.observe(content);
-    for (const element of content.querySelectorAll<HTMLElement>(
-      ".wireframe-frame-card, [data-wireframe-screen]",
-    )) {
-      observer.observe(element);
-    }
-    const maximizable = content.closest<HTMLElement>(
-      "[data-figure-maximizable]",
-    );
-    maximizable?.addEventListener("figure-restored", fitWireframes);
-    requestAnimationFrame(fitWireframes);
-    return () => {
-      maximizable?.removeEventListener("figure-restored", fitWireframes);
-      observer.disconnect();
-    };
-  }, [renderedHtml, renderedSide, selectedScreen, visibleScreenId]);
-  useEffect(() => {
-    document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));
-  }, [renderedHtml]);
-  return (
-    <div
-      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2"
-      data-review-component-diff=""
-    >
-      {/* A single-screen wireframe has no switcher in the non-diff view
-          either - there is nothing to switch between - so the diff view
-          only grows one once a second screen makes it meaningful. The
-          selected entry reuses the non-diff screen switcher's own classes so
-          the two read as the same control. */}
-      {hasMultipleScreens && screenDiffs.length > 0 ? (
-        <nav className="wireframe-switcher" aria-label="Prototype screens">
-          {screenDiffs.map((screen) => (
-            <button
-              key={screen.key}
-              type="button"
-              className="wireframe-switch inline-flex min-h-11 min-w-11 items-center gap-2 wide:min-h-0 wide:min-w-0"
-              aria-current={
-                selectedScreenKey === screen.key ? "true" : undefined
-              }
-              onClick={() => {
-                setSelectedScreenKey(screen.key);
-                if (screen.status === "added") setSide("new");
-                if (screen.status === "removed") setSide("old");
-              }}
-            >
-              <span
-                className={
-                  screen.status === "removed" ? "line-through decoration-2" : ""
-                }
-              >
-                {screen.name}
-              </span>
-              <span
-                className={`rounded-md px-2 py-0.5 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
-              >
-                {wireframeScreenStatusLabel(screen)}
-              </span>
-            </button>
-          ))}
-        </nav>
-      ) : null}
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
-        {/* A toggle, not two ordinary buttons: both options always look
-            clickable (hover, focus, and press feedback on either one), and a
-            sliding fill shows which side is showing without needing the
-            unselected option to look disabled. */}
-        {location.oldHtml === undefined || location.newHtml === undefined ? (
-          <span className="rounded-full border border-edge bg-surface px-4 py-1.5 text-xs font-semibold text-ink">
-            {location.oldHtml === undefined ? "Now" : "Was"}
-          </span>
-        ) : (
-          <div
-            className="relative inline-grid grid-cols-2 rounded-full border border-edge bg-surface p-0.5"
-            role="group"
-            aria-label="Choose Was or Now"
-          >
-            <span
-              aria-hidden="true"
-              data-review-diff-toggle-thumb=""
-              className={`pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full transition-transform duration-150 ease-out ${
-                renderedSide === "old"
-                  ? "translate-x-0 bg-[var(--diff-remove-bg)]"
-                  : "translate-x-[calc(100%+2px)] bg-[var(--diff-add-bg)]"
-              }`}
-            />
-            <button
-              type="button"
-              className={`${DIFF_TOGGLE_OPTION_CLASSES} ${
-                renderedSide === "old"
-                  ? "text-[var(--diff-remove-c)]"
-                  : "text-muted"
-              }`}
-              aria-pressed={renderedSide === "old"}
-              disabled={!canShowOld}
-              onClick={() => setSide("old")}
-            >
-              Was
-            </button>
-            <button
-              type="button"
-              className={`${DIFF_TOGGLE_OPTION_CLASSES} ${
-                renderedSide === "new"
-                  ? "text-[var(--diff-add-c)]"
-                  : "text-muted"
-              }`}
-              aria-pressed={renderedSide === "new"}
-              disabled={!canShowNew}
-              onClick={() => setSide("new")}
-            >
-              Now
-            </button>
-          </div>
-        )}
-      </div>
-      <div
-        className={
-          isWireframe
-            ? "min-w-0 overflow-visible rounded-lg border border-edge bg-surface p-3 text-ink"
-            : `min-w-0 overflow-visible rounded-lg border-[10px] bg-surface p-3 text-ink inset-shadow-well ${
-                renderedSide === "old"
-                  ? "[border-color:color-mix(in_srgb,var(--diff-remove-c)_30%,var(--diff-remove-bg))]"
-                  : "[border-color:color-mix(in_srgb,var(--diff-add-c)_30%,var(--diff-add-bg))]"
-              }`
-        }
-        data-review-component-snapshot={renderedSide}
-        {...{ [MAXIMIZABLE_ATTRIBUTE]: maximizeSubject }}
-      >
-        <div className="mb-2 flex justify-end">
-          <MaximizeButton subject={maximizeSubject} size="toolbar" />
-        </div>
-        <div
-          ref={contentRef}
-          {...{ [BODY_ATTRIBUTE]: "" }}
-          className="min-w-0 focus-visible:shadow-focus focus-visible:outline-none [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_.wireframe-switcher]:hidden [&_[data-flow-controls]]:hidden"
-          role="region"
-          aria-label={`${maximizeSubject} content`}
-          tabIndex={0}
-          onClickCapture={preventSnapshotControlClick}
-          dangerouslySetInnerHTML={{ __html: sanitizedRenderedHtml }}
-        />
-      </div>
-    </div>
-  );
+    host.replaceChildren(document.importNode(root, true));
+    return () => host.replaceChildren();
+  }, [view]);
+  return <div className="min-w-0" inert ref={hostRef} />;
 };
 
 /** Renders the common word-level or stacked Was/Now lens vocabulary. */
@@ -994,12 +656,12 @@ export const DiffLensContent = ({
     hasSideContent(location, "new"),
   );
   // A picture stays inside the stacked Was/Now panels beside the words that
-  // changed with it. Only a component root, which is a whole card, takes the
-  // lens over as one switchable snapshot.
+  // changed with it. A component root brings its own complete diff view, so it
+  // takes the lens over. A change the plan still holds never arrives here at
+  // all - it replaces its own block instead - so reaching this point means the
+  // change is archived or superseded, and the replay handles both.
   const componentLocation = visibleLocations.find(
-    (location) =>
-      !isRenderedPicture(location) &&
-      (location.oldHtml !== undefined || location.newHtml !== undefined),
+    (location) => location.view !== undefined,
   );
   const title = isHistorical
     ? "Updated"
@@ -1025,8 +687,8 @@ export const DiffLensContent = ({
         </strong>
         <em className="text-2xs text-muted">{place.note}</em>
       </div>
-      {componentLocation !== undefined ? (
-        <ComponentSnapshotComparison location={componentLocation} />
+      {componentLocation?.view !== undefined ? (
+        <ReplayedComponentDiff view={componentLocation.view} />
       ) : canUseWordRuns && only !== undefined ? (
         only.kind === "list" ? (
           <ListRunContent runs={only.runs} location={only} />
@@ -1412,10 +1074,9 @@ export const DiffLensPortal = ({
     );
   }, [articleVersion, componentLocation]);
   // A superseded or unanchored change can land only in the historical archive,
-  // whose one surviving copy must carry no plan identity. Increment 3 keeps
-  // that exception on the legacy scrubbed rendering while live Decision
-  // changes replace their real root; the final copy-migration wave removes
-  // both the exception and its oldHtml/newHtml payload together.
+  // whose one surviving copy must carry no plan identity. That copy is now the
+  // component's own diff view replayed without its root address, so the archive
+  // shows the same card the plan does rather than a scrubbed stand-in.
   if (componentLocation === undefined || !isVisible || isSuperseded) {
     return (
       <LegacyDiffLensPortal

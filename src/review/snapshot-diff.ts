@@ -43,13 +43,13 @@ const REWRITTEN_SURVIVAL = 0.2;
 const PLACE_LABEL_LIMIT = 90;
 const DERIVED_BLOCK_KINDS = new Set(["table-of-contents"]);
 
-// Component roots whose changes read better as text diffs than as opaque
-// rendered Was/Now snapshots. Every OTHER component root defaults to the
-// rendered treatment - a component's flattened text extraction is presentation
+// Component roots whose changes read better as text diffs than as their own
+// compiled rendering. Every OTHER component root defaults to the rendered
+// treatment - a component's flattened text extraction is presentation
 // evidence, not authored prose, so word-diffing it degrades into noise while
 // its compiled rendering stays first-class. A new component therefore needs no
 // registration here; list a kind only when the review lens has a dedicated
-// text-level treatment that beats the rendered snapshot:
+// text-level treatment that beats the rendered treatment:
 // - callout: the lens re-renders the callout with its type, icon, and title.
 // - code-snippet / code-diff: authored code diffs as preformatted text.
 // - data-table: the lens diffs the declared table-row sub-targets row by row.
@@ -62,7 +62,7 @@ const DERIVED_BLOCK_KINDS = new Set(["table-of-contents"]);
 //   two complete card renderings.
 //
 // wireframe stays rendered permanently: a picture has no field-level units
-// worth marking, so compiled Was and Now is the honest presentation.
+// worth marking, so its own compiled Was and Now is the honest presentation.
 const TEXT_DIFF_COMPONENT_KINDS: ReadonlySet<string> = new Set([
   "callout",
   "code-snippet",
@@ -78,7 +78,9 @@ const TEXT_DIFF_COMPONENT_KINDS: ReadonlySet<string> = new Set([
 // An authored picture is the same case as a wireframe and the strongest one:
 // its extracted text is the alt words, so a text-only lens says a picture
 // changed while showing none of it, and a change a reviewer cannot see is a
-// change a reviewer cannot review.
+// change a reviewer cannot review. It is also the last block the engine
+// renders on a component's behalf: a picture is not a component, so nothing
+// else owns showing it.
 const RENDERED_SNAPSHOT_KINDS: ReadonlySet<string> = new Set(["image"]);
 
 /** Whether a block's change is evidenced by its compiled rendering. */

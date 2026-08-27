@@ -19,6 +19,7 @@ import type {
   DefaultComponentDiffModel,
 } from "../_model/component-diff/contract.js";
 import { DefaultComponentDiffView } from "../_shared/component-diff/default-component-diff-view.js";
+import { useComponentDiffPresentation } from "../_shared/component-diff/component-diff-context.js";
 
 /**
  * What the deck transform needs to place one component instance in the
@@ -48,7 +49,15 @@ export type CompiledComponent = {
 
 export type CompiledComponentDiff = {
   readonly model: ComponentDiffModel;
-  readonly presentation: (instanceKey: string) => ReactNode;
+  readonly presentation: (
+    instanceKey: string,
+    outlines: ComponentDiffOutlines,
+  ) => ReactNode;
+};
+
+export type ComponentDiffOutlines = {
+  readonly baseline: DocumentOutline;
+  readonly proposed: DocumentOutline;
 };
 
 export type ComponentDefinition = {
@@ -149,11 +158,6 @@ export const defineOutlineComponent = <
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
 }): ComponentDefinition => {
-  const OutlineView = ({ model }: { readonly model: Model }) =>
-    createElement(view, {
-      model,
-      outline: EMPTY_DOCUMENT_OUTLINE,
-    });
   return {
     compile: (input) => {
       const model = compile(input);
@@ -172,14 +176,23 @@ export const defineOutlineComponent = <
       const model = diff === undefined ? typedInput : diff(typedInput);
       return {
         model,
-        presentation: (instanceKey) =>
-          diffView === undefined
+        presentation: (instanceKey, outlines) => {
+          const OutlineView = ({ model }: { readonly model: Model }) => {
+            const diffPresentation = useComponentDiffPresentation();
+            const outline =
+              diffPresentation?.side === "baseline"
+                ? outlines.baseline
+                : outlines.proposed;
+            return createElement(view, { model, outline });
+          };
+          return diffView === undefined
             ? createElement(DefaultComponentDiffView<Model>, {
                 model: typedInput,
                 view: OutlineView,
                 controlId: `component-diff-${instanceKey}`,
               })
-            : createElement(diffView, { model: model as DiffModel }),
+            : createElement(diffView, { model: model as DiffModel });
+        },
       };
     },
     ...(scopedChildren === undefined ? {} : { scopedChildren }),
