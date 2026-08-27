@@ -81,12 +81,18 @@ export const changeSetsFromExchange = ({
   readonly responses: ReadonlyArray<{
     readonly requestId: string;
     readonly resultSnapshot: string;
+    readonly kind?: string;
   }>;
   readonly placeIdsByRevision: ReadonlyMap<string, ReadonlyArray<string>>;
 }): ReadonlyArray<OpenChangeSet> => {
   const byId = new Map(requests.map((request) => [request.requestId, request]));
   const sets: OpenChangeSet[] = [];
   for (const response of responses) {
+    // An approval answer publishes nothing, so there is no revision to accept
+    // or revert. Judged by digests alone an agent that wrote to its candidate
+    // and then refused would still list a change set for bytes that never
+    // reached the plan.
+    if (response.kind === "approval") continue;
     const request = byId.get(response.requestId);
     if (request === undefined) continue;
     const from = request.baselineSnapshot ?? request.premiseSnapshot;

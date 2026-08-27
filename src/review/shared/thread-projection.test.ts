@@ -1262,6 +1262,36 @@ describe("review-wide agent status", () => {
     ).toBe("working");
   });
 
+  // The review-wide pill speaks for the same answer the thread does, so a
+  // refusal must not read as an acknowledgment there just because the step that
+  // narrates it never landed or has aged out of the progress window.
+  it("should not call a refused approval acknowledged on the review-wide pill", () => {
+    const refused = answeredRequest({
+      kind: "approval",
+      commentIds: undefined,
+      commentId: undefined,
+    });
+    const status = projectLatestAgentStatus({
+      ...base,
+      requests: [refused],
+      responses: [
+        {
+          requestId: refused.requestId,
+          resultSnapshot: "2222222222222222",
+          createdAt: "2026-08-10T19:02:00Z",
+          kind: "approval",
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        },
+      ],
+      progressEvents: [],
+    });
+    expect(status).toMatchObject({
+      stage: "failed",
+      detail: "The plan no longer matches the pinned snapshot.",
+    });
+    expect(status.headline).not.toBe("Approval acknowledged");
+  });
+
   it("should ignore a reviewer queue event when timing agent silence", () => {
     const queued = request({ claimedAt: undefined });
     expect(

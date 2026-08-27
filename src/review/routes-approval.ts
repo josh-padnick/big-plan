@@ -187,6 +187,7 @@ const changeSetsAtApproval = async (
     extname(context.resolvedPlanPath),
   );
   for (const response of exchange.responses) {
+    if (response.kind === "approval") continue;
     const request = requests.get(response.requestId);
     if (request === undefined) continue;
     const from = request.baselineSnapshot ?? request.premiseSnapshot;
