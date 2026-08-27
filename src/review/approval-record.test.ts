@@ -108,6 +108,7 @@ describe("approval record", () => {
       approvalSummary({
         record: emptyApprovalRecord(),
         currentSnapshot: SNAPSHOT,
+        delivered: true,
       }),
     ).toBeUndefined();
   });
@@ -119,7 +120,7 @@ describe("approval record", () => {
       entry,
     });
     expect(
-      approvalSummary({ record, currentSnapshot: NEXT_SNAPSHOT }),
+      approvalSummary({ record, currentSnapshot: NEXT_SNAPSHOT, delivered: true }),
     ).toMatchObject({
       approvalId: entry.approvalId,
       status: "stale",

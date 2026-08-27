@@ -359,9 +359,26 @@ export const encodeAgentRequests = (
   requests: ReadonlyArray<unknown>,
 ): ReadonlyArray<unknown> =>
   requests.map((request) => {
-    if (!isReviewWireRecord(request) || !Array.isArray(request.comments)) {
-      return request;
+    if (!isReviewWireRecord(request)) return request;
+    /*
+    An approval carries the canonical-source contract the agent has to satisfy:
+    the reviewer's absolute plan path, the digest to verify it against, and the
+    decisions recorded with it. Reading that contract is the agent's job and
+    checking it is the server's, and the browser projection keeps none of it -
+    so the page is not handed the reviewer's filesystem path on every poll to
+    render the covering message it does keep.
+    */
+    if (request.kind === "approval") {
+      const {
+        planPath: _planPath,
+        pinnedSnapshot: _pinnedSnapshot,
+        recordedAnswers: _recordedAnswers,
+        unansweredDecisions: _unansweredDecisions,
+        ...browserSafe
+      } = request;
+      return browserSafe;
     }
+    if (!Array.isArray(request.comments)) return request;
     return {
       ...request,
       comments: request.comments.map((comment) =>
@@ -660,6 +677,7 @@ export const decodeApprovalSummary = (
     !SNAPSHOT_DIGEST.test(value.pinnedSnapshot) ||
     (value.status !== "approved" && value.status !== "stale") ||
     typeof value.message !== "string" ||
+    typeof value.delivered !== "boolean" ||
     !isReviewWireRecord(value.openItemCounts)
   ) {
     return undefined;
@@ -680,6 +698,7 @@ export const decodeApprovalSummary = (
     pinnedSnapshot: value.pinnedSnapshot,
     status: value.status,
     message: value.message,
+    delivered: value.delivered,
     openItemCounts: {
       changeSetsAccepted: counts.changeSetsAccepted,
       changeSetsTotal: counts.changeSetsTotal,

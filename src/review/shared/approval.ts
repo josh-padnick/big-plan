@@ -71,6 +71,13 @@ export type ApprovalSummary = {
   readonly pinnedSnapshot: string;
   readonly status: "approved" | "stale";
   readonly message: string;
+  /**
+   * Whether the agent was actually handed this approval. The record commits
+   * before the mailbox write, so an approval can be in force with no handoff
+   * behind it, and every surface that speaks for the approval reads this rather
+   * than assuming delivery (BIG-131).
+   */
+  readonly delivered: boolean;
   readonly openItemCounts: ApprovalOpenItemCounts;
 };
 
@@ -124,9 +131,12 @@ export const deriveApprovalStatus = ({
 export const approvalSummary = ({
   record,
   currentSnapshot,
+  delivered,
 }: {
   readonly record: ApprovalRecord;
   readonly currentSnapshot: string;
+  /** Whether this approval reached the agent mailbox. */
+  readonly delivered: boolean;
 }): ApprovalSummary | undefined => {
   const entry = inForceApproval(record);
   const status = deriveApprovalStatus({ entry, currentSnapshot });
@@ -137,6 +147,7 @@ export const approvalSummary = ({
     pinnedSnapshot: entry.pinnedSnapshot,
     status,
     message: entry.message,
+    delivered,
     openItemCounts: entry.openItemCounts,
   };
 };

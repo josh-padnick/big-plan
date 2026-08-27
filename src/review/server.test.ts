@@ -6905,6 +6905,14 @@ describe("review runtime approval", () => {
           planId: target.planId,
         });
         expect(exchange.requests).toEqual([]);
+        // The claim of delivery must not come back on the next load: the
+        // session route answers every reader, including a second tab.
+        const session = await (
+          await callRuntime({ target, sessionToken, path: "/api/session" })
+        ).json();
+        expect(session).toMatchObject({
+          approval: { status: "approved", delivered: false },
+        });
       },
     );
   });
