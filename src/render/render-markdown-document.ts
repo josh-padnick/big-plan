@@ -90,6 +90,76 @@ const deferredIndexOf = (element: Element): string | undefined => {
   return markdownIndex === undefined ? undefined : String(markdownIndex);
 };
 
+const materializeNestedMarkdown = ({
+  value,
+  presentations,
+  outline,
+  headingOffset,
+}: {
+  readonly value: unknown;
+  readonly presentations: DeferredMarkdownPresentations;
+  readonly outline: DocumentOutline;
+  readonly headingOffset: number;
+}): void => {
+  if (Array.isArray(value)) {
+    let offset = headingOffset;
+    for (let index = 0; index < value.length; index += 1) {
+      const child = value[index];
+      if (!isElement(child)) {
+        materializeNestedMarkdown({
+          value: child,
+          presentations,
+          outline,
+          headingOffset: offset,
+        });
+        continue;
+      }
+      const opensPart =
+        child.properties[OUTLINE_PART_TITLE_ATTRIBUTE] !== undefined;
+      const placeholderIndex = deferredIndexOf(child);
+      if (placeholderIndex === undefined) {
+        materializeNestedMarkdown({
+          value: child,
+          presentations,
+          outline,
+          headingOffset: offset,
+        });
+        continue;
+      }
+      const deferred = presentations[Number(placeholderIndex)];
+      if (deferred === undefined) {
+        throw new Error(
+          `Internal error: nested Markdown placeholder ${placeholderIndex} has no presentation`,
+        );
+      }
+      const context = {
+        outline,
+        headingOffset: opensPart ? headingOffset : offset,
+      };
+      materializeNestedMarkdown({
+        value: deferred.model,
+        presentations,
+        ...context,
+      });
+      value[index] = markdownExportPlaceholder({
+        markdown: deferred.present(context),
+        ...(child.position === undefined ? {} : { position: child.position }),
+      });
+      if (opensPart) offset = headingOffset + 1;
+    }
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  for (const nested of Object.values(value as Record<string, unknown>)) {
+    materializeNestedMarkdown({
+      value: nested,
+      presentations,
+      outline,
+      headingOffset,
+    });
+  }
+};
+
 /**
  * Resolves every deferred component presentation on the unwrapped export
  * tree, giving each one the heading depth its position earned. The Part
@@ -128,20 +198,26 @@ const completeMarkdownPlaceholders = ({
       index += 1;
       continue;
     }
-    const present = presentations[Number(placeholderIndex)];
-    if (present === undefined) {
+    const deferred = presentations[Number(placeholderIndex)];
+    if (deferred === undefined) {
       throw new Error(
         `Internal error: Markdown outline placeholder ${String(placeholderIndex)} has no presentation`,
       );
     }
+    const context = {
+      outline,
+      headingOffset: opensPart ? headingOffset : offset,
+    };
+    materializeNestedMarkdown({
+      value: deferred.model,
+      presentations,
+      ...context,
+    });
     parent.children.splice(
       index,
       1,
       markdownExportPlaceholder({
-        markdown: present({
-          outline,
-          headingOffset: opensPart ? headingOffset : offset,
-        }),
+        markdown: deferred.present(context),
         ...(child.position === undefined ? {} : { position: child.position }),
       }),
     );

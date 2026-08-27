@@ -332,6 +332,45 @@ The reader follows one more hop.
     );
   });
 
+  it("should resolve nested components against their document context", () => {
+    const result = render(`# Plan
+
+## Before delivery
+
+<Callout type="note" title="Scope">
+
+<Part title="Delivery" />
+
+<TableOfContents>
+
+- [Before delivery](#before-delivery) — Context before the act.
+- [Inside delivery](#inside-delivery) — Work owned by the act.
+
+</TableOfContents>
+
+<DataTable title="Nested gates">
+
+\`\`\`table
+| Gate | Owner |
+| --- | --- |
+| Canary | Release |
+\`\`\`
+
+</DataTable>
+
+</Callout>
+
+## Inside delivery
+`);
+
+    expect(result.markdown).toContain("> ## Part 1 — Delivery");
+    expect(result.markdown).toContain("> ### Plan outline");
+    expect(result.markdown).toContain(
+      "> - [Before delivery](#before-delivery) — Context before the act.",
+    );
+    expect(result.markdown).toContain("> #### Nested gates");
+  });
+
   it("should demote component headings beneath the Part that owns them", () => {
     const result = render(`# Plan
 

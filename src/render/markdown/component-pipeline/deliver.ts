@@ -14,10 +14,9 @@ import {
 import type { DiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
 import {
   deferredMarkdownPlaceholder,
-  markdownExportPlaceholder,
+  MARKDOWN_EXPORT_INDEX_ATTRIBUTE,
   type ComponentMarkdownContext,
 } from "../../../components/_model/markdown-export.js";
-import { EMPTY_DOCUMENT_OUTLINE } from "../../../components/_model/document-outline/document-outline.js";
 import {
   COMPONENT_REGISTRY,
   definitionFor,
@@ -30,7 +29,10 @@ import {
   createComponentInstanceKeys,
 } from "./component-instance.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-name.js";
-import { createOutlinePlaceholder } from "./outline-placeholder.js";
+import {
+  createOutlinePlaceholder,
+  OUTLINE_PLACEHOLDER_ATTRIBUTE,
+} from "./outline-placeholder.js";
 import type { DeferredOutlinePresentations } from "./outline-placeholder.js";
 import { reactToHast } from "./react-hast-adapter.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
@@ -86,8 +88,38 @@ type ComponentDelivery =
  * outline and how deep each component's headings belong.
  */
 export type DeferredMarkdownPresentations = Array<
-  (context: ComponentMarkdownContext) => string
+  {
+    readonly model: unknown;
+    readonly present: (context: ComponentMarkdownContext) => string;
+  }
 >;
+
+const nestedMarkdownPlaceholders = (model: unknown): ReadonlyArray<Element> => {
+  const placeholders: Array<Element> = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value === null || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    if (
+      record.type === "element" &&
+      ((record.properties as Record<string, unknown> | undefined)?.[
+        MARKDOWN_EXPORT_INDEX_ATTRIBUTE
+      ] !== undefined ||
+        (record.properties as Record<string, unknown> | undefined)?.[
+          OUTLINE_PLACEHOLDER_ATTRIBUTE
+        ] !== undefined)
+    ) {
+      placeholders.push(structuredClone(value as Element));
+      return;
+    }
+    Object.values(record).forEach(visit);
+  };
+  visit(model);
+  return placeholders;
+};
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
 
@@ -270,34 +302,36 @@ const renderFlowElement = ({
     (delivery.kind === "markdown" ||
       (delivery.kind === "render" && delivery.materializeNestedModels));
   // Every Markdown component defers, not only the outline-aware ones: heading
-  // depth is a property of where the document ends up putting this root, and
-  // only the completion pass over the finished tree knows that. A model
-  // materialized inside a parent's body never reaches that tree, so it
-  // presents immediately against the empty outline at the document's own depth.
+  // depth and outline are properties of where the finished document puts it.
+  // Nested models retain their placeholders so the completion pass can apply
+  // that same eventual context before their parent serializes its body.
   if (delivery.kind === "markdown") {
+    delivery.deferOutline.push({
+      model: compiled.model,
+      present: compiled.markdown,
+    });
+    const index = delivery.deferOutline.length - 1;
     if (materializeModel) {
-      return markdownExportPlaceholder({
-        markdown: compiled.markdown({
-          outline: EMPTY_DOCUMENT_OUTLINE,
-          headingOffset: 0,
-        }),
+      return deferredMarkdownPlaceholder({
+        index,
         ...(node.position === undefined ? {} : { position: node.position }),
       });
     }
-    delivery.deferOutline.push(compiled.markdown);
-    const index = delivery.deferOutline.length - 1;
-    return compiled.outline === undefined
-      ? deferredMarkdownPlaceholder({
-          index,
-          ...(node.position === undefined ? {} : { position: node.position }),
-        })
-      : createOutlinePlaceholder({
-          index,
-          marker: compiled.outline.marker,
-          ...(node.position === undefined ? {} : { position: node.position }),
-          ...(name === null ? {} : { component: name }),
-          ...(stampedKey === undefined ? {} : { instanceKey: stampedKey }),
-        });
+    const placeholder =
+      compiled.outline === undefined
+        ? deferredMarkdownPlaceholder({
+            index,
+            ...(node.position === undefined ? {} : { position: node.position }),
+          })
+        : createOutlinePlaceholder({
+            index,
+            marker: compiled.outline.marker,
+            ...(node.position === undefined ? {} : { position: node.position }),
+            ...(name === null ? {} : { component: name }),
+            ...(stampedKey === undefined ? {} : { instanceKey: stampedKey }),
+          });
+    placeholder.children.push(...nestedMarkdownPlaceholders(compiled.model));
+    return placeholder;
   }
   // An outline-aware component defers its presentation behind a placeholder
   // until the deck transform has computed the document outline. A model being
