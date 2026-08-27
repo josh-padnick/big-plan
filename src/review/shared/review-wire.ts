@@ -119,6 +119,12 @@ export type AgentResponse = {
   readonly outcomes: ReadonlyArray<AgentOutcome>;
   readonly message?: string;
   readonly summary?: string;
+  /**
+   * Present exactly when an approval answer refused to acknowledge. The status
+   * projection reads it as the refusal itself, so it is declared here rather
+   * than left to survive on the decoder's structural fit alone.
+   */
+  readonly hardStop?: string;
 };
 
 export type AgentPresence = {

@@ -806,7 +806,17 @@ export const commitStagedPlanMutation = async ({
           const currentSnapshot = deriveSnapshotDigest(
             await readFile(planPath, "utf8"),
           );
-          if (currentSnapshot !== baseSnapshot) {
+          /*
+          The check asks whether this candidate may still be published over the
+          source, so it has nothing to ask of an answer that publishes nothing.
+          An approval held to it was refused outright whenever the reviewer
+          edited the plan between the pickup and the answer: the acknowledgment
+          could not land, and neither could the hard stop reporting that very
+          edit - the mailbox kept the request open with the claim's baseline
+          frozen, so every retry failed the same way and the reviewer waited on
+          an answer the agent had already tried twice to give (BIG-131).
+          */
+          if (currentSnapshot !== baseSnapshot && response.kind !== "approval") {
             throw new StagedPlanMutationRejected(
               "source-moved",
               "The plan source changed while this claim was working, so its candidate can no longer be published. Take the work again from the current plan.",
