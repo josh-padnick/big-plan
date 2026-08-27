@@ -30,6 +30,7 @@ import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
+import { DIFF_LIVE_CONTROL_ATTRIBUTE } from "../_model/component-diff/contract.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -1086,6 +1087,9 @@ export const Wireframe = ({
                 }
                 data-wireframe-navigate={screen.id}
                 data-wireframe-switch=""
+                {...(screenDiffs === undefined
+                  ? {}
+                  : { [DIFF_LIVE_CONTROL_ATTRIBUTE]: "" })}
                 {...(screen.id === model.initialScreenId
                   ? { "aria-current": "true" }
                   : {})}

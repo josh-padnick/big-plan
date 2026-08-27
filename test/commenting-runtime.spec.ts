@@ -6193,8 +6193,16 @@ test("should render a changed wireframe as its own component diff", async ({
 <Text text="Unchanged archive content" />
 </Panel>
 </Screen>`;
+  // Only the baseline keeps this screen, so its badge names a screen the
+  // reader can reach on the Was side alone.
+  const auditScreen = `<Screen id="audit" name="Audit" device="desktop">
+<Panel title="Audit trail">
+<Text text="Only the Was side still has an audit screen." />
+</Panel>
+</Screen>`;
   const workspace = (
     headline: string,
+    trailingScreens: ReadonlyArray<string> = [triageScreen, archiveScreen],
   ) => `<Wireframe id="queue-diff" title="Review queue">
 <Screen id="queue" name="Queue" device="desktop">
 <AppShell>
@@ -6209,8 +6217,7 @@ test("should render a changed wireframe as its own component diff", async ({
 </AppContent>
 </AppShell>
 </Screen>
-${triageScreen}
-${archiveScreen}
+${trailingScreens.join("\n")}
 </Wireframe>`;
   // A second wireframe deliberately reuses the authored id, because a diff
   // that resolved by authored id rather than by block address would take this
@@ -6226,7 +6233,11 @@ ${archiveScreen}
 
 ## Workspace
 
-${workspace("Keep the retry budget visible")}
+${workspace("Keep the retry budget visible", [
+  triageScreen,
+  archiveScreen,
+  auditScreen,
+])}
 
 ${unrelatedWorkspace}
 `;
@@ -6315,10 +6326,39 @@ ${unrelatedWorkspace}
         switcher.getByRole("button", { name: /Queue/u }),
       ).toContainText("Updated");
       // The baseline side is evidence, not a second live prototype: it keeps
-      // its markup but none of its affordances.
-      expect(await baseline.evaluate((node) => node.inert)).toBe(true);
+      // its markup and none of its affordances, with one exception. Its own
+      // screen switcher stays live, because a badge naming a screen only the
+      // Was side still has would otherwise be unopenable.
+      expect(
+        await baseline.evaluate((node) => ({
+          screens: Array.from(
+            node.querySelectorAll("[data-wireframe-screen]"),
+          ).every((screen) => screen.closest("[inert]") !== null),
+          switches: Array.from(
+            node.querySelectorAll("[data-wireframe-switch]"),
+          ).every((button) => button.closest("[inert]") === null),
+        })),
+      ).toEqual({ screens: true, switches: true });
       await switcher.getByRole("button", { name: "Archive" }).click();
       await expect(proposed).toContainText("Unchanged archive content");
+    });
+
+    await test.step("open a screen only the Was side still has", async () => {
+      await was.click();
+      await expect(baseline).toBeVisible();
+      const auditFrame = baseline.locator('[data-wireframe-screen="audit"]');
+      await expect(auditFrame).toBeHidden();
+      const audit = baseline
+        .getByRole("navigation", { name: "Prototype screens" })
+        .getByRole("button", { name: /Audit/u });
+      await expect(audit).toContainText("Removed from 4");
+      await audit.click();
+      await expect(auditFrame).toBeVisible();
+      await expect(auditFrame).toContainText(
+        "Only the Was side still has an audit screen.",
+      );
+      await now.click();
+      await expect(proposed).toBeVisible();
     });
 
     await test.step("maximize under the component's own noun", async () => {
@@ -6347,15 +6387,44 @@ ${unrelatedWorkspace}
     });
 
     await test.step("leave a comment on the wireframe from inside the diff", async () => {
-      const comment = page.getByRole("button", {
-        name: "Comment on Review queue",
+      // The diff root inherits the proposed component's one address, so the
+      // change offers exactly one comment control however many sides it draws.
+      const comment = componentDiff.getByRole("button", {
+        name: /^Comment on /u,
       });
+      await expect(comment).toHaveCount(1);
       await expect(comment).toBeVisible();
       await comment.click();
       const composer = page.getByRole("dialog", { name: /Comment on/u });
       await expect(composer).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(composer).toBeHidden();
+      const submitRightAway = composer.getByRole("switch", {
+        name: "Submit right away",
+      });
+      if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+        await submitRightAway.click();
+      }
+      const body = "Name the rollback owner on the queue screen.";
+      await composer.getByLabel("Add a comment").fill(body);
+      const addComment = composer.getByRole("button", { name: "Add Comment" });
+      await expect(addComment).toBeEnabled();
+      await addComment.click();
+      if (!(await rail.isVisible())) {
+        await page
+          .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+          .click();
+      }
+      const staged = rail
+        .locator("[data-review-comment-ui]")
+        .filter({ hasText: body });
+      await expect(staged).toBeVisible();
+      // The diff root is the only element carrying the wireframe's address, so
+      // this is what proves the comment anchored to the block the reader was
+      // looking at rather than to nothing resolvable.
+      await staged.hover();
+      await expect(componentDiff).toHaveAttribute(
+        "data-review-comment-associated",
+        "",
+      );
     });
   } finally {
     await closeReviewRuntime({ page, runtime });

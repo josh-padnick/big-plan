@@ -14,6 +14,7 @@ import {
   isolateBaselineSide,
   isBaselineDiffSide,
 } from "./side-isolation.js";
+import { DIFF_LIVE_CONTROL_ATTRIBUTE } from "../../components/_model/component-diff/contract.js";
 
 const BOTH_SIDES_FIXTURE = `## Calls
 
@@ -544,6 +545,99 @@ describe("side isolation", () => {
     isolateBaselineSide({ subtree: slash, key: "was/a" });
     isolateBaselineSide({ subtree: hyphen, key: "was-a" });
     expect(ordinaryIdsOf(slash)[0]).not.toBe(ordinaryIdsOf(hyphen)[0]);
+  });
+
+  it("should keep a marked control operable while everything off its path stays inert", () => {
+    // A component whose diff annotates the baseline with evidence only the
+    // baseline holds - a screen the change removed - marks the control that
+    // reaches it. `inert` is inherited, so isolation may not mark any
+    // ancestor of that control.
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "figure",
+          properties: { [MAXIMIZABLE_ATTRIBUTE]: "wireframe" },
+          children: [
+            {
+              type: "element",
+              tagName: "button",
+              properties: { [TRIGGER_ATTRIBUTE]: "" },
+              children: [],
+            },
+            {
+              type: "element",
+              tagName: "nav",
+              properties: {},
+              children: [
+                {
+                  type: "element",
+                  tagName: "button",
+                  properties: {
+                    [DIFF_LIVE_CONTROL_ATTRIBUTE]: "",
+                    "data-navigate": "removed-screen",
+                  },
+                  children: [],
+                },
+              ],
+            },
+            {
+              type: "element",
+              tagName: "div",
+              properties: { [BODY_ATTRIBUTE]: "" },
+              children: [
+                {
+                  type: "element",
+                  tagName: "button",
+                  properties: { "data-prototype-control": "" },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    isolateBaselineSide({ subtree, key: "live-control" });
+
+    const live = collect({
+      node: subtree,
+      match: (candidate) =>
+        candidate.properties[DIFF_LIVE_CONTROL_ATTRIBUTE] !== undefined,
+    })[0];
+    if (live === undefined) throw new Error("Expected the marked control");
+    expect(live.properties.inert).toBeUndefined();
+    expect(live.properties.disabled).toBeUndefined();
+    const inertAncestors = collect({
+      node: subtree,
+      match: (candidate) =>
+        candidate.properties.inert === true &&
+        collect({
+          node: candidate,
+          match: (descendant) =>
+            descendant.properties[DIFF_LIVE_CONTROL_ATTRIBUTE] !== undefined,
+        }).length > 0,
+    });
+    expect(inertAncestors).toHaveLength(0);
+    // Everything the marked control does not lead to keeps the isolation it
+    // had before the exception existed: the maximize trigger and the body
+    // holding the prototype's own controls are each held inert.
+    const inertRoots = collect({
+      node: subtree,
+      match: (candidate) => candidate.properties.inert === true,
+    });
+    expect(inertRoots.map((node) => node.tagName).sort()).toEqual([
+      "button",
+      "div",
+    ]);
+    const trigger = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "button",
+    }).find((candidate) => candidate.properties.disabled === true);
+    expect(trigger).toBeDefined();
   });
 
   it("should mint the same proposed-side block ids as the same document without a baseline side", () => {

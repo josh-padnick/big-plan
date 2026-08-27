@@ -6,6 +6,7 @@ import { createElement } from "react";
 import type { Element, Root } from "hast";
 import { describe, expect, it } from "vitest";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
+import { DIFF_LIVE_CONTROL_ATTRIBUTE } from "../_model/component-diff/contract.js";
 import { compileWireframeDiff } from "./compile-diff.js";
 import type { CompiledWireframe, WireframeScreen } from "./model.js";
 import { WireframeDiffView } from "./view-diff.js";
@@ -66,6 +67,9 @@ describe("WireframeDiffView", () => {
     expect(rendered).toContain("Queue");
     expect(rendered).toContain("Triage");
     expect(rendered).toContain("Choose Was or Now");
+    // Baseline isolation holds the Was side inert; this marker is what keeps
+    // its screen switcher operable, so a badge on that side can be opened.
+    expect(rendered).toContain(`"${DIFF_LIVE_CONTROL_ATTRIBUTE}":""`);
   });
 
   it("should omit the switcher when both sides have only one screen", () => {
