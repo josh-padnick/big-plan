@@ -6751,7 +6751,9 @@ test("should present an added HTTP endpoint as one whole card", async ({
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       "1 of 1",
     );
-    const componentDiff = lens.locator("[data-component-diff]");
+    const componentDiff = page.locator(
+      "[data-review-diff-lens][data-component-diff]",
+    );
     await expect(componentDiff).toHaveCount(1);
     await expect(
       componentDiff.locator('[data-component-diff-side="baseline"]'),

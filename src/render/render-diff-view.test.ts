@@ -141,20 +141,20 @@ ${description}
     {
       kind: "http-endpoint",
       label: "Query parameter: legacy",
-      baseline: `<HttpEndpoint method="GET" path="/jobs"><Param name="legacy" in="query">Old.</Param></HttpEndpoint>`,
-      proposed: `<HttpEndpoint method="GET" path="/jobs"><Param name="legacy" in="query">New.</Param></HttpEndpoint>`,
+      baseline: `<HttpEndpoint method="GET" path="/jobs">\n\n<Param name="legacy" in="query">\n\nOld.\n\n</Param>\n\n</HttpEndpoint>`,
+      proposed: `<HttpEndpoint method="GET" path="/jobs">\n\n<Param name="legacy" in="query">\n\nNew.\n\n</Param>\n\n</HttpEndpoint>`,
     },
     {
       kind: "graphql-operation",
       label: "Input field: jobId",
-      baseline: `<GraphqlOperation kind="query" name="job"><Field in="input" name="jobId" type="ID!">Old.</Field></GraphqlOperation>`,
-      proposed: `<GraphqlOperation kind="query" name="job"><Field in="input" name="jobId" type="ID!">New.</Field></GraphqlOperation>`,
+      baseline: `<GraphqlOperation kind="query" name="job">\n\n<Field in="input" name="jobId" type="ID!">\n\nOld.\n\n</Field>\n\n</GraphqlOperation>`,
+      proposed: `<GraphqlOperation kind="query" name="job">\n\n<Field in="input" name="jobId" type="ID!">\n\nNew.\n\n</Field>\n\n</GraphqlOperation>`,
     },
     {
       kind: "grpc-method",
       label: "Request field: job_id",
-      baseline: `<GrpcMethod service="Jobs" name="Get" request="GetRequest" response="GetResponse"><Field in="request" name="job_id" type="string">Old.</Field></GrpcMethod>`,
-      proposed: `<GrpcMethod service="Jobs" name="Get" request="GetRequest" response="GetResponse"><Field in="request" name="job_id" type="string">New.</Field></GrpcMethod>`,
+      baseline: `<GrpcMethod service="Jobs" name="Get" request="GetRequest" response="GetResponse">\n\n<Field in="request" name="job_id" type="string">\n\nOld.\n\n</Field>\n\n</GrpcMethod>`,
+      proposed: `<GrpcMethod service="Jobs" name="Get" request="GetRequest" response="GetResponse">\n\n<Field in="request" name="job_id" type="string">\n\nNew.\n\n</Field>\n\n</GrpcMethod>`,
     },
     {
       kind: "data-table",

@@ -14,7 +14,7 @@ export const DataTableDiffView = ({
     ...value,
     rows: value.rows.filter((_, index) =>
       new Set(
-        value === model.baseline
+        model.status !== "added" && value === model.baseline
           ? model.baselineRowIndexes
           : model.proposedRowIndexes,
       ).has(index),
