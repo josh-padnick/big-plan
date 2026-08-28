@@ -83,7 +83,7 @@ const FILE_MODE = 0o600;
 // A status file is writable by any local process, so a relayed event carries
 // only these states and a bounded amount of text.
 const PROGRESS_TEXT_LIMIT = 160;
-const PROGRESS_EVENT_LIMIT = 200;
+export const PROGRESS_EVENT_LIMIT = 200;
 const REVIEW_PLAN_ID_LENGTH = 16;
 const REVIEW_IMAGE_METADATA_BYTES = 4096;
 const PUBLISHED_JSON_FILE = /^[a-f0-9]{16}\.json$/;

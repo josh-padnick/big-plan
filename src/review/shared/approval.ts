@@ -39,6 +39,7 @@ export type ApprovalEntry = {
   readonly approvalId: string;
   readonly at: string;
   readonly pinnedSnapshot: string;
+  readonly agentConnected: boolean;
   readonly message: string;
   readonly recordedAnswers: ReadonlyArray<RecordedApprovalAnswer>;
   readonly alreadyDecided: ReadonlyArray<AlreadyDecidedAnswer>;

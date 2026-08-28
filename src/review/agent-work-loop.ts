@@ -1819,38 +1819,25 @@ const respond = async ({
     sessionId: session.sessionId,
     claimToken: agentToken,
   }).catch(() => undefined);
-  await appendProgressEvent({
-    store: session.store,
-    event: {
-      sessionId: session.sessionId,
-      requestId: request.requestId,
-      atMs: Date.now(),
-      ...(response.kind === "approval"
-        ? response.hardStop === undefined
-          ? {
-              stepCode: "approval-acknowledged" as const,
-              step: "Approval acknowledged",
-              state: "done" as const,
-            }
-          : {
-              stepCode: "approval-blocked" as const,
-              step: "Approval not acknowledged",
-              state: "failed" as const,
-              detail: response.hardStop,
-            }
-        : {
-            stepCode: "response-ready" as const,
-            step: "Agent response ready",
-            state: "done" as const,
-            detail:
-              response.kind === "chat"
-                ? "Plan-wide answer"
-                : `${response.outcomes.length} comment outcome${
-                    response.outcomes.length === 1 ? "" : "s"
-                  }`,
-          }),
-    },
-  }).catch(() => undefined);
+  if (response.kind !== "approval") {
+    await appendProgressEvent({
+      store: session.store,
+      event: {
+        sessionId: session.sessionId,
+        requestId: request.requestId,
+        atMs: Date.now(),
+        stepCode: "response-ready",
+        step: "Agent response ready",
+        state: "done",
+        detail:
+          response.kind === "chat"
+            ? "Plan-wide answer"
+            : `${response.outcomes.length} comment outcome${
+                response.outcomes.length === 1 ? "" : "s"
+              }`,
+      },
+    }).catch(() => undefined);
+  }
   return {
     responded: request.requestId,
     kind: response.kind,

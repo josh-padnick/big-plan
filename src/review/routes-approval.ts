@@ -120,7 +120,7 @@ const emitProgress = async ({
   detail,
 }: {
   readonly context: ReviewRouteContext;
-  readonly stepCode: "plan-approved" | "approval-revoked" | "request-canceled";
+  readonly stepCode: "approval-revoked" | "request-canceled";
   readonly step: string;
   readonly requestId?: string;
   readonly detail?: string;
@@ -276,6 +276,7 @@ const buildApprovalEntry = async ({
   context,
   pinnedSnapshot,
   message,
+  agentConnected,
   requestsCanceled,
   changeSetsAccepted,
   changeSetsTotal,
@@ -283,6 +284,7 @@ const buildApprovalEntry = async ({
   readonly context: ReviewRouteContext;
   readonly pinnedSnapshot: string;
   readonly message: string;
+  readonly agentConnected: boolean;
   readonly requestsCanceled: number;
   readonly changeSetsAccepted: number;
   readonly changeSetsTotal: number;
@@ -307,6 +309,7 @@ const buildApprovalEntry = async ({
     approvalId: randomId(),
     at: new Date().toISOString(),
     pinnedSnapshot,
+    agentConnected,
     message,
     recordedAnswers: live.map((answer) => ({
       decisionId: answer.decisionId,
@@ -405,6 +408,20 @@ export const approvePlan = async (
 
   let entry: ApprovalEntry;
   let verdicts: StoredChangeVerdicts;
+  let agentConnected = false;
+  try {
+    agentConnected = (
+      await readAgentPresence({
+        store: context.store,
+        sessionId: context.sessionId,
+      })
+    ).connected;
+  } catch (error: unknown) {
+    context.reportDiagnostic({
+      message: "Agent presence could not be read before approval",
+      error,
+    });
+  }
   try {
     const [inventory, inputs] = await Promise.all([
       context.decisionAnswers.inventory(),
@@ -421,6 +438,7 @@ export const approvePlan = async (
       context,
       pinnedSnapshot: settledSource.digest,
       message,
+      agentConnected,
       requestsCanceled: 0,
       changeSetsAccepted: changeSets.accepted,
       changeSetsTotal: changeSets.total,
@@ -541,29 +559,6 @@ export const approvePlan = async (
       error,
     });
   }
-  let agentConnected = false;
-  try {
-    agentConnected = (
-      await readAgentPresence({
-        store: context.store,
-        sessionId: context.sessionId,
-      })
-    ).connected;
-  } catch (error: unknown) {
-    context.reportDiagnostic({
-      message: "Agent presence could not be read after approval",
-      error,
-    });
-  }
-  await emitProgress({
-    context,
-    stepCode: "plan-approved",
-    step: "Plan approved",
-    requestId: entry.approvalId,
-    ...(agentConnected
-      ? {}
-      : { detail: "Approval recorded - no agent connected to notify" }),
-  });
   const summary = await loadSummary(context, settledSource.digest);
   return jsonResponse({
     status: 200,

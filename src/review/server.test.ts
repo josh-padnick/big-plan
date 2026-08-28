@@ -6671,6 +6671,23 @@ describe("review runtime approval", () => {
       body,
     });
 
+  const approvalProgress = async (
+    target: ReviewRuntime,
+    sessionToken: string,
+  ): Promise<
+    ReadonlyArray<Record<string, unknown>>
+  > => {
+    const response = await callRuntime({
+      target,
+      sessionToken,
+      path: "/api/progress",
+    });
+    const body = (await response.json()) as {
+      readonly events: ReadonlyArray<Record<string, unknown>>;
+    };
+    return body.events;
+  };
+
   it("writes the approval record, pins the digest, and survives a reread", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,
@@ -6718,6 +6735,7 @@ describe("review runtime approval", () => {
             {
               kind: "approval",
               pinnedSnapshot: digest,
+              agentConnected: false,
               message: "Start on it now.",
               recordedAnswers: [
                 {
@@ -6966,6 +6984,21 @@ describe("review runtime approval", () => {
         } finally {
           stderr.mockRestore();
         }
+        await expect(
+          approvalProgress(target, sessionToken),
+        ).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              requestId: approvalId,
+              stepCode: "plan-approved",
+            }),
+            expect.objectContaining({
+              requestId: approvalId,
+              stepCode: "approval-acknowledged",
+              step: "Approval acknowledged",
+            }),
+          ]),
+        );
         // Nothing failed: the acknowledgment is in, so there was never a
         // handoff left to withdraw.
         expect(reported.join("")).not.toContain(
@@ -7105,10 +7138,7 @@ describe("review runtime approval", () => {
         });
         expect(pending[0]?.answeredAt).toBeUndefined();
         expect(pending[0]?.canceledAt).toBeUndefined();
-        const progress = await readProgress({
-          store: target.store,
-          sessionId: target.sessionId,
-        });
+        const progress = await approvalProgress(target, sessionToken);
         expect(progress.at(-1)).toMatchObject({
           requestId: pending[0]?.requestId,
           stepCode: "plan-approved",
@@ -7144,12 +7174,9 @@ describe("review runtime approval", () => {
           stderr.mockRestore();
         }
         expect(reported.join("")).toContain(
-          "Agent presence could not be read after approval",
+          "Agent presence could not be read before approval",
         );
-        const progress = await readProgress({
-          store: target.store,
-          sessionId: target.sessionId,
-        });
+        const progress = await approvalProgress(target, sessionToken);
         expect(progress.at(-1)).toMatchObject({
           stepCode: "plan-approved",
           step: "Plan approved",
@@ -7166,6 +7193,34 @@ describe("review runtime approval", () => {
             }),
           ],
         });
+      },
+    );
+  });
+
+  it("should derive approval Chat when progress storage is unwritable", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await writeFile(target.store.progressPath, "");
+        await chmod(target.store.progressPath, 0o400);
+        try {
+          const response = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          expect(response.status).toBe(200);
+        } finally {
+          await chmod(target.store.progressPath, 0o600);
+        }
+        await expect(
+          approvalProgress(target, sessionToken),
+        ).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              stepCode: "plan-approved",
+              detail: "Approval recorded - no agent connected to notify",
+            }),
+          ]),
+        );
       },
     );
   });

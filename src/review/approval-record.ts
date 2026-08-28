@@ -195,6 +195,9 @@ const approvalEntry = (value: unknown): ApprovalEntry => {
   if (!Array.isArray(candidate.unansweredDecisions)) {
     throw new ApprovalRecordRejected('"unansweredDecisions" must be an array');
   }
+  if (typeof candidate.agentConnected !== "boolean") {
+    throw new ApprovalRecordRejected('"agentConnected" must be true or false');
+  }
   return {
     kind: "approval",
     approvalId: approvalId(candidate.approvalId),
@@ -203,6 +206,7 @@ const approvalEntry = (value: unknown): ApprovalEntry => {
       value: candidate.pinnedSnapshot,
       field: "pinnedSnapshot",
     }),
+    agentConnected: candidate.agentConnected,
     message: text({
       value: candidate.message,
       field: "message",
