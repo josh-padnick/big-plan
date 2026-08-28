@@ -366,7 +366,8 @@ A published turn keeps its own seat for as long as the answering agent's return 
 Run it as given.
 It reclaims the same registration at once, which is what keeps one agent one agent to the reviewer across the several short-lived processes a turn takes.
 A bare `agent next` after publishing mints a new identity instead, so it attaches as an observer of the turn it just finished and waits for the seat rather than picking up straight away.
-It does not put a question to the reviewer while it waits: until the return trip is over, Big Plan cannot tell a second agent from the incumbent coming back, so the question is held and raised only if a second agent is what it turns out to be.
+It does not put a question to the reviewer while it waits: until the return trip is over, Big Plan cannot tell a second agent from the incumbent coming back, so the question is held.
+The question is raised as soon as the incumbent's closed claim has no later signal, or once the incumbent's silence crosses the stall horizon, establishing that the waiting arrival is a second agent.
 
 An observer succeeds to the seat by itself in one case only: the primary fell silent, and the seat has stayed empty for longer than a turn's own quiet.
 That is the recovery path for an agent that died mid review, and it is deliberately slow.
