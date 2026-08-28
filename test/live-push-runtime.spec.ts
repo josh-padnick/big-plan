@@ -1238,6 +1238,44 @@ test("should arm auto-accept from a pushed thread and apply it only to later arr
     await thread.getByRole("button", { name: "Reply" }).click();
     expect((await replyPosted).ok()).toBe(true);
 
+    const reply = await runAgentCli([
+      "next",
+      planPath,
+      "--wait",
+      "--agent",
+      first.agentToken,
+      "--connection",
+      first.connectionToken,
+    ]);
+    const replyRequestId = agentIdOf(reply.stdout, "requestId");
+    await writeFile(
+      responseDraftOf(reply.stdout),
+      JSON.stringify({
+        requestId: replyRequestId,
+        outcomes: [
+          {
+            commentId: first.threadId,
+            state: "answered",
+            message: "No additional revision was needed.",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await runAgentCli([
+      "respond",
+      planPath,
+      responseDraftOf(reply.stdout),
+      "--agent",
+      agentIdOf(reply.stdout, "agent_token"),
+      "--connection",
+      first.connectionToken,
+    ]);
+    await expect(rail.getByText("Needs you (1)")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(rail.getByText("Applied (1)")).toHaveCount(0);
+
     await rail.getByRole("button", { name: "Switch back to review" }).click();
     await expect(rail.getByText(/Auto-accept · on since/u)).toBeHidden();
     const third = await continueThreadWithRevision({

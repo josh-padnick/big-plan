@@ -7193,7 +7193,7 @@ export const ReviewController = () => {
       let allClosed = true;
       for (const changeSet of sets) {
         const diff = changeSetDiffs.get(changeSet.changeSetId);
-        if (diff === undefined || diff.places.length === 0) continue;
+        if (diff === undefined) continue;
         const placeIds = diff.places.map((place) => place.placeId);
         if (!standingOf(diff, placeIds).isAccepted) allClosed = false;
         if (
