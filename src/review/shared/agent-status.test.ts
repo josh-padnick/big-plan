@@ -155,10 +155,10 @@ describe("current agent activity", () => {
         requests: [],
         cancelPendingRequestIds: new Set(),
         progressEvents: [],
-        agentConnected: true,
+        agentConnected: false,
         runtimeOffline: false,
         now: NOW,
-        heartbeatAt: NOW,
+        heartbeatAt: 0,
       }),
     ).toMatchObject({
       state: "idle",
@@ -1333,10 +1333,10 @@ describe("approval progress stays in the chat thread", () => {
       ],
       cancelPendingRequestIds: new Set<string>(),
       progressEvents: [],
-      agentConnected: true,
+      agentConnected: false,
       runtimeOffline: false,
       now: NOW,
-      heartbeatAt: NOW,
+      heartbeatAt: 0,
     });
     expect(activity).toMatchObject({
       state: "approval-blocked",

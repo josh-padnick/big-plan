@@ -824,6 +824,33 @@ export const deriveCurrentAgentActivity = ({
     cancelPendingRequestIds: unavailableRequestIds,
     now,
   });
+  if (request === undefined) {
+    const settled = requests.findLast((candidate) =>
+      settledRequestIds.has(candidate.requestId),
+    );
+    if (settled?.kind === "approval") {
+      const answer = responses.find(
+        (candidate) => candidate.requestId === settled.requestId,
+      );
+      if (answer?.hardStop !== undefined) {
+        return {
+          ...requestFacts(settled),
+          state: "approval-blocked",
+          tone: "warning",
+          headline: "Approval not acknowledged",
+          supporting: `The agent stopped instead of acknowledging: ${answer.hardStop}`,
+        };
+      }
+      return {
+        ...requestFacts(settled),
+        state: "approval-acknowledged",
+        tone: "neutral",
+        headline: "Approval acknowledged",
+        supporting:
+          "The agent has the approved plan and the decisions recorded with it.",
+      };
+    }
+  }
   if (!agentPresenceIsFresh({ connected: agentConnected, heartbeatAt, now })) {
     // A claim is evidence too. An agent that picked work up was demonstrably
     // here, even in a session whose log never recorded the edge that would have
@@ -862,33 +889,6 @@ export const deriveCurrentAgentActivity = ({
           }) === "stale",
       }),
     };
-  }
-  if (request === undefined) {
-    const settled = requests.findLast((candidate) =>
-      settledRequestIds.has(candidate.requestId),
-    );
-    if (settled?.kind === "approval") {
-      const answer = responses.find(
-        (candidate) => candidate.requestId === settled.requestId,
-      );
-      if (answer?.hardStop !== undefined) {
-        return {
-          ...requestFacts(settled),
-          state: "approval-blocked",
-          tone: "warning",
-          headline: "Approval not acknowledged",
-          supporting: `The agent stopped instead of acknowledging: ${answer.hardStop}`,
-        };
-      }
-      return {
-        ...requestFacts(settled),
-        state: "approval-acknowledged",
-        tone: "neutral",
-        headline: "Approval acknowledged",
-        supporting:
-          "The agent has the approved plan and the decisions recorded with it.",
-      };
-    }
   }
   if (request === undefined) {
     return {
