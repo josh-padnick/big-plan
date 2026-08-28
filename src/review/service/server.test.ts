@@ -118,6 +118,9 @@ beforeEach(async () => {
     readToken: async () => token,
     version: "9.9.9-test",
     port: 0,
+    // This listener suite pins the rollback path; proxy behavior has its own
+    // two-listener integration suite in proxy.test.ts.
+    proxyEnabled: false,
   });
 });
 

@@ -356,6 +356,7 @@ test("should keep unsent comment text separate across two tabs", async ({
     readonly composerBody: string;
     readonly replyBody: string;
   }): Promise<void> => {
+    const recoveryKey = await ownedLiveRecoveryKey(targetPage);
     const feedbackButton = targetPage.getByRole("button", {
       name: /^Feedback(?: \d+)?$/u,
     });
@@ -379,6 +380,45 @@ test("should keep unsent comment text separate across two tabs", async ({
       .getByRole("dialog", { name: /Comment on/u })
       .getByLabel("Add a comment")
       .fill(composerBody);
+
+    // Reload only after the tab-owned recovery record has committed both
+    // inputs. A filled textarea can precede the React persistence effect.
+    await expect
+      .poll(() =>
+        targetPage.evaluate((key) => {
+          const raw = window.localStorage.getItem(key);
+          if (raw === null) return null;
+          const parsed: unknown = JSON.parse(raw);
+          if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            !("composer" in parsed) ||
+            typeof parsed.composer !== "object" ||
+            parsed.composer === null
+          )
+            return null;
+          const comment =
+            "comment" in parsed.composer ? parsed.composer.comment : null;
+          const replies =
+            "replies" in parsed.composer ? parsed.composer.replies : null;
+          return {
+            commentBody:
+              typeof comment === "object" &&
+              comment !== null &&
+              "body" in comment &&
+              typeof comment.body === "string"
+                ? comment.body
+                : null,
+            replyBodies:
+              typeof replies === "object" && replies !== null
+                ? Object.values(replies).filter(
+                    (value): value is string => typeof value === "string",
+                  )
+                : [],
+          };
+        }, recoveryKey),
+      )
+      .toEqual({ commentBody: composerBody, replyBodies: [replyBody] });
 
     await targetPage.reload();
     await expect(
@@ -3874,7 +3914,7 @@ test("should restore and submit staged comments through the local review runtime
     name: "Feedback",
     exact: true,
   });
-  const settingsAction = page.getByRole("button", { name: "Open settings" });
+  const moreActions = page.getByRole("button", { name: "More actions" });
   await expect(agentStatus).toBeVisible();
   // The control draws exactly one state mark, and with no agent connected it is
   // not the working one. Asserting the mark exists first keeps the second
@@ -3888,7 +3928,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(feedbackAction).toBeVisible();
   const approveAction = page.getByRole("button", { name: "Approve plan" });
   await expect(approveAction).toBeVisible();
-  await expect(settingsAction).toBeVisible();
+  await expect(moreActions).toBeVisible();
   await expect(
     page.locator('input[type="range"], input[type="color"]'),
   ).toHaveCount(0);
@@ -3904,19 +3944,19 @@ test("should restore and submit staged comments through the local review runtime
     approveAction.boundingBox(),
     feedbackAction.boundingBox(),
     agentStatus.boundingBox(),
-    settingsAction.boundingBox(),
-  ]).then(([approve, feedback, status, settings]) => {
+    moreActions.boundingBox(),
+  ]).then(([approve, feedback, status, more]) => {
     if (
       status === null ||
       feedback === null ||
       approve === null ||
-      settings === null
+      more === null
     )
       throw new Error("The review toolbar actions were not rendered");
     return [
       feedback.x - approve.x - approve.width,
       status.x - feedback.x - feedback.width,
-      settings.x - status.x - status.width,
+      more.x - status.x - status.width,
     ];
   });
   expect(toolbarGaps).toEqual([8, 8, 8]);
@@ -6193,8 +6233,16 @@ test("should render a changed wireframe as its own component diff", async ({
 <Text text="Unchanged archive content" />
 </Panel>
 </Screen>`;
+  // Only the baseline keeps this screen, so its badge names a screen the
+  // reader can reach on the Was side alone.
+  const auditScreen = `<Screen id="audit" name="Audit" device="desktop">
+<Panel title="Audit trail">
+<Text text="Only the Was side still has an audit screen." />
+</Panel>
+</Screen>`;
   const workspace = (
     headline: string,
+    trailingScreens: ReadonlyArray<string> = [triageScreen, archiveScreen],
   ) => `<Wireframe id="queue-diff" title="Review queue">
 <Screen id="queue" name="Queue" device="desktop">
 <AppShell>
@@ -6205,12 +6253,13 @@ test("should render a changed wireframe as its own component diff", async ({
 <List>
 <ListItem label="${headline}" selected />
 </List>
+<Button label="Open triage" navigateTo="triage" />
+<Checkbox label="Notify the owner" />
 </Panel>
 </AppContent>
 </AppShell>
 </Screen>
-${triageScreen}
-${archiveScreen}
+${trailingScreens.join("\n")}
 </Wireframe>`;
   // A second wireframe deliberately reuses the authored id, because a diff
   // that resolved by authored id rather than by block address would take this
@@ -6226,7 +6275,11 @@ ${archiveScreen}
 
 ## Workspace
 
-${workspace("Keep the retry budget visible")}
+${workspace("Keep the retry budget visible", [
+  triageScreen,
+  archiveScreen,
+  auditScreen,
+])}
 
 ${unrelatedWorkspace}
 `;
@@ -6281,13 +6334,19 @@ ${unrelatedWorkspace}
     await test.step("show the proposed wireframe first and the baseline on request", async () => {
       await expect(proposed).toBeVisible();
       await expect(baseline).toBeHidden();
-      const proposedEdge = await proposed.evaluate(
+      const proposedScreen = proposed.locator(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
+      const proposedEdge = await proposedScreen.evaluate(
         (node) => getComputedStyle(node).borderTopColor,
       );
       await was.click();
       await expect(baseline).toBeVisible();
       await expect(proposed).toBeHidden();
-      const baselineEdge = await baseline.evaluate(
+      const baselineScreen = baseline.locator(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
+      const baselineEdge = await baselineScreen.evaluate(
         (node) => getComputedStyle(node).borderTopColor,
       );
       // The pastel edge is what says which side the reader is looking at, so
@@ -6305,11 +6364,146 @@ ${unrelatedWorkspace}
       await expect(
         switcher.getByRole("button", { name: "Triage" }),
       ).toBeVisible();
+      await expect(
+        switcher.getByRole("button", { name: /Queue/u }),
+      ).toContainText("Updated");
       // The baseline side is evidence, not a second live prototype: it keeps
-      // its markup but none of its affordances.
-      expect(await baseline.evaluate((node) => node.inert)).toBe(true);
+      // its markup and none of its affordances, with one exception. Its own
+      // screen switcher stays live, and so does the evidence that switcher
+      // reveals, because a badge naming a screen only the Was side still has
+      // would otherwise be unopenable. The chrome around them is still
+      // frozen: the maximize trigger leaves with its attribute and stays
+      // both inert and disabled.
+      expect(
+        await baseline.evaluate((node) => ({
+          screens: Array.from(
+            node.querySelectorAll("[data-wireframe-screen]"),
+          ).every((screen) => screen.closest("[inert]") === null),
+          switches: Array.from(
+            node.querySelectorAll("[data-wireframe-switch]"),
+          ).every((button) => button.closest("[inert]") === null),
+          maximize: node.querySelectorAll("[data-figure-maximize]").length,
+          frozenChrome: Array.from(node.querySelectorAll("button")).some(
+            (button) => button.disabled && button.closest("[inert]") !== null,
+          ),
+        })),
+      ).toEqual({
+        screens: true,
+        switches: true,
+        maximize: 0,
+        frozenChrome: true,
+      });
       await switcher.getByRole("button", { name: "Archive" }).click();
       await expect(proposed).toContainText("Unchanged archive content");
+    });
+
+    await test.step("open a screen only the Was side still has", async () => {
+      await was.click();
+      await expect(baseline).toBeVisible();
+      const auditFrame = baseline.locator('[data-wireframe-screen="audit"]');
+      await expect(auditFrame).toBeHidden();
+      const audit = baseline
+        .getByRole("navigation", { name: "Prototype screens" })
+        .getByRole("button", { name: /Audit/u });
+      await expect(audit).toContainText("Removed from 4");
+      await audit.click();
+      await expect(auditFrame).toBeVisible();
+      // A control whose target stays inert still does nothing for a reader
+      // using assistive technology, so the revealed screen has to be in the
+      // accessibility tree rather than merely painted.
+      expect(
+        await auditFrame.evaluate((node) => node.closest("[inert]") !== null),
+      ).toBe(false);
+      await expect(
+        auditFrame.getByRole("heading", { name: "Audit trail" }),
+      ).toBeVisible();
+      await expect(auditFrame).toContainText(
+        "Only the Was side still has an audit screen.",
+      );
+      await now.click();
+      await expect(proposed).toBeVisible();
+    });
+
+    await test.step("keep the Was prototype's own controls frozen", async () => {
+      await was.click();
+      const wasSwitcher = baseline.getByRole("navigation", {
+        name: "Prototype screens",
+      });
+      await wasSwitcher.getByRole("button", { name: /Queue/u }).click();
+      const wasOpen = baseline.getByRole("button", { name: "Open triage" });
+      const wasCurrent = baseline.locator(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
+      await expect(wasOpen).toBeVisible();
+      await expect(wasCurrent).toHaveAttribute(
+        "data-wireframe-screen",
+        "queue",
+      );
+      // Evidence stays readable, but the Was prototype is not a second live
+      // one: were it navigable, the two sides would sit on different screens
+      // under a single Was/Now toggle. The freeze is presentation-neutral, so
+      // every hook a stylesheet selects on survives and only the behaviour
+      // goes: the control is out of the tab order and its click navigates
+      // nothing.
+      await expect(wasOpen).toHaveAttribute(
+        "data-wireframe-navigate",
+        "triage",
+      );
+      await expect(wasOpen).toHaveAttribute("tabindex", "-1");
+      await expect(wasOpen).toHaveAttribute("inert", "");
+      // `disabled` is a design decision this component already spends, so the
+      // freeze must not borrow it: the control still reports exactly the state
+      // the plan gave it, and refuses pointers instead.
+      await expect(wasOpen).toBeEnabled();
+      expect(
+        await wasOpen.evaluate(
+          (node) => getComputedStyle(node).pointerEvents === "none",
+        ),
+      ).toBe(true);
+      // Dispatched rather than clicked, because a pointer never reaches this
+      // control: that is what proves the viewer script refuses the navigation
+      // rather than the stylesheet hiding the click.
+      await wasOpen.dispatchEvent("click");
+      await expect(wasCurrent).toHaveAttribute(
+        "data-wireframe-screen",
+        "queue",
+      );
+      // A checkbox has no navigation hook to refuse, and neither the tab
+      // order nor the pointer rule stops an activation that arrives another
+      // way - a screen reader's virtual cursor reaches this control, because
+      // the Was screens are deliberately not inert. A flipped tick would be a
+      // baseline the plan never wrote.
+      const wasTick = baseline.locator(".wireframe-tick");
+      await expect(wasTick).toHaveCount(1);
+      expect(await wasTick.evaluate((node) => node.checked)).toBe(false);
+      await wasTick.evaluate((node) => {
+        node.click();
+      });
+      expect(await wasTick.evaluate((node) => node.checked)).toBe(false);
+
+      await now.click();
+      await expect(proposed).toBeVisible();
+      const nowSwitcher = proposed.getByRole("navigation", {
+        name: "Prototype screens",
+      });
+      await nowSwitcher.getByRole("button", { name: /Queue/u }).click();
+      // The gate is scoped to the isolated side: the live prototype still
+      // answers the same activation.
+      const nowTick = proposed.locator(".wireframe-tick");
+      await nowTick.evaluate((node) => {
+        node.click();
+      });
+      expect(await nowTick.evaluate((node) => node.checked)).toBe(true);
+      await nowTick.evaluate((node) => {
+        node.click();
+      });
+      const nowOpen = proposed.getByRole("button", { name: "Open triage" });
+      await expect(nowOpen).not.toHaveAttribute("tabindex", "-1");
+      await nowOpen.click();
+      await expect(
+        proposed.locator("[data-wireframe-screen][data-wireframe-current]"),
+      ).toHaveAttribute("data-wireframe-screen", "triage");
+      await nowSwitcher.getByRole("button", { name: /Queue/u }).click();
     });
 
     await test.step("maximize under the component's own noun", async () => {
@@ -6335,6 +6529,47 @@ ${unrelatedWorkspace}
         expect(box.height).toBeGreaterThanOrEqual(44);
       }
       await page.setViewportSize({ width: 1600, height: 1000 });
+    });
+
+    await test.step("leave a comment on the wireframe from inside the diff", async () => {
+      // The diff root inherits the proposed component's one address, so the
+      // change offers exactly one comment control however many sides it draws.
+      const comment = componentDiff.getByRole("button", {
+        name: /^Comment on /u,
+      });
+      await expect(comment).toHaveCount(1);
+      await expect(comment).toBeVisible();
+      await comment.click();
+      const composer = page.getByRole("dialog", { name: /Comment on/u });
+      await expect(composer).toBeVisible();
+      const submitRightAway = composer.getByRole("switch", {
+        name: "Submit right away",
+      });
+      if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+        await submitRightAway.click();
+      }
+      const body = "Name the rollback owner on the queue screen.";
+      await composer.getByLabel("Add a comment").fill(body);
+      const addComment = composer.getByRole("button", { name: "Add Comment" });
+      await expect(addComment).toBeEnabled();
+      await addComment.click();
+      if (!(await rail.isVisible())) {
+        await page
+          .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+          .click();
+      }
+      const staged = rail
+        .locator("[data-review-comment-ui]")
+        .filter({ hasText: body });
+      await expect(staged).toBeVisible();
+      // The diff root is the only element carrying the wireframe's address, so
+      // this is what proves the comment anchored to the block the reader was
+      // looking at rather than to nothing resolvable.
+      await staged.hover();
+      await expect(componentDiff).toHaveAttribute(
+        "data-review-comment-associated",
+        "",
+      );
     });
   } finally {
     await closeReviewRuntime({ page, runtime });

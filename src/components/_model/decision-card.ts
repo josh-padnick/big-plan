@@ -84,3 +84,36 @@ export const isAnswerableDecisionCard = (
  */
 export const isCriticalDecisionCard = (model: CompiledDecisionCard): boolean =>
   model.isCritical && isAnswerableDecisionCard(model);
+
+/** Computes the one normalized weighted total shared by every presentation. */
+export const weightedDecisionTotal = ({
+  model,
+  option,
+}: {
+  readonly model: CompiledDecisionCard;
+  readonly option: CompiledDecisionCardOption;
+}): {
+  readonly weights: ReadonlyArray<number>;
+  readonly scores: ReadonlyArray<number>;
+  readonly numerator: number;
+  readonly denominator: number;
+  readonly percent: number;
+} => {
+  const weights = model.criteria.map((criterion) => criterion.impact ?? 0);
+  const scores = option.considerations.map(
+    (consideration) => consideration?.score ?? 0,
+  );
+  const numerator = weights.reduce(
+    (sum, weight, index) => sum + weight * (scores[index] ?? 0),
+    0,
+  );
+  const denominator = weights.reduce((sum, weight) => sum + weight * 5, 0);
+  return {
+    weights,
+    scores,
+    numerator,
+    denominator,
+    percent:
+      denominator === 0 ? 0 : Math.round((numerator / denominator) * 100),
+  };
+};

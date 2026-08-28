@@ -5,6 +5,7 @@ import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileHttpEndpointComponent } from "./compile.js";
 import { HttpEndpoint } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { httpEndpointMarkdown } from "./markdown.js";
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
@@ -25,6 +26,7 @@ const scopedChild = (
 export const HTTP_ENDPOINT_COMPONENT_DEFINITION = defineComponent({
   compile: compileHttpEndpointComponent,
   view: HttpEndpoint,
+  markdown: httpEndpointMarkdown,
   scopedChildren: {
     Param: scopedChild("Param"),
     Request: scopedChild("Request"),

@@ -15,7 +15,7 @@ import {
   isCriticalDecisionCard,
   type CompiledDecisionCard,
 } from "../components/_model/decision-card.js";
-import { compilePlanModel } from "../render/compile-plan-model.js";
+import { compileMarkdownModel } from "../render/compile-semantic-model.js";
 
 /** One decision the plan currently asks, with the content it is asking about. */
 export type DecisionInventoryEntry = {
@@ -82,14 +82,12 @@ const asDecisionCard = (model: unknown): CompiledDecisionCard | undefined => {
 };
 
 /** Projects one compiled plan into the decisions whose answers it will accept. */
-export const deriveDecisionInventory = ({
-  markdown,
-  fallbackTitle,
-}: {
-  readonly markdown: string;
-  readonly fallbackTitle: string;
-}): DecisionInventory => {
-  const { components } = compilePlanModel({ markdown, fallbackTitle });
+export const decisionInventoryFromComponents = (
+  components: ReadonlyArray<{
+    readonly model: unknown;
+    readonly semanticModel?: unknown;
+  }>,
+): DecisionInventory => {
   const inventory = new Map<string, DecisionInventoryEntry>();
   for (const collected of components) {
     const model = asDecisionCard(collected.model);
@@ -97,10 +95,23 @@ export const deriveDecisionInventory = ({
     inventory.set(model.id, {
       decisionId: model.id,
       optionIds: new Set(model.options.map((option) => option.id)),
-      decisionDigest: deriveDecisionDigest(model),
+      decisionDigest: deriveDecisionDigest(
+        asDecisionCard(collected.semanticModel) ?? model,
+      ),
       question: model.question,
       isCritical: isCriticalDecisionCard(model),
     });
   }
   return inventory;
 };
+
+/** Projects one compiled plan into the decisions whose answers it will accept. */
+export const deriveDecisionInventory = ({
+  markdown,
+}: {
+  readonly markdown: string;
+  readonly fallbackTitle: string;
+}): DecisionInventory =>
+  decisionInventoryFromComponents(
+    compileMarkdownModel({ markdown }).components,
+  );

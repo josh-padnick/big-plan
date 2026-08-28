@@ -9,6 +9,8 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
+import type { AgentModelIdentity } from "../shared/agent-model.js";
 import { parseMessageMarkdown } from "../shared/message-markdown.js";
 import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
 import { messageTimeLabel } from "../shared/time-label.js";
@@ -20,6 +22,7 @@ import {
   UNRECORDABLE_ACCEPTANCE_LABEL,
   useDiffTour,
 } from "./diff-tour.browser.js";
+import { AgentIdentityText } from "./agent-identity.browser.js";
 import { Icon } from "./icon.browser.js";
 import {
   renderMessageNode,
@@ -416,9 +419,32 @@ export const AgentStatePill = ({
   );
 };
 
+/** Names who produced a change set without inventing undeclared identity. */
+export const AgentChangeIdentity = ({
+  identity,
+}: {
+  readonly identity: AgentModelIdentity | undefined;
+}) => {
+  const model = identity?.name;
+  const client = identity?.client;
+  if (model === undefined && client === undefined) return null;
+  return (
+    <span
+      className="w-fit rounded-sm bg-surface px-1.5 py-0.5 text-2xs font-semibold text-ink"
+      data-review-change-set-identity=""
+    >
+      <AgentIdentityText
+        label={model === undefined ? "Agent" : agentModelDisplayName(model)}
+        client={client}
+      />
+    </span>
+  );
+};
+
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
   diff,
+  agentIdentity,
   placeIds,
   spilloverCount,
   isSuperseded,
@@ -432,6 +458,7 @@ export const AgentChangeDigest = ({
   onKeepChatting,
 }: {
   readonly diff: SnapshotDiff | null;
+  readonly agentIdentity?: AgentModelIdentity;
   readonly placeIds?: ReadonlyArray<string>;
   readonly spilloverCount?: number;
   readonly isSuperseded?: boolean;
@@ -467,14 +494,17 @@ export const AgentChangeDigest = ({
   const isExpanded = expandedChoice ?? available.length <= 3;
   if (diff === null) {
     return (
-      <button
-        type="button"
-        className="mt-2 rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface"
-        disabled={isLoading}
-        onClick={onLoad}
-      >
-        {isLoading ? "Loading changes…" : "See changes"}
-      </button>
+      <div className="mt-2 grid w-fit grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge pt-2">
+        <AgentChangeIdentity identity={agentIdentity} />
+        <button
+          type="button"
+          className="rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface"
+          disabled={isLoading}
+          onClick={onLoad}
+        >
+          {isLoading ? "Loading changes…" : "See changes"}
+        </button>
+      </div>
     );
   }
   if (available.length === 0) return null;
@@ -513,6 +543,7 @@ export const AgentChangeDigest = ({
   };
   return (
     <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge pt-2">
+      <AgentChangeIdentity identity={agentIdentity} />
       <button
         type="button"
         className="flex w-full cursor-pointer items-center gap-1 rounded-sm bg-transparent px-1 py-0.5 text-left text-2xs font-bold text-muted hover:bg-surface hover:text-accent [&>svg]:size-3"

@@ -13,6 +13,11 @@ import {
 } from "../../../components/_authoring/contract.js";
 import type { DiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
 import {
+  deferredMarkdownPlaceholder,
+  MARKDOWN_EXPORT_INDEX_ATTRIBUTE,
+  type ComponentMarkdownContext,
+} from "../../../components/_model/markdown-export.js";
+import {
   COMPONENT_REGISTRY,
   definitionFor,
   scopedDefinitionFor,
@@ -24,10 +29,17 @@ import {
   createComponentInstanceKeys,
 } from "./component-instance.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-name.js";
-import { createOutlinePlaceholder } from "./outline-placeholder.js";
+import {
+  createOutlinePlaceholder,
+  OUTLINE_PLACEHOLDER_ATTRIBUTE,
+} from "./outline-placeholder.js";
 import type { DeferredOutlinePresentations } from "./outline-placeholder.js";
 import { reactToHast } from "./react-hast-adapter.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
+import {
+  attachNestedComponentModel,
+  semanticComponentModel,
+} from "./semantic-model.js";
 
 type MdxJsxFlowElement = Extract<
   RootContent,
@@ -44,6 +56,7 @@ export type CollectedComponentModel = {
   // internal to one compilation and never reaches machine output.
   readonly instanceKey: string;
   readonly model: unknown;
+  readonly semanticModel: unknown;
 };
 
 /**
@@ -67,7 +80,70 @@ type ComponentDelivery =
       // behind. Machine delivery needs the presentation, because nothing
       // downstream completes a placeholder that only a model holds.
       readonly materializeNestedModels: boolean;
+    }
+  | {
+      readonly kind: "markdown";
+      readonly instanceKeys: () => string;
+      readonly collected: CollectedComponentModels;
+      readonly deferOutline: DeferredMarkdownPresentations;
     };
+
+/**
+ * Component Markdown callbacks deferred until the document knows both its
+ * outline and how deep each component's headings belong.
+ */
+export type DeferredMarkdownPresentations = Array<{
+  readonly model: unknown;
+  readonly present: (context: ComponentMarkdownContext) => string;
+}>;
+
+const nestedMarkdownPlaceholders = ({
+  model,
+  presentations,
+}: {
+  readonly model: unknown;
+  readonly presentations: DeferredMarkdownPresentations;
+}): ReadonlyArray<Element> => {
+  const placeholders: Array<Element> = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value === null || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    if (
+      record.type === "element" &&
+      ((record.properties as Record<string, unknown> | undefined)?.[
+        MARKDOWN_EXPORT_INDEX_ATTRIBUTE
+      ] !== undefined ||
+        (record.properties as Record<string, unknown> | undefined)?.[
+          OUTLINE_PLACEHOLDER_ATTRIBUTE
+        ] !== undefined)
+    ) {
+      const placeholder = structuredClone(value as Element);
+      const properties = record.properties as Record<string, unknown>;
+      const index = Number(
+        properties[OUTLINE_PLACEHOLDER_ATTRIBUTE] ??
+          properties[MARKDOWN_EXPORT_INDEX_ATTRIBUTE],
+      );
+      const deferred = presentations[index];
+      if (deferred !== undefined) {
+        placeholder.children.push(
+          ...nestedMarkdownPlaceholders({
+            model: deferred.model,
+            presentations,
+          }),
+        );
+      }
+      placeholders.push(placeholder);
+      return;
+    }
+    Object.values(record).forEach(visit);
+  };
+  visit(model);
+  return placeholders;
+};
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
 
@@ -198,7 +274,9 @@ const renderFlowElement = ({
     position: node.position,
     diagnostics,
     ids,
-    ...(delivery.kind === "validation" ? { validationOnly: true } : {}),
+    ...(delivery.kind === "validation" || delivery.kind === "markdown"
+      ? { validationOnly: true }
+      : {}),
     renderArtifacts,
   });
   if (delivery.kind === "validation") {
@@ -219,6 +297,7 @@ const renderFlowElement = ({
           }),
       instanceKey,
       model: compiled.model,
+      semanticModel: semanticComponentModel(compiled.model),
     });
   }
   // Only a root the document will hold carries the key. A root rendered into
@@ -244,7 +323,61 @@ const renderFlowElement = ({
   // presentation inside its parent body, which is a property of where this
   // element is being rendered rather than a second thing to thread.
   const materializeModel =
-    insideComponentBody && delivery.materializeNestedModels;
+    insideComponentBody &&
+    (delivery.kind === "markdown" ||
+      (delivery.kind === "render" && delivery.materializeNestedModels));
+  // Every Markdown component defers, not only the outline-aware ones: heading
+  // depth and outline are properties of where the finished document puts it.
+  // Nested models retain their placeholders so the completion pass can apply
+  // that same eventual context before their parent serializes its body.
+  if (delivery.kind === "markdown") {
+    delivery.deferOutline.push({
+      model: compiled.model,
+      present: compiled.markdown,
+    });
+    const index = delivery.deferOutline.length - 1;
+    if (materializeModel) {
+      const placeholder =
+        compiled.outline === undefined
+          ? deferredMarkdownPlaceholder({
+              index,
+              ...(node.position === undefined
+                ? {}
+                : { position: node.position }),
+            })
+          : createOutlinePlaceholder({
+              index,
+              marker: compiled.outline.marker,
+              ...(node.position === undefined
+                ? {}
+                : { position: node.position }),
+            });
+      return attachNestedComponentModel({
+        element: placeholder,
+        model: compiled.model,
+      });
+    }
+    const placeholder =
+      compiled.outline === undefined
+        ? deferredMarkdownPlaceholder({
+            index,
+            ...(node.position === undefined ? {} : { position: node.position }),
+          })
+        : createOutlinePlaceholder({
+            index,
+            marker: compiled.outline.marker,
+            ...(node.position === undefined ? {} : { position: node.position }),
+            ...(name === null ? {} : { component: name }),
+            ...(stampedKey === undefined ? {} : { instanceKey: stampedKey }),
+          });
+    placeholder.children.push(
+      ...nestedMarkdownPlaceholders({
+        model: compiled.model,
+        presentations: delivery.deferOutline,
+      }),
+    );
+    return placeholder;
+  }
   // An outline-aware component defers its presentation behind a placeholder
   // until the deck transform has computed the document outline. A model being
   // materialized inside a parent's body never reaches the document tree, so
@@ -265,7 +398,9 @@ const renderFlowElement = ({
   }
   const rendered = named(delivery.adapt(compiled.presentation()));
   if (rendered !== undefined) {
-    return rendered;
+    return insideComponentBody
+      ? attachNestedComponentModel({ element: rendered, model: compiled.model })
+      : rendered;
   }
   diagnostics.add({
     message: `Internal error: static renderer for "${name ?? "<fragment>"}" produced no element`,
@@ -432,6 +567,36 @@ export const rehypeRenderComponents =
         materializeNestedModels,
         ...(collectModels === undefined ? {} : { collected: collectModels }),
         ...(deferOutline === undefined ? {} : { deferOutline }),
+      },
+    });
+    reportSurvivors({ parent: tree, diagnostics });
+  };
+
+/** Creates the delivery transform whose component roots are semantic Markdown. */
+export const rehypeRenderComponentsAsMarkdown =
+  ({
+    diagnostics,
+    registry = COMPONENT_REGISTRY,
+    collectModels,
+    deferOutline,
+  }: {
+    readonly diagnostics: DiagnosticCollector;
+    readonly registry?: ComponentRegistry;
+    readonly collectModels: CollectedComponentModels;
+    readonly deferOutline: DeferredMarkdownPresentations;
+  }) =>
+  (tree: Root): void => {
+    const reservedIds = collectExistingIds(tree);
+    renderChildren({
+      parent: tree,
+      diagnostics,
+      registry,
+      ids: createComponentIdAllocator({ reservedIds }),
+      delivery: {
+        kind: "markdown",
+        instanceKeys: createComponentInstanceKeys(),
+        collected: collectModels,
+        deferOutline,
       },
     });
     reportSurvivors({ parent: tree, diagnostics });

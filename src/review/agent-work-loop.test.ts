@@ -336,6 +336,13 @@ describe("agent work loop", () => {
     });
     expect(result.agent_prompt).toContain("You are the coding agent");
     expect(result.agent_prompt).toContain("agent next");
+    expect(result.agent_prompt).toContain('agent push <plan> --about "<why>"');
+    expect(result.agent_prompt).toContain(
+      "Edit the returned candidate_plan, write the returned response_template to the response_file, then run the respond_command",
+    );
+    expect(result.agent_prompt).toContain(
+      "finish or abandon the wait, then push",
+    );
     expect(result.agent_prompt).toContain("agent note");
     expect(result.agent_prompt).toContain("Retain the agent_token");
     expect(result.agent_prompt).toContain("agent next --agent <token>");
@@ -352,9 +359,9 @@ describe("agent work loop", () => {
     if (typeof result.prompt_file !== "string") {
       throw new Error("The agent command did not provide its prompt file");
     }
-    expect(await readFile(result.prompt_file, "utf8")).toContain(
-      runtime.planPath,
-    );
+    const writtenPrompt = await readFile(result.prompt_file, "utf8");
+    expect(writtenPrompt).toContain(runtime.planPath);
+    expect(writtenPrompt).toContain('agent push <plan> --about "<why>"');
   });
 
   it("should return the oldest pending work and its response contract", async () => {

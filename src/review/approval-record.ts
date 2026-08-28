@@ -6,8 +6,8 @@
 // the two mutations that grow it (append an approval, append a revocation),
 // and the brief an approval request carries. Entries are never rewritten.
 
-import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
 import { asQuotedBody } from "./feedback-package.js";
+import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import { APPROVAL_MESSAGE_LIMIT } from "./shared/approval-message.js";
 import {
   APPROVAL_ID,

@@ -5,10 +5,7 @@
 // already have owners; this module only joins them into the shape the dialog
 // and the toolbar both read, so those two surfaces cannot disagree.
 
-import {
-  changeSetStanding,
-  type ChangeSetStanding,
-} from "./change-disposition.js";
+import { changeSetStanding, type ChangeSetStanding } from "./change-verdict.js";
 import {
   reviewInputStanding,
   type ReviewInput,

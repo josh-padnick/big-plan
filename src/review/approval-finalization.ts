@@ -5,19 +5,19 @@ import { readFile, unlink } from "node:fs/promises";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
 import { validateApprovalRecord } from "./approval-record.js";
 import {
-  validateChangeDispositions,
-  type StoredChangeDispositions,
-} from "./change-dispositions-store.js";
+  validateChangeVerdicts,
+  type StoredChangeVerdicts,
+} from "./change-verdicts-store.js";
 import {
   AgentRequestAlreadyAnswered,
   cancelAgentRequest,
 } from "./request-mailbox.js";
 import type { ApprovalRecord } from "./shared/approval.js";
-import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
+import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import {
   readStoreJson,
   writeApprovalRecord,
-  writeChangeDispositions,
+  writeChangeVerdicts,
   writeStoreJson,
   type ReviewStore,
 } from "./store.js";
@@ -31,7 +31,7 @@ type ApprovalFinalization = {
   readonly canceledAt: string;
   readonly requestIds: ReadonlyArray<string>;
   readonly approval: ApprovalRecord;
-  readonly dispositions: StoredChangeDispositions;
+  readonly verdicts: StoredChangeVerdicts;
 };
 
 const validateFinalization = (value: unknown): ApprovalFinalization => {
@@ -54,7 +54,7 @@ const validateFinalization = (value: unknown): ApprovalFinalization => {
         typeof requestId === "string" && REQUEST_ID.test(requestId),
     ) ||
     !("approval" in value) ||
-    !("dispositions" in value)
+    !("verdicts" in value)
   ) {
     throw new Error("The interrupted approval finalization is invalid");
   }
@@ -64,7 +64,7 @@ const validateFinalization = (value: unknown): ApprovalFinalization => {
     canceledAt: value.canceledAt,
     requestIds: value.requestIds,
     approval: validateApprovalRecord(value.approval),
-    dispositions: validateChangeDispositions(value.dispositions),
+    verdicts: validateChangeVerdicts(value.verdicts),
   };
 };
 
@@ -123,9 +123,9 @@ const settleLocked = async ({
       if (!(error instanceof AgentRequestAlreadyAnswered)) throw error;
     }
   }
-  await writeChangeDispositions({
+  await writeChangeVerdicts({
     store,
-    dispositions: finalization.dispositions,
+    verdicts: finalization.verdicts,
   });
   await writeApprovalRecord({
     store,

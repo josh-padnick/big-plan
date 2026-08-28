@@ -68,7 +68,7 @@ import {
   requestJson,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
-import { useChangeDispositions } from "./use-change-dispositions.browser.js";
+import { useChangeVerdicts } from "./use-change-verdicts.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
   placeAnchoredDialog,
@@ -1042,7 +1042,7 @@ export const ApproveControl = ({
   const detailsId = useId();
   const isApproved = approval?.status === "approved";
   const contract = useInputContract(identity);
-  const dispositions = useChangeDispositions();
+  const verdicts = useChangeVerdicts();
   const { openTour } = useDiffTour();
   const message = useApprovalMessage(dialogOpen);
   const skeletonSets = useMemo(
@@ -1073,11 +1073,11 @@ export const ApproveControl = ({
     () =>
       deriveOpenItems({
         changeSets,
-        accepted: dispositions.accepted,
+        accepted: verdicts.accepted,
         inputs: contract.inputs,
         requests: openRequestsFromExchange(agent.requests),
       }),
-    [agent.requests, changeSets, contract.inputs, dispositions.accepted],
+    [agent.requests, changeSets, contract.inputs, verdicts.accepted],
   );
   const status = approval?.status;
 

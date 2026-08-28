@@ -11,8 +11,10 @@
 //      are gone. Exactly one, because BIG-143 buys one review per pull request;
 //      two reviews mean one of them was never paid for or never triaged.
 //      A reviewer counts while it has either a review it has not taken back or
-//      an unresolved inline thread, so dismissing a review drops it from the
-//      count only once every finding it left is resolved.
+//      an unresolved inline thread. Dismissible reviews drop only after every
+//      finding is resolved; when another bot remains, a COMMENTED review drops
+//      after its inline findings are resolved or its summary-only review is
+//      explicitly retracted.
 //   b. Every inline finding that reviewer raised is resolved, which here means
 //      a written reply from somebody other than the reviewer. Resolved is this
 //      gate's word, not GitHub's: ticking GitHub's resolve checkbox resolves
@@ -78,6 +80,7 @@ export const ADVERSARIAL_REVIEWER = {
 /** The marker lines an agent posts. CONTRIBUTING.md documents each one. */
 export const MARKERS = {
   signOff: "review-triage: complete <head-sha>",
+  summaryRetraction: "review-triage: retract <reviewer> - <reason>",
   adversarial: "adversarial-review: complete <head-sha> by <agent>",
   validationPassed: "no-mistakes: passed run <run-id> head <head-sha>",
   validationOverride: "no-mistakes: overridden - <reason>",
@@ -292,6 +295,8 @@ const matchMarker = (comment, pattern) =>
 // mentioned mid-sentence does not count, and each tolerates the unicode dashes
 // an editor may substitute for a plain hyphen.
 const SIGN_OFF = /^\s*review-triage:\s*complete\s+([0-9a-f]{7,40})\s*$/i;
+const SUMMARY_RETRACTION =
+  /^\s*review-triage:\s*retract\s+(\S+)\s*[-–—]\s*(\S.*?)\s*$/i;
 const ADVERSARIAL =
   /^\s*adversarial-review:\s*complete\s+([0-9a-f]{7,40})\s+by\s+(\S.*?)\s*$/i;
 const FINDINGS_COUNT = /^\s*findings:\s*(\d+)\s*$/i;
@@ -411,12 +416,65 @@ export const collectAttestations = (snapshot) => {
   return attestations;
 };
 
+const latestCommentedReview = (reviews) =>
+  reviews
+    .filter((review) => review.state === "COMMENTED")
+    .reduce(
+      (latest, review) =>
+        latest === null || review.submittedAt >= latest.submittedAt
+          ? review
+          : latest,
+      null,
+    );
+
+const latestCommentedThreads = (snapshot, reviews) => {
+  const latest = latestCommentedReview(reviews);
+  return snapshot.reviewThreads.filter(
+    (thread) => thread.reviewId === latest?.id,
+  );
+};
+
+const reviewerThreads = (snapshot, reviewerLogins) =>
+  snapshot.reviewThreads.filter((thread) =>
+    isReviewerThread(thread, reviewerLogins),
+  );
+
+const unresolvedReviewerThreads = (snapshot, reviewerLogins) =>
+  reviewerThreads(snapshot, reviewerLogins).filter(
+    (thread) => !isResolved(thread, reviewerLogins),
+  );
+
+const commentedRetractionGuidance = (snapshot, review) => {
+  if (latestCommentedThreads(snapshot, review.reviews).length > 0) {
+    return [
+      `  - ${review.bot.label}: reply in every inline thread it opened. Once every`,
+      "    thread has a written reply, this non-dismissible COMMENTED review is",
+      "    retracted. It keeps counting while any inline thread is unresolved.",
+    ];
+  }
+  const unresolved = unresolvedReviewerThreads(snapshot, review.bot.logins);
+  return [
+    ...(unresolved.length > 0
+      ? [
+          `  - ${review.bot.label}: reply in its ${unresolved.length} older unresolved inline thread(s),`,
+          "    then post this plain issue-comment marker with a reason. The marker",
+          "    cannot take effect while any inline thread remains unresolved:",
+        ]
+      : [
+          `  - ${review.bot.label}: post this plain issue-comment marker with a reason:`,
+        ]),
+    `    review-triage: retract ${review.bot.id} - <reason>`,
+  ];
+};
+
 /**
  * Identifies which accepted reviews exist. A bot counts while it holds either a
  * review it has not taken back or an unresolved inline thread; an attestation
- * counts once it is well-formed. All attestations collapse into one identity
- * because they all stand for the same thing, our own agent reviewing in a bot's
- * place.
+ * counts once it is well-formed. A COMMENTED review cannot be dismissed, so
+ * resolving all of its inline threads retracts it when another bot review can
+ * remain. A sole COMMENTED review stays accepted, preserving the ordinary
+ * single-review path. A summary-only review can instead be retracted by a
+ * visible issue-comment marker that names the reviewer and records why.
  *
  * The unresolved-thread half is what makes the two-review recovery honest.
  * Dismissing a review that left findings would otherwise drop the reviewer from
@@ -427,31 +485,85 @@ export const collectAttestations = (snapshot) => {
 export const identifyReviews = (snapshot) => {
   const byBot = new Map();
   for (const review of snapshot.reviews) {
-    if (!COUNTED_REVIEW_STATES.has((review.state ?? "").toUpperCase())) {
+    const state = (review.state ?? "").toUpperCase();
+    if (!COUNTED_REVIEW_STATES.has(state)) {
       continue;
     }
     const bot = botFor(review.author);
     if (bot !== null) {
-      byBot.set(bot.id, bot);
+      const entry = byBot.get(bot.id) ?? {
+        bot,
+        states: new Set(),
+        reviews: [],
+      };
+      entry.states.add(state);
+      entry.reviews.push({
+        id: review.id,
+        state,
+        submittedAt: review.submittedAt,
+      });
+      byBot.set(bot.id, entry);
     }
   }
   for (const thread of snapshot.reviewThreads) {
     const bot = botFor(thread.comments[0]?.author);
-    if (bot === null || byBot.has(bot.id)) {
+    if (bot === null) {
       continue;
     }
     if (!isResolved(thread, bot.logins)) {
-      byBot.set(bot.id, bot);
+      byBot.set(
+        bot.id,
+        byBot.get(bot.id) ?? { bot, states: new Set(), reviews: [] },
+      );
     }
   }
   const attestations = collectAttestations(snapshot);
   const usable = attestations.filter((one) => one.problems.length === 0);
-  const accepted = [...byBot.values()].map((bot) => ({ kind: "bot", bot }));
+  let accepted = [...byBot.values()].map(({ bot, states, reviews }) => ({
+    kind: "bot",
+    bot,
+    states,
+    reviews,
+  }));
   if (usable.length > 0) {
     accepted.push({
       kind: "adversarial",
       bot: ADVERSARIAL_REVIEWER,
       attestation: usable[usable.length - 1],
+    });
+  }
+  const acceptedBots = accepted.filter((one) => one.kind === "bot");
+  if (acceptedBots.length > 1) {
+    let remainingBots = acceptedBots.length;
+    accepted = accepted.filter((one) => {
+      if (one.kind !== "bot" || remainingBots === 1) {
+        return true;
+      }
+      const isCommentOnly =
+        one.states.size === 1 && one.states.has("COMMENTED");
+      const latestCommented = latestCommentedReview(one.reviews);
+      const latestThreads = latestCommentedThreads(snapshot, one.reviews);
+      const hasUnresolvedThread =
+        unresolvedReviewerThreads(snapshot, one.bot.logins).length > 0;
+      const canRetractByResolution =
+        isCommentOnly && !hasUnresolvedThread && latestThreads.length > 0;
+      const canRetractSummary =
+        isCommentOnly &&
+        !hasUnresolvedThread &&
+        latestThreads.length === 0 &&
+        latestCommented !== null &&
+        snapshot.issueComments.some(
+          (comment) =>
+            comment.createdAt > latestCommented.submittedAt &&
+            matchMarker(comment, SUMMARY_RETRACTION).some(
+              (match) => lower(match[1]) === one.bot.id,
+            ),
+        );
+      if (canRetractByResolution || canRetractSummary) {
+        remainingBots -= 1;
+        return false;
+      }
+      return true;
     });
   }
   return {
@@ -531,6 +643,9 @@ export const evaluateReviewTriage = (snapshot) => {
   );
 
   if (accepted.length === 0) {
+    const botConversationComments = snapshot.issueComments
+      .map((comment) => ({ comment, bot: botFor(comment.author) }))
+      .filter((one) => one.bot !== null);
     return verdict(
       CHECK_NAMES.reviewTriage,
       "failure",
@@ -539,6 +654,17 @@ export const evaluateReviewTriage = (snapshot) => {
         "No accepted third-party review was found.",
         "",
         `Looked for a review by ${REVIEW_BOTS.map((bot) => bot.label).join(", ")}, and for an adversarial-review attestation comment.`,
+        ...(botConversationComments.length === 0
+          ? []
+          : [
+              "",
+              `Found ${botConversationComments.length} bot-authored pull request conversation comment(s) from ${[
+                ...new Set(botConversationComments.map((one) => one.bot.label)),
+              ].join(
+                ", ",
+              )}. These preserve visible feedback, but they are not GitHub`,
+              "COMMENTED reviews and do not satisfy the accepted-review requirement.",
+            ]),
         ...notes,
         "",
         "Next action: get one review. Either request one of the reviewers above,",
@@ -558,11 +684,13 @@ export const evaluateReviewTriage = (snapshot) => {
   if (accepted.length > 1) {
     const retractions = accepted.flatMap((one) =>
       one.kind === "bot"
-        ? [
-            `  - ${one.bot.label}: reply in every thread it opened, saying what you`,
-            "    did, and then dismiss its review. Dismissing alone is not enough - a",
-            "    reviewer keeps counting while any of its inline threads is unresolved.",
-          ]
+        ? one.states.size === 1 && one.states.has("COMMENTED")
+          ? commentedRetractionGuidance(snapshot, one)
+          : [
+              `  - ${one.bot.label}: reply in every thread it opened, saying what you`,
+              "    did, and then dismiss its review. Dismissing alone is not enough - a",
+              "    reviewer keeps counting while any of its inline threads is unresolved.",
+            ]
         : [
             `  - ${ADVERSARIAL_REVIEWER.label} by ${one.attestation.agent}: delete that`,
             `    attestation comment. ${one.attestation.url}`,

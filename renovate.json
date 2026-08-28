@@ -1,0 +1,21 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "rangeStrategy": "pin",
+  "minimumReleaseAge": "7 days",
+  "schedule": ["before 5am on monday"],
+  "packageRules": [
+    {
+      "description": "Group routine minor and patch updates into one weekly PR",
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "weekly minor and patch updates"
+    },
+    {
+      "description": "Keep major updates in individual PRs",
+      "matchUpdateTypes": ["major"],
+      "groupName": null
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true
+  }
+}

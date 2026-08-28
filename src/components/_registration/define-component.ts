@@ -12,6 +12,10 @@ import type {
 } from "../_authoring/contract.js";
 import type { DocumentOutline } from "../_model/document-outline/document-outline.js";
 import { EMPTY_DOCUMENT_OUTLINE } from "../_model/document-outline/document-outline.js";
+import type {
+  ComponentMarkdownContext,
+  ComponentMarkdownRenderer,
+} from "../_model/markdown-export.js";
 import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 import type {
   ComponentDiffInput,
@@ -39,6 +43,7 @@ export type OutlineMarker =
 export type CompiledComponent = {
   readonly model: unknown;
   readonly presentation: () => ReactNode;
+  readonly markdown: (context: ComponentMarkdownContext) => string;
   // Present only on outline-aware components: how the instance joins the
   // document outline, and the presentation consuming the completed outline.
   readonly outline?: {
@@ -80,7 +85,15 @@ type ComponentDiffOptions<Model, DiffModel> =
     }
   | {
       readonly diff: (input: ComponentDiffInput<Model>) => DiffModel;
-      readonly diffView: ComponentType<{ readonly model: DiffModel }>;
+      // `controlId` is the engine's per-instance key, not authored data. A
+      // bespoke view that mints its own form identity from the model would
+      // collide with a second diff of a component sharing that authored id,
+      // and the collision is silent: two radio groups merge into one, and a
+      // label resolves to whichever input the document reaches first.
+      readonly diffView: ComponentType<{
+        readonly model: DiffModel;
+        readonly controlId: string;
+      }>;
     };
 
 type ComponentOptions<Model, DiffModel> = ComponentDiffOptions<
@@ -89,6 +102,7 @@ type ComponentOptions<Model, DiffModel> = ComponentDiffOptions<
 > & {
   readonly compile: ComponentModelCompiler<Model>;
   readonly view: ComponentType<{ readonly model: Model }>;
+  readonly markdown: ComponentMarkdownRenderer<Model>;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
 };
@@ -100,6 +114,7 @@ export const defineComponent = <
 >({
   compile,
   view,
+  markdown,
   diff,
   diffView,
   scopedChildren,
@@ -110,6 +125,7 @@ export const defineComponent = <
     return {
       model,
       presentation: () => createElement(view, { model }),
+      markdown: (context) => markdown(model, context),
     };
   },
   compileDiff: (input) => {
@@ -124,7 +140,10 @@ export const defineComponent = <
               view,
               controlId: `component-diff-${instanceKey}`,
             })
-          : createElement(diffView, { model: model as DiffModel }),
+          : createElement(diffView, {
+              model: model as DiffModel,
+              controlId: `component-diff-${instanceKey}`,
+            }),
     };
   },
   ...(scopedChildren === undefined ? {} : { scopedChildren }),
@@ -143,6 +162,7 @@ export const defineOutlineComponent = <
 >({
   compile,
   view,
+  markdown,
   diff,
   diffView,
   marker,
@@ -154,6 +174,7 @@ export const defineOutlineComponent = <
     readonly model: Model;
     readonly outline: DocumentOutline;
   }>;
+  readonly markdown: ComponentMarkdownRenderer<Model>;
   readonly marker: (model: Model) => OutlineMarker;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
@@ -165,6 +186,7 @@ export const defineOutlineComponent = <
         model,
         presentation: () =>
           createElement(view, { model, outline: EMPTY_DOCUMENT_OUTLINE }),
+        markdown: (context) => markdown(model, context),
         outline: {
           marker: marker(model),
           present: (outline) => createElement(view, { model, outline }),
@@ -191,7 +213,10 @@ export const defineOutlineComponent = <
                 view: OutlineView,
                 controlId: `component-diff-${instanceKey}`,
               })
-            : createElement(diffView, { model: model as DiffModel });
+            : createElement(diffView, {
+                model: model as DiffModel,
+                controlId: `component-diff-${instanceKey}`,
+              });
         },
       };
     },

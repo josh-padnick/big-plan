@@ -4,11 +4,13 @@
 import { compileDataTable } from "./compile.js";
 import { DataTable } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { dataTableMarkdown } from "./markdown.js";
 
 /** Declares DataTable's complete component integration contract. */
 export const DATA_TABLE_COMPONENT_DEFINITION = defineComponent({
   compile: compileDataTable,
   view: DataTable,
+  markdown: dataTableMarkdown,
   scopedChildren: {
     Column: { kind: "scoped-child" },
     SummaryRow: {

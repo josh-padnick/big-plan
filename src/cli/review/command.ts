@@ -132,22 +132,25 @@ export const reviewCommand = async (
         planPath: error.live.plan,
       });
       return {
-        review: error.live.url,
-        ...(heldLink.kind === "published" ? { link: heldLink.url } : {}),
+        review: heldLink.kind === "published" ? heldLink.url : error.live.url,
+        ...(heldLink.kind === "published" ? { direct: error.live.url } : {}),
         plan: error.live.plan,
         session: error.live.sessionId,
         custody: "held",
         help: [
           ...warnings,
           `A live review runtime already serves this plan at ${error.live.url} (session ${error.live.sessionId}, process ${error.live.pid})`,
-          `Open ${error.live.url} in your browser to review and comment`,
           ...(heldLink.kind === "published"
             ? [
-                `${heldLink.url} keeps working after this session ends: it opens the review while one is running, and explains what happened when none is`,
+                `Open ${heldLink.url} in your browser to review and comment`,
+                `Direct runtime address: ${error.live.url} (debugging only)`,
               ]
-            : [heldLink.reason]),
+            : [
+                `Open ${error.live.url} in your browser to review and comment`,
+                heldLink.reason,
+              ]),
           "No second runtime started, so that session's open page and connected agent keep working",
-          `Run \`big-plan review ${quoteShellArgument(error.live.plan)} --takeover\` only to replace it; the live session keeps listening but loses write custody, so its open page and connected agent go read-only until each moves to the new address`,
+          `Run \`big-plan review ${quoteShellArgument(error.live.plan)} --takeover\` only to replace it; the live session keeps listening but loses write custody, so its open page and connected agent go read-only until each reloads`,
         ],
       };
     }
@@ -187,18 +190,17 @@ export const reviewCommand = async (
     });
   });
 
-  // The stable link is published alongside today's direct address rather than
-  // replacing it, so nothing an existing caller reads changes. A machine where
-  // the service cannot run keeps working exactly as it does today, with one
-  // line saying why the permanent link is missing.
+  // The stable link is the review address; the session listener remains a
+  // debugging address. A machine where the service cannot run still falls
+  // back to the direct listener and says why the stable address is missing.
   const stableLink = await publishStableReviewLink({
     planId: runtime.planId,
     planPath: runtime.planPath,
   });
 
   return {
-    review: runtime.url,
-    ...(stableLink.kind === "published" ? { link: stableLink.url } : {}),
+    review: stableLink.kind === "published" ? stableLink.url : runtime.url,
+    ...(stableLink.kind === "published" ? { direct: runtime.url } : {}),
     plan: runtime.planPath,
     session: runtime.sessionId,
     feedback: runtime.store.feedbackDirectory,
@@ -207,15 +209,18 @@ export const reviewCommand = async (
       ...warnings,
       ...(stableLink.kind === "published"
         ? [
-            `${stableLink.url} keeps working after this session ends: it opens the review while one is running, and explains what happened when none is`,
+            `Open ${stableLink.url} in your browser to review and comment`,
+            `Direct runtime address: ${runtime.url} (debugging only)`,
           ]
-        : [stableLink.reason]),
+        : [
+            `Open ${runtime.url} in your browser to review and comment`,
+            stableLink.reason,
+          ]),
       ...(runtime.replacedSession === undefined
         ? []
         : [
-            `Took custody with --takeover from the live session ${runtime.replacedSession.sessionId} at ${runtime.replacedSession.url}; that session's open page and connected agent are now read-only until each moves to this address`,
+            `Took custody with --takeover from the live session ${runtime.replacedSession.sessionId} at ${runtime.replacedSession.url}; that session's open page and connected agent are now read-only until each reloads`,
           ]),
-      `Open ${runtime.url} in your browser to review and comment`,
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
       "Press Ctrl+C to stop the review runtime",

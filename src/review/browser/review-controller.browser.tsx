@@ -133,6 +133,7 @@ import {
 } from "./agent-roster.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
 import { InputsSurface, OPEN_INPUTS_EVENT } from "./inputs-surface.browser.js";
+import { PlanExportControl } from "./plan-export.browser.js";
 import {
   batchSectionTone,
   CommentsSurface,
@@ -3207,6 +3208,7 @@ const ChangeAttachment = ({
   return (
     <AgentChangeDigest
       diff={diff}
+      agentIdentity={request.claimedModel}
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
       isSuperseded={
@@ -5716,7 +5718,7 @@ export const ReviewController = () => {
   ]);
 
   useEffect(() => {
-    if (!hasObservedAgentSnapshot) return;
+    if (!isHydrated || !hasObservedAgentSnapshot) return;
     replaceReplyDrafts(
       repliesForKnownComments({
         replies: replyDraftsRef.current,
@@ -5725,6 +5727,7 @@ export const ReviewController = () => {
     );
   }, [
     hasObservedAgentSnapshot,
+    isHydrated,
     pushedThreadComments,
     replaceReplyDrafts,
     sent,
@@ -7680,6 +7683,9 @@ export const ReviewController = () => {
                   isSelected={isOpen && sidebarView === "agent"}
                   onToggle={toggleAgentSidebar}
                 />
+              )}
+              {identity === null ? null : (
+                <PlanExportControl identity={identity} />
               )}
             </>,
             feedbackHost,
