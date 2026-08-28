@@ -6990,7 +6990,8 @@ test("should keep shell interactions wired after an agent revision refreshes the
     });
     await test.step("a copy control still responds", async () => {
       const copy = page.locator(".code-figure [data-copy-code]").first();
-      await copy.click();
+      await copy.focus();
+      await copy.press("Enter");
       await expect(copy).toHaveAttribute("data-copy-state", "copied");
       await expect(copy).toHaveAccessibleName("Copied code");
     });
