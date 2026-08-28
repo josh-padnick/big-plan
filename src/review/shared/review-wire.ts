@@ -90,6 +90,15 @@ export type AgentRequest = TerminalAgentRequest & {
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly claimedBy?: string;
+  /**
+   * The roster identity of the agent that holds the claim.
+   *
+   * Distinct from `claimedBy`, which is a pickup token: the token identifies a
+   * turn, while this identifies the connector the roster draws a card for. Any
+   * surface that names who did something needs this one, because the token
+   * matches no card.
+   */
+  readonly claimedByConnection?: string;
   readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   readonly createdAt: string;
@@ -749,6 +758,11 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           typeof request.claimExpiresAtMs === "number" &&
           Number.isSafeInteger(request.claimExpiresAtMs) &&
           request.claimExpiresAtMs > 0;
+        const claimedByConnection =
+          typeof request.claimedByConnection === "string" &&
+          /^[a-f0-9]{16}$/.test(request.claimedByConnection)
+            ? request.claimedByConnection
+            : undefined;
         const claimedModel = decodeAgentModelIdentity(request.claimedModel);
         const answeredAt = isWireTimestamp(request.answeredAt)
           ? request.answeredAt
@@ -758,6 +772,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : undefined;
         if (
           (hasAnyClaim && !hasCompleteClaim) ||
+          (request.claimedByConnection !== undefined &&
+            (claimedByConnection === undefined || !hasCompleteClaim)) ||
           (request.claimedModel !== undefined &&
             (claimedModel === undefined || !hasCompleteClaim)) ||
           (request.answeredAt !== undefined && answeredAt === undefined) ||
@@ -785,6 +801,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
                   claimedAt: request.claimedAt as string,
                   claimedBy: request.claimedBy as string,
                   claimExpiresAtMs: request.claimExpiresAtMs as number,
+                  ...(claimedByConnection === undefined
+                    ? {}
+                    : { claimedByConnection }),
                   ...(claimedModel === undefined ? {} : { claimedModel }),
                 }
               : {}),

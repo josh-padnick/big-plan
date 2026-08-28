@@ -23,8 +23,8 @@ import {
   selectPrimaryAgent,
   type RosterAgent,
 } from "../shared/agent-primacy.js";
-import { agentClientDisplayName } from "../shared/agent-identity-catalog.js";
 import { compactDurationLabel } from "../shared/time-label.js";
+import { AgentIdentityText } from "./agent-identity.browser.js";
 import { Icon } from "./icon.browser.js";
 import { AlertDialog, Badge, Button, Tooltip } from "./ui.browser.js";
 
@@ -159,23 +159,14 @@ const AgentIdentity = ({
 }: {
   readonly agent: RosterAgent;
   readonly label: string;
-}) => {
-  const client = agent.model?.client;
-  return (
-    <p
-      className="m-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]"
-      data-review-agent-writer={agent.writerId}
-    >
-      {label}
-      {client === undefined ? null : (
-        <span className="font-normal text-muted">
-          {" · "}
-          {agentClientDisplayName(client)}
-        </span>
-      )}
-    </p>
-  );
-};
+}) => (
+  <p
+    className="m-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]"
+    data-review-agent-writer={agent.writerId}
+  >
+    <AgentIdentityText label={label} client={agent.model?.client} />
+  </p>
+);
 
 /**
  * The card's top line: who this is, and what it currently is.

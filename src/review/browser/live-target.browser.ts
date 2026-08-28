@@ -33,7 +33,12 @@ export type LiveTargetMissReason =
   | "drifted-content"
   // The reading surface itself is absent. Purely defensive: a document without
   // an article has nothing to resolve against.
-  | "no-article";
+  | "no-article"
+  // The element exists and is the right one, but the browser gave it no box:
+  // a block inside a collapsed slide is the honest answer to "which element is
+  // this?" and no answer at all to "where on screen is it?". Only a caller
+  // that must paint something asks for this distinction.
+  | "unlaid-out";
 
 export type LiveTargetResult =
   { readonly found: HTMLElement } | { readonly missing: LiveTargetMissReason };
@@ -176,6 +181,24 @@ export const liveBlock = (blockId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };
   return resolveWithin(article, blockSelector(blockId));
+};
+
+/**
+ * Resolves a block id to a block the reader can see right now.
+ *
+ * Identity is not geometry, and every other caller here rightly wants identity:
+ * a block inside a collapsed slide is the correct element for containment,
+ * labelling, and existence. A caller that is about to paint on the block wants
+ * the narrower question, and asking it here keeps the widened answer beside
+ * the resolution it narrows instead of turning into a raw rect measurement at
+ * the call site, where "no box" and "at the document origin" look identical.
+ */
+export const liveVisibleBlock = (blockId: string): LiveTargetResult => {
+  const resolved = liveBlock(blockId);
+  if ("missing" in resolved) return resolved;
+  return resolved.found.getClientRects().length > 0
+    ? resolved
+    : { missing: "unlaid-out" };
 };
 
 /**

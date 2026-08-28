@@ -276,6 +276,20 @@ describe("review wire contract", () => {
       state: { answeredAt: "2026-08-10T12:01:00.000Z" },
     },
     {
+      name: "malformed claimed connection",
+      state: {
+        baselineSnapshot: "a".repeat(16),
+        claimedAt: "2026-08-10T12:00:30.000Z",
+        claimedBy: "b".repeat(16),
+        claimedByConnection: "not-an-id",
+        claimExpiresAtMs: 1_775_000_000_000,
+      },
+    },
+    {
+      name: "claimed connection without a claim",
+      state: { claimedByConnection: "c".repeat(16) },
+    },
+    {
       name: "two terminal states",
       state: {
         answeredAt: "2026-08-10T12:01:00.000Z",
@@ -307,6 +321,40 @@ describe("review wire contract", () => {
         recoveryPrompt: "Reconnect this review",
       }).requests,
     ).toEqual([]);
+  });
+
+  // Two ids ride on one claim and they mean different things: the pickup token
+  // names a turn, the connection names the connector the roster draws a card
+  // for. Only the second can name who did something to a reader.
+  it("should carry the connection a claim recorded, not just its pickup token", () => {
+    const decoded = decodeAgentSnapshot(
+      encodeSnapshot({
+        currentSnapshot: "a".repeat(16),
+        presence: { connected: true, state: "working" },
+        requests: [
+          {
+            requestId: "1".repeat(16),
+            premiseSnapshot: "a".repeat(16),
+            baselineSnapshot: "a".repeat(16),
+            claimedAt: "2026-08-10T12:00:00.000Z",
+            claimedBy: "b".repeat(16),
+            claimedByConnection: "c".repeat(16),
+            claimExpiresAtMs: 1_775_000_000_000,
+            createdAt: "2026-08-10T11:59:00.000Z",
+            kind: "chat",
+          },
+        ],
+        responses: [],
+        connectionLog: [],
+        plan: "/tmp/plan.mdx",
+        agentCommand: "big-plan agent /tmp/plan.mdx",
+        recoveryPrompt: "Reconnect this review",
+      }),
+    );
+    expect(decoded.requests[0]).toMatchObject({
+      claimedBy: "b".repeat(16),
+      claimedByConnection: "c".repeat(16),
+    });
   });
 
   // The heartbeat may be written by a different, waiting agent than the one

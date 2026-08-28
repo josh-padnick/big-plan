@@ -143,6 +143,17 @@ Open the card to reply, review and accept its changes, revert a response, or res
 When the agent continues a pushed thread, Big Plan adds another exchange to the same card.
 The card keeps the opener's presentation.
 
+A push that lands while you are reading announces itself.
+The **Chat** tab leads with a **Pushed just now** entry naming the agent's model and client, plus how many blocks changed when the push revised the plan.
+**Open thread** takes you to the conversation, and **Dismiss** clears the entry; either way the entry names the newest arrival, and a newer push replaces it.
+On a wide screen, where the sidebar sits beside the plan rather than over it, an arrival opens the sidebar on **Chat** for you, unless you are part-way through writing a comment or reply or a pointer press is in flight: reserving the sidebar's gutter would move or recreate the control you are using, so the arrival waits until that interaction finishes.
+On a narrower screen it waits as well, because the sidebar would cover the sentence you are reading.
+The entry waits on **Chat** without adding a closed-sidebar toolbar indicator; once the sidebar is open on another tab, **Chat** carries a mark until you view the entry.
+Your reading position is kept either way.
+
+The blocks the revision changed settle briefly in place, so you can see what moved without hunting for it.
+Readers who ask their system for reduced motion get the entry without the highlight.
+
 A comment reaches the agent with the scope it was left at.
 Selecting text inside a paragraph, list, or table cell anchors the note to that block alone.
 A slide's comment icon, or a selection of the slide's own title, addresses the whole slide, so an instruction such as "rewrite this in Spanish" carries the slide's content rather than its heading.
