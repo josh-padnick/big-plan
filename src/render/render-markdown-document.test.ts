@@ -665,11 +665,9 @@ Restricts the result set. Example:
 
 <Field in="payload" name="status" type="String">
 
-Current event status. Example:
+Current event status.
 
-\`\`\`json
-"open"
-\`\`\`
+This status is returned after persistence completes.
 
 </Field>
 
@@ -694,6 +692,11 @@ Current event version. Example:
       result.markdown.match(/Source location the event refers to/gu),
     ).toHaveLength(1);
     expect(result.markdown.match(/Current event status/gu)).toHaveLength(1);
+    expect(
+      result.markdown.match(
+        /This status is returned after persistence completes/gu,
+      ),
+    ).toHaveLength(1);
     expect(result.markdown.match(/Current event version/gu)).toHaveLength(1);
     expect(result.markdown).not.toContain("**anchor**");
     const html = readerHtml(result.markdown);
@@ -704,6 +707,9 @@ Current event version. Example:
     expect(html).toContain("<p><strong>filter</strong></p>");
     expect(html).toContain(
       '<pre><code class="language-json">{ "status": "open" }\n</code></pre>',
+    );
+    expect(html).toContain(
+      "<p>This status is returned after persistence completes.</p>",
     );
   });
 
