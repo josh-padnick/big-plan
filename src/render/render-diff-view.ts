@@ -26,16 +26,23 @@ export type CompiledDiffDocuments = {
   readonly proposed: CompiledMarkdown;
 };
 
-/** Compiles the two snapshots once for every component location in one diff. */
+export type DiffDocumentCompiler = (input: {
+  readonly markdown: string;
+}) => CompiledMarkdown;
+
+/** Compiles each snapshot once so every location can reuse the document pair. */
 export const compileDiffDocuments = ({
   baselineMarkdown,
   proposedMarkdown,
+  compileDocument = compileMarkdown,
 }: {
   readonly baselineMarkdown: string;
   readonly proposedMarkdown: string;
+  /** Explicit seam for the timing-free one-compile-per-side contract test. */
+  readonly compileDocument?: DiffDocumentCompiler;
 }): CompiledDiffDocuments => ({
-  baseline: compileMarkdown({ markdown: baselineMarkdown }),
-  proposed: compileMarkdown({ markdown: proposedMarkdown }),
+  baseline: compileDocument({ markdown: baselineMarkdown }),
+  proposed: compileDocument({ markdown: proposedMarkdown }),
 });
 
 const isElement = (node: RootContent): node is Element =>

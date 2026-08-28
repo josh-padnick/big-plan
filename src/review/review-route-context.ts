@@ -3,10 +3,10 @@
 // itself. Keeping the response a value is what lets the runtime decide, after
 // the handler has run, whether this session still holds write authority.
 //
-// The four owned objects here were loose `let` bindings inside the runtime
-// closure, mutated from places far apart in one very long function. Each is
-// named after the thing it means, because that is the state whose drift breaks
-// a review silently rather than loudly.
+// The owned objects here were loose `let` bindings inside the runtime closure,
+// mutated from places far apart in one very long function. Each is named after
+// the thing it means, because that is the state whose drift breaks a review
+// silently rather than loudly.
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
@@ -50,6 +50,7 @@ import {
   encodeAgentRequests,
   encodeReviewSnapshot,
 } from "./shared/review-wire.js";
+import type { SnapshotDiff } from "./shared/review-wire.js";
 import { createRevisionedRecord } from "./revisioned-record.js";
 
 /**
@@ -199,6 +200,19 @@ export type ChangeVerdicts = {
   readonly write: (verdicts: StoredChangeVerdicts) => Promise<void>;
 };
 
+/**
+ * Compiled diff payloads keyed only by the immutable content digests that
+ * produced them. Reviewer disposition is deliberately absent: it is served
+ * beside this payload through its own route and cannot invalidate a compile.
+ */
+export type SnapshotDiffs = {
+  readonly forPair: (input: {
+    readonly from: string;
+    readonly to: string;
+    readonly build: () => SnapshotDiff | Promise<SnapshotDiff>;
+  }) => Promise<SnapshotDiff>;
+};
+
 /** The append-only approval log this review has recorded. */
 export type Approvals = {
   readonly read: () => Promise<ApprovalRecord>;
@@ -224,6 +238,7 @@ export type ReviewRouteContext = {
   readonly planRenderer: PlanRenderer;
   readonly decisionAnswers: DecisionAnswers;
   readonly changeVerdicts: ChangeVerdicts;
+  readonly snapshotDiffs: SnapshotDiffs;
   readonly approvals: Approvals;
   readonly readerProgress: ReaderProgress;
   readonly writeGate: WriteGate;
@@ -232,6 +247,85 @@ export type ReviewRouteContext = {
     readonly message: string;
     readonly error: unknown;
   }) => void;
+};
+
+const SNAPSHOT_DIFF_CACHE_MAX_ENTRIES = 8;
+const SNAPSHOT_DIFF_CACHE_MAX_AGE_MS = 30 * 60 * 1_000;
+
+type SnapshotDiffCacheEntry = {
+  readonly value: Promise<SnapshotDiff>;
+  lastUsedAtMs: number;
+  lastUsedSequence: number;
+};
+
+/**
+ * Owns the runtime-local compiled diff cache. Reusing the in-flight promise
+ * also keeps overlapping opens from compiling the same immutable pair twice.
+ */
+export const createSnapshotDiffs = ({
+  maxEntries = SNAPSHOT_DIFF_CACHE_MAX_ENTRIES,
+  maxAgeMs = SNAPSHOT_DIFF_CACHE_MAX_AGE_MS,
+  now = Date.now,
+}: {
+  readonly maxEntries?: number;
+  readonly maxAgeMs?: number;
+  readonly now?: () => number;
+} = {}): SnapshotDiffs => {
+  if (!Number.isInteger(maxEntries) || maxEntries < 1) {
+    throw new RangeError(
+      "Snapshot diff cache maxEntries must be a positive integer.",
+    );
+  }
+  if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) {
+    throw new RangeError(
+      "Snapshot diff cache maxAgeMs must be a positive finite duration.",
+    );
+  }
+  const entries = new Map<string, SnapshotDiffCacheEntry>();
+  let useSequence = 0;
+
+  const evictExpired = (nowMs: number): void => {
+    for (const [key, entry] of entries) {
+      if (nowMs - entry.lastUsedAtMs >= maxAgeMs) entries.delete(key);
+    }
+  };
+
+  const evictOldest = (): void => {
+    let oldestKey: string | undefined;
+    let oldestSequence = Number.POSITIVE_INFINITY;
+    for (const [key, entry] of entries) {
+      if (entry.lastUsedSequence < oldestSequence) {
+        oldestKey = key;
+        oldestSequence = entry.lastUsedSequence;
+      }
+    }
+    if (oldestKey !== undefined) entries.delete(oldestKey);
+  };
+
+  return {
+    forPair: ({ from, to, build }) => {
+      const nowMs = now();
+      evictExpired(nowMs);
+      const key = `${from}:${to}`;
+      const cached = entries.get(key);
+      if (cached !== undefined) {
+        cached.lastUsedAtMs = nowMs;
+        cached.lastUsedSequence = useSequence++;
+        return cached.value;
+      }
+      while (entries.size >= maxEntries) evictOldest();
+      const value = Promise.resolve().then(build);
+      entries.set(key, {
+        value,
+        lastUsedAtMs: nowMs,
+        lastUsedSequence: useSequence++,
+      });
+      void value.catch(() => {
+        if (entries.get(key)?.value === value) entries.delete(key);
+      });
+      return value;
+    },
+  };
 };
 
 export const createPlanRenderer = ({
