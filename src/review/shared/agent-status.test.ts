@@ -155,10 +155,10 @@ describe("current agent activity", () => {
         requests: [],
         cancelPendingRequestIds: new Set(),
         progressEvents: [],
-        agentConnected: false,
+        agentConnected: true,
         runtimeOffline: false,
         now: NOW,
-        heartbeatAt: 0,
+        heartbeatAt: NOW,
       }),
     ).toMatchObject({
       state: "idle",
