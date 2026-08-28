@@ -431,6 +431,8 @@ Changes inside `DataTable`, `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`,
 `GrpcMethod`, `DatabaseTableSchema`, `Callout`, `CodeSnippet`, and `CodeDiff`
 use their component-owned field, row, facet, or text presentation instead of a
 generic snapshot comparison.
+A `DataTable` configuration-only change keeps the full row evidence visible
+beside the changed table or column settings.
 The change navigator tours several places without losing reading context.
 
 Choose **Accept change** to mark the current place accepted and advance to the next unaccepted place, or **Accept all** to accept the remaining set.
