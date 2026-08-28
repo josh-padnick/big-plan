@@ -798,9 +798,17 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
       feedbackBox.x,
     );
     expect(stampBox.x).toBeLessThan(approvedBox.x);
-    expect(
-      Math.abs(stampBox.x + stampBox.width / 2 - (tocBox.x + tocBox.width / 2)),
-    ).toBeLessThan(2);
+    const stampCenterOffset = await stamp.evaluate((element) => {
+      const toc = element.closest("[data-desktop-toc]");
+      if (toc === null) return null;
+      const stampRect = element.getBoundingClientRect();
+      const tocRect = toc.getBoundingClientRect();
+      return Math.abs(
+        stampRect.x + stampRect.width / 2 - (tocRect.x + tocRect.width / 2),
+      );
+    });
+    expect(stampCenterOffset).not.toBeNull();
+    expect(stampCenterOffset).toBeLessThan(2);
     expect(stampBox.y).toBeGreaterThan(headerBox.y + headerBox.height);
     const stampLayer = await stamp.evaluate((element) => {
       const toc = element.closest("[data-desktop-toc]");
