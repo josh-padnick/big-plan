@@ -13,7 +13,7 @@
 //    header so it stays out of history, referrers, and logs.
 //  - Any request whose Host header is not this runtime's or the local review
 //    service's address is refused. That allow-list, not the socket address, is
-//    what defeats DNS rebinding while permitting the opt-in service hop.
+//    what defeats DNS rebinding while permitting the stable service hop.
 //  - No CORS allowance is ever sent, and a foreign Origin or a Sec-Fetch-Site
 //    other than same-origin is refused outright. CORS hides a response; it
 //    does not stop a write, so it is not the control here.

@@ -10,6 +10,7 @@ import {
   renderPlanEndedPage,
   renderPlanInterruptedPage,
   renderPlanNeverStartedPage,
+  renderPlanRestartingPage,
   renderPlanUnknownPage,
   renderServiceStopConfirmPage,
   renderServiceStoppedPage,
@@ -271,6 +272,16 @@ describe("the service's pages", () => {
     });
     expect(interrupted).toContain("The review stopped unexpectedly.");
     expect(interrupted).not.toContain("ended normally");
+  });
+
+  it("should hold an unexpectedly stopped review at its stable address", () => {
+    const restarting = renderPlanRestartingPage({
+      planPath: "/work/plan.mdx",
+    });
+    expect(restarting).toContain("The review is restarting.");
+    expect(restarting).toContain("Reload this page");
+    expect(restarting).toContain("big-plan review /work/plan.mdx");
+    expect(restarting).not.toContain("ended normally");
   });
 
   it("should name the day an ending fell on", () => {
