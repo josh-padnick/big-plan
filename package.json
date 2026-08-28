@@ -2,7 +2,7 @@
   "name": "big-plan",
   "version": "0.0.1",
   "description": "Good AI output depends on a great plan. Big Plan makes reviewing agent plans a first-class experience.",
-  "license": "MIT",
+  "license": "FSL-1.1-MIT",
   "author": "Josh Padnick",
   "repository": {
     "type": "git",
