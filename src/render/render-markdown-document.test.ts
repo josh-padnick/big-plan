@@ -53,7 +53,7 @@ const COMPONENT_CONTRACT_MARKERS: ReadonlyArray<
   ["QuickSummary", "## Summary"],
   ["Slide", "> Slide structure — type: desired-experience"],
   ["TableOfContents", "## Plan outline"],
-  ["Wireframe", "### Wireframe: Local review queue"],
+  ["Wireframe", "### Interface design: Local review queue"],
 ];
 
 const render = (markdown: string) =>
@@ -122,10 +122,62 @@ Details.
     expect(result.markdown).toContain("Recommendation:");
     expect(result.markdown).toContain("```mermaid");
     expect(result.markdown).toContain("#### Connections");
-    expect(result.markdown).toContain("### Wireframe: Local review queue");
+    expect(result.markdown).toContain(
+      "### Interface design: Local review queue",
+    );
     expect(result.markdown).toContain("#### Screen: Review queue — Initial");
-    expect(result.markdown).toContain("- UI outline:");
-    expect(result.markdown).toContain("Navigation item: Open threads (active)");
+    expect(result.markdown).toContain(
+      "- Device frame: Desktop application viewport, 1200 × 820 pixels; persistent chrome stays fixed while workspace panes manage their own overflow.",
+    );
+    expect(result.markdown).toContain(
+      "- Overall composition: A desktop application layout with a fixed-width left navigation sidebar and a wider, visually dominant main content column.",
+    );
+    expect(result.markdown).toContain(
+      "- Visual hierarchy: The full-width page heading reads first. A filled primary button is the strongest action.",
+    );
+    expect(result.markdown).toContain(
+      "Two-pane workspace: a broad record collection on the left is the dominant working surface, while a narrower supporting sidebar on the right holds detail for the selected record.",
+    );
+    expect(result.markdown).toContain(
+      "Navigation link: Open threads (visually selected as the current location)",
+    );
+  });
+
+  it("should describe a wireframe without relying on component or attribute jargon", () => {
+    const result = render(readFileSync("examples/all-components.mdx", "utf8"));
+    const start = result.markdown.indexOf(
+      "### Interface design: Local review queue",
+    );
+    const end = result.markdown.indexOf(
+      "\n\nThe plan is ready to execute",
+      start,
+    );
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const exportedInterface = result.markdown.slice(start, end);
+
+    for (const jargon of [
+      "AppShell",
+      "AppContent",
+      "ChoiceCard",
+      "ChoiceGroup",
+      "Group",
+      "NavItem",
+      "PageHeader",
+      "Panel",
+      "Rail",
+      "Row",
+      "SegmentedControl",
+      "Stack",
+      "gap:",
+      "align:",
+      "justify:",
+      "surface:",
+      "emphasis:",
+      "Pattern:",
+    ]) {
+      expect(exportedInterface).not.toContain(jargon);
+    }
   });
 
   it("should preserve every semantic wireframe node and authored choice emoji", () => {
@@ -163,13 +215,29 @@ Details.
 `);
 
     for (const meaning of [
-      "Group (gap: lg; align: end)",
-      "Reference: `big-plan render plan.mdx` (icon: terminal; copy action: Copy command)",
-      "Icon: Tip (name: tip; size: sm; label shown)",
-      "Overlay (title: Confirm export; kind: alert; backdrop: dim)",
-      "Choice: Export — Save the plan (emoji: 📦; selected)",
+      "Compact horizontal cluster; its controls stay together as one unit, with generous spacing and their lower edges aligned.",
+      "Bordered copyable reference: `big-plan render plan.mdx` (leading terminal symbol; copy button labelled Copy command)",
+      "Small standalone symbol meaning Tip (visible text label)",
+      "Centered blocking alert dialog titled Confirm export; the page behind it is dimmed and unavailable until the alert is answered.",
+      "Large selectable card: Export — Save the plan (art: 📦; visibly selected with the strongest outline and selection mark)",
     ]) {
       expect(result.markdown).toContain(meaning);
+    }
+    for (const jargon of [
+      "ChoiceCard",
+      "ChoiceGroup",
+      "Group (",
+      "Overlay (",
+      "Reference:",
+      "Icon:",
+      "gap:",
+      "align:",
+      "kind:",
+      "backdrop:",
+      "emoji:",
+      "emphasis:",
+    ]) {
+      expect(result.markdown).not.toContain(jargon);
     }
   });
 
@@ -192,12 +260,14 @@ Details.
       "**Lines 41-42:** Validation must settle",
       "![Operator confirmation state](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==)",
       "#### Screen: Ready to release — Initial",
-      "Badge: Checks passed (tone: success)",
-      "text field: Approval code (value: Confirmed; disabled)",
-      "navigates to screen ready",
+      "Compact status badge: Checks passed (success treatment)",
+      "Disabled text input labelled Approval code (current value: Confirmed)",
+      "opens screen ready",
     ]) {
       expect(result.markdown).toContain(meaning);
     }
+    expect(result.markdown).not.toContain("Stack (");
+    expect(result.markdown).not.toContain("TextField");
   });
 
   it("should keep the version beside a title that is not the first block", () => {
