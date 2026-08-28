@@ -7119,6 +7119,57 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("should preserve approval when the post-commit presence read fails", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await writeFile(target.store.agentHeartbeatPath, "{");
+        const reported: Array<string> = [];
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation((chunk: unknown) => {
+            reported.push(String(chunk));
+            return true;
+          });
+        try {
+          const response = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          expect(response.status).toBe(200);
+          await expect(response.json()).resolves.toMatchObject({
+            delivered: true,
+            approval: { status: "approved", pinnedSnapshot: digest },
+          });
+        } finally {
+          stderr.mockRestore();
+        }
+        expect(reported.join("")).toContain(
+          "Agent presence could not be read after approval",
+        );
+        const progress = await readProgress({
+          store: target.store,
+          sessionId: target.sessionId,
+        });
+        expect(progress.at(-1)).toMatchObject({
+          stepCode: "plan-approved",
+          step: "Plan approved",
+          detail: "Approval recorded - no agent connected to notify",
+        });
+        const stored: unknown = JSON.parse(
+          await readFile(target.store.approvalPath, "utf8"),
+        );
+        expect(stored).toMatchObject({
+          entries: [
+            expect.objectContaining({
+              kind: "approval",
+              pinnedSnapshot: digest,
+            }),
+          ],
+        });
+      },
+    );
+  });
+
   it("accepts every open change set as part of approval", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,

@@ -541,12 +541,20 @@ export const approvePlan = async (
       error,
     });
   }
-  const agentConnected = (
-    await readAgentPresence({
-      store: context.store,
-      sessionId: context.sessionId,
-    })
-  ).connected;
+  let agentConnected = false;
+  try {
+    agentConnected = (
+      await readAgentPresence({
+        store: context.store,
+        sessionId: context.sessionId,
+      })
+    ).connected;
+  } catch (error: unknown) {
+    context.reportDiagnostic({
+      message: "Agent presence could not be read after approval",
+      error,
+    });
+  }
   await emitProgress({
     context,
     stepCode: "plan-approved",
