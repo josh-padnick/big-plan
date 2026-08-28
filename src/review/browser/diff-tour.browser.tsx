@@ -95,7 +95,7 @@ export const DiffTourProvider = ({
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [showCompletionSummary, setShowCompletionSummary] = useState(false);
-  const { accepted, canRecord, disposeOfChanges } = useChangeVerdicts();
+  const { accepted, canRecord, recordChangeVerdicts } = useChangeVerdicts();
   const places = useMemo(() => {
     if (tour === null) return [];
     const allowed = new Set(tour.placeIds);
@@ -128,7 +128,7 @@ export const DiffTourProvider = ({
         const changing = placeIds.filter(
           (placeId) => isPlaceAccepted(diff, placeId) !== isAccepted,
         );
-        disposeOfChanges({
+        recordChangeVerdicts({
           op: isAccepted ? "accept" : "withdraw",
           from: diff.from,
           to: diff.to,
@@ -136,7 +136,7 @@ export const DiffTourProvider = ({
         });
       },
     };
-  }, [accepted, disposeOfChanges]);
+  }, [accepted, recordChangeVerdicts]);
   const { isPlaceAccepted, standingOf, setPlacesAccepted } = tourValue;
   const openTour = (next: OpenTour): void => {
     setTour(next);

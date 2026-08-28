@@ -58,7 +58,7 @@ export type ChangeVerdictsValue = {
   readonly accepted: ReadonlySet<string>;
   /** False while the runtime has told this page it may not record anything. */
   readonly canRecord: boolean;
-  readonly disposeOfChanges: (input: PendingVerdict) => void;
+  readonly recordChangeVerdicts: (input: PendingVerdict) => void;
 };
 
 const overlay = ({
@@ -202,7 +202,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
     }
   }, [applyResponse, identity]);
 
-  const disposeOfChanges = useCallback(
+  const recordChangeVerdicts = useCallback(
     (input: PendingVerdict): void => {
       if (input.placeIds.length === 0) return;
       // One gesture can name more places than a single mutation may carry, so
@@ -275,7 +275,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
     [pending, stored],
   );
   return useMemo(
-    () => ({ accepted, canRecord, disposeOfChanges }),
-    [accepted, canRecord, disposeOfChanges],
+    () => ({ accepted, canRecord, recordChangeVerdicts }),
+    [accepted, canRecord, recordChangeVerdicts],
   );
 };

@@ -165,7 +165,7 @@ export const validateChangeVerdicts = (
 
 /**
  * Validates one browser mutation. The server stamps the acceptance time, so a
- * browser can name which changes it disposed of but never when.
+ * browser can name which changes receive a verdict but never when.
  */
 export const validateChangeVerdictMutation = ({
   value,

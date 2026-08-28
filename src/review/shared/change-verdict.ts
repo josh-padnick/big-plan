@@ -1,5 +1,6 @@
-// Owns what it means for a reviewer to have disposed of a change, and the one
-// arithmetic that turns a change set plus the stored record into a count.
+// Owns what it means for a reviewer to have recorded a verdict for a change,
+// and the one arithmetic that turns a change set plus the stored record into a
+// count.
 //
 // A verdict is addressed by the revision it belongs to - the diff's two
 // snapshot digests - plus the place inside it. That address is content-pinned
@@ -52,7 +53,7 @@ export const PLACE_ID_LIMIT = 256;
  */
 export const ACCEPTED_CHANGE_LIMIT = 5_000;
 
-/** How many places one mutation may dispose of, so a single request stays bounded. */
+/** How many places one mutation may record, so a single request stays bounded. */
 export const VERDICT_BATCH_LIMIT = 500;
 
 /**

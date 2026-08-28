@@ -45,7 +45,7 @@ export const readChangeVerdictState = async (
  * read-modify-write stays atomic against another browser's mutation and only a
  * session that still holds authority reaches it.
  */
-export const disposeOfChanges = async (
+export const recordChangeVerdicts = async (
   context: ReviewRouteContext,
   request: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
