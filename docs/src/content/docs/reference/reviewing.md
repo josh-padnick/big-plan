@@ -7,7 +7,7 @@ description: Review, revise, and approve a plan through the local runtime.
 rendered blocks and hand the staged set to the agent.
 
 ```sh
-npx big-plan review plans/checkout-retry.mdx
+npx -y big-plan@latest review plans/checkout-retry.mdx
 ```
 
 The command prints a stable `http://127.0.0.1:8790/plan/<plan-id>` address and keeps running.
@@ -74,7 +74,7 @@ Two `big-plan review` commands started at the same instant resolve the same way:
 Pass `--takeover` to replace a live session deliberately, for example when its terminal is gone but the process is still running:
 
 ```sh
-npx big-plan review plans/checkout-retry.mdx --takeover
+npx -y big-plan@latest review plans/checkout-retry.mdx --takeover
 ```
 
 The replaced runtime keeps listening but loses write custody.
@@ -275,7 +275,7 @@ version control. Feedback packages and their Markdown briefs live under
 Keep the review runtime open, then run this in the plan repository:
 
 ```sh
-npx big-plan agent plans/checkout-retry.mdx
+npx -y big-plan@latest agent plans/checkout-retry.mdx
 ```
 
 Start either pasteable command it returns. That coding-agent session waits for
