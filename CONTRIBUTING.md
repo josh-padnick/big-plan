@@ -95,6 +95,7 @@ Any account may write any of them: a human, firstmate, or the lane's own agent.
 
 ```text
 review-triage: complete <head-sha>
+review-triage: retract <reviewer> - <reason>
 no-mistakes: passed run <run-id> head <head-sha>
 no-mistakes: overridden - <reason>
 ```
@@ -108,7 +109,10 @@ Sign off last, after every finding has a reply and after the final push.
 1. Get one review.
    Any of CodeRabbit, Greptile, or Devin counts; the gate does not care which, so BIG-143's credit-based picker can choose freely.
    Exactly one, because one review per pull request is the budget, and a second review means one of the two was never triaged.
-   A reviewer counts while it holds either a review it has not taken back or an unresolved inline thread, so dismissing a review drops that reviewer only once every finding it left is resolved.
+   A reviewer counts while it holds either a review it has not taken back or an unresolved inline thread.
+   For an `APPROVED` or `CHANGES_REQUESTED` review, reply to every finding and then dismiss the review; dismissal alone never hides an unresolved finding.
+   GitHub cannot dismiss a `COMMENTED` review, so when two bots reviewed the pull request, resolving every inline thread from one COMMENTED reviewer retracts that reviewer instead.
+   A summary-only COMMENTED review stays counted unless a plain pull request comment explicitly retracts it with `review-triage: retract <reviewer> - <reason>`, using the canonical reviewer name `coderabbit`, `greptile`, or `devin` and a non-empty reason.
 2. Resolve every inline finding.
    Reply in the thread saying what you did: the commit that fixes it, or the reason you decline it.
    A thread is resolved, in this gate's sense, once a comment by somebody other than the reviewer exists in it.
@@ -141,7 +145,7 @@ findings: <n>
 
 The sha must be a commit on this pull request, and the number of findings declared must not exceed the number of disposition lines.
 Post at most one accepted review per pull request: an attestation posted while a bot has already reviewed fails the gate.
-Clear it by deleting the attestation comment, or by resolving the bot's findings and then dismissing its review - dismissal alone leaves the bot counted while any of its threads is unresolved.
+Clear it by deleting the attestation comment, or by removing the bot review through the applicable process under [When to sign off](#when-to-sign-off).
 
 ### The override rule
 

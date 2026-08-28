@@ -4,11 +4,13 @@
 import { compileCodeSnippetComponent } from "./compile.js";
 import { CodeSnippet } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { codeSnippetMarkdown } from "./markdown.js";
 
 /** Declares CodeSnippet's renderer and direct-child Annotation contract. */
 export const CODE_SNIPPET_COMPONENT_DEFINITION = defineComponent({
   compile: compileCodeSnippetComponent,
   view: CodeSnippet,
+  markdown: codeSnippetMarkdown,
   scopedChildren: {
     Annotation: {
       kind: "scoped-child",

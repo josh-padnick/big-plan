@@ -175,7 +175,14 @@ const THREADS_QUERY = `
             originalLine
             comments(first: 100) {
               pageInfo { hasNextPage }
-              nodes { url body isMinimized author { login } }
+              nodes {
+                url
+                body
+                isMinimized
+                createdAt
+                author { login }
+                pullRequestReview { databaseId }
+              }
             }
           }
         }
@@ -198,6 +205,7 @@ const fetchReviewThreads = async (owner, name, number) => {
         );
       }
       threads.push({
+        reviewId: node.comments.nodes[0]?.pullRequestReview?.databaseId ?? null,
         isResolved: node.isResolved,
         isOutdated: node.isOutdated,
         path: node.path,
@@ -206,6 +214,7 @@ const fetchReviewThreads = async (owner, name, number) => {
         comments: node.comments.nodes.map((comment) => ({
           author: comment.author?.login ?? "(deleted account)",
           body: comment.body,
+          createdAt: comment.createdAt,
           isMinimized: comment.isMinimized,
           url: comment.url,
         })),
@@ -248,14 +257,18 @@ export const fetchSnapshot = async ({ owner, repo, number }) => {
     url: pull.html_url,
     commitShas: commits.map((commit) => commit.sha),
     issueComments: issueComments.map((comment) => ({
+      id: comment.id,
       author: comment.user?.login ?? "(deleted account)",
       body: comment.body ?? "",
+      createdAt: comment.created_at,
       url: comment.html_url,
     })),
     reviews: reviews.map((review) => ({
+      id: review.id,
       author: review.user?.login ?? "(deleted account)",
       state: review.state,
       body: review.body ?? "",
+      submittedAt: review.submitted_at,
     })),
     reviewThreads,
   };

@@ -20,19 +20,36 @@ import {
 
 const HEAD = "abc1234def5678901234567890abcdef12345678";
 const OLD = "0000111122223333444455556666777788889999";
+const REVIEWED_AT = "2026-08-20T12:00:00Z";
+const COMMENTED_AT = "2026-08-20T12:01:00Z";
 
 /** A snapshot with nothing on it, which every case narrows. */
-const snapshot = (overrides = {}) => ({
-  number: 42,
-  headSha: HEAD,
-  isDraft: false,
-  url: "https://github.com/o/r/pull/42",
-  commitShas: [OLD, HEAD],
-  issueComments: [],
-  reviews: [],
-  reviewThreads: [],
-  ...overrides,
-});
+const snapshot = (overrides = {}) => {
+  const value = {
+    number: 42,
+    headSha: HEAD,
+    isDraft: false,
+    url: "https://github.com/o/r/pull/42",
+    commitShas: [OLD, HEAD],
+    issueComments: [],
+    reviews: [],
+    reviewThreads: [],
+    ...overrides,
+  };
+  return {
+    ...value,
+    issueComments: value.issueComments.map((one, index) => ({
+      id: index + 100,
+      createdAt: COMMENTED_AT,
+      ...one,
+    })),
+    reviews: value.reviews.map((one, index) => ({
+      id: index + 1,
+      submittedAt: REVIEWED_AT,
+      ...one,
+    })),
+  };
+};
 
 const comment = (body, author = "josh-padnick") => ({
   author,
@@ -41,6 +58,7 @@ const comment = (body, author = "josh-padnick") => ({
 });
 
 const thread = (comments, extra = {}) => ({
+  reviewId: comments[0]?.author.startsWith("greptile") ? 2 : 1,
   isResolved: false,
   isOutdated: false,
   path: "src/review/live-target.browser.ts",
@@ -75,6 +93,22 @@ test("a pull request with no review names the two ways to get one", () => {
   assert.equal(verdict.conclusion, "failure");
   assert.match(verdict.title, /No accepted review/);
   assert.match(report(verdict), /CodeRabbit, Greptile, Devin/);
+  assert.match(report(verdict), /adversarial-review: complete/);
+});
+
+test("bot conversation summaries remain visible without counting as reviews", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        comment("CodeRabbit summary", "coderabbitai[bot]"),
+        comment("Greptile summary", "greptile-apps[bot]"),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(report(verdict), /2 bot-authored pull request conversation/);
+  assert.match(report(verdict), /CodeRabbit, Greptile/);
+  assert.match(report(verdict), /not GitHub\nCOMMENTED reviews/);
   assert.match(report(verdict), /adversarial-review: complete/);
 });
 
@@ -207,7 +241,7 @@ test("two accepted reviews fail, because the budget is one", () => {
           `adversarial-review: complete ${HEAD} by claude-opus-5\nfindings: 1\n1. Race on replay - resolved: fixed - guarded in ${HEAD.slice(0, 8)}`,
         ),
       ],
-      reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+      reviews: [{ author: "coderabbitai[bot]", state: "APPROVED", body: "" }],
       reviewThreads: [thread([finding(), reply()])],
     }),
   );
@@ -225,6 +259,391 @@ test("two accepted reviews fail, because the budget is one", () => {
     report(verdict),
     /by claude-opus-5: delete that\n\s+attestation comment/,
   );
+});
+
+test("resolving every thread retracts one of two commented bot reviews", () => {
+  const greptileFinding = {
+    ...finding("Keep the fallback deterministic."),
+    author: "greptile-apps[bot]",
+  };
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "" },
+      ],
+      reviewThreads: [
+        thread([finding(), reply()]),
+        thread([greptileFinding, reply()]),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "success", report(verdict));
+  assert.match(report(verdict), /Reviewer: Greptile/);
+});
+
+test("two commented bot reviews still fail while each has an unresolved thread", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "" },
+      ],
+      reviewThreads: [
+        thread([finding()]),
+        thread([
+          {
+            ...finding("Keep the fallback deterministic."),
+            author: "greptile-apps[bot]",
+          },
+        ]),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+  assert.match(report(verdict), /non-dismissible COMMENTED review is/);
+  assert.match(
+    report(verdict),
+    /keeps counting while any inline thread is unresolved/,
+  );
+});
+
+test("a summary-only commented review remains the accepted review", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "" },
+      ],
+      reviewThreads: [
+        thread([
+          {
+            ...finding("Keep the fallback deterministic."),
+            author: "greptile-apps[bot]",
+          },
+          reply(),
+        ]),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "success", report(verdict));
+  assert.match(report(verdict), /Reviewer: CodeRabbit/);
+});
+
+test("two summary-only reviews require an explicit reviewer disposition", () => {
+  const reviews = [
+    { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+    { author: "greptile-apps[bot]", state: "COMMENTED", body: "summary" },
+  ];
+  const withoutDisposition = evaluateReviewTriage(
+    snapshot({ issueComments: [signOff], reviews }),
+  );
+  assert.equal(withoutDisposition.conclusion, "failure");
+  assert.match(withoutDisposition.title, /2 accepted reviews/);
+  assert.match(
+    report(withoutDisposition),
+    /review-triage: retract coderabbit - <reason>/,
+  );
+
+  for (const marker of [
+    "review-triage: retract coderabbit -",
+    "> review-triage: retract coderabbit - duplicate bot review",
+  ]) {
+    const invalidDisposition = evaluateReviewTriage(
+      snapshot({ issueComments: [signOff, comment(marker)], reviews }),
+    );
+    assert.equal(invalidDisposition.conclusion, "failure");
+    assert.match(invalidDisposition.title, /2 accepted reviews/);
+  }
+
+  const withDisposition = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        comment("review-triage: retract coderabbit - duplicate bot review"),
+      ],
+      reviews,
+    }),
+  );
+  assert.equal(withDisposition.conclusion, "success", report(withDisposition));
+  assert.match(report(withDisposition), /Reviewer: Greptile/);
+});
+
+test("a summary disposition drops only its named reviewer", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        comment("review-triage: retract devin - duplicate bot review"),
+      ],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "summary" },
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+});
+
+test("a summary disposition does not remove the only bot review", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        comment("review-triage: retract coderabbit - duplicate bot review"),
+      ],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "success", report(verdict));
+  assert.match(report(verdict), /Reviewer: CodeRabbit/);
+});
+
+test("bot retractions never leave an attestation as the sole review", () => {
+  const attestation = comment(
+    `adversarial-review: complete ${HEAD} by claude-opus-5\nfindings: 0`,
+  );
+  const reviews = [
+    { author: "coderabbitai[bot]", state: "COMMENTED", body: "" },
+    { author: "greptile-apps[bot]", state: "COMMENTED", body: "" },
+  ];
+  const greptileFinding = {
+    ...finding("Keep the fallback deterministic."),
+    author: "greptile-apps[bot]",
+  };
+  const cases = [
+    {
+      issueComments: [signOff, attestation],
+      reviewThreads: [
+        thread([finding(), reply()]),
+        thread([greptileFinding, reply()]),
+      ],
+    },
+    {
+      issueComments: [
+        signOff,
+        attestation,
+        comment("review-triage: retract coderabbit - duplicate bot review"),
+        comment("review-triage: retract greptile - duplicate bot review"),
+      ],
+      reviewThreads: [],
+    },
+  ];
+
+  for (const one of cases) {
+    const verdict = evaluateReviewTriage(snapshot({ ...one, reviews }));
+    assert.equal(verdict.conclusion, "failure");
+    assert.match(verdict.title, /2 accepted reviews/);
+    assert.match(report(verdict), /Greptile/);
+    assert.match(report(verdict), /adversarial review/);
+  }
+});
+
+test("a later review invalidates older retraction evidence", () => {
+  const reviews = [
+    {
+      id: 1,
+      author: "coderabbitai[bot]",
+      state: "COMMENTED",
+      body: "finding review",
+      submittedAt: REVIEWED_AT,
+    },
+    {
+      id: 2,
+      author: "greptile-apps[bot]",
+      state: "COMMENTED",
+      body: "retained review",
+      submittedAt: REVIEWED_AT,
+    },
+    {
+      id: 3,
+      author: "coderabbitai[bot]",
+      state: "COMMENTED",
+      body: "new summary feedback",
+      submittedAt: "2026-08-20T12:02:00Z",
+    },
+  ];
+  const oldResolvedThread = thread([finding(), reply()], { reviewId: 1 });
+  const cases = [
+    {
+      issueComments: [signOff],
+      reviewThreads: [oldResolvedThread],
+    },
+    {
+      issueComments: [
+        signOff,
+        {
+          ...comment(
+            "review-triage: retract coderabbit - duplicate bot review",
+          ),
+          createdAt: COMMENTED_AT,
+        },
+      ],
+      reviewThreads: [],
+    },
+  ];
+
+  for (const one of cases) {
+    const verdict = evaluateReviewTriage(snapshot({ ...one, reviews }));
+    assert.equal(verdict.conclusion, "failure");
+    assert.match(verdict.title, /2 accepted reviews/);
+    assert.match(report(verdict), /CodeRabbit/);
+    assert.match(
+      report(verdict),
+      /review-triage: retract coderabbit - <reason>/,
+    );
+    assert.doesNotMatch(report(verdict), /CodeRabbit: reply in every inline/);
+  }
+
+  const retracted = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        {
+          ...comment(
+            "review-triage: retract coderabbit - duplicate bot review",
+          ),
+          createdAt: "2026-08-20T12:03:00Z",
+        },
+      ],
+      reviews,
+      reviewThreads: [oldResolvedThread],
+    }),
+  );
+  assert.equal(retracted.conclusion, "success", report(retracted));
+  assert.match(report(retracted), /Reviewer: Greptile/);
+});
+
+test("a same-second later review invalidates resolved older threads", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [
+        {
+          id: 1,
+          author: "coderabbitai[bot]",
+          state: "COMMENTED",
+          body: "finding review",
+          submittedAt: REVIEWED_AT,
+        },
+        {
+          id: 2,
+          author: "greptile-apps[bot]",
+          state: "COMMENTED",
+          body: "retained review",
+          submittedAt: REVIEWED_AT,
+        },
+        {
+          id: 3,
+          author: "coderabbitai[bot]",
+          state: "COMMENTED",
+          body: "new summary feedback",
+          submittedAt: REVIEWED_AT,
+        },
+      ],
+      reviewThreads: [thread([finding(), reply()], { reviewId: 1 })],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+  assert.match(report(verdict), /CodeRabbit/);
+});
+
+test("summary retraction guidance includes older unresolved threads", () => {
+  const reviews = [
+    {
+      id: 1,
+      author: "coderabbitai[bot]",
+      state: "COMMENTED",
+      body: "finding review",
+      submittedAt: REVIEWED_AT,
+    },
+    {
+      id: 2,
+      author: "greptile-apps[bot]",
+      state: "COMMENTED",
+      body: "retained review",
+      submittedAt: REVIEWED_AT,
+    },
+    {
+      id: 3,
+      author: "coderabbitai[bot]",
+      state: "COMMENTED",
+      body: "new summary feedback",
+      submittedAt: "2026-08-20T12:02:00Z",
+    },
+  ];
+  const marker = {
+    ...comment("review-triage: retract coderabbit - duplicate bot review"),
+    createdAt: "2026-08-20T12:03:00Z",
+  };
+  const unresolved = thread([finding()], { reviewId: 1 });
+  const blocked = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff, marker],
+      reviews,
+      reviewThreads: [unresolved],
+    }),
+  );
+  assert.equal(blocked.conclusion, "failure");
+  assert.match(report(blocked), /1 older unresolved inline thread/);
+  assert.match(report(blocked), /review-triage: retract coderabbit - <reason>/);
+  assert.match(
+    report(blocked),
+    /cannot take effect while any inline thread remains unresolved/,
+  );
+
+  const retracted = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff, marker],
+      reviews,
+      reviewThreads: [thread([finding(), reply()], { reviewId: 1 })],
+    }),
+  );
+  assert.equal(retracted.conclusion, "success", report(retracted));
+  assert.match(report(retracted), /Reviewer: Greptile/);
+});
+
+test("a same-second summary marker cannot retract a review", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        {
+          ...comment(
+            "review-triage: retract coderabbit - duplicate bot review",
+          ),
+          createdAt: REVIEWED_AT,
+        },
+      ],
+      reviews: [
+        {
+          id: 1,
+          author: "coderabbitai[bot]",
+          state: "COMMENTED",
+          body: "summary feedback",
+          submittedAt: REVIEWED_AT,
+        },
+        {
+          id: 2,
+          author: "greptile-apps[bot]",
+          state: "COMMENTED",
+          body: "retained review",
+          submittedAt: REVIEWED_AT,
+        },
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+  assert.match(report(verdict), /CodeRabbit/);
 });
 
 test("an adversarial attestation stands in for a bot review", () => {

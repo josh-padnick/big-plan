@@ -174,6 +174,7 @@ import {
 import { readRuntimeSession } from "./routes-session.js";
 import { updateReviewMode } from "./routes-review-mode.js";
 import { clearStaleReviewMode } from "./review-mode-store.js";
+import { exportPlanMarkdown } from "./routes-export-markdown.js";
 import { drainAndCloseServer } from "./http-shutdown.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -220,6 +221,11 @@ const DOCUMENT_ROUTE: Route = { method: "GET", path: "/" };
 const API_ROUTES: ReadonlyArray<ApiRoute> = [
   { method: "GET", path: "/api/session", handler: readRuntimeSession },
   { method: "POST", path: "/api/review-mode", handler: updateReviewMode },
+  {
+    method: "GET",
+    path: "/api/export-markdown",
+    handler: exportPlanMarkdown,
+  },
   { method: "GET", path: "/api/drafts", handler: readReviewState },
   {
     method: "GET",
@@ -395,24 +401,46 @@ const sendJson = ({
     body: JSON.stringify(value),
   });
 
+/**
+ * Merges a route's own headers under the transport guarantees every binary
+ * response carries. The runtime owns content typing and the browser-facing
+ * protections, so a route naming one of them cannot turn it off.
+ */
+export const binaryTransportHeaders = ({
+  contentType,
+  headers,
+}: {
+  readonly contentType: string;
+  readonly headers?: Readonly<Record<string, string>>;
+}): Record<string, string> => ({
+  ...headers,
+  "content-type": contentType,
+  "content-security-policy": ASSET_CONTENT_SECURITY_POLICY,
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "cache-control": "no-store",
+});
+
 const sendBinary = ({
   response,
   status,
   contentType,
   body,
+  headers,
 }: {
   readonly response: ServerResponse;
   readonly status: number;
   readonly contentType: string;
   readonly body: Uint8Array;
+  readonly headers?: Readonly<Record<string, string>>;
 }): void => {
-  response.writeHead(status, {
-    "content-type": contentType,
-    "content-security-policy": ASSET_CONTENT_SECURITY_POLICY,
-    "x-content-type-options": "nosniff",
-    "referrer-policy": "no-referrer",
-    "cache-control": "no-store",
-  });
+  response.writeHead(
+    status,
+    binaryTransportHeaders({
+      contentType,
+      ...(headers === undefined ? {} : { headers }),
+    }),
+  );
   response.end(body);
 };
 
@@ -1006,6 +1034,7 @@ export const startReviewRuntime = async ({
         status: value.status,
         contentType: value.contentType,
         body: value.body,
+        headers: value.headers,
       });
       return;
     }

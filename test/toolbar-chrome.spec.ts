@@ -9,6 +9,7 @@ import {
   serializePreferencesRecord,
   type Palette,
 } from "../src/render/preferences.js";
+import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "./fixtures";
 
 const NON_TEXT_FLOOR = 3;
@@ -249,4 +250,169 @@ test("should split the default review-panel edges by theme", async ({
   await expect(addComment).toHaveCSS("border-top-color", "rgb(130, 130, 130)");
   await applyTheme(page, { mode: "dark", palette: "default" });
   await expect(addComment).toHaveCSS("border-top-color", "rgb(118, 118, 118)");
+});
+
+test("should put Export then Settings in the live More actions menu only", async ({
+  page,
+  reviewRuntimeUrl,
+  sampleViewerUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await expect(
+    page.getByRole("button", { name: "Approve plan" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Feedback" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Agent Status" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toBeHidden();
+
+  const more = page.getByRole("button", { name: "More actions" });
+  await expect(more).toHaveAttribute("aria-haspopup", "menu");
+  await more.click();
+  const menu = page.getByRole("menu", { name: "More actions" });
+  await expect(menu.getByRole("menuitem")).toHaveText(["Export", "Settings"]);
+
+  await menu.getByRole("menuitem", { name: "Settings" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(more).toBeFocused();
+
+  await page.goto(sampleViewerUrl);
+  await expect(page.getByRole("button", { name: "More actions" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toBeVisible();
+});
+
+test("should keyboard-dismiss the More actions menu and return focus", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const more = page.getByRole("button", { name: "More actions" });
+  await more.click();
+  await expect(page.getByRole("menuitem", { name: "Export" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "Settings" })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(page.getByRole("menuitem", { name: "Export" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(more).toBeFocused();
+
+  await more.click();
+  await page.locator("article").click({ position: { x: 10, y: 10 } });
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  // Clicking elsewhere dismisses without pulling focus back to the trigger,
+  // so the next keystroke still belongs to whatever the reader clicked. The
+  // frames flush first because a deferred refocus would land after this turn.
+  expect(
+    await page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              resolve(document.activeElement?.getAttribute("aria-label") ?? ""),
+            ),
+          );
+        }),
+    ),
+  ).not.toBe("More actions");
+});
+
+test("should hold the export dialog pending and recover from a refusal", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.addInitScript(() => {
+    const fetchRuntime = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const requestUrl = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.href,
+      );
+      if (!requestUrl.pathname.endsWith("/api/export-markdown")) {
+        return fetchRuntime(input, init);
+      }
+      return new Promise<Response>((resolve) => {
+        window.addEventListener(
+          "bigplan:test-release-export",
+          () =>
+            resolve(
+              new Response(
+                JSON.stringify({
+                  error:
+                    "Review state changed while the export was being prepared.",
+                }),
+                {
+                  status: 409,
+                  headers: { "content-type": "application/json" },
+                },
+              ),
+            ),
+          { once: true },
+        );
+      });
+    };
+  });
+  await page.goto(reviewRuntimeUrl);
+  const more = page.getByRole("button", { name: "More actions" });
+  await more.click();
+  await page.getByRole("menuitem", { name: "Export" }).click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Export this plan as Markdown?",
+  });
+  await dialog.getByRole("button", { name: "Export" }).click();
+  await expect(dialog.getByRole("status")).toHaveText("Preparing export...");
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Export" })).toBeDisabled();
+  // Disabling both choices would otherwise drop focus to the body and take
+  // Escape and Tab out of the dialog for the whole request.
+  await expect(dialog).toBeFocused();
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("bigplan:test-release-export")),
+  );
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: "Export" })).toBeEnabled();
+  await expect(page.getByText("The plan could not be exported.")).toBeVisible();
+  await expect(dialog).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(more).toBeFocused();
+});
+
+test("should confirm and download the latest plan as Markdown", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const more = page.getByRole("button", { name: "More actions" });
+  await more.click();
+  await page.getByRole("menuitem", { name: "Export" }).click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Export this plan as Markdown?",
+  });
+  await expect(dialog).toContainText(
+    "Download the latest saved plan as a Markdown file. Draft agent edits and comments are not included.",
+  );
+
+  const downloadEvent = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Export" }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe("plan.md");
+  const path = await download.path();
+  if (path === null) throw new Error("Markdown download had no local path");
+  expect(await readFile(path, "utf8")).toContain("# Review persistence");
+  await expect(dialog).toHaveCount(0);
+  await expect(more).toBeFocused();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Downloaded plan.md." }),
+  ).toBeAttached();
 });

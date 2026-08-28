@@ -9,6 +9,7 @@ import type {
   CompiledDecisionCardOption,
   DecisionCardTone,
 } from "../../_model/decision-card.js";
+import { weightedDecisionTotal } from "../../_model/decision-card.js";
 import { ComparisonMatrix } from "../comparison-matrix/comparison-matrix.js";
 import { BadgePill } from "../badge-pill/badge-pill.js";
 import { CHEVRON_RIGHT_ICON } from "../../../icons/lucide/chevron-right.js";
@@ -245,27 +246,6 @@ export const RowsLayout = ({
 const optionKey = (index: number): string =>
   String.fromCharCode("A".charCodeAt(0) + index);
 
-const weightedTotal = ({
-  model,
-  option,
-}: {
-  readonly model: CompiledDecisionCard;
-  readonly option: CompiledDecisionCardOption;
-}) => {
-  const weights = model.criteria.map((criterion) => criterion.impact ?? 0);
-  const scores = option.considerations.map(
-    (consideration) => consideration?.score ?? 0,
-  );
-  const numerator = weights.reduce(
-    (sum, weight, index) => sum + weight * (scores[index] ?? 0),
-    0,
-  );
-  const denominator = weights.reduce((sum, weight) => sum + weight * 5, 0);
-  const percent =
-    denominator === 0 ? 0 : Math.round((numerator / denominator) * 100);
-  return { weights, scores, numerator, denominator, percent };
-};
-
 // Weighted analysis uses a compact priority-control grammar: weight squares
 // belong directly below the criterion they qualify and expose the full 1–5
 // scale.
@@ -383,7 +363,7 @@ const ScoreCalculationMatrix = ({
 }) => {
   const criteria = criteriaOf(model);
   const totals = model.options.map((option) =>
-    weightedTotal({ model, option }),
+    weightedDecisionTotal({ model, option }),
   );
   return (
     <div className="decision-calculation-scroll mt-3">
@@ -483,7 +463,7 @@ const WeightedScoreFooter = ({
         {"Total score"}
       </th>
       {model.options.map((option, optionIndex) => {
-        const total = weightedTotal({ model, option });
+        const total = weightedDecisionTotal({ model, option });
         return (
           <td
             className="decision-score-total px-4 py-3 text-center"
