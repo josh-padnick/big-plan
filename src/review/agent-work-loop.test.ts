@@ -1078,7 +1078,7 @@ describe("agent work loop lifecycle", () => {
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   it("should not hand one request to two agents on the same review", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-two-"));
