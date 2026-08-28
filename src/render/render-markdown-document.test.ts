@@ -691,6 +691,7 @@ Current event version. Example:
     expect(
       result.markdown.match(/Source location the event refers to/gu),
     ).toHaveLength(1);
+    expect(result.markdown.match(/Restricts the result set/gu)).toHaveLength(1);
     expect(result.markdown.match(/Current event status/gu)).toHaveLength(1);
     expect(
       result.markdown.match(
@@ -710,6 +711,9 @@ Current event version. Example:
     );
     expect(html).toContain(
       "<p>This status is returned after persistence completes.</p>",
+    );
+    expect(html).toContain(
+      '<pre><code class="language-json">"v2"\n</code></pre>',
     );
   });
 
