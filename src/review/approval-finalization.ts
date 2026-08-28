@@ -122,13 +122,28 @@ const settleLocked = async ({
   readonly planPath: string;
   readonly finalization: ApprovalFinalization;
 }): Promise<ApprovalFinalizationResult> => {
-  const currentSnapshot = deriveSnapshotDigest(
-    await readFile(planPath, "utf8"),
+  const journaledEntry = finalization.approval.entries.at(-1);
+  if (journaledEntry?.kind !== "approval") {
+    throw new Error("The approval finalization carries no approval entry");
+  }
+  const { record: storedApproval } = await readApprovalRecord({
+    store,
+    validate: validateApprovalRecord,
+  });
+  const hasJournaledApproval = storedApproval.entries.some(
+    (entry) =>
+      entry.kind === "approval" &&
+      entry.approvalId === journaledEntry.approvalId,
   );
-  if (currentSnapshot !== finalization.expectedSnapshot) {
-    throw new Error(
-      "The plan changed during an interrupted approval finalization",
+  if (!hasJournaledApproval) {
+    const currentSnapshot = deriveSnapshotDigest(
+      await readFile(planPath, "utf8"),
     );
+    if (currentSnapshot !== finalization.expectedSnapshot) {
+      throw new Error(
+        "The plan changed during an interrupted approval finalization",
+      );
+    }
   }
   const canceledRequestIds: string[] = [];
   for (const requestId of finalization.requestIds) {
@@ -153,26 +168,13 @@ const settleLocked = async ({
         finalized: finalization.verdicts,
       }),
   });
-  const finalizedApproval = withCanceledCount({
+  const approvalWithCanceledCount = withCanceledCount({
     record: finalization.approval,
     requestsCanceled: canceledRequestIds.length,
   });
-  const journaledEntry = finalizedApproval.entries.at(-1);
-  if (journaledEntry?.kind !== "approval") {
-    throw new Error("The approval finalization carries no approval entry");
-  }
-  const { record: storedApproval } = await readApprovalRecord({
-    store,
-    validate: validateApprovalRecord,
-  });
-  const hasJournaledApproval = storedApproval.entries.some(
-    (entry) =>
-      entry.kind === "approval" &&
-      entry.approvalId === journaledEntry.approvalId,
-  );
   const currentApproval = hasJournaledApproval
     ? storedApproval
-    : finalizedApproval;
+    : approvalWithCanceledCount;
   if (!hasJournaledApproval) {
     await writeApprovalRecord({ store, record: currentApproval });
   }

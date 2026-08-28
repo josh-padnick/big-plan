@@ -7180,6 +7180,49 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("recovers a durable handoff after the plan source changes", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await chmod(target.store.agentRequestDirectory, 0o500);
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        try {
+          const approved = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          await expect(approved.json()).resolves.toMatchObject({
+            delivered: false,
+          });
+        } finally {
+          stderr.mockRestore();
+          await chmod(target.store.agentRequestDirectory, 0o700);
+        }
+        await writeFile(target.planPath, `${DECISION_PLAN}\nLater edit\n`);
+
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+
+        const recovered = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(recovered.requests).toHaveLength(1);
+        expect(recovered.requests[0]).toMatchObject({
+          kind: "approval",
+          pinnedSnapshot: digest,
+        });
+        await expect(
+          readFile(target.store.approvalFinalizationPath, "utf8"),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+      },
+    );
+  });
+
   it("does not recover a handoff after its approval was revoked", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,
