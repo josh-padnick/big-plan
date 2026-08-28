@@ -271,6 +271,11 @@ export const createSnapshotDiffs = ({
   readonly maxAgeMs?: number;
   readonly now?: () => number;
 } = {}): SnapshotDiffs => {
+  if (!Number.isInteger(maxEntries) || maxEntries < 1) {
+    throw new RangeError(
+      "Snapshot diff cache maxEntries must be a positive integer.",
+    );
+  }
   const entries = new Map<string, SnapshotDiffCacheEntry>();
   let useSequence = 0;
 

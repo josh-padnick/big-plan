@@ -209,6 +209,12 @@ const snapshotDiff = ({
 });
 
 describe("createSnapshotDiffs", () => {
+  it("should reject a cache with no entry capacity", () => {
+    expect(() => createSnapshotDiffs({ maxEntries: 0 })).toThrow(
+      "Snapshot diff cache maxEntries must be a positive integer.",
+    );
+  });
+
   it("should return the identical payload for one immutable snapshot pair", async () => {
     const snapshotDiffs = createSnapshotDiffs();
     let builds = 0;
