@@ -40,10 +40,9 @@ const STRICT_OVERHEAD_MEDIAN_TOLERANCE_MS = 2;
 const PARALLEL_OVERHEAD_SANITY_TOLERANCE_MS = 25;
 const isDedicatedOverheadBenchmark =
   process.env["BIG_PLAN_PROXY_BENCHMARK"] === "1";
-const overheadMedianToleranceMs =
-  isDedicatedOverheadBenchmark
-    ? STRICT_OVERHEAD_MEDIAN_TOLERANCE_MS
-    : PARALLEL_OVERHEAD_SANITY_TOLERANCE_MS;
+const overheadMedianToleranceMs = isDedicatedOverheadBenchmark
+  ? STRICT_OVERHEAD_MEDIAN_TOLERANCE_MS
+  : PARALLEL_OVERHEAD_SANITY_TOLERANCE_MS;
 // Reference medians: document 8.2 ms direct and 9.8 ms proxied; poll 1.38 ms
 // direct and 1.77 ms proxied.
 const STATED_DOCUMENT_ADDED_MS = 1.6;
