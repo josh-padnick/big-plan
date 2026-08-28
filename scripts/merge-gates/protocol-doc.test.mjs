@@ -19,6 +19,8 @@ import {
 } from "./gates.mjs";
 
 const HEAD = "abc1234def5678901234567890abcdef12345678";
+const REVIEWED_AT = "2026-08-20T12:00:00Z";
+const COMMENTED_AT = "2026-08-20T12:01:00Z";
 
 const contributing = readFileSync(
   fileURLToPath(new URL("../../CONTRIBUTING.md", import.meta.url)),
@@ -63,17 +65,32 @@ const documentedLine = (prefix) => {
 
 const fillHead = (line) => line.replace("<head-sha>", HEAD);
 
-const snapshot = (overrides) => ({
-  number: 42,
-  headSha: HEAD,
-  isDraft: false,
-  url: "https://github.com/o/r/pull/42",
-  commitShas: [HEAD],
-  issueComments: [],
-  reviews: [],
-  reviewThreads: [],
-  ...overrides,
-});
+const snapshot = (overrides) => {
+  const value = {
+    number: 42,
+    headSha: HEAD,
+    isDraft: false,
+    url: "https://github.com/o/r/pull/42",
+    commitShas: [HEAD],
+    issueComments: [],
+    reviews: [],
+    reviewThreads: [],
+    ...overrides,
+  };
+  return {
+    ...value,
+    issueComments: value.issueComments.map((one, index) => ({
+      id: index + 100,
+      createdAt: COMMENTED_AT,
+      ...one,
+    })),
+    reviews: value.reviews.map((one, index) => ({
+      id: index + 1,
+      submittedAt: REVIEWED_AT,
+      ...one,
+    })),
+  };
+};
 
 const comment = (body) => ({
   author: "some-agent",
@@ -86,6 +103,7 @@ const triagedBotReview = {
   reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
   reviewThreads: [
     {
+      reviewId: 1,
       isResolved: false,
       isOutdated: false,
       path: "scripts/merge-gates/gates.mjs",
@@ -113,11 +131,33 @@ test("the documented sign-off line signs off", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
       ...triagedBotReview,
-      issueComments: [comment(fillHead(documentedLine("review-triage:")))],
+      issueComments: [
+        comment(fillHead(documentedLine("review-triage: complete"))),
+      ],
     }),
   );
   assert.equal(verdict.conclusion, "success", verdict.details.join("\n"));
   assert.equal(verdict.name, CHECK_NAMES.reviewTriage);
+});
+
+test("the documented summary retraction line retracts the named reviewer", () => {
+  const line = documentedLine("review-triage: retract")
+    .replace("<reviewer>", "coderabbit")
+    .replace("<reason>", "duplicate bot review");
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        comment(fillHead(documentedLine("review-triage: complete"))),
+        comment(line),
+      ],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "summary" },
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "success", verdict.details.join("\n"));
+  assert.match(verdict.details.join("\n"), /Reviewer: Greptile/);
 });
 
 test("the documented pass attestation attests", () => {
@@ -166,7 +206,7 @@ test("the documented attestation template stands in for a bot review", () => {
     snapshot({
       issueComments: [
         comment(attestation),
-        comment(fillHead(documentedLine("review-triage:"))),
+        comment(fillHead(documentedLine("review-triage: complete"))),
       ],
     }),
   );
