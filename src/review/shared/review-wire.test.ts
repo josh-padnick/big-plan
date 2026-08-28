@@ -782,6 +782,7 @@ describe("review wire contract", () => {
       planId: "b".repeat(16),
       plan: "/plans/plan.mdx",
       authoritative: true,
+      mode: "review",
       writesStalledMs: 42_000,
     });
 
@@ -819,14 +820,45 @@ describe("review wire contract", () => {
           to: "b".repeat(16),
           placeId: "place-1",
           acceptedAt: "2026-08-18T00:00:00.000Z",
+          actor: "auto-accept",
         },
         { from: "not-a-digest", to: "b".repeat(16), placeId: "place-2" },
         { from: "a".repeat(16), to: "b".repeat(16), placeId: "" },
+        {
+          from: "a".repeat(16),
+          to: "b".repeat(16),
+          placeId: "place-3",
+          acceptedAt: "2026-08-18T00:00:00.000Z",
+          actor: "mode",
+        },
         "not a verdict",
       ],
     });
     expect(decoded.revision).toBe(4);
     expect(decoded.accepted.map((entry) => entry.placeId)).toEqual(["place-1"]);
+    expect(decoded.accepted[0]?.actor).toBe("auto-accept");
+  });
+
+  it("should expose only a usable review mode and armed time", () => {
+    const sessionId = "a".repeat(16);
+    const identity = {
+      sessionId,
+      planId: "b".repeat(16),
+      plan: "/plans/plan.mdx",
+      authoritative: true,
+    };
+    expect(
+      decodeRuntimeSession({
+        value: { ...identity, mode: "auto-accept", armedAtMs: 42 },
+        sessionId,
+      }),
+    ).toMatchObject({ mode: "auto-accept", armedAtMs: 42 });
+    expect(
+      decodeRuntimeSession({
+        value: { ...identity, mode: "future", armedAtMs: 42 },
+        sessionId,
+      }),
+    ).toMatchObject({ mode: "review" });
   });
 
   // A body this build cannot read must never displace state the page already

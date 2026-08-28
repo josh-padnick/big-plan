@@ -21,12 +21,17 @@ export type ChangeVerdictAddress = {
   readonly placeId: string;
 };
 
+/** Who caused an accepted-change fact to be recorded. */
+export type ChangeVerdictActor = "reviewer" | "auto-accept";
+
 /**
  * One recorded verdict. Today a record holds only acceptances, so the verdict
  * is implied by membership; the address is the whole of the fact.
  */
 export type ChangeVerdict = ChangeVerdictAddress & {
   readonly acceptedAt: string;
+  /** Absent on older rows means reviewer. */
+  readonly actor?: ChangeVerdictActor;
 };
 
 /**

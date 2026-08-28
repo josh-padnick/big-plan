@@ -35,7 +35,10 @@ import {
 } from "./decision-inventory.js";
 import { validateStagedInputs } from "./plan-inputs-store.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
-import { validateChangeVerdicts } from "./change-verdicts-store.js";
+import {
+  updateStoredChangeVerdicts,
+  validateChangeVerdicts,
+} from "./change-verdicts-store.js";
 import type { StoredChangeVerdicts } from "./change-verdicts-store.js";
 import { validateApprovalRecord } from "./approval-record.js";
 import type { ApprovalRecord } from "./shared/approval.js";
@@ -198,6 +201,9 @@ export type DecisionAnswers = {
 export type ChangeVerdicts = {
   readonly read: () => Promise<StoredChangeVerdicts>;
   readonly write: (verdicts: StoredChangeVerdicts) => Promise<void>;
+  readonly update: (
+    change: (verdicts: StoredChangeVerdicts) => StoredChangeVerdicts,
+  ) => Promise<StoredChangeVerdicts>;
 };
 
 /**
@@ -512,7 +518,7 @@ export const createChangeVerdicts = ({
 }: {
   readonly store: ReviewStore;
 }): ChangeVerdicts => {
-  return createRevisionedRecord<StoredChangeVerdicts>({
+  const record = createRevisionedRecord<StoredChangeVerdicts>({
     initial: { version: 1, revision: 0, accepted: [] },
     readStored: () =>
       readChangeVerdicts({
@@ -521,6 +527,16 @@ export const createChangeVerdicts = ({
       }),
     writeStored: (verdicts) => writeChangeVerdicts({ store, verdicts }),
   });
+  return {
+    ...record,
+    update: async (change) => {
+      const updated = await updateStoredChangeVerdicts({ store, change });
+      // Re-read through the runtime's monotonic view so an external commit
+      // that followed this mutation cannot be hidden by its local cache.
+      const observed = await record.read();
+      return observed.revision < updated.revision ? updated : observed;
+    },
+  };
 };
 
 /**

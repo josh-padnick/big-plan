@@ -13,6 +13,7 @@ import { reviewSessionView } from "./session-authority.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
 import { approvalSummary } from "./shared/approval.js";
 import { encodeRuntimeSession } from "./shared/review-wire.js";
+import { readReviewModeForSession } from "./review-mode-store.js";
 
 export const readRuntimeSession = async (
   context: ReviewRouteContext,
@@ -30,6 +31,10 @@ export const readRuntimeSession = async (
     record: await context.approvals.read(),
     currentSnapshot: deriveSnapshotDigest(source),
   });
+  const reviewMode = await readReviewModeForSession({
+    store: context.store,
+    sessionId: context.sessionId,
+  });
   return jsonResponse({
     status: 200,
     value: encodeRuntimeSession({
@@ -45,6 +50,7 @@ export const readRuntimeSession = async (
       idleTimeoutMs: context.activityClock.idleTimeoutMs,
       ...(expiresAtMs === undefined ? {} : { expiresAtMs }),
       ...(approval === undefined ? {} : { approval }),
+      ...reviewMode,
     }),
   });
 };
