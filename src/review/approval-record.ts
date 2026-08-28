@@ -5,7 +5,7 @@
 // shape and the two mutations that grow it: append an approval, append a
 // revocation. Entries are never rewritten.
 
-import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
+import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import { APPROVAL_MESSAGE_LIMIT } from "./shared/approval-message.js";
 import {
   APPROVAL_ID,

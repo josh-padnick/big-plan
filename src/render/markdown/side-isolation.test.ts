@@ -14,6 +14,7 @@ import {
   isolateBaselineSide,
   isBaselineDiffSide,
 } from "./side-isolation.js";
+import { DIFF_LIVE_ATTRIBUTE } from "../../components/_model/component-diff/contract.js";
 
 const BOTH_SIDES_FIXTURE = `## Calls
 
@@ -544,6 +545,202 @@ describe("side isolation", () => {
     isolateBaselineSide({ subtree: slash, key: "was/a" });
     isolateBaselineSide({ subtree: hyphen, key: "was-a" });
     expect(ordinaryIdsOf(slash)[0]).not.toBe(ordinaryIdsOf(hyphen)[0]);
+  });
+
+  it("should keep a marked control operable while everything off its path stays inert", () => {
+    // A component whose diff annotates the baseline with evidence only the
+    // baseline holds - a screen the change removed - marks the control that
+    // reaches it. `inert` is inherited, so isolation may not mark any
+    // ancestor of that control.
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "figure",
+          properties: { [MAXIMIZABLE_ATTRIBUTE]: "wireframe" },
+          children: [
+            {
+              type: "element",
+              tagName: "button",
+              properties: { [TRIGGER_ATTRIBUTE]: "" },
+              children: [],
+            },
+            {
+              type: "element",
+              tagName: "nav",
+              properties: {},
+              children: [
+                {
+                  type: "element",
+                  tagName: "button",
+                  properties: {
+                    [DIFF_LIVE_ATTRIBUTE]: "",
+                    "data-navigate": "removed-screen",
+                  },
+                  children: [],
+                },
+              ],
+            },
+            {
+              type: "element",
+              tagName: "div",
+              properties: { [BODY_ATTRIBUTE]: "" },
+              children: [
+                {
+                  type: "element",
+                  tagName: "button",
+                  properties: { "data-prototype-control": "" },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    isolateBaselineSide({ subtree, key: "live-control" });
+
+    const live = collect({
+      node: subtree,
+      match: (candidate) =>
+        candidate.properties[DIFF_LIVE_ATTRIBUTE] !== undefined,
+    })[0];
+    if (live === undefined) throw new Error("Expected the marked control");
+    expect(live.properties.inert).toBeUndefined();
+    expect(live.properties.disabled).toBeUndefined();
+    const inertAncestors = collect({
+      node: subtree,
+      match: (candidate) =>
+        candidate.properties.inert === true &&
+        collect({
+          node: candidate,
+          match: (descendant) =>
+            descendant.properties[DIFF_LIVE_ATTRIBUTE] !== undefined,
+        }).length > 0,
+    });
+    expect(inertAncestors).toHaveLength(0);
+    // Everything the marked control does not lead to keeps the isolation it
+    // had before the exception existed: the maximize trigger and the body
+    // holding the prototype's own controls are each held inert.
+    const inertRoots = collect({
+      node: subtree,
+      match: (candidate) => candidate.properties.inert === true,
+    });
+    expect(inertRoots.map((node) => node.tagName).sort()).toEqual([
+      "button",
+      "div",
+    ]);
+    const trigger = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "button",
+    }).find((candidate) => candidate.properties.disabled === true);
+    expect(trigger).toBeDefined();
+  });
+
+  it("should keep the evidence a marked control reveals out of the inert region", () => {
+    // `inert` takes content out of the accessibility tree and out of
+    // selection, so a control whose target stays inert still does nothing
+    // for a reader using assistive technology. The revealed evidence is
+    // marked too, and nothing inside it may be frozen.
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "figure",
+          properties: { [MAXIMIZABLE_ATTRIBUTE]: "wireframe" },
+          children: [
+            {
+              type: "element",
+              tagName: "button",
+              properties: { [TRIGGER_ATTRIBUTE]: "" },
+              children: [],
+            },
+            {
+              type: "element",
+              tagName: "div",
+              properties: { [BODY_ATTRIBUTE]: "" },
+              children: [
+                {
+                  type: "element",
+                  tagName: "nav",
+                  properties: {},
+                  children: [
+                    {
+                      type: "element",
+                      tagName: "button",
+                      properties: { [DIFF_LIVE_ATTRIBUTE]: "" },
+                      children: [],
+                    },
+                  ],
+                },
+                {
+                  type: "element",
+                  tagName: "div",
+                  properties: { [DIFF_LIVE_ATTRIBUTE]: "" },
+                  children: [
+                    {
+                      type: "element",
+                      tagName: "section",
+                      properties: { "data-revealed": "" },
+                      children: [
+                        {
+                          type: "element",
+                          tagName: "button",
+                          properties: { "data-prototype-control": "" },
+                          children: [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    isolateBaselineSide({ subtree, key: "live-evidence" });
+
+    const revealed = collect({
+      node: subtree,
+      match: (candidate) => candidate.properties["data-revealed"] !== undefined,
+    })[0];
+    if (revealed === undefined) throw new Error("Expected the revealed screen");
+    expect(revealed.properties.inert).toBeUndefined();
+    expect(
+      collect({
+        node: subtree,
+        match: (candidate) =>
+          candidate.properties.inert === true &&
+          collect({
+            node: candidate,
+            match: (descendant) =>
+              descendant.properties["data-revealed"] !== undefined,
+          }).length > 0,
+      }),
+    ).toHaveLength(0);
+    expect(
+      collect({
+        node: revealed,
+        match: (candidate) => candidate.properties.inert !== undefined,
+      }),
+    ).toHaveLength(0);
+    // The maximize trigger still leaves with its attribute and is still
+    // frozen, because it sits outside every marked subtree.
+    const trigger = collect({
+      node: subtree,
+      match: (candidate) =>
+        candidate.tagName === "button" &&
+        candidate.properties.disabled === true,
+    });
+    expect(trigger).toHaveLength(1);
+    expect(trigger[0]?.properties.inert).toBe(true);
   });
 
   it("should mint the same proposed-side block ids as the same document without a baseline side", () => {

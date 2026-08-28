@@ -78,9 +78,11 @@ const requestRuntime = async <Result>({
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
+      const retryAfter = response.headers.get("retry-after");
       throw await reviewRuntimeRefusal({
         status: response.status,
         readBody: () => response.json(),
+        ...(retryAfter === null ? {} : { retryAfter }),
       });
     }
     return await readResponse(response);

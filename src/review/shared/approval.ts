@@ -5,7 +5,7 @@
 // digest equals the source on disk; a later edit changes the digest and the
 // status follows, so no path has to remember to un-set a flag.
 
-import { SNAPSHOT_DIGEST } from "./change-disposition.js";
+import { SNAPSHOT_DIGEST } from "./change-verdict.js";
 import { APPROVAL_MESSAGE_LIMIT } from "./approval-message.js";
 
 /** How the latest non-revoked approval sits against the plan on disk. */

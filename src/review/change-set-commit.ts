@@ -14,7 +14,7 @@ import { join } from "node:path";
 import type { AgentResponse } from "./agent-exchange.js";
 import { readStoreJson, writeStoreJson } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
+import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 // A change-set id names either an ordinary comment thread or an immutable

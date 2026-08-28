@@ -177,9 +177,18 @@ describe("reviewCommand", () => {
       const result = await reviewCommand([planPath]);
 
       const stable = `http://127.0.0.1:${stubPort}/plan/${live.planId}`;
-      expect(result).toMatchObject({ custody: "held", link: stable });
+      expect(result).toMatchObject({
+        custody: "held",
+        review: stable,
+        direct: live.url,
+      });
+      expect(result["link"]).toBe(undefined);
       expect(result["help"]).toEqual(
-        expect.arrayContaining([expect.stringContaining(stable)]),
+        expect.arrayContaining([
+          expect.stringContaining(`Open ${stable}`),
+          expect.stringContaining(`Direct runtime address: ${live.url}`),
+          expect.stringContaining("read-only until each reloads"),
+        ]),
       );
     } finally {
       await live.close();

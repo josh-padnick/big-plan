@@ -3208,6 +3208,7 @@ const ChangeAttachment = ({
   return (
     <AgentChangeDigest
       diff={diff}
+      agentIdentity={request.claimedModel}
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
       isSuperseded={

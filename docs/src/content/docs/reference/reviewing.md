@@ -10,7 +10,7 @@ rendered blocks and hand the staged set to the agent.
 npx big-plan review plans/checkout-retry.mdx
 ```
 
-The command prints a `http://127.0.0.1:<port>/` address and keeps running.
+The command prints a stable `http://127.0.0.1:8790/plan/<plan-id>` address and keeps running.
 Open that address, review the plan, and stop the runtime with `Ctrl+C`.
 By default the review stays up until you stop it, so a link you were handed
 keeps working if you step away.
@@ -30,39 +30,35 @@ When a newer review session for that plan was recorded before contact was lost, 
 
 ## The link worth saving
 
-The `http://127.0.0.1:<port>/` address belongs to this run: the port is assigned
-when the runtime starts, so it differs every time and stops answering when the
-session ends.
+The printed address is derived from the plan file's path, so it is the same for
+every review of that plan and keeps answering through runtime restarts. Save or
+share the address the command printed rather than one assembled from the default
+port: `BIG_PLAN_PORT` moves the service, and every link with it. The command also
+prints the session's ephemeral address as a debugging line.
 
-The command also prints `link`, a second address of the form
-`http://127.0.0.1:8790/plan/<plan-id>`, where `8790` is the default port. That
-one is derived from the plan file's path, so it is the same for every review of
-the same plan, and it keeps answering after the session ends. Save or share the
-address the command printed rather than one you assembled from the default port:
-`BIG_PLAN_PORT` moves the service, and every link with it.
+The service keeps the review on that stable address by default.
+`BIG_PLAN_PROXY=0` restores the redirect to the session port. The switch is read
+once when the service starts, so changing it requires
+`big-plan service restart`, or `big-plan service stop` before the next command,
+to take effect. Each review still runs on its own unique session port so its
+process, custody, and write fences remain isolated; the service only supplies
+the hop.
 
-`BIG_PLAN_PROXY=1` makes the service keep a live review on that stable address
-instead of redirecting the browser to the session port. The switch is read once
-when the service starts; unset it or set it to `0` to retain the default
-redirect. Setting it changes nothing while a service started without it is
-still running, because later commands adopt that process rather than replacing
-it: export the variable and then run `big-plan service restart` - or
-`big-plan service stop` before the next command - for the change to take
-effect. Each review still runs on its own unique session port so its process,
-custody, and write fences remain isolated—the service only supplies the hop.
-If that hop cannot reach a live runtime, it answers as a gateway with `502` or
-`504`; a live runtime's `503` remains its own refusal while a write is stalled.
+If a runtime stops answering without recording an ending, opening the stable
+address shows that the review is restarting. API requests receive `503` with
+`Retry-After`, which lets an open page record runtime unavailability without a
+network failure. A live runtime's bare `503` remains its own refusal while a
+write is stalled.
 
-Opening it while a review is running takes you straight to the running session.
-Opening it afterwards gives a page saying what happened - stopped normally after
-inactivity, stopped by the reviewer, or stopped unexpectedly - along with the
-command that starts the review again at the same address.
+Opening it while a review is running serves that session without changing the
+address. A deliberate stop gives a page saying why it ended. An unexpected stop
+holds the address for the replacement runtime and includes the command that
+starts the review again there.
 
 The address is answered by a small local process described in
 [the CLI reference](/reference/cli/#big-plan-service); `big-plan service status`
-reports on it and `big-plan service stop` stops it. When it cannot run, `link`
-is absent and the command explains why, leaving the direct address exactly as it
-was.
+reports on it and `big-plan service stop` stops it. When it cannot run, the
+command explains why and falls back to the direct session address.
 
 ## Starting a review that is already running
 
@@ -82,7 +78,7 @@ npx big-plan review plans/checkout-retry.mdx --takeover
 ```
 
 The replaced runtime keeps listening but loses write custody.
-Its open page and its connected agent become read-only until each moves to the new address, so prefer opening the printed address over taking custody.
+Its open page and its connected agent become read-only until each reloads, so prefer opening the printed address over taking custody.
 The command reports `custody: seized` together with the session it displaced.
 
 ## When a session stops accepting changes
@@ -408,19 +404,25 @@ happen.
 **What changed** compares the request's claim-time baseline snapshot with the
 validated result snapshot. Each changed answer carries its own attributed
 places; plan-wide chat carries a grouped digest.
+Every change digest names the model and client declared for that request with
+the same identity presentation as **Agent Status**; undeclared fields remain
+absent. This applies equally to reviewer-started work and pushed threads.
 The in-place lens shows word-level edits for close rewrites and stacked **Was**/**Now** bands for larger rewrites, additions, removals, tables, and code.
 Component changes that use the component diff contract render the component's compiled presentation on both **Was** and **Now** sides.
 The change replaces the component in the plan instead of sitting beside a hidden copy.
 When a **Now** side exists, it is the live, commentable component.
 It keeps its comment entry and any controls, including maximize.
-The **Was** side is inert evidence and carries no live plan identity.
+The **Was** side is inert evidence and carries no live plan identity, apart from the controls that reach evidence only it holds: a wireframe's screen switcher stays navigable there, so a screen marked as removed or moved can be opened on the side that still has it.
+The controls drawn inside a **Was** screen look exactly as the plan draws them and do nothing, so the screen it shows stays the one the reader chose from its switcher.
+That switcher moves the **Was** side alone, so the two sides can show different screens - which is how a screen the change removed stays reachable on the side that still has it.
 Until the reviewer accepts an answerable **Now** Decision, a banner at the top of its card asks them to accept the change before answering.
 Its disabled **Confirm choice** control shows the same guidance in a hazard-icon tooltip.
 Diagram, file tree, and wireframe changes use the component's own maximize control and name.
 Their controls work inside the change: diagram theme and flow controls, tree copy controls, and wireframe screen switchers.
 A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle.
-The wireframe diff does not mark individual screens as added, removed, moved, or updated.
+For a changed wireframe, its own screen switcher marks screens that were added, removed, moved, or updated; wholly added or removed wireframes keep plain entries.
 A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer.
+A removed wireframe keeps its own screen switcher, so the screens the change took away stay readable.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,
@@ -453,9 +455,9 @@ fuzzy matching or silently attach it to nearby prose.
 
 Loopback is not an authentication boundary.
 The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
-It checks the `Host` header on every request and refuses any value outside a short allow-list: its own address and the review-link service's, so the opt-in service hop can reach it while a rebound name still cannot.
+It checks the `Host` header on every request and refuses any value outside a short allow-list: its own address and the review-link service's, so the service hop can reach it while a rebound name still cannot.
 
-The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: by default it redirects to this runtime, and with `BIG_PLAN_PROXY=1` it forwards the request instead, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
+The service that answers saved links is a separate process on its own fixed loopback port, holding no review content. It forwards requests to this runtime by default, while `BIG_PLAN_PROXY=0` restores the redirect, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
 [The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
 
 Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:

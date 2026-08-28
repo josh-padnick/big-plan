@@ -167,17 +167,16 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 
 It writes no output.
 
-When `review` takes custody of the plan, it returns the loopback address,
+When `review` takes custody of the plan, it returns the stable loopback address,
 resolved plan path, session id, and feedback directory, then keeps running until
 `Ctrl+C` or an opt-in idle timeout. It owns the local session token,
 heartbeat, durable review state, and source snapshots.
 
-It also returns `link`, the plan's stable address on the review-link service,
-whenever that service is reachable. `review` is the ephemeral address this run
-happens to hold; `link` is the same for every run of the same plan file and
-keeps answering after the session ends, so it is the one worth saving or
-sharing. When the service cannot run, `link` is absent and `help` says why; the
-command is otherwise unchanged, so nothing that reads `review` is affected.
+`review` is the plan's address on the review-link service. It is the same for
+every run of the same plan file and keeps answering through runtime restarts.
+`direct` is the ephemeral session address and is reported as a debugging line.
+When the service cannot run, `review` falls back to that direct address,
+`direct` is omitted, and `help` says why.
 
 It always reports `custody`, because only one runtime may hold a plan at a time,
 and that value says whether this command took it:
@@ -192,8 +191,7 @@ heartbeat, so two simultaneous starts cannot both take the same plan.
 A stopped, expired, or crashed session leaves the plan free, and the next
 `review` takes custody normally.
 `--takeover` leaves the replaced runtime listening without write custody, which
-makes its open page and its connected agent read-only until each moves to the
-new address.
+makes its open page and its connected agent read-only until each reloads.
 
 `agent <input.mdx>` reads the matching live session and returns the owner-only
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
@@ -379,9 +377,9 @@ Every other way a seat empties - a turn ending, a poll returning, a reviewer dis
 The review-link service is one small loopback process on a fixed port that
 answers saved review links, so a link keeps working after the review session
 behind it ends. It holds no review state: it reads the plan's own session files
-at the moment of the click, then redirects to the live session by default,
-forwards to it when the opt-in proxy is enabled, or serves a page explaining how
-that session ended.
+at the moment of the request, then forwards to the live session by default,
+redirects to it when the rollback switch is enabled, or serves a page explaining
+the session state.
 
 Nothing needs installing. Any command that prints a review link starts the
 service when nothing is answering, and it stops when you tell it to or when your
@@ -410,14 +408,12 @@ report one, and keeps working with the session's direct address. Set
 `BIG_PLAN_PORT` to choose a different port, remembering that links saved at the
 old one stop resolving.
 
-`BIG_PLAN_PROXY=1` opts the service into forwarding a running review while the
-browser stays on the saved-link address. It is a startup switch, not a
-persisted setting: the default is the existing redirect, and `BIG_PLAN_PROXY=0`
-is the reversible escape hatch that explicitly keeps that behavior. The
-listening process took its answer at startup, and a command that finds a healthy
-service adopts it, so changing the variable only reaches a service you restart:
-run `service restart` after exporting it, or `service stop` before the next
-command that prints a link.
+The service forwards a running review by default, so the browser stays on the
+stable address. `BIG_PLAN_PROXY=0` is the reversible escape hatch that restores
+the redirect. It is a startup switch, not a persisted setting: the listening
+process reads it once, and a command that finds a healthy service adopts that
+process. Changing the variable therefore requires `service restart`, or
+`service stop` before the next command that prints an address.
 
 State lives under `~/.big-plan/service/`, owner-only, and honours
 `BIG_PLAN_STATE_DIR`: one small identity record per plan, the token that

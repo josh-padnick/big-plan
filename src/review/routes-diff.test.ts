@@ -1,0 +1,52 @@
+// Owns the route-level regression proof that each snapshot-diff document side
+// compiles once, then every copied change location reuses that compiled view.
+
+import { describe, expect, it, vi } from "vitest";
+import { compileDiffDocuments } from "../render/render-diff-view.js";
+import { compileSnapshotDiffPayload } from "./routes-diff.js";
+
+const FROM_SNAPSHOT = "1111111111111111";
+const TO_SNAPSHOT = "2222222222222222";
+
+describe("snapshot diff payload", () => {
+  it("should compile each document once when a request has multiple locations", () => {
+    const beforeSource = `# Plan
+
+## Approach
+
+Keep the first path stable.
+
+Keep the second path stable.
+`;
+    const afterSource = `# Plan
+
+## Approach
+
+Keep the first path resilient.
+
+Keep the second path resilient.
+`;
+    const prepared = compileDiffDocuments({
+      baselineMarkdown: beforeSource,
+      proposedMarkdown: afterSource,
+    });
+    const compileDocument = vi.fn(
+      ({ markdown }: { readonly markdown: string }) =>
+        markdown === beforeSource ? prepared.baseline : prepared.proposed,
+    );
+
+    const payload = compileSnapshotDiffPayload({
+      from: FROM_SNAPSHOT,
+      to: TO_SNAPSHOT,
+      beforeSource,
+      afterSource,
+      compileDocument,
+    });
+
+    expect(payload.locations).toHaveLength(2);
+    expect(compileDocument).toHaveBeenCalledTimes(2);
+    expect(compileDocument.mock.calls.map(([input]) => input.markdown)).toEqual(
+      [beforeSource, afterSource],
+    );
+  });
+});

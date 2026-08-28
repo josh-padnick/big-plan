@@ -151,6 +151,25 @@ marks and a plan diff never jitters.
     min-height: 0;
   }
 
+  /* A component-diff side highlights the visible screen with the Was/Now
+     tone instead of wrapping the whole prototype in a second thick border.
+     data-wireframe-current tracks the live switcher, so the highlight
+     follows navigation without a fit effect or a re-implemented switcher. */
+  [data-component-diff-side="baseline"]
+    [data-wireframe-screen][data-wireframe-current] {
+    border: 10px solid
+      color-mix(in srgb, var(--diff-remove-c) 30%, var(--diff-remove-bg));
+    border-radius: 0.75rem;
+    padding: 1rem;
+  }
+  [data-component-diff-side="proposed"]
+    [data-wireframe-screen][data-wireframe-current] {
+    border: 10px solid
+      color-mix(in srgb, var(--diff-add-c) 30%, var(--diff-add-bg));
+    border-radius: 0.75rem;
+    padding: 1rem;
+  }
+
   /* The switcher only means something once a script can act on it, so it
      stays hidden in an inert document where every screen is already shown. */
   .wireframe-switcher {
@@ -2641,6 +2660,14 @@ marks and a plan diff never jitters.
     cursor: not-allowed;
     opacity: 0.58;
     background: var(--wf-fill);
+  }
+  /* A control the Was side of a component diff froze is evidence, not an
+     affordance. It keeps every hook a stylesheet selects on and every state
+     a screen reader announces, and gives up only the behaviour - including
+     through the field label, whose click would otherwise forward to the
+     control it wraps. */
+  [data-wireframe-frozen] {
+    pointer-events: none;
   }
   .wireframe-textarea {
     resize: vertical;

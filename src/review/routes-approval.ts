@@ -42,10 +42,10 @@ import { encodeApprovalSummary } from "./shared/review-wire.js";
 import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import {
-  applyChangeDispositionMutation,
-  type StoredChangeDispositions,
-} from "./change-dispositions-store.js";
-import { changeDispositionKey } from "./shared/change-disposition.js";
+  applyChangeVerdictMutation,
+  type StoredChangeVerdicts,
+} from "./change-verdicts-store.js";
+import { changeVerdictKey } from "./shared/change-verdict.js";
 import {
   changeSetsFromExchange,
   deriveOpenItems,
@@ -214,15 +214,15 @@ const acceptChangeSets = async ({
   readonly inputs: ReturnType<typeof reviewInputs>;
   readonly requestIds: ReadonlyArray<string>;
 }): Promise<{
-  readonly dispositions: StoredChangeDispositions;
+  readonly verdicts: StoredChangeVerdicts;
   readonly accepted: number;
   readonly total: number;
 }> => {
-  let dispositions = await context.changeDispositions.read();
+  let verdicts = await context.changeVerdicts.read();
   const changeSets = await changeSetsAtApproval(context);
   const items = deriveOpenItems({
     changeSets,
-    accepted: new Set(dispositions.accepted.map(changeDispositionKey)),
+    accepted: new Set(verdicts.accepted.map(changeVerdictKey)),
     inputs,
     requests: requestIds.map((requestId) => ({ requestId, label: requestId })),
   });
@@ -233,8 +233,8 @@ const acceptChangeSets = async ({
         `Change set ${changeSet.id} could not be resolved for approval`,
       );
     }
-    dispositions = applyChangeDispositionMutation({
-      dispositions,
+    verdicts = applyChangeVerdictMutation({
+      verdicts,
       mutation: {
         op: "accept",
         from: changeSet.from,
@@ -245,7 +245,7 @@ const acceptChangeSets = async ({
     });
   }
   return {
-    dispositions,
+    verdicts,
     accepted: items.changeSets.total,
     total: items.changeSets.total,
   };
@@ -382,7 +382,7 @@ export const approvePlan = async (
   }
 
   let entry: ApprovalEntry;
-  let dispositions: StoredChangeDispositions;
+  let verdicts: StoredChangeVerdicts;
   try {
     const [inventory, inputs] = await Promise.all([
       context.decisionAnswers.inventory(),
@@ -394,7 +394,7 @@ export const approvePlan = async (
       inputs: contract,
       requestIds,
     });
-    dispositions = changeSets.dispositions;
+    verdicts = changeSets.verdicts;
     entry = await buildApprovalEntry({
       context,
       pinnedSnapshot: settledSource.digest,
@@ -430,7 +430,7 @@ export const approvePlan = async (
     canceledAt,
     requestIds,
     approval: next,
-    dispositions,
+    verdicts,
   };
   let canceledRequestIds: ReadonlyArray<string>;
   try {

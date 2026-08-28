@@ -1,6 +1,6 @@
 // Owns the one-at-a-time What-changed tour and the stepper shared by comment
 // threads and plan-wide chat. Acceptance itself belongs to the review store, so
-// this reads and writes it through the disposition record rather than holding a
+// this reads and writes it through the verdict record rather than holding a
 // copy: two surfaces show one change set's standing at the same moment, and a
 // reload must not reopen work the reviewer already closed.
 
@@ -19,11 +19,11 @@ import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import type { SnapshotDiff } from "../shared/review-wire.js";
 import {
-  changeDispositionKey,
+  changeVerdictKey,
   changeSetStanding,
   type ChangeSetStanding,
-} from "../shared/change-disposition.js";
-import { useChangeDispositions } from "./use-change-dispositions.browser.js";
+} from "../shared/change-verdict.js";
+import { useChangeVerdicts } from "./use-change-verdicts.browser.js";
 import { reviewerMessageLabel } from "../shared/reviewer-markdown.js";
 import { DiffLensPortal } from "./diff-lens.browser.js";
 import { tourStartIndex } from "./diff-anchor.js";
@@ -95,7 +95,7 @@ export const DiffTourProvider = ({
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [showCompletionSummary, setShowCompletionSummary] = useState(false);
-  const { accepted, canRecord, disposeOfChanges } = useChangeDispositions();
+  const { accepted, canRecord, recordChangeVerdicts } = useChangeVerdicts();
   const places = useMemo(() => {
     if (tour === null) return [];
     const allowed = new Set(tour.placeIds);
@@ -105,9 +105,7 @@ export const DiffTourProvider = ({
   const closeTour = () => setTour(null);
   const tourValue = useMemo(() => {
     const isPlaceAccepted = (diff: SnapshotDiff, placeId: string): boolean =>
-      accepted.has(
-        changeDispositionKey({ from: diff.from, to: diff.to, placeId }),
-      );
+      accepted.has(changeVerdictKey({ from: diff.from, to: diff.to, placeId }));
     return {
       isPlaceAccepted,
       standingOf: (
@@ -130,7 +128,7 @@ export const DiffTourProvider = ({
         const changing = placeIds.filter(
           (placeId) => isPlaceAccepted(diff, placeId) !== isAccepted,
         );
-        disposeOfChanges({
+        recordChangeVerdicts({
           op: isAccepted ? "accept" : "withdraw",
           from: diff.from,
           to: diff.to,
@@ -138,7 +136,7 @@ export const DiffTourProvider = ({
         });
       },
     };
-  }, [accepted, disposeOfChanges]);
+  }, [accepted, recordChangeVerdicts]);
   const { isPlaceAccepted, standingOf, setPlacesAccepted } = tourValue;
   const openTour = (next: OpenTour): void => {
     setTour(next);

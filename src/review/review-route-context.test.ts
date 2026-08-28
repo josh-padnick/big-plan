@@ -2,7 +2,8 @@
 // shape: the snapshot the browser is allowed to reload advances on the first
 // sighting of an agent response and never again, the write gate gives up on
 // one mutation rather than on the whole session (BIG-44), and the decision
-// answer revision a runtime serves never moves backwards.
+// answer revision a runtime serves never moves backwards, and immutable
+// snapshot pairs keep one bounded compiled diff independent of verdict.
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,10 +11,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createActivityClock,
+  createChangeVerdicts,
   createDecisionAnswers,
   createReaderProgress,
+  createSnapshotDiffs,
   createWriteGate,
 } from "./review-route-context.js";
+import type { SnapshotDiff } from "./shared/review-wire.js";
 import { prepareStore, reviewStoreFor } from "./store.js";
 import {
   createMutationRegistry,
@@ -173,6 +177,234 @@ describe("createDecisionAnswers", () => {
     );
 
     expect((await answers.read()).revision).toBe(5);
+  });
+});
+
+const FROM_SNAPSHOT = "1111111111111111";
+const TO_SNAPSHOT = "2222222222222222";
+const NEXT_SNAPSHOT = "3333333333333333";
+
+const snapshotDiff = ({
+  from,
+  to,
+  label,
+}: {
+  readonly from: string;
+  readonly to: string;
+  readonly label: string;
+}): SnapshotDiff => ({
+  from,
+  to,
+  locations: [],
+  places: [
+    {
+      placeId: label,
+      status: "changed",
+      label,
+      section: "Plan",
+      note: "reworded",
+      locationIndexes: [],
+    },
+  ],
+});
+
+describe("createSnapshotDiffs", () => {
+  it("should reject a cache with no entry capacity", () => {
+    expect(() => createSnapshotDiffs({ maxEntries: 0 })).toThrow(
+      "Snapshot diff cache maxEntries must be a positive integer.",
+    );
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "should reject the invalid maximum age %s",
+    (maxAgeMs) => {
+      expect(() => createSnapshotDiffs({ maxAgeMs })).toThrow(
+        "Snapshot diff cache maxAgeMs must be a positive finite duration.",
+      );
+    },
+  );
+
+  it("should return the identical payload for one immutable snapshot pair", async () => {
+    const snapshotDiffs = createSnapshotDiffs();
+    let builds = 0;
+    const build = (): SnapshotDiff => {
+      builds += 1;
+      return snapshotDiff({
+        from: FROM_SNAPSHOT,
+        to: TO_SNAPSHOT,
+        label: "first",
+      });
+    };
+
+    const first = await snapshotDiffs.forPair({
+      from: FROM_SNAPSHOT,
+      to: TO_SNAPSHOT,
+      build,
+    });
+    const repeated = await snapshotDiffs.forPair({
+      from: FROM_SNAPSHOT,
+      to: TO_SNAPSHOT,
+      build,
+    });
+
+    expect(repeated).toBe(first);
+    expect(builds).toBe(1);
+  });
+
+  it("should compile a different payload after a new snapshot", async () => {
+    const snapshotDiffs = createSnapshotDiffs();
+    let builds = 0;
+    const read = (to: string) =>
+      snapshotDiffs.forPair({
+        from: FROM_SNAPSHOT,
+        to,
+        build: () => {
+          builds += 1;
+          return snapshotDiff({ from: FROM_SNAPSHOT, to, label: to });
+        },
+      });
+
+    const first = await read(TO_SNAPSHOT);
+    const next = await read(NEXT_SNAPSHOT);
+
+    expect(next).not.toBe(first);
+    expect(next.to).toBe(NEXT_SNAPSHOT);
+    expect(builds).toBe(2);
+  });
+
+  it("should keep the compiled payload when a change is accepted", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
+    created.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n");
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const verdicts = createChangeVerdicts({ store });
+    const snapshotDiffs = createSnapshotDiffs();
+    let builds = 0;
+    const read = () =>
+      snapshotDiffs.forPair({
+        from: FROM_SNAPSHOT,
+        to: TO_SNAPSHOT,
+        build: () => {
+          builds += 1;
+          return snapshotDiff({
+            from: FROM_SNAPSHOT,
+            to: TO_SNAPSHOT,
+            label: "accepted-place",
+          });
+        },
+      });
+    const beforeAcceptance = await read();
+
+    await verdicts.write({
+      version: 1,
+      revision: 1,
+      accepted: [
+        {
+          from: FROM_SNAPSHOT,
+          to: TO_SNAPSHOT,
+          placeId: "accepted-place",
+          acceptedAt: "2026-08-27T12:00:00.000Z",
+        },
+      ],
+    });
+    const afterAcceptance = await read();
+
+    expect(afterAcceptance).toBe(beforeAcceptance);
+    expect(builds).toBe(1);
+    expect((await verdicts.read()).accepted).toHaveLength(1);
+  });
+
+  it("should bound entries by evicting the least recently used pair", async () => {
+    let nowMs = 0;
+    const snapshotDiffs = createSnapshotDiffs({
+      maxEntries: 2,
+      maxAgeMs: 1_000,
+      now: () => nowMs,
+    });
+    const builds = new Map<string, number>();
+    const read = async (to: string): Promise<void> => {
+      await snapshotDiffs.forPair({
+        from: FROM_SNAPSHOT,
+        to,
+        build: () => {
+          builds.set(to, (builds.get(to) ?? 0) + 1);
+          return snapshotDiff({ from: FROM_SNAPSHOT, to, label: to });
+        },
+      });
+    };
+
+    await read(TO_SNAPSHOT);
+    nowMs = 10;
+    await read(NEXT_SNAPSHOT);
+    nowMs = 20;
+    await read(TO_SNAPSHOT);
+    nowMs = 30;
+    await read("4444444444444444");
+    nowMs = 40;
+    await read(NEXT_SNAPSHOT);
+
+    expect(builds.get(TO_SNAPSHOT)).toBe(1);
+    expect(builds.get(NEXT_SNAPSHOT)).toBe(2);
+  });
+
+  it("should preserve recency when cache uses happen in the same clock tick", async () => {
+    const snapshotDiffs = createSnapshotDiffs({
+      maxEntries: 2,
+      now: () => 0,
+    });
+    const builds = new Map<string, number>();
+    const read = async (to: string): Promise<void> => {
+      await snapshotDiffs.forPair({
+        from: FROM_SNAPSHOT,
+        to,
+        build: () => {
+          builds.set(to, (builds.get(to) ?? 0) + 1);
+          return snapshotDiff({ from: FROM_SNAPSHOT, to, label: to });
+        },
+      });
+    };
+
+    await read(TO_SNAPSHOT);
+    await read(NEXT_SNAPSHOT);
+    await read(TO_SNAPSHOT);
+    await read("4444444444444444");
+    await read(NEXT_SNAPSHOT);
+
+    expect(builds.get(TO_SNAPSHOT)).toBe(1);
+    expect(builds.get(NEXT_SNAPSHOT)).toBe(2);
+  });
+
+  it("should evict a pair after its maximum idle age", async () => {
+    let nowMs = 0;
+    const snapshotDiffs = createSnapshotDiffs({
+      maxEntries: 2,
+      maxAgeMs: 100,
+      now: () => nowMs,
+    });
+    let builds = 0;
+    const read = () =>
+      snapshotDiffs.forPair({
+        from: FROM_SNAPSHOT,
+        to: TO_SNAPSHOT,
+        build: () => {
+          builds += 1;
+          return snapshotDiff({
+            from: FROM_SNAPSHOT,
+            to: TO_SNAPSHOT,
+            label: "aged",
+          });
+        },
+      });
+
+    await read();
+    nowMs = 99;
+    await read();
+    nowMs = 200;
+    await read();
+
+    expect(builds).toBe(2);
   });
 });
 

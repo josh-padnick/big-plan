@@ -115,4 +115,19 @@ describe("review runtime requests", () => {
     expect(error).toMatchObject({ message: stalled });
     expect(reviewRuntimeIsDown(healthAfterTwo(error))).toBe(false);
   });
+
+  it("should take a page down when the stable hop asks it to retry later", async () => {
+    const error = await failedPoll(
+      new Response("The review runtime is restarting\n", {
+        status: 503,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "retry-after": "1",
+        },
+      }),
+    );
+
+    expect(isReviewRuntimeUnavailable(error)).toBe(true);
+    expect(reviewRuntimeIsDown(healthAfterTwo(error))).toBe(true);
+  });
 });

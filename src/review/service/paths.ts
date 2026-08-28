@@ -32,7 +32,7 @@ export const servicePort = (): number => {
 
 /** Whether this service instance should keep live requests on its own port. */
 export const serviceProxyEnabled = (): boolean =>
-  process.env["BIG_PLAN_PROXY"] === "1";
+  process.env["BIG_PLAN_PROXY"] !== "0";
 
 /** The address a saved review link points at. */
 export const serviceOrigin = (): string => `http://127.0.0.1:${servicePort()}`;

@@ -130,4 +130,4 @@ After building the root package, regenerate the docs' light/dark component scree
 
 ## License
 
-[MIT](LICENSE).
+[FSL-1.1-MIT](LICENSE.md). Each release becomes available under MIT two years after it is published.

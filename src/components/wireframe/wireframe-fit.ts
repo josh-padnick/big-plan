@@ -5,9 +5,10 @@
 // the frame actually paints at.
 //
 // Shared by the shell viewer script, which embeds this source as text
-// through its own build step (see viewer-script.ts), and the review diff
-// lens, which imports it directly - so a maximized wireframe fits the same
-// whether shown in place or inside a Was/Now comparison.
+// through its own build step (see viewer-script.ts). A component diff
+// renders the real Wireframe, so the same fit applies when that script
+// re-wires on article replacement. Do not re-implement a fit effect in
+// the diff view; that is the path this module exists to retire.
 //
 // SELF-CONTAINED. The viewer script embeds this through `.toString()`, which
 // carries the function body and nothing else. A module-level constant,
