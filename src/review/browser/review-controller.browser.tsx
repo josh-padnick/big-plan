@@ -3728,9 +3728,20 @@ const SentThread = ({
               <p className="mt-0.5 mb-2">
                 Stops asking for a verdict while you dictate.
               </p>
-              <Button variant="outline" size="micro" onClick={onArmAutoAccept}>
+              <Button
+                variant="outline"
+                size="micro"
+                disabled={replyBlock !== undefined}
+                data-tooltip={replyBlock?.cause}
+                onClick={onArmAutoAccept}
+              >
                 Auto-accept all changes
               </Button>
+              {replyBlock === undefined ? null : (
+                <p className="mt-1 mb-0 font-semibold text-danger">
+                  {replyBlock.label}
+                </p>
+              )}
             </div>
           )}
           {appliedSummaries.length === 0 ? null : (
@@ -3877,9 +3888,20 @@ const SentThread = ({
             <p className="mt-0.5 mb-2">
               Stops asking for a verdict while you dictate.
             </p>
-            <Button variant="outline" size="micro" onClick={onArmAutoAccept}>
+            <Button
+              variant="outline"
+              size="micro"
+              disabled={replyBlock !== undefined}
+              data-tooltip={replyBlock?.cause}
+              onClick={onArmAutoAccept}
+            >
               Auto-accept all changes
             </Button>
+            {replyBlock === undefined ? null : (
+              <p className="mt-1 mb-0 font-semibold text-danger">
+                {replyBlock.label}
+              </p>
+            )}
           </div>
         )}
         {appliedSummaries.length === 0 ? null : (
@@ -7254,6 +7276,14 @@ export const ReviewController = () => {
     readonly threadId?: string;
   }): Promise<void> => {
     if (identity === null || isChangingReviewMode) return;
+    const refusal = reviewWriteRefusal({
+      path: "review-mode",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      setStatus(refusal);
+      return;
+    }
     setIsChangingReviewMode(true);
     try {
       const value = await requestJson({

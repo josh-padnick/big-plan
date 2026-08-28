@@ -1310,6 +1310,83 @@ test("should arm auto-accept from a pushed thread and apply it only to later arr
   }
 });
 
+test("should disable review-mode controls when writes are unavailable", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-live-push-mode-block-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  let authoritative = true;
+  let modeRequests = 0;
+
+  await page.route("**/api/session", async (route) => {
+    const response = await route.fetch();
+    const value: unknown = await response.json();
+    if (typeof value !== "object" || value === null) {
+      throw new Error("The session route did not return an object");
+    }
+    await route.fulfill({ response, json: { ...value, authoritative } });
+  });
+  page.on("request", (request) => {
+    if (
+      request.url().endsWith("/api/review-mode") &&
+      request.method() === "POST"
+    ) {
+      modeRequests += 1;
+    }
+  });
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(runtime.url);
+    const first = await pushRevisionFrom({
+      planPath,
+      prompt: "Prepare an unavailable-mode control probe.",
+    });
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const thread = rail.locator(
+      `[data-review-pushed-thread="${first.threadId}"]`,
+    );
+    const arm = thread.getByRole("button", {
+      name: "Auto-accept all changes",
+    });
+
+    authoritative = false;
+    await expect(arm).toBeDisabled({ timeout: 15_000 });
+    await expect(thread.getByText("Review session replaced")).toBeVisible();
+    await arm.evaluate((button: HTMLButtonElement) => button.click());
+    await expect.poll(() => modeRequests).toBe(0);
+
+    authoritative = true;
+    await expect(arm).toBeEnabled({ timeout: 15_000 });
+    await arm.click();
+    await page
+      .getByRole("alertdialog", { name: "Turn on auto-accept?" })
+      .getByRole("button", { name: "Turn on auto-accept" })
+      .click();
+    await expect.poll(() => modeRequests).toBe(1);
+    await expect(rail.getByText(/Auto-accept · on since/u)).toBeVisible();
+
+    authoritative = false;
+    const switchBack = rail.getByRole("button", {
+      name: "Switch back to review",
+    });
+    await expect(switchBack).toBeDisabled({ timeout: 15_000 });
+    await expect(
+      rail.getByText("Review session replaced").first(),
+    ).toBeVisible();
+    await switchBack.evaluate((button: HTMLButtonElement) => button.click());
+    await expect.poll(() => modeRequests).toBe(1);
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should badge a narrow arrival without opening the sidebar", async ({
   page,
 }) => {

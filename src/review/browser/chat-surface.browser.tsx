@@ -127,22 +127,31 @@ export const ChatSurface = ({
           </div>
           {model.arrivalEntry}
           {model.mode === "auto-accept" ? (
-            <section
-              className="flex items-center gap-2 rounded-lg bg-surface p-3"
-              aria-label="Review mode"
-            >
-              <Badge tone="statusAccent" size="status">
-                Auto-accept · on since {model.modeSince ?? "just now"}
-              </Badge>
-              <Button
-                variant="outline"
-                size="micro"
-                className="ml-auto"
-                onClick={model.onSwitchToReview}
+            <>
+              <section
+                className="flex items-center gap-2 rounded-lg bg-surface p-3"
+                aria-label="Review mode"
               >
-                Switch back to review
-              </Button>
-            </section>
+                <Badge tone="statusAccent" size="status">
+                  Auto-accept · on since {model.modeSince ?? "just now"}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="micro"
+                  className="ml-auto"
+                  disabled={block !== undefined}
+                  data-tooltip={block?.cause}
+                  onClick={model.onSwitchToReview}
+                >
+                  Switch back to review
+                </Button>
+              </section>
+              {block === undefined ? null : (
+                <p className="m-0 text-2xs font-semibold text-danger">
+                  {block.label}
+                </p>
+              )}
+            </>
           ) : null}
           {model.pushedThreadCount === 0 ? null : (
             <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
