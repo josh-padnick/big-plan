@@ -18,7 +18,6 @@ import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import {
   agentIsAttached,
   agentLabelResolver,
-  agentWriterIdLabel,
   orderAttachedAgents,
   pendingPrimacyRequest,
   selectPrimaryAgent,
@@ -178,6 +177,7 @@ const AgentIdentity = ({
 
 /** Names an arriving agent with every identity fact it declared. */
 const ArrivalAgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
+  const sessionId = agent.model?.sessionId ?? agent.writerId;
   const parts = [
     agent.model?.client === undefined
       ? undefined
@@ -185,7 +185,7 @@ const ArrivalAgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
     agent.model?.name === undefined
       ? undefined
       : agentModelDisplayName(agent.model.name),
-    agentWriterIdLabel(agent),
+    `…${sessionId.slice(-4)}`,
   ].filter((part): part is string => part !== undefined);
   return (
     <AgentIdentityChip>

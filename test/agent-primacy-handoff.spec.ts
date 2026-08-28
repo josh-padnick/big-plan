@@ -236,6 +236,7 @@ test("should offer to make a newcomer primary after the incumbent's closed claim
       model: {
         client: "claude-code 2.1.217",
         name: "claude-opus-4-8",
+        sessionId: "session-2e29",
       },
       now: startedAtMs + 3,
     });
@@ -253,7 +254,7 @@ test("should offer to make a newcomer primary after the incumbent's closed claim
     );
     await expect(requestCard).toBeVisible();
     await expect(requestCard).toContainText(
-      "Claude Code - claude-opus-4-8 - …rver",
+      "Claude Code - claude-opus-4-8 - …2e29",
     );
     await expect(
       requestCard.getByRole("button", { name: "Make it primary" }),
