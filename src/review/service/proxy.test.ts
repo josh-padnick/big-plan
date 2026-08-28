@@ -680,8 +680,8 @@ describe("the stable review proxy", () => {
         row.directMedianMs * MAX_PROXY_OVERHEAD_BASELINE_MULTIPLE,
       );
     }
-    // TODO(BIG-236): Reconcile these regression bounds with the authoritative
-    // plan overhead table's exact stated figures when Firstmate supplies it.
+    // TODO(BIG-236): At merge time, reconcile these regression bounds with the
+    // omitted authoritative plan table's exact stated figures.
   });
 
   it("should stream a 10 MiB request without retaining one body in proxy RSS", async () => {
