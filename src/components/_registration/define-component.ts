@@ -80,7 +80,15 @@ type ComponentDiffOptions<Model, DiffModel> =
     }
   | {
       readonly diff: (input: ComponentDiffInput<Model>) => DiffModel;
-      readonly diffView: ComponentType<{ readonly model: DiffModel }>;
+      // `controlId` is the engine's per-instance key, not authored data. A
+      // bespoke view that mints its own form identity from the model would
+      // collide with a second diff of a component sharing that authored id,
+      // and the collision is silent: two radio groups merge into one, and a
+      // label resolves to whichever input the document reaches first.
+      readonly diffView: ComponentType<{
+        readonly model: DiffModel;
+        readonly controlId: string;
+      }>;
     };
 
 type ComponentOptions<Model, DiffModel> = ComponentDiffOptions<
@@ -124,7 +132,10 @@ export const defineComponent = <
               view,
               controlId: `component-diff-${instanceKey}`,
             })
-          : createElement(diffView, { model: model as DiffModel }),
+          : createElement(diffView, {
+              model: model as DiffModel,
+              controlId: `component-diff-${instanceKey}`,
+            }),
     };
   },
   ...(scopedChildren === undefined ? {} : { scopedChildren }),
@@ -191,7 +202,10 @@ export const defineOutlineComponent = <
                 view: OutlineView,
                 controlId: `component-diff-${instanceKey}`,
               })
-            : createElement(diffView, { model: model as DiffModel });
+            : createElement(diffView, {
+                model: model as DiffModel,
+                controlId: `component-diff-${instanceKey}`,
+              });
         },
       };
     },

@@ -20,12 +20,18 @@ import {
   WIREFRAME_PLACEHOLDER_GLYPH,
   wireframeGlyphFor,
 } from "./view-glyphs.js";
+import {
+  wireframeScreenStatusLabel,
+  type WireframeScreenDiff,
+} from "./compile-diff.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
+import { useComponentDiffPresentation } from "../_shared/component-diff/component-diff-context.js";
+import { DIFF_LIVE_ATTRIBUTE } from "../_model/component-diff/contract.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -185,6 +191,30 @@ const WireframeElement = ({
   // detail beside it rather than leaving the screen.
   readonly selectsInPlace?: boolean;
 }): JSX.Element => {
+  // The Was side is evidence a reader may read, not a second prototype they
+  // may drive: the screen it shows is the one the reader chose from its
+  // switcher, and an in-screen control that navigated or took input would
+  // move it somewhere nobody asked for. Freezing buys exactly that and
+  // nothing more - the Was switcher stays navigable on purpose, so the two
+  // sides can and do show different screens.
+  //
+  // Freezing is presentation-neutral, because the reader is being asked to
+  // compare two renderings and any difference the plan did not propose reads
+  // as one it did, so every hook a stylesheet selects on stays. It is
+  // state-neutral too: `disabled` is a design decision this component
+  // already spends, in paint and in what a screen reader announces, so the
+  // freeze may not borrow it. What is left is the behaviour - natively inert
+  // even without the viewer script, out of the tab order, refusing pointers,
+  // and refused again by the viewer script when it is present.
+  const frozen = useComponentDiffPresentation()?.side === "baseline";
+  const navigation = (
+    target: string | undefined,
+  ): Readonly<Record<string, string>> =>
+    target === undefined ? {} : { "data-wireframe-navigate": target };
+  const frozenControl: Readonly<Record<string, string | number | boolean>> =
+    frozen ? { inert: true, tabIndex: -1, "data-wireframe-frozen": "" } : {};
+  const frozenEntry: Readonly<Record<string, string | number | boolean>> =
+    frozen ? { ...frozenControl, readOnly: true } : {};
   switch (node.element) {
     case "Stack":
       return (
@@ -292,9 +322,8 @@ const WireframeElement = ({
                 title: node.label,
               }
             : {})}
-          {...(node.navigateTo === undefined
-            ? {}
-            : { "data-wireframe-navigate": node.navigateTo })}
+          {...navigation(node.navigateTo)}
+          {...frozenControl}
         >
           {node.icon === undefined ? null : <Glyph name={node.icon} />}
           {node.iconOnly ? null : (
@@ -422,9 +451,8 @@ const WireframeElement = ({
           type="button"
           className="wireframe-nav-item"
           {...(node.active ? { "aria-current": "page" } : {})}
-          {...(node.navigateTo === undefined
-            ? {}
-            : { "data-wireframe-navigate": node.navigateTo })}
+          {...navigation(node.navigateTo)}
+          {...frozenControl}
         >
           {node.label}
         </button>
@@ -527,6 +555,7 @@ const WireframeElement = ({
               type="button"
               className="wireframe-reference-copy"
               aria-label={node.copyLabel}
+              {...frozenControl}
             >
               <Glyph name="copy" />
             </button>
@@ -586,9 +615,8 @@ const WireframeElement = ({
           role="radio"
           aria-checked={node.selected}
           {...(node.selected ? { "data-wireframe-selected": "" } : {})}
-          {...(node.navigateTo === undefined
-            ? {}
-            : { "data-wireframe-navigate": node.navigateTo })}
+          {...navigation(node.navigateTo)}
+          {...frozenControl}
         >
           {node.emoji === undefined ? null : (
             <span className="wireframe-choice-icon" aria-hidden="true">
@@ -663,7 +691,8 @@ const WireframeElement = ({
             <button
               type="button"
               className="wireframe-list-row flex w-full min-w-0 flex-col gap-0.5"
-              data-wireframe-navigate={node.navigateTo}
+              {...navigation(node.navigateTo)}
+              {...frozenControl}
             >
               {rowInner}
             </button>
@@ -713,6 +742,7 @@ const WireframeElement = ({
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
             disabled={node.disabled}
+            {...frozenEntry}
           />
         </Field>
       );
@@ -727,6 +757,7 @@ const WireframeElement = ({
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
             disabled={node.disabled}
+            {...frozenEntry}
           />
         </Field>
       );
@@ -737,6 +768,7 @@ const WireframeElement = ({
           <select
             className="wireframe-input wireframe-select"
             disabled={node.disabled}
+            {...frozenControl}
           >
             <option>{node.value}</option>
           </select>
@@ -749,6 +781,7 @@ const WireframeElement = ({
             className="wireframe-tick"
             type="checkbox"
             defaultChecked={node.checked}
+            {...frozenControl}
           />
         </Field>
       );
@@ -760,6 +793,7 @@ const WireframeElement = ({
             type="checkbox"
             role="switch"
             defaultChecked={node.on}
+            {...frozenControl}
           />
         </Field>
       );
@@ -807,7 +841,8 @@ const WireframeElement = ({
         <button
           type="button"
           className="wireframe-crumb wireframe-crumb-link"
-          data-wireframe-navigate={node.navigateTo}
+          {...navigation(node.navigateTo)}
+          {...frozenControl}
         >
           {node.label}
         </button>
@@ -891,7 +926,13 @@ const Field = ({
   readonly inline?: boolean;
   readonly children: JSX.Element;
 }) => (
-  <label className="wireframe-field" data-wireframe-inline={String(inline)}>
+  <label
+    className="wireframe-field"
+    data-wireframe-inline={String(inline)}
+    {...(useComponentDiffPresentation()?.side === "baseline"
+      ? { "data-wireframe-frozen": "" }
+      : {})}
+  >
     {inline ? children : null}
     <span className="wireframe-field-label">{label}</span>
     {inline ? null : children}
@@ -924,6 +965,37 @@ const WireframeElements = ({
     ))}
   </>
 );
+
+const screenDiffFor = (
+  screenId: string,
+  diffs: ReadonlyArray<WireframeScreenDiff> | undefined,
+): Exclude<WireframeScreenDiff, { status: "initial" }> | undefined => {
+  if (diffs === undefined) return undefined;
+  for (const diff of diffs) {
+    if (diff.status === "initial") continue;
+    if (diff.status === "added" && diff.newScreenId === screenId) return diff;
+    if (diff.status === "removed" && diff.oldScreenId === screenId) return diff;
+    if (
+      (diff.status === "moved" || diff.status === "updated") &&
+      diff.newScreenId === screenId
+    ) {
+      return diff;
+    }
+  }
+  return undefined;
+};
+
+const screenStatusClasses = (
+  status: Exclude<WireframeScreenDiff["status"], "initial">,
+): string => {
+  if (status === "added") {
+    return "bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]";
+  }
+  if (status === "removed") {
+    return "bg-[var(--diff-remove-bg)] text-[var(--diff-remove-c)]";
+  }
+  return "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,var(--callout-warning-bg))] text-[var(--callout-warning-c)]";
+};
 
 const Screen = ({
   screen,
@@ -1007,53 +1079,101 @@ const Screen = ({
   );
 };
 
-export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
-  <figure
-    className="wireframe my-8"
-    data-wireframe={model.id}
-    {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
-    {...(model.screens.some((screen) => screen.device === "desktop")
-      ? { "data-wireframe-desktop": "" }
-      : {})}
-  >
-    <div className="wireframe-header flex w-full flex-wrap items-center gap-3">
-      {model.title === undefined ? null : (
-        <figcaption className="wireframe-caption wireframe-figure-title text-sm font-semibold text-ink">
-          {model.title}
-        </figcaption>
-      )}
-      <div className="figure-control-bar wireframe-toolbar ml-auto flex shrink-0 items-center gap-2">
-        <MaximizeButton subject="wireframe" />
+export const Wireframe = ({
+  model,
+  screenDiffs,
+}: {
+  readonly model: CompiledWireframe;
+  // Present only where a comparison has something per-screen to say. Omitted
+  // from ordinary plan rendering, and from a wholly added or removed
+  // wireframe, whose status the diff already states once at the top.
+  readonly screenDiffs?: ReadonlyArray<WireframeScreenDiff>;
+}) => {
+  // Which side this rendering is, not whether it carries badges, decides what
+  // baseline isolation may hold inert: a removed wireframe carries no badges
+  // and its switcher still has to open the screens only it has. Only the
+  // baseline is isolated, so only the baseline carries the mark.
+  const live: Readonly<Record<string, string>> =
+    useComponentDiffPresentation()?.side === "baseline"
+      ? { [DIFF_LIVE_ATTRIBUTE]: "" }
+      : {};
+  return (
+    <figure
+      className="wireframe my-8"
+      data-wireframe={model.id}
+      {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
+      {...(model.screens.some((screen) => screen.device === "desktop")
+        ? { "data-wireframe-desktop": "" }
+        : {})}
+    >
+      <div className="wireframe-header flex w-full flex-wrap items-center gap-3">
+        {model.title === undefined ? null : (
+          <figcaption className="wireframe-caption wireframe-figure-title text-sm font-semibold text-ink">
+            {model.title}
+          </figcaption>
+        )}
+        <div className="figure-control-bar wireframe-toolbar ml-auto flex shrink-0 items-center gap-2">
+          <MaximizeButton subject="wireframe" />
+        </div>
       </div>
-    </div>
-    <div className="wireframe-content" {...{ [BODY_ATTRIBUTE]: "" }}>
-      {model.screens.length < 2 ? null : (
-        <nav className="wireframe-switcher" aria-label="Prototype screens">
+      <div className="wireframe-content" {...{ [BODY_ATTRIBUTE]: "" }}>
+        {model.screens.length < 2 ? null : (
+          <nav className="wireframe-switcher" aria-label="Prototype screens">
+            {model.screens.map((screen) => {
+              const annotation = screenDiffFor(screen.id, screenDiffs);
+              return (
+                <button
+                  key={screen.id}
+                  type="button"
+                  className={
+                    screenDiffs === undefined
+                      ? "wireframe-switch"
+                      : "wireframe-switch inline-flex items-center gap-2"
+                  }
+                  data-wireframe-navigate={screen.id}
+                  data-wireframe-switch=""
+                  {...live}
+                  {...(screen.id === model.initialScreenId
+                    ? { "aria-current": "true" }
+                    : {})}
+                >
+                  {screenDiffs === undefined ? (
+                    screen.name
+                  ) : (
+                    <>
+                      <span
+                        className={
+                          annotation?.status === "removed"
+                            ? "line-through decoration-2"
+                            : undefined
+                        }
+                      >
+                        {screen.name}
+                      </span>
+                      {annotation === undefined ? null : (
+                        <span
+                          className={`rounded-md px-2 py-0.5 text-2xs font-bold ${screenStatusClasses(annotation.status)}`}
+                        >
+                          {wireframeScreenStatusLabel(annotation)}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        )}
+        <div className="wireframe-screens flex flex-col gap-6" {...live}>
           {model.screens.map((screen) => (
-            <button
+            <Screen
               key={screen.id}
-              type="button"
-              className="wireframe-switch"
-              data-wireframe-navigate={screen.id}
-              data-wireframe-switch=""
-              {...(screen.id === model.initialScreenId
-                ? { "aria-current": "true" }
-                : {})}
-            >
-              {screen.name}
-            </button>
+              screen={screen}
+              current={screen.id === model.initialScreenId}
+            />
           ))}
-        </nav>
-      )}
-      <div className="wireframe-screens flex flex-col gap-6">
-        {model.screens.map((screen) => (
-          <Screen
-            key={screen.id}
-            screen={screen}
-            current={screen.id === model.initialScreenId}
-          />
-        ))}
+        </div>
       </div>
-    </div>
-  </figure>
-);
+    </figure>
+  );
+};

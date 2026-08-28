@@ -3720,4 +3720,48 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics).toEqual([]);
     expect(html(render(compiled))).toContain("wireframe-top-bar-actions");
   });
+
+  it("should flag a pattern change that lays the same panels out differently", () => {
+    // The comparison never reads `pattern`; it compares the children a
+    // pattern expanded into. `create` and `settings` arrange the same two
+    // panels differently, so those children differ and the screen is
+    // flagged - a pattern change whose expansion left the children alone
+    // would not be.
+    const panels = [
+      element({
+        name: "Panel",
+        attributes: { title: "Queue" },
+        children: [element({ name: "Text", attributes: { text: "Items" } })],
+      }),
+      element({
+        name: "Panel",
+        attributes: { title: "Detail" },
+        children: [element({ name: "Text", attributes: { text: "One item" } })],
+      }),
+    ];
+    const patterned = (pattern: string): CompiledWireframe => {
+      const { compiled, diagnostics } = compile({
+        scopedChildren: [
+          screen({
+            id: "workspace",
+            attributes: { pattern },
+            children: panels,
+          }),
+        ],
+      });
+      expect(diagnostics).toEqual([]);
+      return compiled.model as CompiledWireframe;
+    };
+
+    const diff = WIREFRAME_COMPONENT_DEFINITION.compileDiff({
+      status: "changed",
+      baseline: patterned("create"),
+      proposed: patterned("settings"),
+      runs: [],
+    });
+
+    expect(diff.model).toMatchObject({
+      screens: [{ key: "screen:workspace", status: "updated" }],
+    });
+  });
 });
