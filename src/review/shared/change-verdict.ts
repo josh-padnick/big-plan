@@ -1,18 +1,18 @@
-// Owns what it means for a reviewer to have recorded a verdict for a change,
-// and the one arithmetic that turns a change set plus the stored record into a
-// count.
+// Owns what it means to record a verdict for a change, including who caused
+// the acceptance, and the one arithmetic that turns a change set plus the
+// stored record into a count.
 //
 // A verdict is addressed by the revision it belongs to - the diff's two
 // snapshot digests - plus the place inside it. That address is content-pinned
 // by construction: a later plan revision produces a different result digest, so
-// an acceptance can never migrate onto content the reviewer never saw. Nothing
-// here needs a currency predicate for the same reason.
+// an acceptance can never migrate onto different content. Nothing here needs a
+// currency predicate for the same reason.
 //
 // The counting lives here rather than at each surface because a change set's
 // progress is shown in more than one place at once - the digest attached to an
 // agent message, the stepper reviewing that same set - and two surfaces that
-// each derive it are two surfaces that can disagree about whether a reviewer
-// still has work to do.
+// each derive it are two surfaces that can disagree about whether the change
+// set still has open work.
 
 /** The revision-scoped address of one change place. */
 export type ChangeVerdictAddress = {
@@ -52,9 +52,9 @@ export const PLACE_ID_LIMIT = 256;
 
 /**
  * How many accepted changes one review may hold. Reached only by a review with
- * more recorded acceptances than a person could read, and refused rather than
- * trimmed: dropping the oldest entry would silently reopen a change set the
- * reviewer had already closed.
+ * more recorded acceptances than a review could reasonably present, and
+ * refused rather than trimmed: dropping the oldest entry would silently reopen
+ * a change set that was already closed.
  */
 export const ACCEPTED_CHANGE_LIMIT = 5_000;
 
@@ -62,10 +62,10 @@ export const ACCEPTED_CHANGE_LIMIT = 5_000;
 export const VERDICT_BATCH_LIMIT = 500;
 
 /**
- * The places of one gesture split into mutations the record will accept. A
- * change set can hold more places than a single request may name, and a
- * reviewer closing all of them is one gesture either way, so the split belongs
- * beside the bound that forces it rather than at the surface that trips over it.
+ * The places of one acceptance operation split into mutations the record will
+ * accept. A change set can hold more places than a single request may name, and
+ * closing all of them is one operation either way, so the split belongs beside
+ * the bound that forces it rather than at the surface that trips over it.
  */
 export const changeVerdictBatches = (
   placeIds: ReadonlyArray<string>,
@@ -90,7 +90,7 @@ export const acceptedChangeKeys = (
 ): ReadonlySet<string> =>
   new Set(state.accepted.map((entry) => changeVerdictKey(entry)));
 
-/** How much of one change set the reviewer has closed, and how much is still open. */
+/** How much of one change set is closed, and how much is still open. */
 export type ChangeSetStanding = {
   readonly total: number;
   readonly accepted: number;
@@ -101,7 +101,7 @@ export type ChangeSetStanding = {
 /**
  * The one definition of a change set's standing. `isAccepted` is deliberately
  * false for an empty set: a change set with nothing in it has not been closed
- * by a reviewer, and calling it accepted would report work that never happened.
+ * by a verdict, and calling it accepted would report work that never happened.
  */
 export const changeSetStanding = ({
   from,

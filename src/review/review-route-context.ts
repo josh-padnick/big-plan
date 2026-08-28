@@ -208,7 +208,7 @@ export type ChangeVerdicts = {
 
 /**
  * Compiled diff payloads keyed only by the immutable content digests that
- * produced them. Reviewer disposition is deliberately absent: it is served
+ * produced them. Recorded verdicts are deliberately absent: they are served
  * beside this payload through its own route and cannot invalidate a compile.
  */
 export type SnapshotDiffs = {
