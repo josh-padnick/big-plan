@@ -337,6 +337,9 @@ describe("agent work loop", () => {
     expect(result.agent_prompt).toContain("agent next");
     expect(result.agent_prompt).toContain('agent push <plan> --about "<why>"');
     expect(result.agent_prompt).toContain(
+      "Edit the returned candidate_plan, write the returned response_template to the response_file, then run the respond_command",
+    );
+    expect(result.agent_prompt).toContain(
       "finish or abandon the wait, then push",
     );
     expect(result.agent_prompt).toContain("agent note");
