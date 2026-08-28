@@ -706,7 +706,7 @@ describe("the question an arrival raises", () => {
     expect(agent.unsettledArrivalAtMs).toBeUndefined();
   });
 
-  it("should surface the hand-off prompt when a closed-claim primary has departed (BIG-253)", async () => {
+  it("should surface the hand-off prompt immediately when a primary closes its claim without another signal (BIG-253)", async () => {
     const store = await betweenTurns();
     await attachAgentToRoster({
       store,
@@ -725,6 +725,13 @@ describe("the question an arrival raises", () => {
     expect(pendingPrimacyRequest({ agents, nowMs: 2_200 })?.writerId).toBe(
       "arriving",
     );
+    expect(
+      agents.find((agent) => agent.writerId === "answering"),
+    ).toMatchObject({
+      role: "primary",
+      signalAtMs: 1_000,
+      claimClosedAtMs: 2_000,
+    });
   });
 
   it("should never re-raise a question the reviewer has answered", async () => {
