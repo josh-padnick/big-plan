@@ -777,11 +777,6 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     await expect(
       page.locator("[data-review-approve-status=approved]"),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Feedback" }).click();
-    await page.getByRole("tab", { name: "Chat" }).click();
-    await expect(
-      page.getByText("Approval recorded - no agent connected to notify"),
-    ).toBeVisible();
     const stampBox = await stamp.boundingBox();
     const approvedBox = await approvedButton.boundingBox();
     const tocBox = await page.locator("[data-desktop-toc]").boundingBox();
@@ -823,13 +818,19 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
       const type = element.querySelector("[data-review-approval-stamp-type]");
       return {
         position: style.position,
-        transform: style.transform,
+        rotate: style.rotate,
         fontSize: type === null ? null : getComputedStyle(type).fontSize,
       };
     });
     expect(stampLayer?.position).toBe("absolute");
-    expect(stampLayer?.transform).not.toBe("none");
+    expect(stampLayer?.rotate).toBe("-3deg");
     expect(stampLayer?.fontSize).toBe("20px");
+
+    await page.getByRole("button", { name: "Feedback" }).click();
+    await page.getByRole("tab", { name: "Chat" }).click();
+    await expect(
+      page.getByText("Approval recorded - no agent connected to notify"),
+    ).toBeVisible();
 
     await approvedButton.click();
     const details = page.locator("[data-review-approval-details]");
