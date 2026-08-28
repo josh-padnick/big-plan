@@ -1091,7 +1091,7 @@ export const startReviewRuntime = async (
       },
     };
   } catch (error) {
-    await runtime.close();
+    await runtime.close().catch(() => undefined);
     throw error;
   }
 };
