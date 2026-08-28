@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // Most viewer journeys open static files, while docs journeys exercise Astro's
-// built output through a local static server.
+// built output through a local server from the declared Node toolchain. Keep
+// this free of undeclared system-runtime dependencies so every journey starts.
 export default defineConfig({
   testDir: "./test",
   fullyParallel: true,
