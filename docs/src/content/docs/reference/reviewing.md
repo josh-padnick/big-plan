@@ -140,7 +140,7 @@ Open the card to reply, review and accept its changes, revert a response, or res
 When the agent continues a pushed thread, Big Plan adds another exchange to the same card.
 The card keeps the opener's presentation.
 An unresolved pushed card offers **Auto-accept all changes**.
-Its confirmation separates the immediate consequence - accepting the open changes in that thread - from the ongoing consequence that later pushes arrive accepted.
+Its confirmation separates the immediate consequence - accepting the open changes in that thread - from the session-wide consequence that every later push arrives accepted, including pushes in other threads.
 While armed, the Chat tab shows when auto-accept was turned on and offers **Switch back to review**.
 Applied cards remain conversations: you can reply, receive a follow-up push, inspect each pushed revision's summary, or revert it.
 Switching back changes only later arrivals: it leaves the card and its conversation available, while the next pushed change arrives open for review.
