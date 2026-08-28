@@ -429,8 +429,8 @@ An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.
 Changes inside `DataTable`, `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`,
 `GrpcMethod`, `DatabaseTableSchema`, `Callout`, `CodeSnippet`, and `CodeDiff`
-use their component-owned field or text presentation instead of a generic
-snapshot comparison.
+use their component-owned field, row, facet, or text presentation instead of a
+generic snapshot comparison.
 The change navigator tours several places without losing reading context.
 
 Choose **Accept change** to mark the current place accepted and advance to the next unaccepted place, or **Accept all** to accept the remaining set.
