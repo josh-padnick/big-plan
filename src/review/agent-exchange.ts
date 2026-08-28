@@ -1176,13 +1176,23 @@ const validateStoredResponse = ({
   if (response.kind === "chat" || request.kind === "chat") {
     return response;
   }
-  if (response.kind === "approval" && request.kind === "approval") {
+  if (response.kind === "approval") {
+    if (request.kind !== "approval") {
+      throw new AgentExchangeRejected(
+        "A stored agent response does not match its request",
+      );
+    }
     validateApprovalAcknowledgment({
       hardStop: response.hardStop,
       resultSnapshot: response.resultSnapshot,
       pinnedSnapshot: request.pinnedSnapshot,
     });
     return response;
+  }
+  if (request.kind === "approval") {
+    throw new AgentExchangeRejected(
+      "A stored agent response does not match its request",
+    );
   }
   const expected = expectedCommentIds({ request, commentsById });
   const actual = response.outcomes.map((entry) => entry.commentId);
