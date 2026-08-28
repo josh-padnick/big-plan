@@ -74,7 +74,7 @@ See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence mode
 
 - Local, self-contained review delivery; the [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0001-two-artifact-plan-delivery.md) owns the artifact and script-behavior contract.
 - No external requests, ever.
-- Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
+- Renders anywhere Node.js 22+ runs, straight from `npx -y big-plan@latest render`.
 
 See the [CLI reference](/reference/cli/) for command details.
 
