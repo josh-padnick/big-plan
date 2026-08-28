@@ -31,6 +31,10 @@ jobs:
       - name: Stale-copy warning (never fails the build)
         continue-on-error: true
         run: node scripts/merge-guard/warn-stale-copy.mjs
+      - name: Configure test Git identity
+        run: |
+          git config --global user.name "Big Plan CI"
+          git config --global user.email "ci@big-plan.invalid"
       - uses: oven-sh/setup-bun@v2
         with:
           # Reads the packageManager field so CI and local bun stay in lockstep.
