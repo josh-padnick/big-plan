@@ -10,7 +10,9 @@ import { test } from "node:test";
 
 process.env.GITHUB_TOKEN = "test-token";
 
-const { publishCheckRun, GitHubFailure } = await import("./github.mjs");
+const { fetchSnapshot, publishCheckRun, GitHubFailure } = await import(
+  "./github.mjs"
+);
 
 /**
  * Runs `body` with fetch stubbed, and hands it the calls that were made.
@@ -66,6 +68,96 @@ const publish = () =>
   });
 
 const listing = (...runs) => ({ total_count: runs.length, check_runs: runs });
+
+test("the snapshot preserves review identity and chronology", async () => {
+  await withStubbedApi(
+    (call) => {
+      if (call.url.endsWith("/pulls/42")) {
+        return {
+          head: { sha: "abc1234def5678901234567890abcdef12345678" },
+          draft: false,
+          html_url: "https://github.com/o/r/pull/42",
+        };
+      }
+      if (call.url.includes("/issues/42/comments?")) {
+        return [
+          {
+            id: 101,
+            user: { login: "some-agent" },
+            body: "review-triage: retract coderabbit - duplicate review",
+            created_at: "2026-08-20T12:01:00Z",
+            html_url: "https://github.com/o/r/pull/42#issuecomment-101",
+          },
+        ];
+      }
+      if (call.url.includes("/pulls/42/reviews?")) {
+        return [
+          {
+            id: 11,
+            user: { login: "coderabbitai[bot]" },
+            state: "COMMENTED",
+            body: "finding",
+            submitted_at: "2026-08-20T12:00:00Z",
+          },
+        ];
+      }
+      if (call.url.includes("/pulls/42/commits?")) {
+        return [{ sha: "abc1234def5678901234567890abcdef12345678" }];
+      }
+      if (call.url.endsWith("/graphql")) {
+        return {
+          data: {
+            repository: {
+              pullRequest: {
+                reviewThreads: {
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes: [
+                    {
+                      isResolved: false,
+                      isOutdated: false,
+                      path: "src/example.ts",
+                      line: 7,
+                      originalLine: 7,
+                      comments: {
+                        pageInfo: { hasNextPage: false },
+                        nodes: [
+                          {
+                            url: "https://github.com/o/r/pull/42#discussion_r1",
+                            body: "finding",
+                            isMinimized: false,
+                            createdAt: "2026-08-20T12:00:00Z",
+                            author: { login: "coderabbitai[bot]" },
+                            pullRequestReview: { databaseId: 11 },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        };
+      }
+      throw new Error(`unexpected request: ${call.url}`);
+    },
+    async () => {
+      const result = await fetchSnapshot({
+        owner: "o",
+        repo: "r",
+        number: 42,
+      });
+      assert.equal(result.reviews[0].id, 11);
+      assert.equal(result.reviews[0].submittedAt, "2026-08-20T12:00:00Z");
+      assert.equal(result.issueComments[0].id, 101);
+      assert.equal(
+        result.issueComments[0].createdAt,
+        "2026-08-20T12:01:00Z",
+      );
+      assert.equal(result.reviewThreads[0].reviewId, 11);
+    },
+  );
+});
 
 test("a check run of the same name owned by another app is left alone", async () => {
   await withStubbedApi(

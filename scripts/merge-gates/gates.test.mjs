@@ -20,19 +20,36 @@ import {
 
 const HEAD = "abc1234def5678901234567890abcdef12345678";
 const OLD = "0000111122223333444455556666777788889999";
+const REVIEWED_AT = "2026-08-20T12:00:00Z";
+const COMMENTED_AT = "2026-08-20T12:01:00Z";
 
 /** A snapshot with nothing on it, which every case narrows. */
-const snapshot = (overrides = {}) => ({
-  number: 42,
-  headSha: HEAD,
-  isDraft: false,
-  url: "https://github.com/o/r/pull/42",
-  commitShas: [OLD, HEAD],
-  issueComments: [],
-  reviews: [],
-  reviewThreads: [],
-  ...overrides,
-});
+const snapshot = (overrides = {}) => {
+  const value = {
+    number: 42,
+    headSha: HEAD,
+    isDraft: false,
+    url: "https://github.com/o/r/pull/42",
+    commitShas: [OLD, HEAD],
+    issueComments: [],
+    reviews: [],
+    reviewThreads: [],
+    ...overrides,
+  };
+  return {
+    ...value,
+    issueComments: value.issueComments.map((one, index) => ({
+      id: index + 100,
+      createdAt: COMMENTED_AT,
+      ...one,
+    })),
+    reviews: value.reviews.map((one, index) => ({
+      id: index + 1,
+      submittedAt: REVIEWED_AT,
+      ...one,
+    })),
+  };
+};
 
 const comment = (body, author = "josh-padnick") => ({
   author,
@@ -41,6 +58,7 @@ const comment = (body, author = "josh-padnick") => ({
 });
 
 const thread = (comments, extra = {}) => ({
+  reviewId: comments[0]?.author.startsWith("greptile") ? 2 : 1,
   isResolved: false,
   isOutdated: false,
   path: "src/review/live-target.browser.ts",
@@ -409,6 +427,58 @@ test("bot retractions never leave an attestation as the sole review", () => {
     assert.match(verdict.title, /2 accepted reviews/);
     assert.match(report(verdict), /Greptile/);
     assert.match(report(verdict), /adversarial review/);
+  }
+});
+
+test("a later review invalidates older retraction evidence", () => {
+  const reviews = [
+    {
+      id: 1,
+      author: "coderabbitai[bot]",
+      state: "COMMENTED",
+      body: "finding review",
+      submittedAt: REVIEWED_AT,
+    },
+    {
+      id: 2,
+      author: "greptile-apps[bot]",
+      state: "COMMENTED",
+      body: "retained review",
+      submittedAt: REVIEWED_AT,
+    },
+    {
+      id: 3,
+      author: "coderabbitai[bot]",
+      state: "COMMENTED",
+      body: "new summary feedback",
+      submittedAt: "2026-08-20T12:02:00Z",
+    },
+  ];
+  const oldResolvedThread = thread([finding(), reply()], { reviewId: 1 });
+  const cases = [
+    {
+      issueComments: [signOff],
+      reviewThreads: [oldResolvedThread],
+    },
+    {
+      issueComments: [
+        signOff,
+        {
+          ...comment(
+            "review-triage: retract coderabbit - duplicate bot review",
+          ),
+          createdAt: COMMENTED_AT,
+        },
+      ],
+      reviewThreads: [],
+    },
+  ];
+
+  for (const one of cases) {
+    const verdict = evaluateReviewTriage(snapshot({ ...one, reviews }));
+    assert.equal(verdict.conclusion, "failure");
+    assert.match(verdict.title, /2 accepted reviews/);
+    assert.match(report(verdict), /CodeRabbit/);
   }
 });
 

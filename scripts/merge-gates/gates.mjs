@@ -438,8 +438,17 @@ export const identifyReviews = (snapshot) => {
     }
     const bot = botFor(review.author);
     if (bot !== null) {
-      const entry = byBot.get(bot.id) ?? { bot, states: new Set() };
+      const entry = byBot.get(bot.id) ?? {
+        bot,
+        states: new Set(),
+        reviews: [],
+      };
       entry.states.add(state);
+      entry.reviews.push({
+        id: review.id,
+        state,
+        submittedAt: review.submittedAt,
+      });
       byBot.set(bot.id, entry);
     }
   }
@@ -449,15 +458,19 @@ export const identifyReviews = (snapshot) => {
       continue;
     }
     if (!isResolved(thread, bot.logins)) {
-      byBot.set(bot.id, byBot.get(bot.id) ?? { bot, states: new Set() });
+      byBot.set(
+        bot.id,
+        byBot.get(bot.id) ?? { bot, states: new Set(), reviews: [] },
+      );
     }
   }
   const attestations = collectAttestations(snapshot);
   const usable = attestations.filter((one) => one.problems.length === 0);
-  let accepted = [...byBot.values()].map(({ bot, states }) => ({
+  let accepted = [...byBot.values()].map(({ bot, states, reviews }) => ({
     kind: "bot",
     bot,
     states,
+    reviews,
   }));
   if (usable.length > 0) {
     accepted.push({
@@ -468,29 +481,47 @@ export const identifyReviews = (snapshot) => {
   }
   const acceptedBots = accepted.filter((one) => one.kind === "bot");
   if (acceptedBots.length > 1) {
-    const summaryRetractions = new Set(
-      snapshot.issueComments
-        .flatMap((comment) => matchMarker(comment, SUMMARY_RETRACTION))
-        .map((match) => lower(match[1])),
-    );
     let remainingBots = acceptedBots.length;
     accepted = accepted.filter((one) => {
       if (one.kind !== "bot" || remainingBots === 1) {
         return true;
       }
-      const threads = snapshot.reviewThreads.filter((thread) =>
+      const allThreads = snapshot.reviewThreads.filter((thread) =>
         isReviewerThread(thread, one.bot.logins),
       );
       const isCommentOnly =
         one.states.size === 1 && one.states.has("COMMENTED");
+      const latestCommented = one.reviews
+        .filter((review) => review.state === "COMMENTED")
+        .reduce(
+          (latest, review) =>
+            latest === null || review.submittedAt > latest.submittedAt
+              ? review
+              : latest,
+          null,
+        );
+      const latestThreads = allThreads.filter(
+        (thread) => thread.reviewId === latestCommented?.id,
+      );
+      const hasUnresolvedThread = allThreads.some(
+        (thread) => !isResolved(thread, one.bot.logins),
+      );
       const canRetractByResolution =
         isCommentOnly &&
-        threads.length > 0 &&
-        threads.every((thread) => isResolved(thread, one.bot.logins));
+        !hasUnresolvedThread &&
+        latestThreads.length > 0;
       const canRetractSummary =
         isCommentOnly &&
-        threads.length === 0 &&
-        summaryRetractions.has(one.bot.id);
+        !hasUnresolvedThread &&
+        latestThreads.length === 0 &&
+        latestCommented !== null &&
+        snapshot.issueComments.some(
+          (comment) =>
+            comment.createdAt >= latestCommented.submittedAt &&
+            matchMarker(comment, SUMMARY_RETRACTION).some(
+              (match) => lower(match[1]) === one.bot.id,
+            ),
+        );
       if (canRetractByResolution || canRetractSummary) {
         remainingBots -= 1;
         return false;
