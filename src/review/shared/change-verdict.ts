@@ -1,7 +1,8 @@
-// Owns what it means for a reviewer to have disposed of a change, and the one
-// arithmetic that turns a change set plus the stored record into a count.
+// Owns what it means for a reviewer to have recorded a verdict for a change,
+// and the one arithmetic that turns a change set plus the stored record into a
+// count.
 //
-// A disposition is addressed by the revision it belongs to - the diff's two
+// A verdict is addressed by the revision it belongs to - the diff's two
 // snapshot digests - plus the place inside it. That address is content-pinned
 // by construction: a later plan revision produces a different result digest, so
 // an acceptance can never migrate onto content the reviewer never saw. Nothing
@@ -14,7 +15,7 @@
 // still has work to do.
 
 /** The revision-scoped address of one change place. */
-export type ChangeDispositionAddress = {
+export type ChangeVerdictAddress = {
   readonly from: string;
   readonly to: string;
   readonly placeId: string;
@@ -24,7 +25,7 @@ export type ChangeDispositionAddress = {
  * One recorded verdict. Today a record holds only acceptances, so the verdict
  * is implied by membership; the address is the whole of the fact.
  */
-export type ChangeDisposition = ChangeDispositionAddress & {
+export type ChangeVerdict = ChangeVerdictAddress & {
   readonly acceptedAt: string;
 };
 
@@ -33,8 +34,8 @@ export type ChangeDisposition = ChangeDispositionAddress & {
  * monotonic across accepted writes so a browser can order two responses without
  * inspecting their bodies, exactly as the answers store does.
  */
-export type ChangeDispositionState = {
-  readonly accepted: ReadonlyArray<ChangeDisposition>;
+export type ChangeVerdictState = {
+  readonly accepted: ReadonlyArray<ChangeVerdict>;
   readonly revision: number;
 };
 
@@ -52,8 +53,8 @@ export const PLACE_ID_LIMIT = 256;
  */
 export const ACCEPTED_CHANGE_LIMIT = 5_000;
 
-/** How many places one mutation may dispose of, so a single request stays bounded. */
-export const DISPOSITION_BATCH_LIMIT = 500;
+/** How many places one mutation may record, so a single request stays bounded. */
+export const VERDICT_BATCH_LIMIT = 500;
 
 /**
  * The places of one gesture split into mutations the record will accept. A
@@ -61,32 +62,28 @@ export const DISPOSITION_BATCH_LIMIT = 500;
  * reviewer closing all of them is one gesture either way, so the split belongs
  * beside the bound that forces it rather than at the surface that trips over it.
  */
-export const changeDispositionBatches = (
+export const changeVerdictBatches = (
   placeIds: ReadonlyArray<string>,
 ): ReadonlyArray<ReadonlyArray<string>> => {
   const batches: Array<ReadonlyArray<string>> = [];
-  for (
-    let start = 0;
-    start < placeIds.length;
-    start += DISPOSITION_BATCH_LIMIT
-  ) {
-    batches.push(placeIds.slice(start, start + DISPOSITION_BATCH_LIMIT));
+  for (let start = 0; start < placeIds.length; start += VERDICT_BATCH_LIMIT) {
+    batches.push(placeIds.slice(start, start + VERDICT_BATCH_LIMIT));
   }
   return batches;
 };
 
-/** The key one disposition is stored and looked up under. */
-export const changeDispositionKey = ({
+/** The key one verdict is stored and looked up under. */
+export const changeVerdictKey = ({
   from,
   to,
   placeId,
-}: ChangeDispositionAddress): string => `${from}:${to}:${placeId}`;
+}: ChangeVerdictAddress): string => `${from}:${to}:${placeId}`;
 
 /** The stored acceptances as the key set every surface asks its questions of. */
 export const acceptedChangeKeys = (
-  state: ChangeDispositionState,
+  state: ChangeVerdictState,
 ): ReadonlySet<string> =>
-  new Set(state.accepted.map((entry) => changeDispositionKey(entry)));
+  new Set(state.accepted.map((entry) => changeVerdictKey(entry)));
 
 /** How much of one change set the reviewer has closed, and how much is still open. */
 export type ChangeSetStanding = {
@@ -114,7 +111,7 @@ export const changeSetStanding = ({
 }): ChangeSetStanding => {
   const total = placeIds.length;
   const closed = placeIds.filter((placeId) =>
-    accepted.has(changeDispositionKey({ from, to, placeId })),
+    accepted.has(changeVerdictKey({ from, to, placeId })),
   ).length;
   return {
     total,

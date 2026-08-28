@@ -4,11 +4,11 @@
 import { describe, expect, it } from "vitest";
 import {
   acceptedChangeKeys,
-  changeDispositionBatches,
-  changeDispositionKey,
+  changeVerdictBatches,
+  changeVerdictKey,
   changeSetStanding,
-  DISPOSITION_BATCH_LIMIT,
-} from "./change-disposition.js";
+  VERDICT_BATCH_LIMIT,
+} from "./change-verdict.js";
 
 const FROM = "aaaaaaaaaaaaaaaa";
 const TO = "bbbbbbbbbbbbbbbb";
@@ -101,41 +101,41 @@ describe("changeSetStanding", () => {
   });
 });
 
-describe("changeDispositionKey", () => {
+describe("changeVerdictKey", () => {
   it("separates two places that share a revision", () => {
-    expect(
-      changeDispositionKey({ from: FROM, to: TO, placeId: "p1" }),
-    ).not.toBe(changeDispositionKey({ from: FROM, to: TO, placeId: "p2" }));
+    expect(changeVerdictKey({ from: FROM, to: TO, placeId: "p1" })).not.toBe(
+      changeVerdictKey({ from: FROM, to: TO, placeId: "p2" }),
+    );
   });
 
   it("separates one place across two revisions", () => {
-    expect(
-      changeDispositionKey({ from: FROM, to: TO, placeId: "p1" }),
-    ).not.toBe(changeDispositionKey({ from: TO, to: LATER, placeId: "p1" }));
+    expect(changeVerdictKey({ from: FROM, to: TO, placeId: "p1" })).not.toBe(
+      changeVerdictKey({ from: TO, to: LATER, placeId: "p1" }),
+    );
   });
 });
 
-describe("changeDispositionBatches", () => {
+describe("changeVerdictBatches", () => {
   const places = (count: number) =>
     Array.from({ length: count }, (_unused, index) => `p${index}`);
 
   it("leaves a gesture within the bound as one mutation", () => {
-    const batches = changeDispositionBatches(places(DISPOSITION_BATCH_LIMIT));
+    const batches = changeVerdictBatches(places(VERDICT_BATCH_LIMIT));
     expect(batches).toHaveLength(1);
-    expect(batches[0]).toHaveLength(DISPOSITION_BATCH_LIMIT);
+    expect(batches[0]).toHaveLength(VERDICT_BATCH_LIMIT);
   });
 
   it("splits a gesture past the bound into mutations the record accepts", () => {
-    const all = places(DISPOSITION_BATCH_LIMIT * 2 + 3);
-    const batches = changeDispositionBatches(all);
+    const all = places(VERDICT_BATCH_LIMIT * 2 + 3);
+    const batches = changeVerdictBatches(all);
     expect(batches).toHaveLength(3);
     for (const batch of batches) {
-      expect(batch.length).toBeLessThanOrEqual(DISPOSITION_BATCH_LIMIT);
+      expect(batch.length).toBeLessThanOrEqual(VERDICT_BATCH_LIMIT);
     }
     expect(batches.flatMap((batch) => [...batch])).toEqual(all);
   });
 
   it("has nothing to send for an empty gesture", () => {
-    expect(changeDispositionBatches([])).toEqual([]);
+    expect(changeVerdictBatches([])).toEqual([]);
   });
 });

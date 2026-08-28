@@ -13,7 +13,7 @@ The workflow is intentionally light:
 - **Small PRs.** Keep pull requests small and reviewable; prefer several self-contained increments over one large change.
 - **Checks.** Run `bun run lint`, `bun run build`, `bun run test`, and `bun run test:e2e` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
 - **Merge gates.** A pull request merges only once its review is triaged and its validation is attested, both stated in comments that CI checks. See [Merge gates](#merge-gates).
-- **License.** Big Plan is [MIT](LICENSE) licensed; contributions are accepted under the same license.
+- **License.** Big Plan is [FSL-1.1-MIT](LICENSE.md) licensed; contributions are accepted under the same license.
 
 ## Do not overwrite merged work
 
