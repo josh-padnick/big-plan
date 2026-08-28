@@ -121,6 +121,18 @@ export type CurrentAgentActivity =
       readonly headline: "Agent is unreachable";
       readonly supporting: string;
     }
+  | ({
+      readonly state: "approval-acknowledged";
+      readonly tone: "neutral";
+      readonly headline: "Approval acknowledged";
+      readonly supporting: "The agent has the approved plan and the decisions recorded with it.";
+    } & ActivityRequestFacts)
+  | ({
+      readonly state: "approval-blocked";
+      readonly tone: "warning";
+      readonly headline: "Approval not acknowledged";
+      readonly supporting: string;
+    } & ActivityRequestFacts)
   | {
       readonly state: "idle";
       readonly tone: "neutral";
@@ -205,6 +217,9 @@ export const deriveAgentHealth = ({
   }
   if (activity.state === "errored") {
     return { indicator: "error", label: "Agent error" };
+  }
+  if (activity.state === "approval-blocked") {
+    return { indicator: "stalled", label: "Approval not acknowledged" };
   }
   if (activity.state === "stalled") {
     return { indicator: "stalled", label: "Agent not responding" };
@@ -703,6 +718,7 @@ export const selectPendingAgentRequest = <
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
   requests,
+  responses = [],
   cancelPendingRequestIds,
   progressEvents,
   agentConnected,
@@ -742,6 +758,13 @@ export const deriveCurrentAgentActivity = ({
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
     };
   }
+  const settledRequestIds = new Set(
+    responses.map((response) => response.requestId),
+  );
+  const unavailableRequestIds = new Set([
+    ...cancelPendingRequestIds,
+    ...settledRequestIds,
+  ]);
   // Work that has been picked up is judged by its own narration, and never
   // falls through to the presence question below. The two ask different things
   // - "is anyone attached" against "has this turn reported lately" - and the
@@ -749,7 +772,7 @@ export const deriveCurrentAgentActivity = ({
   // process is gone for the length of the turn (BIG-147).
   const claimed = selectClaimedAgentRequest({
     requests,
-    cancelPendingRequestIds,
+    cancelPendingRequestIds: unavailableRequestIds,
     now,
   });
   if (claimed !== undefined) {
@@ -798,7 +821,7 @@ export const deriveCurrentAgentActivity = ({
 
   const request = selectPendingAgentRequest({
     requests,
-    cancelPendingRequestIds,
+    cancelPendingRequestIds: unavailableRequestIds,
     now,
   });
   if (!agentPresenceIsFresh({ connected: agentConnected, heartbeatAt, now })) {
@@ -832,9 +855,40 @@ export const deriveCurrentAgentActivity = ({
           : { disconnectRequestedAtMs }),
         now,
         claimStillOpen:
-          heldWorkQuiet({ requests, cancelPendingRequestIds, now }) === "stale",
+          heldWorkQuiet({
+            requests,
+            cancelPendingRequestIds: unavailableRequestIds,
+            now,
+          }) === "stale",
       }),
     };
+  }
+  if (request === undefined) {
+    const settled = requests.findLast((candidate) =>
+      settledRequestIds.has(candidate.requestId),
+    );
+    if (settled?.kind === "approval") {
+      const answer = responses.find(
+        (candidate) => candidate.requestId === settled.requestId,
+      );
+      if (answer?.hardStop !== undefined) {
+        return {
+          ...requestFacts(settled),
+          state: "approval-blocked",
+          tone: "warning",
+          headline: "Approval not acknowledged",
+          supporting: `The agent stopped instead of acknowledging: ${answer.hardStop}`,
+        };
+      }
+      return {
+        ...requestFacts(settled),
+        state: "approval-acknowledged",
+        tone: "neutral",
+        headline: "Approval acknowledged",
+        supporting:
+          "The agent has the approved plan and the decisions recorded with it.",
+      };
+    }
   }
   if (request === undefined) {
     return {

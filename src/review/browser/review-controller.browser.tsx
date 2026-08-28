@@ -436,6 +436,8 @@ const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
   errored: "Error",
   disconnected: "Offline",
   offline: "Unreachable",
+  "approval-acknowledged": "Acknowledged",
+  "approval-blocked": "Needs attention",
   idle: "Connected",
   "never-connected": "",
 };

@@ -1220,6 +1220,8 @@ describe("disconnecting the attached agent", () => {
       "waiting",
       "stalled",
       "errored",
+      "approval-acknowledged",
+      "approval-blocked",
       "idle",
     ] as const) {
       expect(agentActivityIsAttached({ state })).toBe(true);
@@ -1246,17 +1248,26 @@ describe("disconnecting the attached agent", () => {
 
   it("should not warn about dropped work when the queue is merely waiting", () => {
     // A request nobody picked up stays queued for the next agent.
-    for (const state of ["waiting", "idle", "disconnected"] as const) {
+    for (const state of [
+      "waiting",
+      "approval-acknowledged",
+      "approval-blocked",
+      "idle",
+      "disconnected",
+    ] as const) {
       expect(agentDisconnectDropsWork({ state })).toBe(false);
     }
   });
 });
 
 describe("approval progress stays in the chat thread", () => {
-  const approvalRequest: AgentActivityRequest = {
+  const unansweredApprovalRequest: AgentActivityRequest = {
     requestId: "dddddddddddddddd",
     kind: "approval",
     createdAt: "2026-08-08T19:59:00.000Z",
+  };
+  const approvalRequest: AgentActivityRequest = {
+    ...unansweredApprovalRequest,
     answeredAt: "2026-08-08T20:00:00.000Z",
   };
 
@@ -1288,5 +1299,61 @@ describe("approval progress stays in the chat thread", () => {
         heartbeatAt: NOW,
       }),
     ).toMatchObject({ state: "idle", headline: "Agent connected" });
+  });
+
+  it("should read an acknowledgment from its durable answer", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        everConnected: true,
+        requests: [unansweredApprovalRequest],
+        responses: [{ requestId: approvalRequest.requestId }],
+        cancelPendingRequestIds: new Set<string>(),
+        progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW,
+      }),
+    ).toMatchObject({
+      state: "approval-acknowledged",
+      headline: "Approval acknowledged",
+      requestId: approvalRequest.requestId,
+    });
+  });
+
+  it("should read a hard stop from its durable answer", () => {
+    const activity = deriveCurrentAgentActivity({
+      everConnected: true,
+      requests: [unansweredApprovalRequest],
+      responses: [
+        {
+          requestId: approvalRequest.requestId,
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        },
+      ],
+      cancelPendingRequestIds: new Set<string>(),
+      progressEvents: [],
+      agentConnected: true,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: NOW,
+    });
+    expect(activity).toMatchObject({
+      state: "approval-blocked",
+      headline: "Approval not acknowledged",
+      supporting:
+        "The agent stopped instead of acknowledging: The plan no longer matches the pinned snapshot.",
+    });
+    expect(
+      deriveAgentHealth({
+        activity,
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: true,
+      }),
+    ).toEqual({
+      indicator: "stalled",
+      label: "Approval not acknowledged",
+    });
   });
 });
