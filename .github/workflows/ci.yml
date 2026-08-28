@@ -40,6 +40,8 @@ jobs:
           # Reads the packageManager field so CI and local bun stay in lockstep.
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: Runtime dependencies must have no high or critical vulnerabilities
+        run: npm audit --no-package-lock --omit=dev --audit-level=high
       - run: bun run lint
       - run: bun run build
       # Generated modules are committed; build just regenerated them, so any
