@@ -236,6 +236,7 @@ describe("scoped child dispatch", () => {
         column: 1,
         instanceKey: expect.any(String),
         model: { value: "compiled" },
+        semanticModel: { value: "compiled" },
       },
     ]);
     expect(serializeHtml({ root })).toBe(

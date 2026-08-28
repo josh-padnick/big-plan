@@ -36,6 +36,10 @@ import {
 import type { DeferredOutlinePresentations } from "./outline-placeholder.js";
 import { reactToHast } from "./react-hast-adapter.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
+import {
+  attachNestedComponentModel,
+  semanticComponentModel,
+} from "./semantic-model.js";
 
 type MdxJsxFlowElement = Extract<
   RootContent,
@@ -52,6 +56,7 @@ export type CollectedComponentModel = {
   // internal to one compilation and never reaches machine output.
   readonly instanceKey: string;
   readonly model: unknown;
+  readonly semanticModel: unknown;
 };
 
 /**
@@ -292,6 +297,7 @@ const renderFlowElement = ({
           }),
       instanceKey,
       model: compiled.model,
+      semanticModel: semanticComponentModel(compiled.model),
     });
   }
   // Only a root the document will hold carries the key. A root rendered into
@@ -331,16 +337,25 @@ const renderFlowElement = ({
     });
     const index = delivery.deferOutline.length - 1;
     if (materializeModel) {
-      return compiled.outline === undefined
-        ? deferredMarkdownPlaceholder({
-            index,
-            ...(node.position === undefined ? {} : { position: node.position }),
-          })
-        : createOutlinePlaceholder({
-            index,
-            marker: compiled.outline.marker,
-            ...(node.position === undefined ? {} : { position: node.position }),
-          });
+      const placeholder =
+        compiled.outline === undefined
+          ? deferredMarkdownPlaceholder({
+              index,
+              ...(node.position === undefined
+                ? {}
+                : { position: node.position }),
+            })
+          : createOutlinePlaceholder({
+              index,
+              marker: compiled.outline.marker,
+              ...(node.position === undefined
+                ? {}
+                : { position: node.position }),
+            });
+      return attachNestedComponentModel({
+        element: placeholder,
+        model: compiled.model,
+      });
     }
     const placeholder =
       compiled.outline === undefined
@@ -383,7 +398,9 @@ const renderFlowElement = ({
   }
   const rendered = named(delivery.adapt(compiled.presentation()));
   if (rendered !== undefined) {
-    return rendered;
+    return insideComponentBody
+      ? attachNestedComponentModel({ element: rendered, model: compiled.model })
+      : rendered;
   }
   diagnostics.add({
     message: `Internal error: static renderer for "${name ?? "<fragment>"}" produced no element`,
