@@ -121,7 +121,7 @@ import type { ReviewSessionDescriptor } from "./session-authority.js";
 import {
   createActivityClock,
   createApprovals,
-  createChangeDispositions,
+  createChangeVerdicts,
   createDecisionAnswers,
   createPlanRenderer,
   createReaderProgress,
@@ -160,9 +160,9 @@ import {
   stageDecisionAnswer,
 } from "./routes-inputs.js";
 import {
-  disposeOfChanges,
-  readChangeDispositionState,
-} from "./routes-dispositions.js";
+  readChangeVerdictState,
+  recordChangeVerdicts,
+} from "./routes-verdicts.js";
 import { readCommittedChangeSetState } from "./routes-change-sets.js";
 import { readReviewInputContract } from "./routes-input-contract.js";
 import {
@@ -225,8 +225,8 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
   { method: "POST", path: "/api/inputs", handler: stageDecisionAnswer },
   {
     method: "GET",
-    path: "/api/change-dispositions",
-    handler: readChangeDispositionState,
+    path: "/api/change-verdicts",
+    handler: readChangeVerdictState,
   },
   {
     method: "GET",
@@ -240,8 +240,8 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
   },
   {
     method: "POST",
-    path: "/api/change-dispositions",
-    handler: disposeOfChanges,
+    path: "/api/change-verdicts",
+    handler: recordChangeVerdicts,
   },
   { method: "PUT", path: "/api/drafts", handler: updateReviewState },
   { method: "POST", path: "/api/feedback", handler: submitFeedback },
@@ -958,7 +958,7 @@ export const startReviewRuntime = async ({
       resolvedPlanPath,
       reportDiagnostic,
     }),
-    changeDispositions: createChangeDispositions({ store }),
+    changeVerdicts: createChangeVerdicts({ store }),
     approvals: createApprovals({ store, reportDiagnostic }),
     readerProgress: createReaderProgress({
       initialSnapshot,
