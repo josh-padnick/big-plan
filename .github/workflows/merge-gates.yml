@@ -26,16 +26,6 @@
 # governs conversation comments only once it merges, which is why
 # workflow_dispatch exists.
 #
-# It shares CI's self-hosted runner because this account has no GitHub-hosted
-# minutes. The job only reads the API, so it is seconds long and needs nothing
-# from the local machine, but it does queue behind whatever that runner is
-# already building. Move it to a hosted runner if gate latency starts to matter.
-#
-# That runner is why fork pull requests matter here. ci.yml states the policy
-# this workflow has to keep: trusted contributors only on the self-hosted
-# runner, because external contributions must never execute workflows on the
-# local machine.
-#
 # What enforces that property is a repository setting, not this file. "Fork
 # pull request workflows from outside collaborators" is off, so a fork pull
 # request cannot run any workflow in this private repository. Re-verify it with
@@ -121,7 +111,7 @@ concurrency:
 
 jobs:
   judge:
-    # Second belt against running fork-authored code on the self-hosted runner:
+    # Second belt against running fork-authored code:
     # the events that run the pull request's own ref are allowed only for a
     # pull request whose head lives in this repository. The header explains why
     # this cannot be the boundary and names the repository setting that is.
@@ -133,9 +123,8 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request) ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: self-hosted
-    # The gate is one API-reading script. Anything longer than this is wedged,
-    # and it is holding a runner every other lane's build needs.
+    runs-on: ubuntu-latest
+    # The gate is one API-reading script. Anything longer than this is wedged.
     timeout-minutes: 10
     permissions:
       # An explicit block sets every scope it omits to none, so the checkout of
@@ -150,12 +139,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The gate runs no git command after this, and the workspace on a
-          # self-hosted runner outlives the job, so the token must not stay
+          # The gate runs no git command after this, so the token must not stay
           # behind in .git/config.
           persist-credentials: false
-      # No toolchain step: the gate is one Node script with no dependencies, and
-      # the runner already has Node for the merge guard.
+      # No toolchain step: the gate is one Node script with no dependencies.
       - name: Judge the merge gates
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
