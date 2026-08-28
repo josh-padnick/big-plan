@@ -3402,7 +3402,10 @@ const SentThread = ({
   readonly pushedOrigin?: "prompt" | "about";
   /** Offered only by pushed threads while this session is in review mode. */
   readonly onArmAutoAccept?: () => void;
-  readonly appliedSummaries?: ReadonlyArray<string>;
+  readonly appliedSummaries?: ReadonlyArray<{
+    readonly changeSetId: string;
+    readonly text: string;
+  }>;
 }) => {
   const {
     exchanges,
@@ -3733,7 +3736,7 @@ const SentThread = ({
           {appliedSummaries.length === 0 ? null : (
             <ul className="mt-2 mb-0 list-none p-0 text-2xs text-muted">
               {appliedSummaries.map((summary) => (
-                <li key={summary}>{summary}</li>
+                <li key={summary.changeSetId}>{summary.text}</li>
               ))}
             </ul>
           )}
@@ -3882,7 +3885,7 @@ const SentThread = ({
         {appliedSummaries.length === 0 ? null : (
           <ul className="mt-2 mb-0 list-none p-0 text-2xs text-muted">
             {appliedSummaries.map((summary) => (
-              <li key={summary}>{summary}</li>
+              <li key={summary.changeSetId}>{summary.text}</li>
             ))}
           </ul>
         )}
@@ -4481,8 +4484,10 @@ export const ReviewController = () => {
   useEffect(() => {
     if (identity === null) return;
     let current = true;
-    void requestJson({ path: "/api/change-sets", identity })
-      .then(async (value) => {
+    let retryTimer: number | undefined;
+    const readCommittedChangeSets = async (): Promise<void> => {
+      try {
+        const value = await requestJson({ path: "/api/change-sets", identity });
         const decoded = decodeCommittedChangeSets(value);
         if (decoded === undefined) return;
         const entries = await Promise.all(
@@ -4501,10 +4506,16 @@ export const ReviewController = () => {
         if (!current) return;
         setCommittedChangeSets(decoded.changeSets);
         setChangeSetDiffs(new Map(entries));
-      })
-      .catch(() => undefined);
+      } catch {
+        if (current) {
+          retryTimer = window.setTimeout(readCommittedChangeSets, 2_000);
+        }
+      }
+    };
+    void readCommittedChangeSets();
     return () => {
       current = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, [committedResponseKey, identity]);
   /* The roster's own ambiguity set, so the arrival entry and the card the
@@ -7251,16 +7262,20 @@ export const ReviewController = () => {
         method: "POST",
         body: { mode, ...(threadId === undefined ? {} : { threadId }) },
       });
-      if (runtimeSession !== null && isRecord(value)) {
+      if (isRecord(value)) {
         const armedAtMs =
           typeof value.armedAtMs === "number" ? value.armedAtMs : undefined;
-        setRuntimeSession({
-          ...runtimeSession,
-          mode,
-          ...(mode === "auto-accept" && armedAtMs !== undefined
-            ? { armedAtMs }
-            : { armedAtMs: undefined }),
-        });
+        setRuntimeSession((current) =>
+          current === null
+            ? null
+            : {
+                ...current,
+                mode,
+                ...(mode === "auto-accept" && armedAtMs !== undefined
+                  ? { armedAtMs }
+                  : { armedAtMs: undefined }),
+              },
+        );
       }
       refreshVerdicts();
       setPendingAutoAcceptThreadId(null);
@@ -7292,7 +7307,10 @@ export const ReviewController = () => {
         minute: "2-digit",
       });
       return [
-        `${count === undefined ? "Applied changes" : `${count} ${count === 1 ? "change" : "changes"}`} · ${at}`,
+        {
+          changeSetId: changeSet.changeSetId,
+          text: `${count === undefined ? "Applied changes" : `${count} ${count === 1 ? "change" : "changes"}`} · ${at}`,
+        },
       ];
     });
     return (
