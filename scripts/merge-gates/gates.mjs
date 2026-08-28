@@ -643,6 +643,9 @@ export const evaluateReviewTriage = (snapshot) => {
   );
 
   if (accepted.length === 0) {
+    const botConversationComments = snapshot.issueComments
+      .map((comment) => ({ comment, bot: botFor(comment.author) }))
+      .filter((one) => one.bot !== null);
     return verdict(
       CHECK_NAMES.reviewTriage,
       "failure",
@@ -651,6 +654,17 @@ export const evaluateReviewTriage = (snapshot) => {
         "No accepted third-party review was found.",
         "",
         `Looked for a review by ${REVIEW_BOTS.map((bot) => bot.label).join(", ")}, and for an adversarial-review attestation comment.`,
+        ...(botConversationComments.length === 0
+          ? []
+          : [
+              "",
+              `Found ${botConversationComments.length} bot-authored pull request conversation comment(s) from ${[
+                ...new Set(botConversationComments.map((one) => one.bot.label)),
+              ].join(
+                ", ",
+              )}. These preserve visible feedback, but they are not GitHub`,
+              "COMMENTED reviews and do not satisfy the accepted-review requirement.",
+            ]),
         ...notes,
         "",
         "Next action: get one review. Either request one of the reviewers above,",

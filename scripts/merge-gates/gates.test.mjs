@@ -96,6 +96,22 @@ test("a pull request with no review names the two ways to get one", () => {
   assert.match(report(verdict), /adversarial-review: complete/);
 });
 
+test("bot conversation summaries remain visible without counting as reviews", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        comment("CodeRabbit summary", "coderabbitai[bot]"),
+        comment("Greptile summary", "greptile-apps[bot]"),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(report(verdict), /2 bot-authored pull request conversation/);
+  assert.match(report(verdict), /CodeRabbit, Greptile/);
+  assert.match(report(verdict), /not GitHub\nCOMMENTED reviews/);
+  assert.match(report(verdict), /adversarial-review: complete/);
+});
+
 test("a triaged review with a matching sign-off passes", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
