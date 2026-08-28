@@ -3,6 +3,7 @@ import {
   compileNamedFieldDiff,
   type NamedField,
   type NamedFieldDiff,
+  unionNamedFields,
 } from "../_model/component-diff/named-fields.js";
 import type { CompiledHttpEndpoint } from "./compile.js";
 
@@ -41,5 +42,9 @@ export const compileHttpEndpointDiff = (
   input: ComponentDiffInput<CompiledHttpEndpoint>,
 ): CompiledHttpEndpointDiff => {
   const sample = input.status === "removed" ? input.baseline : input.proposed;
-  return compileNamedFieldDiff(input, fieldsFor(sample));
+  const fields =
+    input.status === "changed"
+      ? unionNamedFields(fieldsFor(input.baseline), fieldsFor(input.proposed))
+      : fieldsFor(sample);
+  return compileNamedFieldDiff(input, fields);
 };

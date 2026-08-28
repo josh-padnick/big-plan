@@ -3,6 +3,7 @@ import {
   compileNamedFieldDiff,
   type NamedField,
   type NamedFieldDiff,
+  unionNamedFields,
 } from "../_model/component-diff/named-fields.js";
 import type { CompiledGrpcMethod } from "./compile.js";
 
@@ -42,5 +43,9 @@ export const compileGrpcMethodDiff = (
   input: ComponentDiffInput<CompiledGrpcMethod>,
 ): CompiledGrpcMethodDiff => {
   const sample = input.status === "removed" ? input.baseline : input.proposed;
-  return compileNamedFieldDiff(input, fieldsFor(sample));
+  const fields =
+    input.status === "changed"
+      ? unionNamedFields(fieldsFor(input.baseline), fieldsFor(input.proposed))
+      : fieldsFor(sample);
+  return compileNamedFieldDiff(input, fields);
 };

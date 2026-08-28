@@ -10,6 +10,16 @@ export type NamedFieldDiff<Model> = ComponentDiffInput<Model> & {
   readonly wholeComponent: boolean;
 };
 
+export const unionNamedFields = <Model>(
+  ...catalogs: ReadonlyArray<ReadonlyArray<NamedField<Model>>>
+): ReadonlyArray<NamedField<Model>> => {
+  const fields = new Map<string, NamedField<Model>>();
+  for (const catalog of catalogs) {
+    for (const field of catalog) fields.set(field.name, field);
+  }
+  return [...fields.values()];
+};
+
 export const sameDiffValue = (left: unknown, right: unknown): boolean =>
   JSON.stringify(left, (key, value: unknown) =>
     key === "position" ? undefined : value,

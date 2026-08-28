@@ -20,7 +20,10 @@ export const compileDataTableDiff = (
       name: `Row: ${sample.rows[index]?.cells[0]?.text || String(index + 1)}`,
       value: (model: CompiledDataTable) => model.rows[index],
     })),
-    ...(sample.summaryRow === undefined
+    ...(input.status === "changed"
+      ? input.baseline.summaryRow === undefined &&
+        input.proposed.summaryRow === undefined
+      : sample.summaryRow === undefined
       ? []
       : [
           {

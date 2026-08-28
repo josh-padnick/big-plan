@@ -3,6 +3,7 @@ import {
   compileNamedFieldDiff,
   type NamedField,
   type NamedFieldDiff,
+  unionNamedFields,
 } from "../_model/component-diff/named-fields.js";
 import type { CompiledDatabaseTableSchema } from "./compile.js";
 
@@ -24,10 +25,14 @@ const fieldsFor = (
     value: (value: CompiledDatabaseTableSchema) =>
       value.schema.columns.find((candidate) => candidate.name === column.name),
   })),
-  ...model.schema.indexes.map((index, position) => ({
+  ...model.schema.indexes.map((index) => ({
     name: `Index: ${index.name ?? index.columns.join(", ")}`,
     value: (value: CompiledDatabaseTableSchema) =>
-      value.schema.indexes[position],
+      value.schema.indexes.find(
+        (candidate) =>
+          (candidate.name ?? candidate.columns.join(", ")) ===
+          (index.name ?? index.columns.join(", ")),
+      ),
   })),
   ...model.ddlSections.map((section) => ({
     name: `DDL: ${section.title}`,
@@ -39,5 +44,9 @@ export const compileDatabaseTableSchemaDiff = (
   input: ComponentDiffInput<CompiledDatabaseTableSchema>,
 ): CompiledDatabaseTableSchemaDiff => {
   const sample = input.status === "removed" ? input.baseline : input.proposed;
-  return compileNamedFieldDiff(input, fieldsFor(sample));
+  const fields =
+    input.status === "changed"
+      ? unionNamedFields(fieldsFor(input.baseline), fieldsFor(input.proposed))
+      : fieldsFor(sample);
+  return compileNamedFieldDiff(input, fields);
 };

@@ -223,4 +223,170 @@ describe("last-wave component diff fields", () => {
       changedField: "Code",
     });
   });
+
+  it("names removed HttpEndpoint parameters", () => {
+    const baseline: CompiledHttpEndpoint = {
+      method: "GET",
+      path: "/jobs",
+      deprecated: false,
+      description: [],
+      params: [
+        {
+          name: "legacy",
+          location: "query",
+          required: false,
+          children: [],
+        },
+      ],
+      responses: [],
+    };
+    expect(
+      compileHttpEndpointDiff({
+        status: "changed",
+        baseline,
+        proposed: { ...baseline, params: [] },
+        runs,
+      }).changedFields,
+    ).toEqual(["query: legacy"]);
+  });
+
+  it("names both GraphqlOperation argument identities on rename", () => {
+    const baseline: CompiledGraphqlOperation = {
+      kind: "query",
+      name: "jobs",
+      deprecated: false,
+      description: [],
+      args: [{ name: "before", argumentType: "String", children: [] }],
+      inputFields: [],
+      payloadFields: [],
+      responses: [],
+    };
+    expect(
+      compileGraphqlOperationDiff({
+        status: "changed",
+        baseline,
+        proposed: {
+          ...baseline,
+          args: [{ name: "after", argumentType: "String", children: [] }],
+        },
+        runs,
+      }).changedFields,
+    ).toEqual(["Argument: before", "Argument: after"]);
+  });
+
+  it("names removed GrpcMethod errors", () => {
+    const baseline: CompiledGrpcMethod = {
+      service: "Jobs",
+      name: "Get",
+      request: "GetRequest",
+      response: "GetResponse",
+      kind: "unary",
+      deprecated: false,
+      description: [],
+      requestFields: [],
+      responseFields: [],
+      errors: [{ code: "NOT_FOUND", children: [] }],
+      examples: [],
+    };
+    expect(
+      compileGrpcMethodDiff({
+        status: "changed",
+        baseline,
+        proposed: { ...baseline, errors: [] },
+        runs,
+      }).changedFields,
+    ).toEqual(["Status code: NOT_FOUND"]);
+  });
+
+  it("names removed DatabaseTableSchema DDL sections", () => {
+    const baseline: CompiledDatabaseTableSchema = {
+      tableName: "jobs",
+      schema: { columns: [], indexes: [] },
+      source: "",
+      ddlSections: [{ title: "Backfill", children: text("UPDATE jobs") }],
+    };
+    expect(
+      compileDatabaseTableSchemaDiff({
+        status: "changed",
+        baseline,
+        proposed: { ...baseline, ddlSections: [] },
+        runs,
+      }).changedFields,
+    ).toEqual(["DDL: Backfill"]);
+  });
+
+  it("names both DatabaseTableSchema column identities on rename", () => {
+    const column = {
+      name: "before",
+      type: "text",
+      primaryKey: false,
+      notNull: false,
+      unique: false,
+      identity: false,
+    };
+    const baseline: CompiledDatabaseTableSchema = {
+      tableName: "jobs",
+      schema: { columns: [column], indexes: [] },
+      source: "before text",
+      ddlSections: [],
+    };
+    expect(
+      compileDatabaseTableSchemaDiff({
+        status: "changed",
+        baseline,
+        proposed: {
+          ...baseline,
+          schema: {
+            ...baseline.schema,
+            columns: [{ ...column, name: "after" }],
+          },
+          source: "after text",
+        },
+        runs,
+      }).changedFields,
+    ).toEqual(["Column: before", "Column: after"]);
+  });
+
+  it("names only an inserted DatabaseTableSchema index", () => {
+    const existing = { columns: ["status"], unique: false, name: "by_status" };
+    const inserted = { columns: ["owner_id"], unique: false };
+    const baseline: CompiledDatabaseTableSchema = {
+      tableName: "jobs",
+      schema: { columns: [], indexes: [existing] },
+      source: "",
+      ddlSections: [],
+    };
+    expect(
+      compileDatabaseTableSchemaDiff({
+        status: "changed",
+        baseline,
+        proposed: {
+          ...baseline,
+          schema: { ...baseline.schema, indexes: [inserted, existing] },
+        },
+        runs,
+      }).changedFields,
+    ).toEqual(["Index: owner_id"]);
+  });
+
+  it("names a removed DataTable summary row", () => {
+    const baseline: CompiledDataTable = {
+      id: "jobs",
+      filter: false,
+      fit: "wrap",
+      columns: [{ label: "Job", type: "text", align: "left" }],
+      rows: [{ cells: [cell("Build")] }],
+      summaryRow: { cells: [cell("1 job")] },
+      groups: [],
+      groupColumn: -1,
+    };
+    expect(
+      compileDataTableDiff({
+        status: "changed",
+        baseline,
+        proposed: { ...baseline, summaryRow: undefined },
+        runs,
+      }).changedFields,
+    ).toEqual(["Summary row"]);
+  });
 });
