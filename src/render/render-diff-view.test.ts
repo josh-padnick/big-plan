@@ -211,6 +211,10 @@ ${description}
       ),
     ).toHaveLength(1);
     expect(
+      nodes.find((node) => node.properties.dataBlockId === proposedRows[1]?.id)
+        ?.properties.dataTableRow,
+    ).toBe("1");
+    expect(
       nodes.filter(
         (node) => node.properties.dataBlockId === proposedRows[0]?.id,
       ),

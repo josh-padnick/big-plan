@@ -14,12 +14,14 @@ export const DataTableDiffView = ({
 }) => {
   const project = (value: CompiledDataTable): CompiledDataTable => ({
     ...value,
-    rows: value.rows.filter((_, index) =>
+    rows: value.rows.flatMap((row, index) =>
       new Set(
         model.status !== "added" && value === model.baseline
           ? model.baselineRowIndexes
           : model.proposedRowIndexes,
-      ).has(index),
+      ).has(index)
+        ? [{ ...row, diffSourceIndex: index }]
+        : [],
     ),
     ...(model.changedFields.some((field) => field.startsWith("Summary: "))
       ? {}

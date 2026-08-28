@@ -52,6 +52,9 @@ export type CompiledDataTableColumn = {
 export type CompiledDataTableRow = {
   readonly group?: string;
   readonly cells: ReadonlyArray<TableCell>;
+  // Present only on a diff projection, where filtering rows would otherwise
+  // make the rendered row position differ from its source-table position.
+  readonly diffSourceIndex?: number;
 };
 
 export type CompiledDataTable = {

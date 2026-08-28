@@ -232,10 +232,13 @@ const inheritProposedSubtargetIdentity = ({
     const label = node.properties["data-commentable-label"];
     if (typeof kind === "string" && typeof label === "string") {
       const normalizedLabel = label.replaceAll("`", "");
+      const sourceRowIndex = node.properties["data-table-row"];
       const source = proposedElements.find(
         (element) =>
           element.properties["data-block-kind"] === kind &&
           element.properties["data-block-label"] === normalizedLabel &&
+          (sourceRowIndex === undefined ||
+            element.properties["data-table-row"] === sourceRowIndex) &&
           elementText(element) === elementText(node),
       );
       const sourceId = source?.properties["data-block-id"];
