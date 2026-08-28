@@ -3,7 +3,7 @@
 // sighting of an agent response and never again, the write gate gives up on
 // one mutation rather than on the whole session (BIG-44), and the decision
 // answer revision a runtime serves never moves backwards, and immutable
-// snapshot pairs keep one bounded compiled diff independent of disposition.
+// snapshot pairs keep one bounded compiled diff independent of verdict.
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createActivityClock,
-  createChangeDispositions,
+  createChangeVerdicts,
   createDecisionAnswers,
   createReaderProgress,
   createSnapshotDiffs,
@@ -279,7 +279,7 @@ describe("createSnapshotDiffs", () => {
     await writeFile(planPath, "# Plan\n");
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
-    const dispositions = createChangeDispositions({ store });
+    const verdicts = createChangeVerdicts({ store });
     const snapshotDiffs = createSnapshotDiffs();
     let builds = 0;
     const read = () =>
@@ -297,7 +297,7 @@ describe("createSnapshotDiffs", () => {
       });
     const beforeAcceptance = await read();
 
-    await dispositions.write({
+    await verdicts.write({
       version: 1,
       revision: 1,
       accepted: [
@@ -313,7 +313,7 @@ describe("createSnapshotDiffs", () => {
 
     expect(afterAcceptance).toBe(beforeAcceptance);
     expect(builds).toBe(1);
-    expect((await dispositions.read()).accepted).toHaveLength(1);
+    expect((await verdicts.read()).accepted).toHaveLength(1);
   });
 
   it("should bound entries by evicting the least recently used pair", async () => {
