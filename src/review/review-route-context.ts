@@ -276,6 +276,11 @@ export const createSnapshotDiffs = ({
       "Snapshot diff cache maxEntries must be a positive integer.",
     );
   }
+  if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) {
+    throw new RangeError(
+      "Snapshot diff cache maxAgeMs must be a positive finite duration.",
+    );
+  }
   const entries = new Map<string, SnapshotDiffCacheEntry>();
   let useSequence = 0;
 

@@ -215,6 +215,15 @@ describe("createSnapshotDiffs", () => {
     );
   });
 
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "should reject the invalid maximum age %s",
+    (maxAgeMs) => {
+      expect(() => createSnapshotDiffs({ maxAgeMs })).toThrow(
+        "Snapshot diff cache maxAgeMs must be a positive finite duration.",
+      );
+    },
+  );
+
   it("should return the identical payload for one immutable snapshot pair", async () => {
     const snapshotDiffs = createSnapshotDiffs();
     let builds = 0;
