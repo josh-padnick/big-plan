@@ -8,6 +8,7 @@ import {
   renderDiffView,
   renderIsolatedBlockView,
 } from "../render/render-diff-view.js";
+import type { CompiledMarkdown } from "../render/markdown/compile-markdown.js";
 import { jsonResponse, refusal } from "./review-route-context.js";
 import type {
   ReviewRouteContext,
@@ -43,16 +44,20 @@ const MIGRATED_DIFF_KINDS: ReadonlySet<string> = new Set([
 class SnapshotDiffSourceUnavailable extends Error {}
 
 /** Compiles one immutable document pair and renders every location from it. */
-const compileSnapshotDiffPayload = ({
+export const compileSnapshotDiffPayload = ({
   from,
   to,
   beforeSource,
   afterSource,
+  compileDocument,
 }: {
   readonly from: string;
   readonly to: string;
   readonly beforeSource: string;
   readonly afterSource: string;
+  readonly compileDocument?: (input: {
+    readonly markdown: string;
+  }) => CompiledMarkdown;
 }): SnapshotDiff => {
   // One compilation per snapshot answers every question this route asks: the
   // block descriptors the alignment reads, the models a component diff pairs,
@@ -61,6 +66,7 @@ const compileSnapshotDiffPayload = ({
   const compiled = compileDiffDocuments({
     baselineMarkdown: beforeSource,
     proposedMarkdown: afterSource,
+    ...(compileDocument === undefined ? {} : { compileDocument }),
   });
   const snapshotDiff = buildSnapshotDiff({
     from,
