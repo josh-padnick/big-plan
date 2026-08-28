@@ -42,7 +42,7 @@ Example destinations (adjust to the harness layout):
 npx -y big-plan@latest skill write ~/.agents/skills/big-plan/SKILL.md
 ```
 
-`skill write` is the only path that mutates a skill file; never invent a silent overwrite.
+`skill write <path>` creates any missing parent directories, then writes the thin Big Plan skill shell to the exact file path you provide so your coding harness can load it. Because that explicit command accepts overwriting that one file, inspect an existing destination before replacing it; never invent a silent overwrite.
 The skill shell forces `big-plan guidance` as the live authoring authority each session.
 See https://big-plan.ai/for-agents/use-the-skill.md for update propagation.
 
@@ -50,11 +50,11 @@ See https://big-plan.ai/for-agents/use-the-skill.md for update propagation.
 
 Before implementing any non-trivial task:
 
-1. Run `npx -y big-plan@latest guidance` and follow its principles.
+1. Run `npx -y big-plan@latest guidance` to learn how to write a plan humans love to review, then follow those principles.
    Validate, render, and review stay locked until you have read it.
 2. Write your implementation plan to an MDX file, for example `plan.mdx`.
-3. Run `npx -y big-plan@latest validate plan.mdx` and fix every diagnostic until it passes.
-4. Run `npx -y big-plan@latest render plan.mdx`.
+3. Run `npx -y big-plan@latest validate plan.mdx` to compile and lint the plan without writing an output file, and fix every diagnostic until it passes.
+4. Run `npx -y big-plan@latest render plan.mdx` to write a self-contained `plan.html` review document next to the source.
 5. Tell your human to open the rendered `plan.html` using its absolute path or a `file://` URL.
 6. Do not start implementing until your human agrees.
    When they ask for changes, revise the plan file, validate, render again, and ask again.
