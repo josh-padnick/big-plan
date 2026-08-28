@@ -9,6 +9,7 @@ import {
   writeStoreJson,
   type ReviewStore,
 } from "./store.js";
+import { withReviewSessionAuthority } from "./session-authority.js";
 
 const SESSION_ID = /^[a-f0-9]{16}$/u;
 
@@ -146,9 +147,15 @@ export const clearStaleReviewMode = async ({
   readonly store: ReviewStore;
   readonly sessionId: string;
 }): Promise<void> => {
-  const stored = await readStoreJson(store.reviewModePath);
-  if (stored === undefined) return;
-  const armed = validateArmedReviewMode(stored);
-  if (armed?.sessionId === sessionId) return;
-  await clearReviewMode({ store });
+  await withReviewSessionAuthority({
+    store,
+    sessionId,
+    change: async () => {
+      const stored = await readStoreJson(store.reviewModePath);
+      if (stored === undefined) return;
+      const armed = validateArmedReviewMode(stored);
+      if (armed?.sessionId === sessionId) return;
+      await clearReviewMode({ store });
+    },
+  });
 };

@@ -22,6 +22,26 @@ import {
 const SESSION = "1111111111111111";
 const NEXT_SESSION = "2222222222222222";
 
+const sessionDescriptor = ({
+  sessionId,
+  planId,
+  plan,
+}: {
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly plan: string;
+}) => ({
+  version: 1 as const,
+  sessionId,
+  planId,
+  plan,
+  url: "http://127.0.0.1:61000/",
+  port: 61_000,
+  pid: 123,
+  startedAt: "2026-08-28T12:00:00.000Z",
+  token: "A".repeat(43),
+});
+
 describe("review mode store", () => {
   it("should validate only the session-stamped auto-accept record", () => {
     expect(
@@ -50,7 +70,11 @@ describe("review mode store", () => {
     try {
       await writeSessionDescriptorValue({
         store,
-        value: { sessionId: SESSION },
+        value: sessionDescriptor({
+          sessionId: SESSION,
+          planId,
+          plan: planPath,
+        }),
       });
       await writeArmedReviewMode({ store, sessionId: SESSION, armedAtMs: 42 });
       await expect(readActiveArmedReviewMode({ store })).resolves.toMatchObject(
@@ -61,7 +85,11 @@ describe("review mode store", () => {
 
       await writeSessionDescriptorValue({
         store,
-        value: { sessionId: NEXT_SESSION },
+        value: sessionDescriptor({
+          sessionId: NEXT_SESSION,
+          planId,
+          plan: planPath,
+        }),
       });
       await expect(
         readActiveArmedReviewMode({ store }),
@@ -76,6 +104,37 @@ describe("review mode store", () => {
       ).rejects.toMatchObject({
         code: "ENOENT",
       });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should not clear mode state after session custody changes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-review-mode-"));
+    const planPath = join(directory, "plan.mdx");
+    const planId = deriveReviewPlanId({ planPath });
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    try {
+      await writeSessionDescriptorValue({
+        store,
+        value: sessionDescriptor({
+          sessionId: NEXT_SESSION,
+          planId,
+          plan: planPath,
+        }),
+      });
+      await writeArmedReviewMode({
+        store,
+        sessionId: NEXT_SESSION,
+        armedAtMs: 42,
+      });
+
+      await clearStaleReviewMode({ store, sessionId: SESSION });
+
+      await expect(
+        readReviewModeForSession({ store, sessionId: NEXT_SESSION }),
+      ).resolves.toEqual({ mode: "auto-accept", armedAtMs: 42 });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

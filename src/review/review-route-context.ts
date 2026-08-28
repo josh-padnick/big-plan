@@ -200,7 +200,6 @@ export type DecisionAnswers = {
  */
 export type ChangeVerdicts = {
   readonly read: () => Promise<StoredChangeVerdicts>;
-  readonly write: (verdicts: StoredChangeVerdicts) => Promise<void>;
   readonly update: (
     change: (verdicts: StoredChangeVerdicts) => StoredChangeVerdicts,
   ) => Promise<StoredChangeVerdicts>;
@@ -528,7 +527,7 @@ export const createChangeVerdicts = ({
     writeStored: (verdicts) => writeChangeVerdicts({ store, verdicts }),
   });
   return {
-    ...record,
+    read: record.read,
     update: async (change) => {
       const updated = await updateStoredChangeVerdicts({ store, change });
       // Re-read through the runtime's monotonic view so an external commit

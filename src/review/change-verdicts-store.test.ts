@@ -9,6 +9,7 @@ import {
 } from "./shared/change-verdict.js";
 import {
   applyChangeVerdictMutation,
+  mergeFinalizedChangeVerdicts,
   validateChangeVerdictMutation,
   validateChangeVerdicts,
   type StoredChangeVerdicts,
@@ -336,5 +337,37 @@ describe("applyChangeVerdictMutation", () => {
         mutation: accept(["beyond-the-bound"]),
       }),
     ).toThrow(new RegExp(`at most ${ACCEPTED_CHANGE_LIMIT}`, "u"));
+  });
+});
+
+describe("mergeFinalizedChangeVerdicts", () => {
+  it("should preserve a concurrent acceptance when approval finalizes", () => {
+    const finalized = applyChangeVerdictMutation({
+      verdicts: empty,
+      mutation: accept(["approved"]),
+    });
+    const current = applyChangeVerdictMutation({
+      verdicts: finalized,
+      mutation: accept(["concurrent"]),
+    });
+
+    const merged = mergeFinalizedChangeVerdicts({ current, finalized });
+
+    expect(merged.revision).toBe(2);
+    expect(merged.accepted.map((entry) => entry.placeId)).toEqual([
+      "approved",
+      "concurrent",
+    ]);
+  });
+
+  it("should leave an already finalized record unchanged during recovery", () => {
+    const finalized = applyChangeVerdictMutation({
+      verdicts: empty,
+      mutation: accept(["approved"]),
+    });
+
+    expect(
+      mergeFinalizedChangeVerdicts({ current: finalized, finalized }),
+    ).toBe(finalized);
   });
 });

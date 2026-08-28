@@ -271,6 +271,43 @@ export const applyChangeVerdictMutation = ({
   return { version: 1, revision, accepted };
 };
 
+/** Merges an approval's accepted places into the latest locked record. */
+export const mergeFinalizedChangeVerdicts = ({
+  current,
+  finalized,
+}: {
+  readonly current: StoredChangeVerdicts;
+  readonly finalized: StoredChangeVerdicts;
+}): StoredChangeVerdicts => {
+  const currentByKey = new Map(
+    current.accepted.map((entry) => [changeVerdictKey(entry), entry]),
+  );
+  const isAlreadyFinalized = finalized.accepted.every((entry) => {
+    const stored = currentByKey.get(changeVerdictKey(entry));
+    return (
+      stored?.acceptedAt === entry.acceptedAt && stored.actor === entry.actor
+    );
+  });
+  if (isAlreadyFinalized) return current;
+  const finalizedKeys = new Set(finalized.accepted.map(changeVerdictKey));
+  const accepted = [
+    ...current.accepted.filter(
+      (entry) => !finalizedKeys.has(changeVerdictKey(entry)),
+    ),
+    ...finalized.accepted,
+  ];
+  if (accepted.length > ACCEPTED_CHANGE_LIMIT) {
+    throw new ChangeVerdictsRejected(
+      `A review may record at most ${ACCEPTED_CHANGE_LIMIT} accepted changes`,
+    );
+  }
+  return {
+    version: 1,
+    revision: Math.max(current.revision, finalized.revision) + 1,
+    accepted,
+  };
+};
+
 /**
  * Updates the verdict record under its cross-process lock.
  *

@@ -8,6 +8,8 @@ import {
 } from "./agent-exchange.js";
 import { validateApprovalRecord } from "./approval-record.js";
 import {
+  mergeFinalizedChangeVerdicts,
+  updateStoredChangeVerdicts,
   validateChangeVerdicts,
   type StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
@@ -17,7 +19,6 @@ import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import {
   readStoreJson,
   writeApprovalRecord,
-  writeChangeVerdicts,
   writeStoreJson,
   type ReviewStore,
 } from "./store.js";
@@ -128,9 +129,13 @@ const settleLocked = async ({
       }
     }
   }
-  await writeChangeVerdicts({
+  await updateStoredChangeVerdicts({
     store,
-    verdicts: finalization.verdicts,
+    change: (current) =>
+      mergeFinalizedChangeVerdicts({
+        current,
+        finalized: finalization.verdicts,
+      }),
   });
   await writeApprovalRecord({
     store,
