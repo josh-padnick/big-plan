@@ -1490,16 +1490,19 @@ describe("agent work loop lifecycle", () => {
           if (writes === 1) return writeSnapshot(args);
           throw new Error("The store went away mid-commit");
         });
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "respond",
-          planPath,
-          responsePath: pickup.response_file,
-          executablePath,
-          agentToken: pickup.agent_token,
-        }),
-      ).rejects.toThrow();
-      interrupted.mockRestore();
+      try {
+        await expect(
+          runAgentWorkLoopAction({
+            kind: "respond",
+            planPath,
+            responsePath: pickup.response_file,
+            executablePath,
+            agentToken: pickup.agent_token,
+          }),
+        ).rejects.toThrow();
+      } finally {
+        interrupted.mockRestore();
+      }
       expect(
         await readdir(review.store.agentMutationJournalDirectory),
       ).toHaveLength(1);

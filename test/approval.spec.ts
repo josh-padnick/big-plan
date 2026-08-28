@@ -23,6 +23,7 @@ import {
   agentIdOf,
   agentSidebar,
   agentStatusTrigger,
+  closeReviewRuntime,
   expect,
   runAgentCli,
   startReviewRuntime,
@@ -942,7 +943,7 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
       await expect(status).not.toContainText("Approval acknowledged");
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
