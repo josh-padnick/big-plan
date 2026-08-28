@@ -814,7 +814,7 @@ Current event version. Example:
 Strike ~~gone~~ and break here\\
 next line.
 
-Two spaces form:  
+Two spaces form:${"  "}
 second line here.
 `).markdown,
     );
