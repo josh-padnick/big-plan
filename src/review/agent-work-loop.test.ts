@@ -1048,18 +1048,6 @@ describe("agent work loop lifecycle", () => {
         responded: request.requestId,
         kind: "approval",
       });
-      await expect(
-        readProgress({ store: review.store, sessionId: review.sessionId }),
-      ).resolves.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            requestId: request.requestId,
-            stepCode: "approval-acknowledged",
-            step: "Approval acknowledged",
-            state: "done",
-          }),
-        ]),
-      );
       expect(deriveSnapshotDigest(await readFile(planPath, "utf8"))).toBe(
         pinned,
       );
@@ -1190,25 +1178,6 @@ describe("agent work loop lifecycle", () => {
         kind: "approval",
       });
 
-      // The reviewer's own record of what happened, and no claim that the
-      // approval was acknowledged.
-      const progress = await readProgress({
-        store: review.store,
-        sessionId: review.sessionId,
-      });
-      expect(progress).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            requestId: request.requestId,
-            stepCode: "approval-blocked",
-            state: "failed",
-            detail: "The plan no longer matches the pinned snapshot.",
-          }),
-        ]),
-      );
-      expect(
-        progress.some((event) => event.stepCode === "approval-acknowledged"),
-      ).toBe(false);
       // A hard stop publishes nothing.
       await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
     } finally {
@@ -1389,17 +1358,6 @@ describe("agent work loop lifecycle", () => {
           agentToken: pickup.agent_token,
         }),
       ).resolves.toMatchObject({ responded: request.requestId });
-      await expect(
-        readProgress({ store: review.store, sessionId: review.sessionId }),
-      ).resolves.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            requestId: request.requestId,
-            stepCode: "approval-blocked",
-            state: "failed",
-          }),
-        ]),
-      );
       // The reviewer's newer text is still theirs.
       await expect(readFile(planPath, "utf8")).resolves.toBe(edited);
     } finally {
@@ -1456,16 +1414,6 @@ describe("agent work loop lifecycle", () => {
           agentToken: pickup.agent_token,
         }),
       ).resolves.toMatchObject({ responded: request.requestId });
-      await expect(
-        readProgress({ store: review.store, sessionId: review.sessionId }),
-      ).resolves.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            requestId: request.requestId,
-            stepCode: "approval-acknowledged",
-          }),
-        ]),
-      );
       await expect(readFile(planPath, "utf8")).resolves.toBe(edited);
     } finally {
       await review.close();

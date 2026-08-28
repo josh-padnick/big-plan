@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./shared/comment.js";
 import {
   AgentExchangeRejected,
+  approvalAgentRequest,
   deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
@@ -705,14 +706,16 @@ describe("request mailbox", () => {
 
   it("should let a withdrawal prevent a delayed request from being created", async () => {
     const { store } = await preparedReview();
-    const request = messageAgentRequest({
-      kind: "chat",
-      requestId: "4444444444444444",
+    const request = approvalAgentRequest({
+      approvalId: "4444444444444444",
       sessionId,
       planId,
-      premiseSnapshot: snapshot,
+      planPath: "/tmp/plan.mdx",
+      pinnedSnapshot: snapshot,
       createdAt: "2026-08-10T12:00:00.000Z",
-      body: "Do not create this after its owner withdraws it.",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "Begin after this approval is handed off.",
     });
     let permitted = true;
     const withdrawalStarted = deferred();

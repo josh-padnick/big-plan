@@ -27,6 +27,7 @@ const approval = (overrides: Partial<ApprovalEntry> = {}): ApprovalEntry => ({
   approvalId: "a1b2c3d4e5f60718",
   at: NOW,
   pinnedSnapshot: SNAPSHOT,
+  agentConnected: false,
   message: "This plan is approved and we are ready to begin.",
   recordedAnswers: [
     {

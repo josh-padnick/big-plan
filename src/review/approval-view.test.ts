@@ -23,6 +23,7 @@ const entry: ApprovalEntry = {
   approvalId: APPROVAL_ID,
   at: "2026-08-19T17:41:00.000Z",
   pinnedSnapshot: SNAPSHOT,
+  agentConnected: false,
   message: "Start on it now.",
   recordedAnswers: [],
   alreadyDecided: [],
