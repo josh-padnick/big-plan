@@ -1,3 +1,6 @@
+// Proves the snapshot diff route compiles each document exactly once and reuses
+// those compiled sides across every copied change location.
+
 import { describe, expect, it, vi } from "vitest";
 import { compileDiffDocuments } from "../render/render-diff-view.js";
 import { compileSnapshotDiffPayload } from "./routes-diff.js";
