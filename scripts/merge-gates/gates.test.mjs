@@ -482,6 +482,76 @@ test("a later review invalidates older retraction evidence", () => {
   }
 });
 
+test("a same-second later review invalidates resolved older threads", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [
+        {
+          id: 1,
+          author: "coderabbitai[bot]",
+          state: "COMMENTED",
+          body: "finding review",
+          submittedAt: REVIEWED_AT,
+        },
+        {
+          id: 2,
+          author: "greptile-apps[bot]",
+          state: "COMMENTED",
+          body: "retained review",
+          submittedAt: REVIEWED_AT,
+        },
+        {
+          id: 3,
+          author: "coderabbitai[bot]",
+          state: "COMMENTED",
+          body: "new summary feedback",
+          submittedAt: REVIEWED_AT,
+        },
+      ],
+      reviewThreads: [thread([finding(), reply()], { reviewId: 1 })],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+  assert.match(report(verdict), /CodeRabbit/);
+});
+
+test("a same-second summary marker cannot retract a review", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        {
+          ...comment(
+            "review-triage: retract coderabbit - duplicate bot review",
+          ),
+          createdAt: REVIEWED_AT,
+        },
+      ],
+      reviews: [
+        {
+          id: 1,
+          author: "coderabbitai[bot]",
+          state: "COMMENTED",
+          body: "summary feedback",
+          submittedAt: REVIEWED_AT,
+        },
+        {
+          id: 2,
+          author: "greptile-apps[bot]",
+          state: "COMMENTED",
+          body: "retained review",
+          submittedAt: REVIEWED_AT,
+        },
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+  assert.match(report(verdict), /CodeRabbit/);
+});
+
 test("an adversarial attestation stands in for a bot review", () => {
   const verdict = evaluateReviewTriage(
     snapshot({

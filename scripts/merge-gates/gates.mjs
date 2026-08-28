@@ -495,7 +495,7 @@ export const identifyReviews = (snapshot) => {
         .filter((review) => review.state === "COMMENTED")
         .reduce(
           (latest, review) =>
-            latest === null || review.submittedAt > latest.submittedAt
+            latest === null || review.submittedAt >= latest.submittedAt
               ? review
               : latest,
           null,
@@ -517,7 +517,7 @@ export const identifyReviews = (snapshot) => {
         latestCommented !== null &&
         snapshot.issueComments.some(
           (comment) =>
-            comment.createdAt >= latestCommented.submittedAt &&
+            comment.createdAt > latestCommented.submittedAt &&
             matchMarker(comment, SUMMARY_RETRACTION).some(
               (match) => lower(match[1]) === one.bot.id,
             ),
