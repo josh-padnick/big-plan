@@ -240,9 +240,10 @@ Revoking an approval that the agent has not yet answered cancels that still-open
 Every critical decision must be answered first; non-critical decisions may remain unanswered and are recorded that way.
 The approval is refused if the plan changes while the confirmation is open, so the record never silently covers a different revision.
 
-After approval, the branding-bar control reads **Plan approved**, and an approval stamp appears just above the document title in the reading column.
+After approval, the branding-bar control reads **Plan approved**, and a persistent approval stamp appears centered above the table of contents while you scroll.
 Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
 The plan-wide Chat thread shows **Plan approved**, followed by **Approval acknowledged** after a successful acknowledgment or a warning when the agent reports a hard stop.
+When no agent is connected, the **Plan approved** entry instead says the approval was recorded but there was no agent to notify; the mailbox request remains waiting for the next agent.
 Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.
 If the plan source changes while an approval remains in force, the bar reports **Changed since approval** and offers **Re-approve** for the plan as it now reads.
 

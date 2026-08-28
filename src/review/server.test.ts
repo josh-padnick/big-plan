@@ -6674,9 +6674,7 @@ describe("review runtime approval", () => {
   const approvalProgress = async (
     target: ReviewRuntime,
     sessionToken: string,
-  ): Promise<
-    ReadonlyArray<Record<string, unknown>>
-  > => {
+  ): Promise<ReadonlyArray<Record<string, unknown>>> => {
     const response = await callRuntime({
       target,
       sessionToken,
@@ -6984,9 +6982,7 @@ describe("review runtime approval", () => {
         } finally {
           stderr.mockRestore();
         }
-        await expect(
-          approvalProgress(target, sessionToken),
-        ).resolves.toEqual(
+        await expect(approvalProgress(target, sessionToken)).resolves.toEqual(
           expect.arrayContaining([
             expect.objectContaining({
               requestId: approvalId,
@@ -7149,33 +7145,19 @@ describe("review runtime approval", () => {
     );
   });
 
-  it("should preserve approval when the post-commit presence read fails", async () => {
+  it("should derive agentless approval Chat when presence is malformed", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,
       async ({ target, sessionToken, digest }) => {
         await writeFile(target.store.agentHeartbeatPath, "{");
-        const reported: Array<string> = [];
-        const stderr = vi
-          .spyOn(process.stderr, "write")
-          .mockImplementation((chunk: unknown) => {
-            reported.push(String(chunk));
-            return true;
-          });
-        try {
-          const response = await approve(target, sessionToken, {
-            expectedSnapshot: digest,
-          });
-          expect(response.status).toBe(200);
-          await expect(response.json()).resolves.toMatchObject({
-            delivered: true,
-            approval: { status: "approved", pinnedSnapshot: digest },
-          });
-        } finally {
-          stderr.mockRestore();
-        }
-        expect(reported.join("")).toContain(
-          "Agent presence could not be read before approval",
-        );
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          delivered: true,
+          approval: { status: "approved", pinnedSnapshot: digest },
+        });
         const progress = await approvalProgress(target, sessionToken);
         expect(progress.at(-1)).toMatchObject({
           stepCode: "plan-approved",
@@ -7211,9 +7193,7 @@ describe("review runtime approval", () => {
         } finally {
           await chmod(target.store.progressPath, 0o600);
         }
-        await expect(
-          approvalProgress(target, sessionToken),
-        ).resolves.toEqual(
+        await expect(approvalProgress(target, sessionToken)).resolves.toEqual(
           expect.arrayContaining([
             expect.objectContaining({
               stepCode: "plan-approved",

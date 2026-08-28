@@ -16,6 +16,7 @@ import {
   readAgentExchange,
   readValidatedAgentRequests,
   requestIsTerminal,
+  type AgentApprovalResponse,
   type AgentResponse,
 } from "./agent-exchange.js";
 import { readMutationStage } from "./staged-plan-mutation.js";
@@ -179,6 +180,7 @@ export const readProgressEvents = async (
         event.stepCode !== "approval-blocked",
     ),
     ...approvalProgressEvents({
+      sessionId: context.sessionId,
       record: approvalRecord,
       responses: exchange.responses,
     }),
@@ -190,20 +192,23 @@ export const readProgressEvents = async (
 };
 
 function approvalProgressEvents({
+  sessionId,
   record,
   responses,
 }: {
+  readonly sessionId: string;
   readonly record: ApprovalRecord;
   readonly responses: ReadonlyArray<AgentResponse>;
 }): ReadonlyArray<ProgressEvent> {
   return record.entries.flatMap((entry): ReadonlyArray<ProgressEvent> => {
     if (entry.kind !== "approval") return [];
     const response = responses.find(
-      (candidate) =>
+      (candidate): candidate is AgentApprovalResponse =>
         candidate.kind === "approval" &&
         candidate.requestId === entry.approvalId,
     );
     const approved: ProgressEvent = {
+      sessionId,
       requestId: entry.approvalId,
       atMs: Date.parse(entry.at),
       seq: 0,
@@ -219,6 +224,7 @@ function approvalProgressEvents({
       approved,
       response.hardStop === undefined
         ? {
+            sessionId,
             requestId: entry.approvalId,
             atMs: Date.parse(response.createdAt),
             seq: 0,
@@ -227,6 +233,7 @@ function approvalProgressEvents({
             state: "done",
           }
         : {
+            sessionId,
             requestId: entry.approvalId,
             atMs: Date.parse(response.createdAt),
             seq: 0,
