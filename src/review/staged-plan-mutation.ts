@@ -47,6 +47,8 @@ import {
 import type { ReviewStore } from "./store.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
+import { autoAcceptChangeSets } from "./change-set-closure.js";
+import { readActiveArmedReviewMode } from "./review-mode-store.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 const JOURNAL_FILE = /^[a-f0-9]{16}\.json$/;
@@ -427,6 +429,33 @@ type JournalScan = {
   readonly unreadable: ReadonlyArray<string>;
 };
 
+/** Closes an arriving push only for the runtime session that armed the mode. */
+const autoAcceptPushIfArmed = async ({
+  store,
+  planPath,
+  response,
+  baseSnapshot,
+  resultSnapshot,
+  acceptedAt,
+}: {
+  readonly store: ReviewStore;
+  readonly planPath: string;
+  readonly response: AgentResponse;
+  readonly baseSnapshot: string;
+  readonly resultSnapshot: string;
+  readonly acceptedAt: string;
+}): Promise<void> => {
+  if (response.kind !== "push") return;
+  const armed = await readActiveArmedReviewMode({ store });
+  if (armed?.sessionId !== response.sessionId) return;
+  await autoAcceptChangeSets({
+    store,
+    planPath,
+    transactions: [{ from: baseSnapshot, to: resultSnapshot }],
+    acceptedAt,
+  });
+};
+
 /** True only for the one filesystem failure that proves a path is absent. */
 const isMissingPath = (error: unknown): boolean =>
   error instanceof Error && "code" in error && error.code === "ENOENT";
@@ -565,6 +594,23 @@ export const recoverStagedPlanMutations = async ({
         const currentSnapshot = deriveSnapshotDigest(source);
         if (currentSnapshot === journal.resultSnapshot) {
           try {
+            // The closure diff reads immutable endpoints. A crash may have
+            // happened immediately after the source rename, before ordinary
+            // finalization retained the result snapshot, so recovery restores
+            // that endpoint before replaying the pre-answer closure.
+            await writeSnapshot({
+              store: lockedStore,
+              snapshot: journal.resultSnapshot,
+              source,
+            });
+            await autoAcceptPushIfArmed({
+              store: lockedStore,
+              planPath,
+              response: journal.response,
+              baseSnapshot: journal.baseSnapshot,
+              resultSnapshot: journal.resultSnapshot,
+              acceptedAt: journal.answeredAt,
+            });
             await completeRequestTerminal({
               store: lockedStore,
               response: journal.response,
@@ -823,6 +869,21 @@ export const commitStagedPlanMutation = async ({
           if (resultSnapshot !== baseSnapshot) {
             await replacePlanSource({ path: planPath, source: resultSource });
           }
+          // Auto-accept builds the same diff the reader counts, so its result
+          // endpoint must exist before the request receives answeredAt.
+          await writeSnapshot({
+            store: lockedStore,
+            snapshot: resultSnapshot,
+            source: resultSource,
+          });
+          await autoAcceptPushIfArmed({
+            store: lockedStore,
+            planPath,
+            response,
+            baseSnapshot,
+            resultSnapshot,
+            acceptedAt: now,
+          });
         },
       });
       await finalizeCommittedMutation({

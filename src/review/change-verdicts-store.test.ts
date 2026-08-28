@@ -9,6 +9,7 @@ import {
 } from "./shared/change-verdict.js";
 import {
   applyChangeVerdictMutation,
+  mergeFinalizedChangeVerdicts,
   validateChangeVerdictMutation,
   validateChangeVerdicts,
   type StoredChangeVerdicts,
@@ -95,22 +96,68 @@ describe("validateChangeVerdicts", () => {
     });
     expect(stored.accepted).toHaveLength(2);
   });
+
+  it("preserves a known actor and treats its absence as a reviewer row", () => {
+    const stored = validateChangeVerdicts({
+      version: 1,
+      revision: 2,
+      accepted: [
+        { from: FROM, to: TO, placeId: "p1", acceptedAt: NOW },
+        {
+          from: TO,
+          to: LATER,
+          placeId: "p2",
+          acceptedAt: NOW,
+          actor: "auto-accept",
+        },
+      ],
+    });
+    expect(stored.accepted).toEqual([
+      { from: FROM, to: TO, placeId: "p1", acceptedAt: NOW },
+      {
+        from: TO,
+        to: LATER,
+        placeId: "p2",
+        acceptedAt: NOW,
+        actor: "auto-accept",
+      },
+    ]);
+  });
+
+  it("refuses an unknown verdict actor", () => {
+    expect(() =>
+      validateChangeVerdicts({
+        version: 1,
+        revision: 1,
+        accepted: [
+          {
+            from: FROM,
+            to: TO,
+            placeId: "p1",
+            acceptedAt: NOW,
+            actor: "mode",
+          },
+        ],
+      }),
+    ).toThrow(/"reviewer" or "auto-accept"/u);
+  });
 });
 
 describe("validateChangeVerdictMutation", () => {
   it("stamps the acceptance time from the server clock", () => {
-    expect(
-      validateChangeVerdictMutation({
-        value: {
-          op: "accept",
-          from: FROM,
-          to: TO,
-          placeIds: ["p1"],
-          acceptedAt: "1999-01-01T00:00:00.000Z",
-        },
-        now: NOW,
-      }).acceptedAt,
-    ).toBe(NOW);
+    const mutation = validateChangeVerdictMutation({
+      value: {
+        op: "accept",
+        from: FROM,
+        to: TO,
+        placeIds: ["p1"],
+        acceptedAt: "1999-01-01T00:00:00.000Z",
+        actor: "auto-accept",
+      },
+      now: NOW,
+    });
+    expect(mutation.acceptedAt).toBe(NOW);
+    expect(mutation.actor).toBe("reviewer");
   });
 
   it("refuses an unknown operation", () => {
@@ -186,8 +233,20 @@ describe("applyChangeVerdictMutation", () => {
     });
     expect(next.revision).toBe(1);
     expect(next.accepted).toEqual([
-      { from: FROM, to: TO, placeId: "p1", acceptedAt: NOW },
-      { from: FROM, to: TO, placeId: "p2", acceptedAt: NOW },
+      {
+        from: FROM,
+        to: TO,
+        placeId: "p1",
+        acceptedAt: NOW,
+        actor: "reviewer",
+      },
+      {
+        from: FROM,
+        to: TO,
+        placeId: "p2",
+        acceptedAt: NOW,
+        actor: "reviewer",
+      },
     ]);
   });
 
@@ -249,7 +308,13 @@ describe("applyChangeVerdictMutation", () => {
       }),
     });
     expect(withdrawn.accepted).toEqual([
-      { from: FROM, to: LATER, placeId: "p1", acceptedAt: NOW },
+      {
+        from: FROM,
+        to: LATER,
+        placeId: "p1",
+        acceptedAt: NOW,
+        actor: "reviewer",
+      },
     ]);
   });
 
@@ -272,5 +337,37 @@ describe("applyChangeVerdictMutation", () => {
         mutation: accept(["beyond-the-bound"]),
       }),
     ).toThrow(new RegExp(`at most ${ACCEPTED_CHANGE_LIMIT}`, "u"));
+  });
+});
+
+describe("mergeFinalizedChangeVerdicts", () => {
+  it("should preserve a concurrent acceptance when approval finalizes", () => {
+    const finalized = applyChangeVerdictMutation({
+      verdicts: empty,
+      mutation: accept(["approved"]),
+    });
+    const current = applyChangeVerdictMutation({
+      verdicts: finalized,
+      mutation: accept(["concurrent"]),
+    });
+
+    const merged = mergeFinalizedChangeVerdicts({ current, finalized });
+
+    expect(merged.revision).toBe(2);
+    expect(merged.accepted.map((entry) => entry.placeId)).toEqual([
+      "approved",
+      "concurrent",
+    ]);
+  });
+
+  it("should leave an already finalized record unchanged during recovery", () => {
+    const finalized = applyChangeVerdictMutation({
+      verdicts: empty,
+      mutation: accept(["approved"]),
+    });
+
+    expect(
+      mergeFinalizedChangeVerdicts({ current: finalized, finalized }),
+    ).toBe(finalized);
   });
 });

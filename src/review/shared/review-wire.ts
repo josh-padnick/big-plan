@@ -249,6 +249,8 @@ export type SnapshotDiff = {
 export type RuntimeSession = {
   readonly plan: string;
   readonly authoritative: boolean;
+  readonly mode: "review" | "auto-accept";
+  readonly armedAtMs?: number;
   readonly latestReviewUrl?: string;
   readonly restartCommand?: string;
   /**
@@ -294,6 +296,8 @@ export type RuntimeSessionSource = {
   readonly planId: string;
   readonly plan: string;
   readonly authoritative: boolean;
+  readonly mode: "review" | "auto-accept";
+  readonly armedAtMs?: number;
   readonly latestReviewUrl?: string;
   readonly restartCommand?: string;
   readonly writesStalledMs?: number;
@@ -445,13 +449,17 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
       typeof entry.placeId === "string" &&
       entry.placeId !== "" &&
       entry.placeId.length <= PLACE_ID_LIMIT &&
-      typeof entry.acceptedAt === "string"
+      typeof entry.acceptedAt === "string" &&
+      (entry.actor === undefined ||
+        entry.actor === "reviewer" ||
+        entry.actor === "auto-accept")
         ? [
             {
               from: entry.from,
               to: entry.to,
               placeId: entry.placeId,
               acceptedAt: entry.acceptedAt,
+              ...(entry.actor === undefined ? {} : { actor: entry.actor }),
             },
           ]
         : [],
@@ -1076,11 +1084,16 @@ export const decodeRuntimeSession = ({
     return null;
   }
   const approval = decodeApprovalSummary(value.approval);
+  const mode = value.mode === "auto-accept" ? "auto-accept" : "review";
   return {
     plan: value.plan,
     // A malformed payload must withhold authority, not grant it: `!== false`
     // read a missing field, a null, and the string "false" as authoritative.
     authoritative: value.authoritative === true,
+    mode,
+    ...(mode === "auto-accept" && isUsableTimeValue(value.armedAtMs)
+      ? { armedAtMs: value.armedAtMs }
+      : {}),
     ...(typeof value.latestReviewUrl === "string"
       ? { latestReviewUrl: value.latestReviewUrl }
       : {}),

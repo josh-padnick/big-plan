@@ -172,6 +172,8 @@ import {
   revokeApproval,
 } from "./routes-approval.js";
 import { readRuntimeSession } from "./routes-session.js";
+import { updateReviewMode } from "./routes-review-mode.js";
+import { clearStaleReviewMode } from "./review-mode-store.js";
 import { exportPlanMarkdown } from "./routes-export-markdown.js";
 import { drainAndCloseServer } from "./http-shutdown.js";
 
@@ -218,6 +220,7 @@ const DOCUMENT_ROUTE: Route = { method: "GET", path: "/" };
 // is refused before anything else looks at it.
 const API_ROUTES: ReadonlyArray<ApiRoute> = [
   { method: "GET", path: "/api/session", handler: readRuntimeSession },
+  { method: "POST", path: "/api/review-mode", handler: updateReviewMode },
   {
     method: "GET",
     path: "/api/export-markdown",
@@ -880,6 +883,21 @@ export const startReviewRuntime = async ({
     void queueHeartbeat(true);
   }, REVIEW_HEARTBEAT_INTERVAL_MS);
   heartbeatTimer.unref();
+
+  // Review is the safe default for every new runtime. The session stamp would
+  // already make an older mode record inert; removing it here keeps the
+  // singleton slot honest for tools that inspect the store directly.
+  await clearStaleReviewMode({ store, sessionId }).catch(
+    async (error: unknown) => {
+      clearInterval(heartbeatTimer);
+      await queueHeartbeat(
+        false,
+        "The review runtime could not reset its session mode.",
+      );
+      await drainAndCloseServer(server);
+      throw error;
+    },
+  );
 
   // Everything below mutates state this session now owns. A failure gives the
   // port back rather than leaving a bound socket behind, and records a stopped

@@ -241,6 +241,7 @@ const acceptChangeSets = async ({
         to: changeSet.to,
         placeIds: changeSet.placeIds,
         acceptedAt,
+        actor: "reviewer",
       },
     });
   }

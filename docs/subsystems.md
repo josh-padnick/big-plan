@@ -33,7 +33,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 ### A. Change Engine
 
-**Problem set.** The core entity of review is the change set: a baseline snapshot, a current snapshot, acceptance state, provenance, and an optionally attached conversation, diffed from its start, rendered in place of what it changes, and closed by explicit acceptance.
+**Problem set.** The core entity of review is the change set: a baseline snapshot, a current snapshot, acceptance state and provenance, and an optionally attached conversation, diffed from its start, rendered in place of what it changes, and closed by a reviewer or by session-scoped auto-accept.
 
 **Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/change-verdicts-store.ts`, `src/review/input-contract.ts`, `src/review/shared/change-verdict.ts`, `src/review/shared/input-contract.ts`, `src/review/browser/inputs-surface.browser.tsx`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/components/wireframe/compile-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, `src/components/_model/component-diff/contract.ts`, `src/components/_registration/define-component.ts`, `src/render/render-diff-view.ts`, snapshots in `src/review/store.ts`.
 
@@ -50,7 +50,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   `src/review/change-set-commit.ts` is the seam: a revision is recorded inside the terminal commit and nowhere else, the reader's current snapshot advances from that log rather than from response files, and folding the log keeps an ordinary comment thread's baseline and provenance stable across later replies while pushes and replies in pushed threads remain immutable request-keyed transactions.
   `GET /api/change-sets` serves that fold on demand through the browser-safe contract in `src/review/shared/review-wire.ts`; the route exposes the aggregate without creating a second one or making claim stages domain state.
 - A change set's verdict is a review fact, not a browser preference.
-  `src/review/change-verdicts-store.ts` owns the record and `src/review/shared/change-verdict.ts` owns the one selector that turns it into a count, so every surface showing how much of a set is still open reads the same number and a reload never reopens closed work.
+  `src/review/change-verdicts-store.ts` owns the record, including whether a place was accepted by the reviewer or by auto-accept, and `src/review/shared/change-verdict.ts` owns the one selector that turns it into a count, so every surface showing how much of a set is still open reads the same number and a reload never reopens closed work.
 - What a review is waiting for is one derived contract, never a per-surface tally.
   `src/review/input-contract.ts` joins the compiled decision inventory with the answers record into the inputs a review expects - decisions for now, growing to the rest of what a review waits on as each of those becomes enumerable; `src/review/shared/input-contract.ts` owns the one selector that turns them into a standing, including how many critical ones are still open.
   Criticality is authored on a decision and travels through `CompiledDecisionCard.isCritical`; it is deliberately excluded from the decision digest, because raising what approval demands does not change what the reviewer answered.

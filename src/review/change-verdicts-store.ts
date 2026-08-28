@@ -10,6 +10,7 @@
 // would silently reopen a change set the reviewer had already closed, and the
 // open-items count would then be wrong in the direction nobody checks.
 
+import { join } from "node:path";
 import {
   ACCEPTED_CHANGE_LIMIT,
   VERDICT_BATCH_LIMIT,
@@ -17,8 +18,17 @@ import {
   SNAPSHOT_DIGEST,
   changeVerdictKey,
   type ChangeVerdict,
+  type ChangeVerdictActor,
   type ChangeVerdictState,
 } from "./shared/change-verdict.js";
+import {
+  anchorReviewStore,
+  readChangeVerdicts,
+  ReviewStorePathRejected,
+  withReviewStoreLock,
+  writeChangeVerdicts,
+  type ReviewStore,
+} from "./store.js";
 
 /** The stored record, with the version its shape is understood under. */
 export type StoredChangeVerdicts = ChangeVerdictState & {
@@ -33,6 +43,8 @@ export type ChangeVerdictMutation = {
   readonly placeIds: ReadonlyArray<string>;
   /** The server's own clock, so a browser cannot backdate an acceptance. */
   readonly acceptedAt: string;
+  /** The trusted boundary that created this mutation, never browser input. */
+  readonly actor: ChangeVerdictActor;
 };
 
 export class ChangeVerdictsRejected extends Error {
@@ -118,8 +130,19 @@ const revisionNumber = (value: unknown): number => {
   return value;
 };
 
+const actor = (value: unknown): ChangeVerdictActor | undefined => {
+  if (value === undefined) return undefined;
+  if (value !== "reviewer" && value !== "auto-accept") {
+    throw new ChangeVerdictsRejected(
+      '"actor" must be "reviewer" or "auto-accept"',
+    );
+  }
+  return value;
+};
+
 const verdict = (value: unknown): ChangeVerdict => {
   const candidate = record({ value, field: "verdict" });
+  const acceptedBy = actor(candidate.actor);
   return {
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
@@ -128,6 +151,7 @@ const verdict = (value: unknown): ChangeVerdict => {
       value: candidate.acceptedAt,
       field: "acceptedAt",
     }),
+    ...(acceptedBy === undefined ? {} : { actor: acceptedBy }),
   };
 };
 
@@ -196,6 +220,7 @@ export const validateChangeVerdictMutation = ({
     to: digest({ value: candidate.to, field: "to" }),
     placeIds,
     acceptedAt: now,
+    actor: "reviewer",
   };
 };
 
@@ -235,6 +260,7 @@ export const applyChangeVerdictMutation = ({
       to: mutation.to,
       placeId,
       acceptedAt: mutation.acceptedAt,
+      actor: mutation.actor,
     })),
   ];
   if (accepted.length > ACCEPTED_CHANGE_LIMIT) {
@@ -243,4 +269,86 @@ export const applyChangeVerdictMutation = ({
     );
   }
   return { version: 1, revision, accepted };
+};
+
+/** Merges an approval's accepted places into the latest locked record. */
+export const mergeFinalizedChangeVerdicts = ({
+  current,
+  finalized,
+}: {
+  readonly current: StoredChangeVerdicts;
+  readonly finalized: StoredChangeVerdicts;
+}): StoredChangeVerdicts => {
+  const currentByKey = new Map(
+    current.accepted.map((entry) => [changeVerdictKey(entry), entry]),
+  );
+  const isAlreadyFinalized = finalized.accepted.every((entry) => {
+    const stored = currentByKey.get(changeVerdictKey(entry));
+    return (
+      stored?.acceptedAt === entry.acceptedAt && stored.actor === entry.actor
+    );
+  });
+  if (isAlreadyFinalized) return current;
+  const finalizedKeys = new Set(finalized.accepted.map(changeVerdictKey));
+  const accepted = [
+    ...current.accepted.filter(
+      (entry) => !finalizedKeys.has(changeVerdictKey(entry)),
+    ),
+    ...finalized.accepted,
+  ];
+  if (accepted.length > ACCEPTED_CHANGE_LIMIT) {
+    throw new ChangeVerdictsRejected(
+      `A review may record at most ${ACCEPTED_CHANGE_LIMIT} accepted changes`,
+    );
+  }
+  return {
+    version: 1,
+    revision: Math.max(current.revision, finalized.revision) + 1,
+    accepted,
+  };
+};
+
+/**
+ * Updates the verdict record under its cross-process lock.
+ *
+ * Auto-accept commits run in the agent process while reviewer mutations run in
+ * the review runtime, so a runtime-local write gate cannot serialize them.
+ * The read and replacement stay together here so neither writer can erase the
+ * other's accepted places.
+ */
+export const updateStoredChangeVerdicts = async ({
+  store,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly change: (verdicts: StoredChangeVerdicts) => StoredChangeVerdicts;
+}): Promise<StoredChangeVerdicts> => {
+  let lockedStore: ReviewStore;
+  try {
+    lockedStore = await (await anchorReviewStore(store)).resolveStore();
+  } catch (error: unknown) {
+    if (!(error instanceof ReviewStorePathRejected)) throw error;
+    throw new ChangeVerdictsRejected(
+      "The change verdict record is unavailable",
+    );
+  }
+  return withReviewStoreLock({
+    lockPath: join(lockedStore.reviewDirectory, ".change-verdicts.lock"),
+    change: async () => {
+      const current = await readChangeVerdicts({
+        store: lockedStore,
+        validate: validateChangeVerdicts,
+      });
+      const next = change(current);
+      if (next === current) return current;
+      await writeChangeVerdicts({ store: lockedStore, verdicts: next });
+      return next;
+    },
+    timeoutError: () =>
+      new ChangeVerdictsRejected(
+        "Another process is changing the verdict record. Try again.",
+      ),
+    invalidLockError: () =>
+      new ChangeVerdictsRejected("The change verdict record is unavailable"),
+  });
 };

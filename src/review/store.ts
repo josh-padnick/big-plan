@@ -129,6 +129,7 @@ export type ReviewStore = {
   readonly draftsPath: string;
   readonly inputsPath: string;
   readonly changeVerdictsPath: string;
+  readonly reviewModePath: string;
   readonly approvalPath: string;
   readonly approvalFinalizationPath: string;
   readonly sentPath: string;
@@ -516,6 +517,7 @@ export const reviewStoreFor = ({
       base: reviewDirectory,
       leaf: "verdicts.json",
     }),
+    reviewModePath: inside({ base: reviewDirectory, leaf: "mode.json" }),
     approvalPath: inside({ base: reviewDirectory, leaf: "approval.json" }),
     approvalFinalizationPath: inside({
       base: reviewDirectory,

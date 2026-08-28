@@ -8,6 +8,7 @@ import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 const sessionAt = (expiresAtMs: number): RuntimeSession => ({
   plan: "/plans/checkout.mdx",
   authoritative: true,
+  mode: "review",
   idleTimeoutMs: 1_800_000,
   expiresAtMs,
 });

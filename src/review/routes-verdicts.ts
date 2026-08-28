@@ -55,11 +55,9 @@ export const recordChangeVerdicts = async (
       value: payloadOf(request.body),
       now: new Date().toISOString(),
     });
-    const verdicts = applyChangeVerdictMutation({
-      verdicts: await changeVerdicts.read(),
-      mutation,
-    });
-    await changeVerdicts.write(verdicts);
+    const verdicts = await changeVerdicts.update((current) =>
+      applyChangeVerdictMutation({ verdicts: current, mutation }),
+    );
     return verdictState(verdicts);
   } catch (error: unknown) {
     if (error instanceof ChangeVerdictsRejected) {
