@@ -6,7 +6,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test, type Page } from "./fixtures";
+import { expect, startReviewRuntime, test, type Page } from "./fixtures";
 
 const AFTER = `# Retry queue
 
@@ -33,11 +33,20 @@ const startPreviewRuntime = async (
 ) => {
   // Playwright wraps JSX values during source transformation, so component
   // journeys use the built renderer exactly as the shipped runtime does.
-  const { startReviewRuntime } = await import("../dist/review/server.js");
-  return startReviewRuntime({ planPath, diffPreviewSource: BEFORE, takeover });
+  const { startReviewRuntime: startCompiledRuntime } =
+    await import("../dist/review/server.js");
+  return startReviewRuntime(
+    { planPath, diffPreviewSource: BEFORE, takeover },
+    startCompiledRuntime,
+  );
 };
 
 const openThread = async (page: Page, url: string): Promise<void> => {
+  if (page.url() === `${url}/`) {
+    // A stopped upstream invalidates the service's cached resolution on the
+    // first attempt; the next request resolves the replacement runtime.
+    await page.reload();
+  }
   const verdicts = page.waitForResponse((response) =>
     response.url().endsWith("/api/change-verdicts"),
   );
@@ -192,23 +201,55 @@ test("should keep an accepted change accepted across a reload and a restart", as
       );
     });
 
-    // A read-only session records nothing, so an accept control there would be
-    // a checklist nothing reads back. It says so instead of offering one.
-    await test.step("a read-only session says why it cannot accept", async () => {
+    await test.step("the stable address follows a replacement and keeps the verdict", async () => {
       // Superseding a session that is still live is exactly what --takeover is
       // for; without it the runtime yields to the session this page is reading.
       const replacement = await startPreviewRuntime(planPath, {
         takeover: true,
       });
       try {
-        await expect(
-          page.getByRole("button", { name: /Using read-only session/u }),
-        ).toBeVisible();
-        await expect(
-          rail(page).getByRole("button", {
-            name: "Accepting is unavailable because this page cannot record review state",
-          }),
-        ).toBeDisabled();
+        if (process.env["BIG_PLAN_PROXY"] === "0") {
+          await expect(
+            page.getByRole("button", { name: /Using read-only session/u }),
+          ).toBeVisible();
+          await expect(
+            rail(page).getByRole("button", {
+              name: "Accepting is unavailable because this page cannot record review state",
+            }),
+          ).toBeDisabled();
+          expect(await recordedChanges(verdictsPath)).toHaveLength(1);
+          return;
+        }
+        await expect
+          .poll(() =>
+            page.evaluate(async () => {
+              const response = await fetch("api/session", {
+                headers: {
+                  "x-big-plan-review-token":
+                    document.documentElement.dataset.reviewToken ?? "",
+                },
+              });
+              const current: unknown = await response.json();
+              return typeof current === "object" &&
+                current !== null &&
+                "sessionId" in current
+                ? current.sessionId
+                : undefined;
+            }),
+          )
+          .toBe(replacement.sessionId);
+        await page.reload();
+        await expect(page).toHaveURL(`${runtime.url}/`);
+        await page
+          .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+          .click();
+        await rail(page)
+          .getByRole("button", { name: /Expand thread:/u })
+          .first()
+          .click();
+        await expect(digest.getByLabel("1 of 2 changes accepted")).toHaveText(
+          "1/2",
+        );
         expect(await recordedChanges(verdictsPath)).toHaveLength(1);
       } finally {
         await replacement.close();

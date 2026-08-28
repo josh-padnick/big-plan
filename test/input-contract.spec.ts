@@ -13,7 +13,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test, type Page } from "./fixtures";
+import { expect, startReviewRuntime, test, type Page } from "./fixtures";
 
 const PLAN = `# Retry queue
 
@@ -71,8 +71,9 @@ test("should list what the review needs and answer an input without a reload", a
   await writeFile(planPath, PLAN);
   // Playwright wraps JSX values during source transformation, so component
   // journeys use the built renderer exactly as the shipped runtime does.
-  const { startReviewRuntime } = await import("../dist/review/server.js");
-  const runtime = await startReviewRuntime({ planPath });
+  const { startReviewRuntime: startCompiledRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startReviewRuntime({ planPath }, startCompiledRuntime);
   try {
     let contractRead: ContractRead = "unreachable";
     await page.route("**/api/input-contract", async (route) => {

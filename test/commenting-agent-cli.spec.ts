@@ -11,7 +11,6 @@ import {
   AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
 } from "../src/review/shared/agent-timing.js";
-import { startReviewRuntime } from "../src/review/server.js";
 import {
   grantAgentPrimacy,
   readProgress,
@@ -27,6 +26,7 @@ import {
   closeReviewRuntime,
   expect,
   runAgentCli,
+  startReviewRuntime,
   test,
   untilObserverAttaches,
 } from "./fixtures";

@@ -39,7 +39,7 @@ const liveReviewSession = async (
 }> => {
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/session", {
+    const response = await fetch("api/session", {
       headers: { "x-big-plan-review-token": root.dataset.reviewToken ?? "" },
     });
     return response.json();

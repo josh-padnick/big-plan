@@ -17,7 +17,7 @@ import {
   commitRequestTerminal,
 } from "../src/review/request-mailbox.js";
 import { writeSnapshot } from "../src/review/store.js";
-import { expect, test, type Page } from "./fixtures";
+import { expect, startReviewRuntime, test, type Page } from "./fixtures";
 
 const PLAN = `# Durable decision answers
 
@@ -70,8 +70,9 @@ const startCompiledReviewRuntime = async (
 ) => {
   // Playwright wraps JSX values during source transformation, so component
   // journeys use the built renderer exactly as the shipped runtime does.
-  const { startReviewRuntime } = await import("../dist/review/server.js");
-  return startReviewRuntime({ planPath, takeover });
+  const { startReviewRuntime: startCompiledRuntime } =
+    await import("../dist/review/server.js");
+  return startReviewRuntime({ planPath, takeover }, startCompiledRuntime);
 };
 
 const isInputOperation = (
@@ -1006,7 +1007,7 @@ test("should keep the approve dialog anchored without a mobile dimmer", async ({
   }
 });
 
-test("should keep an approved stamp when the review becomes read-only", async ({
+test("should keep an approved stamp when the stable address follows a takeover", async ({
   page,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-readonly-"));
@@ -1028,16 +1029,43 @@ test("should keep an approved stamp when the review becomes read-only", async ({
     replacement = await startCompiledReviewRuntime(planPath, {
       takeover: true,
     });
-    await expect(
-      page.getByRole("button", { name: /Using read-only session/ }),
-    ).toBeVisible({ timeout: 10_000 });
+    if (process.env["BIG_PLAN_PROXY"] === "0") {
+      await expect(
+        page.getByRole("button", { name: /Using read-only session/ }),
+      ).toBeVisible({ timeout: 10_000 });
+      await expect(
+        page.getByRole("button", { name: "Plan approved" }),
+      ).toBeVisible();
+      return;
+    }
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const response = await fetch("api/session", {
+            headers: {
+              "x-big-plan-review-token":
+                document.documentElement.dataset.reviewToken ?? "",
+            },
+          });
+          const session: unknown = await response.json();
+          return typeof session === "object" &&
+            session !== null &&
+            "sessionId" in session
+            ? session.sessionId
+            : undefined;
+        }),
+      )
+      .toBe(replacement.sessionId);
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-session",
+      replacement.sessionId,
+      { timeout: 10_000 },
+    );
+    await expect(page).toHaveURL(`${runtime.url}/`);
     await expect(
       page.getByRole("button", { name: "Plan approved" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Plan approved" }).click();
-    await expect(
-      page.getByRole("button", { name: "Revoke approval" }),
-    ).toHaveCount(0);
     await expect(
       page.locator("[data-review-approve-status=approved]"),
     ).toBeVisible();

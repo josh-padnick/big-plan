@@ -12,7 +12,6 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startReviewRuntime } from "../src/review/server.js";
 import { readAgentRoster } from "../src/review/store.js";
 import {
   agentIdOf,
@@ -23,6 +22,7 @@ import {
   runAgentCli,
   runRefusedAgentCli,
   stageComment,
+  startReviewRuntime,
   test,
   untilObserverAttaches,
 } from "./fixtures";

@@ -8,12 +8,12 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startReviewRuntime } from "../src/review/server.js";
 import {
   agentIdOf,
   expect,
   runAgentCli,
   stageComment,
+  startReviewRuntime,
   test,
   closeReviewRuntime,
 } from "./fixtures";

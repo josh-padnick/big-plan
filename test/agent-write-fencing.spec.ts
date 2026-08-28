@@ -11,7 +11,6 @@ import {
   readAgentExchange,
 } from "../src/review/agent-exchange.js";
 import { releaseClaimsForPrimacyHandoff } from "../src/review/request-mailbox.js";
-import { startReviewRuntime } from "../src/review/server.js";
 import {
   grantAgentPrimacy,
   readSnapshot,
@@ -24,6 +23,7 @@ import {
   runAgentCli,
   runRefusedAgentCli,
   stageComment,
+  startReviewRuntime,
   test,
   closeReviewRuntime,
   untilObserverAttaches,
