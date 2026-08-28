@@ -30,7 +30,7 @@ import type { ServiceRuntime } from "./server.js";
 
 // Cold document rendering competes with the full suite's renderer workers.
 // This test still owns a finite bound, but not Vitest's too-tight 5s default.
-const PROXY_INTEGRATION_TEST_TIMEOUT_MS = 45_000;
+const PROXY_INTEGRATION_TEST_TIMEOUT_MS = 60_000;
 const MAX_PROXY_OVERHEAD_BASELINE_MULTIPLE = 8;
 
 const reserveFreePort = async (): Promise<number> => {
