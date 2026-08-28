@@ -2,6 +2,6 @@
 
 ## Operator-initiated plan changes
 
-When YOUR OPERATOR (not the reviewer) asks you to change the plan, run `agent push <plan> --about "<why>"` to open your own thread. Edit the returned candidate_plan, write the returned response_template to the response_file, then run the respond_command - the same publish contract as any work item. Do this instead of waiting on `agent next`.
+When YOUR OPERATOR (not the reviewer) asks you to change or add plan content, run `agent push <plan> --about "<why>"` to open your own thread. Edit the returned candidate_plan, write the returned response_template to the response_file, then run the respond_command - the same publish contract as any work item. Do this instead of waiting on `agent next`.
 
 If an operator instruction arrives while you are blocked on `agent next --wait`, finish or abandon the wait, then push.
