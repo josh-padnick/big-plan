@@ -7070,6 +7070,61 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("requires approval revocation instead of generic handoff cancellation", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        const { approvalId } = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+
+        const canceled = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/agent-cancel",
+          method: "POST",
+          body: { requestId: approvalId },
+        });
+        expect(canceled.status).toBe(409);
+        await expect(canceled.json()).resolves.toMatchObject({
+          reason: "Revoke the approval to cancel its agent handoff",
+        });
+        const beforeRevoke = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          beforeRevoke.requests.find(
+            (request) => request.requestId === approvalId,
+          )?.canceledAt,
+        ).toBeUndefined();
+
+        const revoked = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/revoke-approval",
+          method: "POST",
+          body: { approvalId },
+        });
+        expect(revoked.status).toBe(200);
+        const afterRevoke = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          afterRevoke.requests.find(
+            (request) => request.requestId === approvalId,
+          )?.canceledAt,
+        ).toBeDefined();
+      },
+    );
+  });
+
   it("reports an undelivered handoff instead of implying the agent has it", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,

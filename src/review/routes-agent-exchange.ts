@@ -753,6 +753,12 @@ export const cancelPendingAgentRequest = async (
   if (agentRequest === undefined) {
     return refusal({ status: 404, reason: "No such agent request" });
   }
+  if (agentRequest.kind === "approval") {
+    return refusal({
+      status: 409,
+      reason: "Revoke the approval to cancel its agent handoff",
+    });
+  }
   if (
     exchange.responses.some(
       (candidate) => candidate.requestId === agentRequest.requestId,
