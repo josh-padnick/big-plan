@@ -71,10 +71,10 @@ Re-run `skill write` only when this thin shell itself changed (rare).
 4. **Validate.** `npx big-plan@latest validate <plan.mdx>` until clean.
    Details: `npx big-plan@latest validate --help` if available, otherwise top-level `big-plan --help` and the guidance text.
 5. **Review.** `npx big-plan@latest review <plan.mdx>`.
-6. **Present.** Give the human the stable review address the command prints.
+6. **Present.** Give the human the stable plan address the command prints.
    Treat it as the plan's address; the session address is only for debugging.
 7. **Wait.** Do not implement until the human accepts the plan.
-   On feedback, revise the MDX source, re-validate, re-render, and ask again.
+   On feedback, revise the MDX source, re-validate, and ask again in the live review.
 
 `compile` produces machine-readable JSON for tools; it does not replace human review of the HTML document.
 
