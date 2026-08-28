@@ -1,5 +1,5 @@
-// Covers the review route's snapshot-diff compilation boundary: each document
-// side compiles once, then every copied change location reuses that result.
+// Owns the route-level regression proof that each snapshot-diff document side
+// compiles once, then every copied change location reuses that compiled view.
 
 import { describe, expect, it, vi } from "vitest";
 import { compileDiffDocuments } from "../render/render-diff-view.js";
