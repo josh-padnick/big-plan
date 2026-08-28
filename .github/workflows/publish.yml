@@ -1,0 +1,156 @@
+# Publishes an immutable npm release from a version tag on main, proves the
+# package came from this workflow, and exercises the canary before promotion.
+name: Publish npm canary
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a package-version tag from main
+        id: release
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "$GITHUB_REF_NAME" != "v${package_version}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} must equal package version v${package_version}."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::Release tag ${GITHUB_REF_NAME} must point to a commit on main."
+            exit 1
+          fi
+          echo "version=${package_version}" >> "$GITHUB_OUTPUT"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run build
+      - name: Generated files must not drift from their sources
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain -- '*.generated.ts' '*.generated.css')" ]]; then
+            git status --porcelain -- '*.generated.ts' '*.generated.css'
+            echo "::error::Generated files drifted from their sources. Run 'bun run gen' and commit the result."
+            exit 1
+          fi
+      - run: bun run test
+      - run: bunx playwright install chromium
+      - run: bun run test:e2e
+
+  publish-next:
+    name: Publish to next
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: npm-release
+      url: https://www.npmjs.com/package/big-plan/v/${{ needs.verify.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Require an OIDC-capable npm CLI
+        shell: bash
+        run: |
+          npm_version="$(npm --version)"
+          node -e '
+            const [major = 0, minor = 0, patch = 0] = process.argv[1]
+              .split(".")
+              .map(Number);
+            const isSupported =
+              major > 11 ||
+              (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!isSupported) process.exit(1);
+          ' "$npm_version" || {
+            echo "::error::npm ${npm_version} is too old for Trusted Publishing; npm 11.5.1 or newer is required."
+            exit 1
+          }
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Publish immutable canary with provenance
+        run: npm publish --access public --tag next --provenance
+
+  smoke-next:
+    name: Smoke-test next
+    needs: [verify, publish-next]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Exercise the published CLI in a clean environment
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+        shell: bash
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            next_version="$(npm view big-plan@next version 2>/dev/null || true)"
+            [[ "$next_version" == "$RELEASE_VERSION" ]] && break
+            if [[ "$attempt" == 6 ]]; then
+              echo "::error::big-plan@next is ${next_version:-unavailable}; expected ${RELEASE_VERSION}."
+              exit 1
+            fi
+            sleep 10
+          done
+
+          smoke_root="$(mktemp -d)"
+          trap 'rm -rf "$smoke_root"' EXIT
+          export HOME="$smoke_root/home"
+          export BIG_PLAN_STATE_DIR="$smoke_root/state"
+          export NPM_CONFIG_CACHE="$smoke_root/npm-cache"
+          mkdir -p "$HOME" "$BIG_PLAN_STATE_DIR" "$smoke_root/work" "$smoke_root/package"
+
+          archive="$(npm pack "big-plan@${RELEASE_VERSION}" --pack-destination "$smoke_root" --silent)"
+          tar -xzf "$smoke_root/$archive" -C "$smoke_root/package"
+          plan="$smoke_root/package/package/examples/diff-gallery-before.mdx"
+          cd "$smoke_root/work"
+          npx -y big-plan@next guidance > guidance-next.md
+          npx -y big-plan@next validate "$plan"
+          npx -y big-plan@next render "$plan" next-smoke.html
+          test -s next-smoke.html
+
+          npx -y "big-plan@${RELEASE_VERSION}" guidance > guidance-release.md
+          npx -y "big-plan@${RELEASE_VERSION}" validate "$plan"
+          npx -y "big-plan@${RELEASE_VERSION}" render "$plan" release-smoke.html
+          test -s release-smoke.html
+
+          final_next_version="$(npm view big-plan@next version)"
+          if [[ "$final_next_version" != "$RELEASE_VERSION" ]]; then
+            echo "::error::big-plan@next moved to ${final_next_version} during the smoke test."
+            exit 1
+          fi
