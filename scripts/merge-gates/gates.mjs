@@ -546,9 +546,7 @@ export const identifyReviews = (snapshot) => {
       const hasUnresolvedThread =
         unresolvedReviewerThreads(snapshot, one.bot.logins).length > 0;
       const canRetractByResolution =
-        isCommentOnly &&
-        !hasUnresolvedThread &&
-        latestThreads.length > 0;
+        isCommentOnly && !hasUnresolvedThread && latestThreads.length > 0;
       const canRetractSummary =
         isCommentOnly &&
         !hasUnresolvedThread &&

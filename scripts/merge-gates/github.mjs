@@ -205,8 +205,7 @@ const fetchReviewThreads = async (owner, name, number) => {
         );
       }
       threads.push({
-        reviewId:
-          node.comments.nodes[0]?.pullRequestReview?.databaseId ?? null,
+        reviewId: node.comments.nodes[0]?.pullRequestReview?.databaseId ?? null,
         isResolved: node.isResolved,
         isOutdated: node.isOutdated,
         path: node.path,

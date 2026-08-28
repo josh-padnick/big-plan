@@ -10,9 +10,8 @@ import { test } from "node:test";
 
 process.env.GITHUB_TOKEN = "test-token";
 
-const { fetchSnapshot, publishCheckRun, GitHubFailure } = await import(
-  "./github.mjs"
-);
+const { fetchSnapshot, publishCheckRun, GitHubFailure } =
+  await import("./github.mjs");
 
 /**
  * Runs `body` with fetch stubbed, and hands it the calls that were made.
@@ -150,10 +149,7 @@ test("the snapshot preserves review identity and chronology", async () => {
       assert.equal(result.reviews[0].id, 11);
       assert.equal(result.reviews[0].submittedAt, "2026-08-20T12:00:00Z");
       assert.equal(result.issueComments[0].id, 101);
-      assert.equal(
-        result.issueComments[0].createdAt,
-        "2026-08-20T12:01:00Z",
-      );
+      assert.equal(result.issueComments[0].createdAt, "2026-08-20T12:01:00Z");
       assert.equal(result.reviewThreads[0].reviewId, 11);
     },
   );

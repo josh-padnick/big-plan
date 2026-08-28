@@ -578,10 +578,7 @@ test("summary retraction guidance includes older unresolved threads", () => {
   );
   assert.equal(blocked.conclusion, "failure");
   assert.match(report(blocked), /1 older unresolved inline thread/);
-  assert.match(
-    report(blocked),
-    /review-triage: retract coderabbit - <reason>/,
-  );
+  assert.match(report(blocked), /review-triage: retract coderabbit - <reason>/);
   assert.match(
     report(blocked),
     /cannot take effect while any inline thread remains unresolved/,
