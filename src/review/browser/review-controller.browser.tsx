@@ -5973,12 +5973,14 @@ export const ReviewController = () => {
       }
     };
     void refresh();
+    document.addEventListener("bigplan:approval-changed", refresh);
     const timer = window.setInterval(
       () => void refresh(),
       REVIEW_POLL_INTERVAL_MS,
     );
     return () => {
       current = false;
+      document.removeEventListener("bigplan:approval-changed", refresh);
       window.clearInterval(timer);
     };
   }, [

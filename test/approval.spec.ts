@@ -769,48 +769,49 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     await expect(
       page.locator("[data-review-approve-status=approved]"),
     ).toBeVisible();
+    await page.getByRole("button", { name: "Feedback" }).click();
+    await page.getByRole("tab", { name: "Chat" }).click();
+    await expect(
+      page.getByText("Approval recorded - no agent connected to notify"),
+    ).toBeVisible();
     const stampBox = await stamp.boundingBox();
     const approvedBox = await approvedButton.boundingBox();
-    const titleBox = await page
-      .getByRole("heading", { level: 1 })
-      .boundingBox();
+    const tocBox = await page.locator("[data-desktop-toc]").boundingBox();
     const headerBox = await page
       .locator("header[data-shell-chrome]")
       .boundingBox();
     const feedbackBox = await page
-      .getByRole("button", { name: "Feedback" })
+      .getByRole("button", { name: "Feedback", exact: true })
       .boundingBox();
     if (
       stampBox === null ||
       approvedBox === null ||
       feedbackBox === null ||
-      titleBox === null ||
+      tocBox === null ||
       headerBox === null
     ) {
       throw new Error(
-        "The approved stamp, Plan approved control, title, and Feedback were not laid out",
+        "The approved stamp, Plan approved control, contents, and Feedback were not laid out",
       );
     }
     expect(approvedBox.x + approvedBox.width).toBeLessThanOrEqual(
       feedbackBox.x,
     );
     expect(stampBox.x).toBeLessThan(approvedBox.x);
-    expect(Math.abs(stampBox.x - titleBox.x)).toBeLessThan(24);
-    expect(stampBox.y + stampBox.height).toBeLessThanOrEqual(titleBox.y + 4);
+    expect(
+      Math.abs(stampBox.x + stampBox.width / 2 - (tocBox.x + tocBox.width / 2)),
+    ).toBeLessThan(2);
     expect(stampBox.y).toBeGreaterThan(headerBox.y + headerBox.height);
     const stampLayer = await stamp.evaluate((element) => {
-      const slot = element.closest("[data-review-approval-page-stamp]");
-      if (slot === null) return null;
-      const style = getComputedStyle(slot);
+      const toc = element.closest("[data-desktop-toc]");
+      if (toc === null) return null;
+      const style = getComputedStyle(toc);
       return {
         position: style.position,
         zIndex: style.zIndex,
       };
     });
-    expect(stampLayer?.position).toBe("absolute");
-    expect(
-      stampLayer?.zIndex === "auto" || Number(stampLayer?.zIndex) < 40,
-    ).toBe(true);
+    expect(stampLayer?.position).toBe("sticky");
     const stampTopBefore = stampBox.y;
     const scrolled = await page.evaluate(() => {
       const html = document.documentElement;
@@ -826,46 +827,7 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     if (stampTopAfter === undefined) {
       throw new Error("The approved stamp left the layout while scrolling");
     }
-    expect(Math.abs(stampTopAfter - (stampTopBefore - scrolled))).toBeLessThan(
-      2,
-    );
-    await page.evaluate(() => {
-      const html = document.documentElement;
-      const previous = html.style.scrollBehavior;
-      html.style.scrollBehavior = "auto";
-      window.scrollTo(0, 0);
-      html.style.scrollBehavior = previous;
-    });
-    const overlapScroll = Math.max(
-      8,
-      Math.round(stampTopBefore - headerBox.height / 2),
-    );
-    await page.evaluate((y) => {
-      const html = document.documentElement;
-      const previous = html.style.scrollBehavior;
-      html.style.scrollBehavior = "auto";
-      window.scrollTo(0, y);
-      html.style.scrollBehavior = previous;
-    }, overlapScroll);
-    const covered = await page.evaluate(() => {
-      const header = document.querySelector("header[data-shell-chrome]");
-      const mark = document.querySelector("[data-review-approval-stamp]");
-      if (header === null || mark === null) {
-        return { hitHeader: false, stampY: 0, headerBottom: 0 };
-      }
-      const headerRect = header.getBoundingClientRect();
-      const stampRect = mark.getBoundingClientRect();
-      const x = stampRect.x + stampRect.width / 2;
-      const y = headerRect.top + headerRect.height / 2;
-      const hit = document.elementFromPoint(x, y);
-      return {
-        hitHeader: hit !== null && header.contains(hit),
-        stampY: stampRect.y,
-        headerBottom: headerRect.bottom,
-      };
-    });
-    expect(covered.stampY).toBeLessThan(covered.headerBottom);
-    expect(covered.hitHeader).toBe(true);
+    expect(Math.abs(stampTopAfter - stampTopBefore)).toBeLessThan(2);
     await page.evaluate(() => {
       const html = document.documentElement;
       const previous = html.style.scrollBehavior;
