@@ -10,11 +10,24 @@ const project = (
   ...model,
   description: fields.has("Description") ? model.description : [],
   params: model.params.filter((param) =>
-    fields.has(`${param.location}: ${param.name}`),
+    fields.has(
+      `${
+        (
+          {
+            path: "Path parameter",
+            query: "Query parameter",
+            header: "Header",
+            body: "Body field",
+          } as const
+        )[param.location]
+      }: ${param.name}`,
+    ),
   ),
   ...(fields.has("Request body") ? {} : { request: undefined }),
   responses: model.responses.filter((response) =>
-    fields.has(`Response: ${response.status}`),
+    fields.has(
+      `Response: ${response.status}${response.label === undefined ? "" : ` ${response.label}`}`,
+    ),
   ),
 });
 export const HttpEndpointDiffView = ({

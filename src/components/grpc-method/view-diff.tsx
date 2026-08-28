@@ -10,10 +10,10 @@ const project = (
   ...model,
   description: fields.has("Description") ? model.description : [],
   requestFields: model.requestFields.filter((field) =>
-    fields.has(`${field.side}: ${field.name}`),
+    fields.has(`Request field: ${field.name}`),
   ),
   responseFields: model.responseFields.filter((field) =>
-    fields.has(`${field.side}: ${field.name}`),
+    fields.has(`Response field: ${field.name}`),
   ),
   errors: model.errors.filter((error) =>
     fields.has(`Status code: ${error.code}`),

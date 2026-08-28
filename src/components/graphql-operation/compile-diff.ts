@@ -7,6 +7,11 @@ import {
 } from "../_model/component-diff/named-fields.js";
 import type { CompiledGraphqlOperation } from "./compile.js";
 
+const FIELD_LABELS = {
+  input: "Input field",
+  payload: "Payload field",
+} as const;
+
 export type CompiledGraphqlOperationDiff =
   NamedFieldDiff<CompiledGraphqlOperation>;
 const fieldsFor = (
@@ -29,14 +34,21 @@ const fieldsFor = (
       value.args.find((candidate) => candidate.name === field.name),
   })),
   ...[...model.inputFields, ...model.payloadFields].map((field) => ({
-    name: `${field.side}: ${field.name}`,
+    name: `${FIELD_LABELS[field.side]}: ${field.name}`,
     value: (value: CompiledGraphqlOperation) =>
       [...value.inputFields, ...value.payloadFields].find(
         (candidate) =>
           candidate.side === field.side && candidate.name === field.name,
       ),
   })),
-  { name: "Returns", value: (value) => value.returns },
+  ...(model.returns === undefined
+    ? []
+    : [
+        {
+          name: `Returns: ${model.returns.returnType}`,
+          value: (value: CompiledGraphqlOperation) => value.returns,
+        },
+      ]),
   {
     name: "Example",
     value: (value) => ({

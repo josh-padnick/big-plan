@@ -11,12 +11,15 @@ const project = (
   description: fields.has("Description") ? model.description : [],
   args: model.args.filter((field) => fields.has(`Argument: ${field.name}`)),
   inputFields: model.inputFields.filter((field) =>
-    fields.has(`${field.side}: ${field.name}`),
+    fields.has(`Input field: ${field.name}`),
   ),
   payloadFields: model.payloadFields.filter((field) =>
-    fields.has(`${field.side}: ${field.name}`),
+    fields.has(`Payload field: ${field.name}`),
   ),
-  ...(fields.has("Returns") ? {} : { returns: undefined }),
+  ...(model.returns !== undefined &&
+  fields.has(`Returns: ${model.returns.returnType}`)
+    ? {}
+    : { returns: undefined }),
   ...(fields.has("Example")
     ? {}
     : { operation: undefined, variables: undefined }),

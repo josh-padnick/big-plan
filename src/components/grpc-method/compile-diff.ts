@@ -7,6 +7,11 @@ import {
 } from "../_model/component-diff/named-fields.js";
 import type { CompiledGrpcMethod } from "./compile.js";
 
+const FIELD_LABELS = {
+  request: "Request field",
+  response: "Response field",
+} as const;
+
 export type CompiledGrpcMethodDiff = NamedFieldDiff<CompiledGrpcMethod>;
 const fieldsFor = (
   model: CompiledGrpcMethod,
@@ -24,7 +29,7 @@ const fieldsFor = (
   },
   { name: "Description", value: (value) => value.description },
   ...[...model.requestFields, ...model.responseFields].map((field) => ({
-    name: `${field.side}: ${field.name}`,
+    name: `${FIELD_LABELS[field.side]}: ${field.name}`,
     value: (value: CompiledGrpcMethod) =>
       [...value.requestFields, ...value.responseFields].find(
         (candidate) =>

@@ -7,6 +7,13 @@ import {
 } from "../_model/component-diff/named-fields.js";
 import type { CompiledHttpEndpoint } from "./compile.js";
 
+const PARAM_LABELS = {
+  path: "Path parameter",
+  query: "Query parameter",
+  header: "Header",
+  body: "Body field",
+} as const;
+
 export type CompiledHttpEndpointDiff = NamedFieldDiff<CompiledHttpEndpoint>;
 const fieldsFor = (
   model: CompiledHttpEndpoint,
@@ -23,7 +30,7 @@ const fieldsFor = (
   },
   { name: "Description", value: (value) => value.description },
   ...model.params.map((param) => ({
-    name: `${param.location}: ${param.name}`,
+    name: `${PARAM_LABELS[param.location]}: ${param.name}`,
     value: (value: CompiledHttpEndpoint) =>
       value.params.find(
         (candidate) =>
@@ -33,7 +40,7 @@ const fieldsFor = (
   })),
   { name: "Request body", value: (value) => value.request },
   ...model.responses.map((response) => ({
-    name: `Response: ${response.status}`,
+    name: `Response: ${response.status}${response.label === undefined ? "" : ` ${response.label}`}`,
     value: (value: CompiledHttpEndpoint) =>
       value.responses.find((candidate) => candidate.status === response.status),
   })),

@@ -136,6 +136,73 @@ ${description}
       nodes.filter((node) => node.properties.dataBlockId === declaredField?.id),
     ).toHaveLength(1);
   });
+
+  it.each([
+    {
+      kind: "http-endpoint",
+      label: "Query parameter: legacy",
+      baseline: `<HttpEndpoint method="GET" path="/jobs"><Param name="legacy" in="query">Old.</Param></HttpEndpoint>`,
+      proposed: `<HttpEndpoint method="GET" path="/jobs"><Param name="legacy" in="query">New.</Param></HttpEndpoint>`,
+    },
+    {
+      kind: "graphql-operation",
+      label: "Input field: jobId",
+      baseline: `<GraphqlOperation kind="query" name="job"><Field in="input" name="jobId" type="ID!">Old.</Field></GraphqlOperation>`,
+      proposed: `<GraphqlOperation kind="query" name="job"><Field in="input" name="jobId" type="ID!">New.</Field></GraphqlOperation>`,
+    },
+    {
+      kind: "grpc-method",
+      label: "Request field: job_id",
+      baseline: `<GrpcMethod service="Jobs" name="Get" request="GetRequest" response="GetResponse"><Field in="request" name="job_id" type="string">Old.</Field></GrpcMethod>`,
+      proposed: `<GrpcMethod service="Jobs" name="Get" request="GetRequest" response="GetResponse"><Field in="request" name="job_id" type="string">New.</Field></GrpcMethod>`,
+    },
+    {
+      kind: "data-table",
+      label: "A",
+      baseline: `<DataTable>\n\n\`\`\`table\n| Job | State |\n| --- | --- |\n| A | Old |\n\`\`\`\n\n</DataTable>`,
+      proposed: `<DataTable>\n\n\`\`\`table\n| Job | State |\n| --- | --- |\n| A | New |\n\`\`\`\n\n</DataTable>`,
+    },
+    {
+      kind: "database-table-schema",
+      label: "Index: status",
+      baseline: `<DatabaseTableSchema name="jobs">\n\n\`\`\`dbml\nstatus text\nindexes {\n  status\n}\n\`\`\`\n\n</DatabaseTableSchema>`,
+      proposed: `<DatabaseTableSchema name="jobs">\n\n\`\`\`dbml\nstatus text\nindexes {\n  status [unique]\n}\n\`\`\`\n\n</DatabaseTableSchema>`,
+    },
+  ])(
+    "should preserve the declared $label target",
+    ({ kind, label, baseline, proposed }) => {
+      const compile = (component: string) =>
+        compileMarkdown({ markdown: `# Plan\n\n## Contract\n\n${component}` });
+      const baselineDocument = compile(baseline);
+      const proposedDocument = compile(proposed);
+      const baselineRoot = baselineDocument.blocks.find(
+        (block) => block.kind === kind,
+      );
+      const proposedRoot = proposedDocument.blocks.find(
+        (block) => block.kind === kind,
+      );
+      const declaredField = proposedDocument.blocks.find(
+        (block) => block.ownerId === proposedRoot?.id && block.label === label,
+      );
+      expect(declaredField).toBeDefined();
+      const rendered = renderDiffView({
+        baselineDocument,
+        proposedDocument,
+        baselineBlockId: baselineRoot?.id,
+        proposedBlockId: proposedRoot?.id,
+        status: "changed",
+        runs: [],
+      });
+      const nodes = elements(
+        fromHtml(rendered?.view ?? "", { fragment: true }),
+      );
+      expect(
+        nodes.filter(
+          (node) => node.properties.dataBlockId === declaredField?.id,
+        ),
+      ).toHaveLength(1);
+    },
+  );
 });
 
 describe("renderIsolatedBlockView", () => {

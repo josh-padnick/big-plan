@@ -66,7 +66,7 @@ describe("last-wave component diff fields", () => {
       compile: compileDataTableDiff,
       baseline,
       proposed: { ...baseline, rows: [{ cells: [cell("Rebuild")] }] },
-      changedField: "Row: Rebuild",
+      changedField: "Rebuild",
     });
   });
 
@@ -247,7 +247,7 @@ describe("last-wave component diff fields", () => {
         proposed: { ...baseline, params: [] },
         runs,
       }).changedFields,
-    ).toEqual(["query: legacy"]);
+    ).toEqual(["Query parameter: legacy"]);
   });
 
   it("names both GraphqlOperation argument identities on rename", () => {
@@ -387,6 +387,30 @@ describe("last-wave component diff fields", () => {
         proposed: { ...baseline, summaryRow: undefined },
         runs,
       }).changedFields,
-    ).toEqual(["Summary row"]);
+    ).toEqual(["Summary: 1 job"]);
+  });
+
+  it("names only an inserted DataTable row", () => {
+    const baseline: CompiledDataTable = {
+      id: "jobs",
+      filter: false,
+      fit: "wrap",
+      columns: [{ label: "Job", type: "text", align: "left" }],
+      rows: ["A", "B"].map((value) => ({ cells: [cell(value)] })),
+      groups: [],
+      groupColumn: -1,
+    };
+    const diff = compileDataTableDiff({
+      status: "changed",
+      baseline,
+      proposed: {
+        ...baseline,
+        rows: ["X", "A", "B"].map((value) => ({ cells: [cell(value)] })),
+      },
+      runs,
+    });
+    expect(diff.changedFields).toEqual(["X"]);
+    expect(diff.baselineRowIndexes).toEqual([]);
+    expect(diff.proposedRowIndexes).toEqual([0]);
   });
 });
