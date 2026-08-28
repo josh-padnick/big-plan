@@ -18,6 +18,7 @@ import {
   messageAgentRequest,
   nextPendingAgentRequest,
   readAgentExchange,
+  readValidatedAgentResponse,
   requestBaselineSnapshot,
   responseTemplateFor,
   validateAgentResponseDraft,
@@ -1205,5 +1206,56 @@ describe("approval request contract", () => {
       kind: "approval",
       hardStop: "The plan no longer matches the pinned snapshot.",
     });
+  });
+
+  it("should validate stored approval acknowledgments against the pinned snapshot", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-approval-pin-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, before);
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    const claimed = validateAgentRequest({
+      ...claimedApproval(),
+      answeredAt: "2026-08-13T17:42:00.000Z",
+    });
+    await writeAgentRequest({ store, request: claimed });
+    const responsePath = join(
+      store.agentResponseDirectory,
+      `${claimed.requestId}.json`,
+    );
+    const storedResponse = {
+      version: 3,
+      requestId: claimed.requestId,
+      sessionId: claimed.sessionId,
+      planId: claimed.planId,
+      claimGeneration: claimed.claimGeneration,
+      resultSnapshot: deriveSnapshotDigest(after),
+      createdAt: "2026-08-13T17:42:00.000Z",
+      kind: "approval",
+    };
+
+    try {
+      await writeFile(responsePath, JSON.stringify(storedResponse));
+      await expect(
+        readValidatedAgentResponse({ store, request: claimed }),
+      ).resolves.toBeUndefined();
+
+      await writeFile(
+        responsePath,
+        JSON.stringify({
+          ...storedResponse,
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        }),
+      );
+      await expect(
+        readValidatedAgentResponse({ store, request: claimed }),
+      ).resolves.toMatchObject({
+        kind: "approval",
+        resultSnapshot: deriveSnapshotDigest(after),
+        hardStop: "The plan no longer matches the pinned snapshot.",
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

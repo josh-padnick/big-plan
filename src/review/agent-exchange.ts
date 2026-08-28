@@ -910,6 +910,22 @@ export const requestClaimGeneration = (request: AgentRequest): number => {
   return request.claimGeneration;
 };
 
+const validateApprovalAcknowledgment = ({
+  hardStop,
+  resultSnapshot,
+  pinnedSnapshot,
+}: {
+  readonly hardStop: string | undefined;
+  readonly resultSnapshot: string;
+  readonly pinnedSnapshot: string;
+}): void => {
+  if (hardStop === undefined && resultSnapshot !== pinnedSnapshot) {
+    throw new AgentExchangeRejected(
+      'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
+    );
+  }
+};
+
 /** Validates an agent-authored draft and fills trusted session metadata. */
 export const validateAgentResponseDraft = ({
   value,
@@ -960,11 +976,11 @@ export const validateAgentResponseDraft = ({
     nothing and settles the request as unanswered work the reviewer must decide
     about, which is why it is opt-in rather than inferred from the digest.
     */
-    if (hardStop === undefined && currentSnapshot !== request.pinnedSnapshot) {
-      throw new AgentExchangeRejected(
-        'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
-      );
-    }
+    validateApprovalAcknowledgment({
+      hardStop,
+      resultSnapshot: currentSnapshot,
+      pinnedSnapshot: request.pinnedSnapshot,
+    });
     const summary =
       value.summary === undefined
         ? undefined
@@ -1157,12 +1173,15 @@ const validateStoredResponse = ({
       "A stored agent response does not match its request",
     );
   }
-  if (
-    response.kind === "chat" ||
-    request.kind === "chat" ||
-    response.kind === "approval" ||
-    request.kind === "approval"
-  ) {
+  if (response.kind === "chat" || request.kind === "chat") {
+    return response;
+  }
+  if (response.kind === "approval" && request.kind === "approval") {
+    validateApprovalAcknowledgment({
+      hardStop: response.hardStop,
+      resultSnapshot: response.resultSnapshot,
+      pinnedSnapshot: request.pinnedSnapshot,
+    });
     return response;
   }
   const expected = expectedCommentIds({ request, commentsById });
