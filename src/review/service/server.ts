@@ -302,7 +302,10 @@ export const startService = async ({
   let stopArmed = false;
   const planAnswers = new Map<
     string,
-    { readonly answer: ServicePlanAnswer; readonly expiresAtMs: number }
+    {
+      readonly answer: Promise<ServicePlanAnswer>;
+      readonly expiresAtMs: number;
+    }
   >();
 
   /** Resolves one plan at most once per heartbeat-length cache window. */
@@ -312,13 +315,21 @@ export const startService = async ({
     if (cached !== undefined && observedAtMs < cached.expiresAtMs) {
       return cached.answer;
     }
-    const answer = await answerForPlan({ planId, now: observedAtMs });
-    if (answer.kind === "live") {
-      planAnswers.set(planId, {
-        answer,
-        expiresAtMs: observedAtMs + REVIEW_HEARTBEAT_INTERVAL_MS,
-      });
-    } else {
+    const answerPromise = answerForPlan({ planId, now: observedAtMs });
+    planAnswers.set(planId, {
+      answer: answerPromise,
+      expiresAtMs: observedAtMs + REVIEW_HEARTBEAT_INTERVAL_MS,
+    });
+    const answer = await answerPromise.catch((error: unknown) => {
+      if (planAnswers.get(planId)?.answer === answerPromise) {
+        planAnswers.delete(planId);
+      }
+      throw error;
+    });
+    if (
+      answer.kind !== "live" &&
+      planAnswers.get(planId)?.answer === answerPromise
+    ) {
       // Unknown ids are attacker-controlled input and must never grow a
       // process-lifetime cache. Non-live known states have no upstream
       // resolution to reuse and need to notice a newly started runtime.

@@ -205,7 +205,12 @@ const uploadFromChild = async ({
 /** Returns the middle observed duration without letting one cold run dominate. */
 const median = (samples: ReadonlyArray<number>): number => {
   const ordered = [...samples].sort((left, right) => left - right);
-  return ordered[Math.floor(ordered.length / 2)] ?? Number.NaN;
+  const upperIndex = Math.floor(ordered.length / 2);
+  const upper = ordered[upperIndex];
+  if (upper === undefined) return Number.NaN;
+  if (ordered.length % 2 === 1) return upper;
+  const lower = ordered[upperIndex - 1];
+  return lower === undefined ? Number.NaN : (lower + upper) / 2;
 };
 
 /** Measures one complete response, including consumption of its body. */
