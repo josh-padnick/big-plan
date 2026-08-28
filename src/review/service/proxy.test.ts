@@ -38,11 +38,19 @@ const OVERHEAD_SAMPLE_COUNT = 10;
 // worker contention is not a measurement of proxy cost.
 const STRICT_OVERHEAD_MEDIAN_TOLERANCE_MS = 2;
 const PARALLEL_OVERHEAD_SANITY_TOLERANCE_MS = 25;
+const DOCUMENT_ABSOLUTE_MEDIAN_TOLERANCE_MS = 8;
+const POLL_ABSOLUTE_MEDIAN_TOLERANCE_MS = 2;
+const isDedicatedOverheadBenchmark =
+  process.env["BIG_PLAN_PROXY_BENCHMARK"] === "1";
 const overheadMedianToleranceMs =
-  process.env["BIG_PLAN_PROXY_BENCHMARK"] === "1"
+  isDedicatedOverheadBenchmark
     ? STRICT_OVERHEAD_MEDIAN_TOLERANCE_MS
     : PARALLEL_OVERHEAD_SANITY_TOLERANCE_MS;
+const STATED_DOCUMENT_DIRECT_MS = 8.2;
+const STATED_DOCUMENT_PROXIED_MS = 9.8;
 const STATED_DOCUMENT_ADDED_MS = 1.6;
+const STATED_POLL_DIRECT_MS = 1.38;
+const STATED_POLL_PROXIED_MS = 1.77;
 const STATED_POLL_ADDED_MS = 0.39;
 const STATED_RESOLUTION_MS = 2.2;
 const STATED_SERVICE_REDIRECT_MS = 3;
@@ -658,14 +666,20 @@ describe("the stable review proxy", () => {
         route: "document",
         direct: running.review.url,
         proxied: `${running.service.origin}${planPrefix}`,
+        statedDirectMs: STATED_DOCUMENT_DIRECT_MS,
+        statedProxiedMs: STATED_DOCUMENT_PROXIED_MS,
         statedAddedMs: STATED_DOCUMENT_ADDED_MS,
+        absoluteMedianToleranceMs: DOCUMENT_ABSOLUTE_MEDIAN_TOLERANCE_MS,
       },
       {
         route: "poll",
         direct: `${running.review.url}api/agent`,
         proxied: `${running.service.origin}${planPrefix}api/agent`,
         headers: browserReadHeaders,
+        statedDirectMs: STATED_POLL_DIRECT_MS,
+        statedProxiedMs: STATED_POLL_PROXIED_MS,
         statedAddedMs: STATED_POLL_ADDED_MS,
+        absoluteMedianToleranceMs: POLL_ABSOLUTE_MEDIAN_TOLERANCE_MS,
       },
     ] as const;
 
@@ -698,7 +712,10 @@ describe("the stable review proxy", () => {
         directMedianMs,
         proxiedMedianMs,
         overheadMs: proxiedMedianMs - directMedianMs,
+        statedDirectMs: route.statedDirectMs,
+        statedProxiedMs: route.statedProxiedMs,
         statedAddedMs: route.statedAddedMs,
+        absoluteMedianToleranceMs: route.absoluteMedianToleranceMs,
       });
     }
 
@@ -707,6 +724,14 @@ describe("the stable review proxy", () => {
       expect(Number.isFinite(row.directMedianMs)).toBe(true);
       expect(Number.isFinite(row.proxiedMedianMs)).toBe(true);
       expect(Number.isFinite(row.overheadMs)).toBe(true);
+      if (isDedicatedOverheadBenchmark) {
+        expect(
+          Math.abs(row.directMedianMs - row.statedDirectMs),
+        ).toBeLessThanOrEqual(row.absoluteMedianToleranceMs);
+        expect(
+          Math.abs(row.proxiedMedianMs - row.statedProxiedMs),
+        ).toBeLessThanOrEqual(row.absoluteMedianToleranceMs);
+      }
       expect(row.overheadMs).toBeLessThanOrEqual(
         row.statedAddedMs + overheadMedianToleranceMs,
       );
