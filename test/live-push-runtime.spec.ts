@@ -463,6 +463,7 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await stepper.getByRole("button", { name: "Accept this change" }).click();
     await expect(stepper).toContainText("2 of 2");
     await stepper.getByRole("button", { name: "Accept this change" }).click();
+    await expect(stepper).toContainText("All changes accepted (2 of 2)");
     await page.keyboard.press("Escape");
 
     const continuedPush = await runAgentCli([
