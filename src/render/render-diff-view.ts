@@ -26,7 +26,7 @@ export type CompiledDiffDocuments = {
   readonly proposed: CompiledMarkdown;
 };
 
-type DiffDocumentCompiler = (input: {
+export type DiffDocumentCompiler = (input: {
   readonly markdown: string;
 }) => CompiledMarkdown;
 

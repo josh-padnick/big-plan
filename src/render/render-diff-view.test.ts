@@ -6,10 +6,7 @@ import { fromHtml } from "hast-util-from-html";
 import type { Element, Root } from "hast";
 import { describe, expect, it } from "vitest";
 import { compileMarkdown } from "./markdown/compile-markdown.js";
-import {
-  renderDiffView,
-  renderIsolatedBlockView,
-} from "./render-diff-view.js";
+import { renderDiffView, renderIsolatedBlockView } from "./render-diff-view.js";
 
 const decision = (option: string): string => `# Plan
 

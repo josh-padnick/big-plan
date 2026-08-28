@@ -8,7 +8,7 @@ import {
   renderDiffView,
   renderIsolatedBlockView,
 } from "../render/render-diff-view.js";
-import type { CompiledMarkdown } from "../render/markdown/compile-markdown.js";
+import type { DiffDocumentCompiler } from "../render/render-diff-view.js";
 import { jsonResponse, refusal } from "./review-route-context.js";
 import type {
   ReviewRouteContext,
@@ -55,9 +55,7 @@ export const compileSnapshotDiffPayload = ({
   readonly to: string;
   readonly beforeSource: string;
   readonly afterSource: string;
-  readonly compileDocument?: (input: {
-    readonly markdown: string;
-  }) => CompiledMarkdown;
+  readonly compileDocument?: DiffDocumentCompiler;
 }): SnapshotDiff => {
   // One compilation per snapshot answers every question this route asks: the
   // block descriptors the alignment reads, the models a component diff pairs,
