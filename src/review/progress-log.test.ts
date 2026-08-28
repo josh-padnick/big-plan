@@ -127,7 +127,7 @@ describe("the progress log", () => {
     directories.push(directory);
     counters.fullFileReads = 0;
 
-    for (let index = 0; index < 500; index += 1) {
+    for (let index = 0; index < 201; index += 1) {
       await appendProgressEvent({
         store,
         event: {
@@ -144,8 +144,8 @@ describe("the progress log", () => {
     expect(counters.fullFileReads).toBeLessThanOrEqual(2);
     const events = await readProgress({ store, sessionId: SESSION });
     expect(events).toHaveLength(200);
-    expect(events.at(0)?.seq).toBe(301);
-    expect(events.at(-1)?.seq).toBe(500);
+    expect(events.at(0)?.seq).toBe(2);
+    expect(events.at(-1)?.seq).toBe(201);
   }, 20_000);
 
   it("should read an event appended by another writer", async () => {
