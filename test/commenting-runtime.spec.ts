@@ -356,6 +356,7 @@ test("should keep unsent comment text separate across two tabs", async ({
     readonly composerBody: string;
     readonly replyBody: string;
   }): Promise<void> => {
+    const recoveryKey = await ownedLiveRecoveryKey(targetPage);
     const feedbackButton = targetPage.getByRole("button", {
       name: /^Feedback(?: \d+)?$/u,
     });
@@ -379,6 +380,45 @@ test("should keep unsent comment text separate across two tabs", async ({
       .getByRole("dialog", { name: /Comment on/u })
       .getByLabel("Add a comment")
       .fill(composerBody);
+
+    // Reload only after the tab-owned recovery record has committed both
+    // inputs. A filled textarea can precede the React persistence effect.
+    await expect
+      .poll(() =>
+        targetPage.evaluate((key) => {
+          const raw = window.localStorage.getItem(key);
+          if (raw === null) return null;
+          const parsed: unknown = JSON.parse(raw);
+          if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            !("composer" in parsed) ||
+            typeof parsed.composer !== "object" ||
+            parsed.composer === null
+          )
+            return null;
+          const comment =
+            "comment" in parsed.composer ? parsed.composer.comment : null;
+          const replies =
+            "replies" in parsed.composer ? parsed.composer.replies : null;
+          return {
+            commentBody:
+              typeof comment === "object" &&
+              comment !== null &&
+              "body" in comment &&
+              typeof comment.body === "string"
+                ? comment.body
+                : null,
+            replyBodies:
+              typeof replies === "object" && replies !== null
+                ? Object.values(replies).filter(
+                    (value): value is string => typeof value === "string",
+                  )
+                : [],
+          };
+        }, recoveryKey),
+      )
+      .toEqual({ commentBody: composerBody, replyBodies: [replyBody] });
 
     await targetPage.reload();
     await expect(

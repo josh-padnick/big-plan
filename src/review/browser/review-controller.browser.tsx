@@ -5713,7 +5713,7 @@ export const ReviewController = () => {
   ]);
 
   useEffect(() => {
-    if (!hasObservedAgentSnapshot) return;
+    if (!isHydrated || !hasObservedAgentSnapshot) return;
     replaceReplyDrafts(
       repliesForKnownComments({
         replies: replyDraftsRef.current,
@@ -5722,6 +5722,7 @@ export const ReviewController = () => {
     );
   }, [
     hasObservedAgentSnapshot,
+    isHydrated,
     pushedThreadComments,
     replaceReplyDrafts,
     sent,
