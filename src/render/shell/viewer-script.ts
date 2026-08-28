@@ -2870,7 +2870,7 @@ const wireDecisions = () => {
       document.documentElement.hasAttribute("data-review-read-only");
     // Decision owns this ordering rule: a changed decision is finalized first
     // and answered second. The review layer only removes the overlay once its
-    // disposition says the change is accepted.
+    // verdict says the change is accepted.
     const changeIsOpen = () =>
       decision.hasAttribute("data-decision-change-open");
     const approvedReview = () =>

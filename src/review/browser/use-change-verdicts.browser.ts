@@ -1,4 +1,4 @@
-// Owns the browser's copy of the change dispositions the review has recorded:
+// Owns the browser's copy of the change verdicts the review has recorded:
 // reading the record, applying the reviewer's gesture to it, and keeping what
 // the page shows equal to what the runtime stored.
 //
@@ -14,11 +14,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   acceptedChangeKeys,
-  changeDispositionBatches,
-  changeDispositionKey,
-  type ChangeDispositionState,
-} from "../shared/change-disposition.js";
-import { decodeChangeDispositions } from "../shared/review-wire.js";
+  changeVerdictBatches,
+  changeVerdictKey,
+  type ChangeVerdictState,
+} from "../shared/change-verdict.js";
+import { decodeChangeVerdicts } from "../shared/review-wire.js";
 import {
   isReadOnlyReview,
   requestJson,
@@ -29,7 +29,7 @@ import { isTerminalReviewRuntimeRefusal } from "./review-runtime-request.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import { toast } from "./ui.browser.js";
 
-const DISPOSITIONS_PATH = "/api/change-dispositions";
+const VERDICTS_PATH = "/api/change-verdicts";
 const RETRY_DELAY_MS = 2_000;
 // The first failure is usually the runtime being briefly busy and is not worth
 // interrupting a reader over. A second one has outlived that explanation.
@@ -38,14 +38,14 @@ const FAILURES_BEFORE_NOTICE = 2;
 // a retry notice is resolved by the write finally landing, while a refusal is
 // the only surviving evidence that an acceptance was dropped and outlives every
 // later gesture.
-const DISPOSITION_RETRY_TOAST_ID = "big-plan-change-disposition-retry";
-const DISPOSITION_REFUSED_TOAST_ID = "big-plan-change-disposition-refused";
+const VERDICT_RETRY_TOAST_ID = "big-plan-change-verdict-retry";
+const VERDICT_REFUSED_TOAST_ID = "big-plan-change-verdict-refused";
 // The read has its own notice: it says what the page may be under-reporting,
 // which is a different fact from a gesture that did not reach the record.
-const DISPOSITION_READ_TOAST_ID = "big-plan-change-disposition-read";
+const VERDICT_READ_TOAST_ID = "big-plan-change-verdict-read";
 
 /** One gesture on its way to the record. */
-type PendingDisposition = {
+type PendingVerdict = {
   readonly op: "accept" | "withdraw";
   readonly from: string;
   readonly to: string;
@@ -53,25 +53,25 @@ type PendingDisposition = {
 };
 
 /** What every surface that shows a change set's standing reads. */
-export type ChangeDispositionsValue = {
+export type ChangeVerdictsValue = {
   /** The accepted change keys, including gestures still being written. */
   readonly accepted: ReadonlySet<string>;
   /** False while the runtime has told this page it may not record anything. */
   readonly canRecord: boolean;
-  readonly disposeOfChanges: (input: PendingDisposition) => void;
+  readonly disposeOfChanges: (input: PendingVerdict) => void;
 };
 
 const overlay = ({
   stored,
   pending,
 }: {
-  readonly stored: ChangeDispositionState;
-  readonly pending: ReadonlyArray<PendingDisposition>;
+  readonly stored: ChangeVerdictState;
+  readonly pending: ReadonlyArray<PendingVerdict>;
 }): ReadonlySet<string> => {
   const keys = new Set(acceptedChangeKeys(stored));
   for (const mutation of pending) {
     for (const placeId of mutation.placeIds) {
-      const key = changeDispositionKey({
+      const key = changeVerdictKey({
         from: mutation.from,
         to: mutation.to,
         placeId,
@@ -89,25 +89,25 @@ const sleep = (ms: number): Promise<void> =>
   });
 
 /**
- * Keeps one review's disposition record in step with the runtime.
+ * Keeps one review's verdict record in step with the runtime.
  *
  * The record is re-read after an article replacement for the same reason the
  * answers record is: a replaced article hands back freshly rendered change
  * attachments, and the standing they show has to come from the store rather
  * than from whatever the previous DOM happened to hold.
  */
-export const useChangeDispositions = (): ChangeDispositionsValue => {
+export const useChangeVerdicts = (): ChangeVerdictsValue => {
   const articleVersion = useArticleVersion();
   const [identity] = useState<RuntimeIdentity | null>(runtimeIdentity);
-  const [stored, setStored] = useState<ChangeDispositionState>({
+  const [stored, setStored] = useState<ChangeVerdictState>({
     accepted: [],
     revision: -1,
   });
-  const [pending, setPending] = useState<ReadonlyArray<PendingDisposition>>([]);
+  const [pending, setPending] = useState<ReadonlyArray<PendingVerdict>>([]);
   const [canRecord, setCanRecord] = useState(
     () => identity !== null && !isReadOnlyReview(),
   );
-  const queue = useRef<Array<PendingDisposition>>([]);
+  const queue = useRef<Array<PendingVerdict>>([]);
   const isFlushing = useRef(false);
   const appliedRevision = useRef(-1);
   const isMounted = useRef(true);
@@ -129,12 +129,12 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
       document.removeEventListener("bigplan:review-authority", onAuthority);
   }, [identity]);
 
-  // Every response from the disposition store carries the whole current record
+  // Every response from the verdict store carries the whole current record
   // and the revision that produced it, so applying one is the only way this
   // page learns what is stored. A strictly older revision lost a race with a
   // write that has already been applied and is dropped without comment.
   const applyResponse = useCallback((value: unknown): void => {
-    const state = decodeChangeDispositions(value);
+    const state = decodeChangeVerdicts(value);
     if (state.revision < appliedRevision.current) return;
     appliedRevision.current = state.revision;
     setStored(state);
@@ -151,7 +151,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
         try {
           applyResponse(
             await requestJson({
-              path: DISPOSITIONS_PATH,
+              path: VERDICTS_PATH,
               identity,
               method: "POST",
               body: {
@@ -165,7 +165,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
           queue.current = queue.current.filter((entry) => entry !== head);
           setPending([...queue.current]);
           failures = 0;
-          toast.dismiss(DISPOSITION_RETRY_TOAST_ID);
+          toast.dismiss(VERDICT_RETRY_TOAST_ID);
         } catch (error: unknown) {
           // The runtime looked at this gesture and refused it, so retrying
           // would collect the same refusal forever. Dropping it is what takes
@@ -174,9 +174,9 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
             queue.current = queue.current.filter((entry) => entry !== head);
             setPending([...queue.current]);
             failures = 0;
-            toast.dismiss(DISPOSITION_RETRY_TOAST_ID);
+            toast.dismiss(VERDICT_RETRY_TOAST_ID);
             toast.error("Change acceptance not saved", {
-              id: DISPOSITION_REFUSED_TOAST_ID,
+              id: VERDICT_REFUSED_TOAST_ID,
               description:
                 error instanceof Error
                   ? error.message
@@ -188,7 +188,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
           failures += 1;
           if (failures === FAILURES_BEFORE_NOTICE) {
             toast.error("Change acceptance not saved yet", {
-              id: DISPOSITION_RETRY_TOAST_ID,
+              id: VERDICT_RETRY_TOAST_ID,
               description:
                 "Big Plan will keep retrying. Keep this review open until the change set says it is accepted.",
               duration: Infinity,
@@ -203,7 +203,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
   }, [applyResponse, identity]);
 
   const disposeOfChanges = useCallback(
-    (input: PendingDisposition): void => {
+    (input: PendingVerdict): void => {
       if (input.placeIds.length === 0) return;
       // One gesture can name more places than a single mutation may carry, so
       // it is queued as successive batches. The overlay reads the whole queue,
@@ -211,7 +211,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
       // a refusal takes back only the batch the runtime refused.
       queue.current = [
         ...queue.current,
-        ...changeDispositionBatches(input.placeIds).map((placeIds) => ({
+        ...changeVerdictBatches(input.placeIds).map((placeIds) => ({
           op: input.op,
           from: input.from,
           to: input.to,
@@ -235,17 +235,15 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
       let failures = 0;
       while (reading && isMounted.current) {
         try {
-          applyResponse(
-            await requestJson({ path: DISPOSITIONS_PATH, identity }),
-          );
-          toast.dismiss(DISPOSITION_READ_TOAST_ID);
+          applyResponse(await requestJson({ path: VERDICTS_PATH, identity }));
+          toast.dismiss(VERDICT_READ_TOAST_ID);
           return;
         } catch (error: unknown) {
           // A refused read is the runtime's answer, not a lost one, so it is
           // reported once instead of collected forever.
           if (isTerminalReviewRuntimeRefusal(error)) {
             toast.error("Recorded change acceptances could not be read", {
-              id: DISPOSITION_READ_TOAST_ID,
+              id: VERDICT_READ_TOAST_ID,
               description:
                 error instanceof Error
                   ? error.message
@@ -257,7 +255,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
           failures += 1;
           if (failures === FAILURES_BEFORE_NOTICE) {
             toast.error("Recorded change acceptances not read yet", {
-              id: DISPOSITION_READ_TOAST_ID,
+              id: VERDICT_READ_TOAST_ID,
               description:
                 "Big Plan will keep retrying. What this page shows as accepted may be incomplete until it succeeds.",
               duration: Infinity,

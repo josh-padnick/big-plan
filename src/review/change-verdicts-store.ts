@@ -1,8 +1,8 @@
-// Owns validation, bounds, and immutable updates for the change dispositions a
+// Owns validation, bounds, and immutable updates for the change verdicts a
 // live review records.
 //
-// Why a disposition needs no currency predicate, and why its revision is
-// ordered rather than counted, belong to ./shared/change-disposition.js; this
+// Why a verdict needs no currency predicate, and why its revision is
+// ordered rather than counted, belong to ./shared/change-verdict.js; this
 // module only enforces them.
 //
 // What this does own is refusal. The record is bounded, and a mutation past the
@@ -12,21 +12,21 @@
 
 import {
   ACCEPTED_CHANGE_LIMIT,
-  DISPOSITION_BATCH_LIMIT,
+  VERDICT_BATCH_LIMIT,
   PLACE_ID_LIMIT,
   SNAPSHOT_DIGEST,
-  changeDispositionKey,
-  type ChangeDisposition,
-  type ChangeDispositionState,
-} from "./shared/change-disposition.js";
+  changeVerdictKey,
+  type ChangeVerdict,
+  type ChangeVerdictState,
+} from "./shared/change-verdict.js";
 
 /** The stored record, with the version its shape is understood under. */
-export type StoredChangeDispositions = ChangeDispositionState & {
+export type StoredChangeVerdicts = ChangeVerdictState & {
   readonly version: 1;
 };
 
-/** One browser mutation over the disposition record. */
-export type ChangeDispositionMutation = {
+/** One browser mutation over the verdict record. */
+export type ChangeVerdictMutation = {
   readonly op: "accept" | "withdraw";
   readonly from: string;
   readonly to: string;
@@ -35,10 +35,10 @@ export type ChangeDispositionMutation = {
   readonly acceptedAt: string;
 };
 
-export class ChangeDispositionsRejected extends Error {
+export class ChangeVerdictsRejected extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "ChangeDispositionsRejected";
+    this.name = "ChangeVerdictsRejected";
   }
 }
 
@@ -50,7 +50,7 @@ const record = ({
   readonly field: string;
 }): Readonly<Record<string, unknown>> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new ChangeDispositionsRejected(`"${field}" must be an object`);
+    throw new ChangeVerdictsRejected(`"${field}" must be an object`);
   }
   return value as Readonly<Record<string, unknown>>;
 };
@@ -63,7 +63,7 @@ const digest = ({
   readonly field: string;
 }): string => {
   if (typeof value !== "string" || !SNAPSHOT_DIGEST.test(value)) {
-    throw new ChangeDispositionsRejected(
+    throw new ChangeVerdictsRejected(
       `"${field}" must be a hexadecimal snapshot digest`,
     );
   }
@@ -75,14 +75,14 @@ const digest = ({
 // produces addresses no change and is inert rather than dangerous.
 const placeId = (value: unknown): string => {
   if (typeof value !== "string" || value.trim() === "") {
-    throw new ChangeDispositionsRejected('"placeId" must be non-empty text');
+    throw new ChangeVerdictsRejected('"placeId" must be non-empty text');
   }
   // Blank text names nothing, but the id itself is returned exactly as the
   // caller gave it: trimming would store an acceptance under an address the
   // browser never asked for, and the record would then answer for a different
   // place than the one the reviewer closed.
   if (value.length > PLACE_ID_LIMIT) {
-    throw new ChangeDispositionsRejected(
+    throw new ChangeVerdictsRejected(
       `"placeId" is longer than ${PLACE_ID_LIMIT} characters`,
     );
   }
@@ -97,11 +97,11 @@ const timestamp = ({
   readonly field: string;
 }): string => {
   if (typeof value !== "string") {
-    throw new ChangeDispositionsRejected(`"${field}" must be an ISO timestamp`);
+    throw new ChangeVerdictsRejected(`"${field}" must be an ISO timestamp`);
   }
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed) || new Date(parsed).toISOString() !== value) {
-    throw new ChangeDispositionsRejected(`"${field}" must be an ISO timestamp`);
+    throw new ChangeVerdictsRejected(`"${field}" must be an ISO timestamp`);
   }
   return value;
 };
@@ -113,15 +113,13 @@ const revisionNumber = (value: unknown): number => {
     value < 0 ||
     !Number.isSafeInteger(value)
   ) {
-    throw new ChangeDispositionsRejected(
-      '"revision" must be a whole write count',
-    );
+    throw new ChangeVerdictsRejected('"revision" must be a whole write count');
   }
   return value;
 };
 
-const disposition = (value: unknown): ChangeDisposition => {
-  const candidate = record({ value, field: "disposition" });
+const verdict = (value: unknown): ChangeVerdict => {
+  const candidate = record({ value, field: "verdict" });
   return {
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
@@ -134,28 +132,28 @@ const disposition = (value: unknown): ChangeDisposition => {
 };
 
 /** Validates the complete on-disk record, treating an absent file as empty. */
-export const validateChangeDispositions = (
+export const validateChangeVerdicts = (
   value: unknown,
-): StoredChangeDispositions => {
+): StoredChangeVerdicts => {
   if (value === undefined) return { version: 1, revision: 0, accepted: [] };
-  const candidate = record({ value, field: "dispositions" });
+  const candidate = record({ value, field: "verdicts" });
   if (candidate.version !== 1 || !Array.isArray(candidate.accepted)) {
-    throw new ChangeDispositionsRejected(
-      "Change dispositions must be a version 1 record",
+    throw new ChangeVerdictsRejected(
+      "Change verdicts must be a version 1 record",
     );
   }
   if (candidate.accepted.length > ACCEPTED_CHANGE_LIMIT) {
-    throw new ChangeDispositionsRejected(
-      `Change dispositions hold more than ${ACCEPTED_CHANGE_LIMIT} accepted changes`,
+    throw new ChangeVerdictsRejected(
+      `Change verdicts hold more than ${ACCEPTED_CHANGE_LIMIT} accepted changes`,
     );
   }
-  const accepted = candidate.accepted.map(disposition);
+  const accepted = candidate.accepted.map(verdict);
   if (
-    new Set(accepted.map((entry) => changeDispositionKey(entry))).size !==
+    new Set(accepted.map((entry) => changeVerdictKey(entry))).size !==
     accepted.length
   ) {
-    throw new ChangeDispositionsRejected(
-      "Change dispositions may hold only one entry per change",
+    throw new ChangeVerdictsRejected(
+      "Change verdicts may hold only one entry per change",
     );
   }
   return {
@@ -169,28 +167,28 @@ export const validateChangeDispositions = (
  * Validates one browser mutation. The server stamps the acceptance time, so a
  * browser can name which changes it disposed of but never when.
  */
-export const validateChangeDispositionMutation = ({
+export const validateChangeVerdictMutation = ({
   value,
   now,
 }: {
   readonly value: unknown;
   readonly now: string;
-}): ChangeDispositionMutation => {
-  const candidate = record({ value, field: "disposition mutation" });
+}): ChangeVerdictMutation => {
+  const candidate = record({ value, field: "verdict mutation" });
   if (candidate.op !== "accept" && candidate.op !== "withdraw") {
-    throw new ChangeDispositionsRejected('"op" must be "accept" or "withdraw"');
+    throw new ChangeVerdictsRejected('"op" must be "accept" or "withdraw"');
   }
   if (!Array.isArray(candidate.placeIds) || candidate.placeIds.length === 0) {
-    throw new ChangeDispositionsRejected('"placeIds" must name a change');
+    throw new ChangeVerdictsRejected('"placeIds" must name a change');
   }
-  if (candidate.placeIds.length > DISPOSITION_BATCH_LIMIT) {
-    throw new ChangeDispositionsRejected(
-      `"placeIds" names more than ${DISPOSITION_BATCH_LIMIT} changes`,
+  if (candidate.placeIds.length > VERDICT_BATCH_LIMIT) {
+    throw new ChangeVerdictsRejected(
+      `"placeIds" names more than ${VERDICT_BATCH_LIMIT} changes`,
     );
   }
   const placeIds = candidate.placeIds.map(placeId);
   if (new Set(placeIds).size !== placeIds.length) {
-    throw new ChangeDispositionsRejected('"placeIds" repeats a change');
+    throw new ChangeVerdictsRejected('"placeIds" repeats a change');
   }
   return {
     op: candidate.op,
@@ -207,25 +205,25 @@ export const validateChangeDispositionMutation = ({
  * an acceptance and one that records nothing new, because the revision orders
  * responses rather than counting content.
  */
-export const applyChangeDispositionMutation = ({
-  dispositions,
+export const applyChangeVerdictMutation = ({
+  verdicts,
   mutation,
 }: {
-  readonly dispositions: StoredChangeDispositions;
-  readonly mutation: ChangeDispositionMutation;
-}): StoredChangeDispositions => {
-  const revision = dispositions.revision + 1;
+  readonly verdicts: StoredChangeVerdicts;
+  readonly mutation: ChangeVerdictMutation;
+}): StoredChangeVerdicts => {
+  const revision = verdicts.revision + 1;
   const touched = new Set(
     mutation.placeIds.map((placeId) =>
-      changeDispositionKey({
+      changeVerdictKey({
         from: mutation.from,
         to: mutation.to,
         placeId,
       }),
     ),
   );
-  const kept = dispositions.accepted.filter(
-    (entry) => !touched.has(changeDispositionKey(entry)),
+  const kept = verdicts.accepted.filter(
+    (entry) => !touched.has(changeVerdictKey(entry)),
   );
   if (mutation.op === "withdraw") {
     return { version: 1, revision, accepted: kept };
@@ -240,7 +238,7 @@ export const applyChangeDispositionMutation = ({
     })),
   ];
   if (accepted.length > ACCEPTED_CHANGE_LIMIT) {
-    throw new ChangeDispositionsRejected(
+    throw new ChangeVerdictsRejected(
       `A review may record at most ${ACCEPTED_CHANGE_LIMIT} accepted changes`,
     );
   }

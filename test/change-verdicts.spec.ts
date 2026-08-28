@@ -38,11 +38,11 @@ const startPreviewRuntime = async (
 };
 
 const openThread = async (page: Page, url: string): Promise<void> => {
-  const dispositions = page.waitForResponse((response) =>
-    response.url().endsWith("/api/change-dispositions"),
+  const verdicts = page.waitForResponse((response) =>
+    response.url().endsWith("/api/change-verdicts"),
   );
   await page.goto(url);
-  expect((await dispositions).ok()).toBe(true);
+  expect((await verdicts).ok()).toBe(true);
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await page
     .getByRole("complementary", { name: "Feedback" })
@@ -56,7 +56,7 @@ const rail = (page: Page) =>
 
 const stepper = (page: Page) => page.locator("[data-review-diff-stepper]");
 
-/** What the disposition record holds on disk, without going through a route. */
+/** What the verdict record holds on disk, without going through a route. */
 const recordedChanges = async (
   path: string,
 ): Promise<ReadonlyArray<{ readonly placeId: string }>> => {
@@ -69,11 +69,11 @@ const recordedChanges = async (
 test("should keep an accepted change accepted across a reload and a restart", async ({
   page,
 }) => {
-  const directory = await mkdtemp(join(tmpdir(), "big-plan-dispositions-"));
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-verdicts-"));
   const planPath = join(directory, "plan.mdx");
   await writeFile(planPath, AFTER);
   let runtime = await startPreviewRuntime(planPath);
-  const dispositionsPath = runtime.store.changeDispositionsPath;
+  const verdictsPath = runtime.store.changeVerdictsPath;
   try {
     await openThread(page, runtime.url);
     const digest = rail(page).getByRole("button", {
@@ -86,7 +86,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
     await test.step("accepting one change is recorded and counted once", async () => {
       const written = page.waitForResponse(
         (response) =>
-          response.url().endsWith("/api/change-dispositions") &&
+          response.url().endsWith("/api/change-verdicts") &&
           response.request().method() === "POST",
       );
       await rail(page)
@@ -100,7 +100,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
       await expect(digest.getByLabel("1 of 2 changes accepted")).toHaveText(
         "1/2",
       );
-      expect(await recordedChanges(dispositionsPath)).toHaveLength(1);
+      expect(await recordedChanges(verdictsPath)).toHaveLength(1);
     });
 
     await test.step("the acceptance and the count survive a reload", async () => {
@@ -132,7 +132,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
       // record on disk is read only once the write it came from has answered.
       const written = page.waitForResponse(
         (response) =>
-          response.url().endsWith("/api/change-dispositions") &&
+          response.url().endsWith("/api/change-verdicts") &&
           response.request().method() === "POST",
       );
       await stepper(page)
@@ -145,7 +145,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
         rail(page).locator("[data-review-changes-accepted]"),
       ).toContainText("Change set accepted");
       expect((await written).ok()).toBe(true);
-      expect(await recordedChanges(dispositionsPath)).toHaveLength(2);
+      expect(await recordedChanges(verdictsPath)).toHaveLength(2);
     });
 
     await test.step("a restarted runtime serves the same closed change set", async () => {
@@ -166,7 +166,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
         .click();
       const withdrawn = page.waitForResponse(
         (response) =>
-          response.url().endsWith("/api/change-dispositions") &&
+          response.url().endsWith("/api/change-verdicts") &&
           response.request().method() === "POST",
       );
       await stepper(page)
@@ -179,7 +179,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
       await expect(
         rail(page).locator("[data-review-changes-accepted]"),
       ).toHaveCount(0);
-      expect(await recordedChanges(dispositionsPath)).toHaveLength(1);
+      expect(await recordedChanges(verdictsPath)).toHaveLength(1);
 
       await page.reload();
       await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
@@ -209,7 +209,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
             name: "Accepting is unavailable because this page cannot record review state",
           }),
         ).toBeDisabled();
-        expect(await recordedChanges(dispositionsPath)).toHaveLength(1);
+        expect(await recordedChanges(verdictsPath)).toHaveLength(1);
       } finally {
         await replacement.close();
       }

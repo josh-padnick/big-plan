@@ -46,7 +46,7 @@ import {
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { mkdir, writeFile } from "node:fs/promises";
-import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
+import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 const JOURNAL_FILE = /^[a-f0-9]{16}\.json$/;
