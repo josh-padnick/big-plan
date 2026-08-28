@@ -330,7 +330,7 @@ The review itself is free the moment you confirm, so a second agent can connect 
 A second agent that connects does not take the review by arriving.
 It attaches as an observer - able to read the plan, and nothing else: not your comments, not the state of your requests, and able to answer nothing - and asks you whether it should be the one answering you.
 **Agent Status** raises a hazard mark while that question is unanswered.
-The sidebar always leads with the agent status card, which carries a **Current primary** badge once a second agent is on the rail; under it sits the card that names the agent that asked, and a **Current observer** card for anyone else attached.
+The sidebar always leads with the agent status card, which carries a **Current primary** badge once a second agent is on the rail; under it sits the card that names the arriving agent by its declared harness and model plus an abbreviated writer id, falling back cleanly to the abbreviated id when it declared neither, and a **Current observer** card for anyone else attached.
 Each agent gets exactly one card: the primary's is the status card at the top, so nobody is drawn twice.
 The three answers stack under the asking agent's name with a mark beside each that says, on hover or keyboard focus, what it will do: **Make it primary** hands the review to that agent and makes the current one an observer, **Leave as observer** keeps the arrangement as it is and stops asking, and **Disconnect this agent** drops it from the review.
 Making an observer the primary asks you to confirm, and offers to hand the outgoing agent's unfinished draft to the new one as reference it may read rather than as work that publishes itself; left unticked, that draft stays where it is and never reaches your plan.
@@ -341,6 +341,8 @@ You say so in one of two ways, and **Agent Status** keeps showing its cards for 
 Either pick an agent that is already watching and choose **Make it primary**, or connect a new one - a connector you start after the seat is empty takes it and begins answering, since starting it is you saying who answers.
 The roster stays out of the way while one agent is answering you: a single attached agent with nothing to ask shows no cards at all.
 It comes back the moment nobody is answering you, so the decision is always in reach.
+When an arrival initially cannot be distinguished from the current agent returning between turns, Big Plan parks the question instead of showing a false second-agent card.
+It raises the question as soon as the incumbent's closed claim and lack of a later signal establish that the arrival is different, or once the incumbent's silence crosses the stall horizon.
 
 The stalled reading is bounded, because a pickup cannot account for silence indefinitely.
 After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: **Agent Status** gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.

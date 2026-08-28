@@ -12,7 +12,13 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readAgentRoster } from "../src/review/store.js";
+import {
+  attachAgentToRoster,
+  closeAgentClaim,
+  readAgentRoster,
+  recordAgentClaimToken,
+  requestAgentPrimacy,
+} from "../src/review/store.js";
 import {
   agentIdOf,
   agentSidebar,
@@ -174,8 +180,8 @@ test("should let the reviewer hand primacy to a second agent and tell both", asy
       "--agent",
       firstToken,
     ]);
-    expect(`${refused.stdout}${refused.stderr}`).toMatch(
-      /no longer the primary/u,
+    expect(`${refused.stdout}${refused.stderr}`).toContain(
+      "This agent is an observer",
     );
 
     // And the question is gone from the reviewer's surface, not merely answered
@@ -189,6 +195,100 @@ test("should let the reviewer hand primacy to a second agent and tell both", asy
     await expect(
       agentStatusTrigger(page).locator("[data-review-agent-status]"),
     ).toHaveAttribute("data-review-agent-status", "working");
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should offer to make a newcomer primary after the incumbent's closed claim goes silent (BIG-253)", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-primary-arrival-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    const startedAtMs = Date.now();
+    await attachAgentToRoster({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "departed-primary",
+      now: startedAtMs,
+    });
+    await recordAgentClaimToken({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "departed-primary",
+      claimToken: "closed-claim-token",
+      now: startedAtMs + 1,
+    });
+    await closeAgentClaim({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      claimToken: "closed-claim-token",
+      now: startedAtMs + 2,
+    });
+    await attachAgentToRoster({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "new-observer",
+      model: {
+        client: "claude-code 2.1.217",
+        name: "claude-opus-4-8",
+        sessionId: "session-2e29",
+      },
+      now: startedAtMs + 3,
+    });
+    await requestAgentPrimacy({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "new-observer",
+      now: startedAtMs + 4,
+    });
+
+    await page.goto(runtime.url);
+    await agentStatusTrigger(page).click();
+    const requestCard = agentSidebar(page).locator(
+      '[data-review-agent-card="request"]',
+    );
+    await expect(requestCard).toBeVisible();
+    await expect(requestCard).toContainText(
+      "Claude Code - claude-opus-4-8 - …2e29",
+    );
+    await expect(
+      requestCard.getByRole("button", { name: "Make it primary" }),
+    ).toBeVisible();
+
+    const settled = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/agent-primacy") &&
+        response.request().method() === "POST",
+    );
+    await requestCard
+      .getByRole("button", { name: "Leave as observer" })
+      .click();
+    expect((await settled).ok()).toBe(true);
+
+    await attachAgentToRoster({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "identity-free-observer",
+      now: startedAtMs + 5,
+    });
+    await requestAgentPrimacy({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "identity-free-observer",
+      now: startedAtMs + 6,
+    });
+    await page.reload();
+    await agentStatusTrigger(page).click();
+    const fallbackCard = agentSidebar(page).locator(
+      '[data-review-agent-card="request"]',
+    );
+    await expect(fallbackCard).toBeVisible();
+    await expect(fallbackCard).toContainText("…rver");
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });

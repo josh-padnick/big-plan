@@ -616,7 +616,7 @@ test("should say what connecting a second agent does while one is attached", asy
         "--agent",
         workingAgent,
       ]),
-    ).rejects.toThrow(/no longer the primary/u);
+    ).rejects.toThrow(/This agent is an observer/u);
     await expect(
       readAgentExchange({
         store: runtime.store,

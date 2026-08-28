@@ -332,10 +332,10 @@ The reviewer answers from **Agent Status** in the review, where every attached a
 Making an observer the primary displaces the incumbent immediately: its open claim is freed, and the reviewer may hand its unpublished draft to the new primary as `previous_agent_draft` - a path to read as reference, never a candidate to publish.
 
 A displaced agent finds out at its next command rather than after paying for a whole turn, and there are two shapes to branch on.
-`agent note` and `agent respond` refuse with the error code `PRIMACY_LOST`, naming the agent that holds the plan now.
+`agent note` and `agent respond` refuse with the error code `NOT_PRIMARY`, explaining that this agent is an observer and naming the primary agent.
 `agent next` is not an error: a displaced loop is an observer again, so it returns the `role: "observer"` result above.
 Branch on both.
-A harness that watches only for `PRIMACY_LOST` reads the observer result as ordinary "no work" and polls on, which is exactly the churn this design removes; the correct response to either is to stop claiming, not to retry.
+A harness that watches only for `NOT_PRIMARY` reads the observer result as ordinary "no work" and polls on, which is exactly the churn this design removes; the correct response to either is to stop claiming, not to retry.
 
 **Disconnect this agent** ends the loop outright rather than moving its role.
 The reviewer's answer is recorded, so a loop already waiting on `--wait` is told at its very next refresh instead of quietly registering again, and `agent next` returns a final result:
@@ -355,7 +355,7 @@ The reviewer's answer is recorded, so a loop already waiting on `--wait` is told
 That is the same result **Disconnect agent** on the agent status card returns, because it is the same fact: the reviewer took this agent off the review.
 It states that fact twice on purpose - as the end (`ended` and `disconnected`) and as the role it is no longer in (`role`) - so a harness branches on whichever one it already reads, rather than on which control the reviewer pressed.
 That result is terminal even with `--wait`: stop the loop.
-`agent note` and `agent respond` from the same session refuse with `PRIMACY_LOST` and say the reviewer disconnected it, for as long as the turn they belong to could still be running.
+`agent note` and `agent respond` from the same session refuse with `AGENT_DISCONNECTED` and say the reviewer disconnected the agent, for as long as the turn they belong to could still be running.
 The claim it was part way through is freed as well, so the turn it had in flight can no longer reach the plan, and no other agent's claim is touched.
 Disconnecting the agent that answers the review leaves the review with no primary until the reviewer fills the seat, and they have two ways to do it.
 No agent already attached succeeds into a seat the reviewer emptied, so an observer waits there until they pick it from **Agent Status**.
@@ -366,7 +366,8 @@ A published turn keeps its own seat for as long as the answering agent's return 
 Run it as given.
 It reclaims the same registration at once, which is what keeps one agent one agent to the reviewer across the several short-lived processes a turn takes.
 A bare `agent next` after publishing mints a new identity instead, so it attaches as an observer of the turn it just finished and waits for the seat rather than picking up straight away.
-It does not put a question to the reviewer while it waits: until the return trip is over, Big Plan cannot tell a second agent from the incumbent coming back, so the question is held and raised only if a second agent is what it turns out to be.
+It does not put a question to the reviewer while it waits: until the return trip is over, Big Plan cannot tell a second agent from the incumbent coming back, so the question is held.
+The question is raised as soon as the incumbent's closed claim has no later signal, or once the incumbent's silence crosses the stall horizon, establishing that the waiting arrival is a second agent.
 
 An observer succeeds to the seat by itself in one case only: the primary fell silent, and the seat has stayed empty for longer than a turn's own quiet.
 That is the recovery path for an agent that died mid review, and it is deliberately slow.
@@ -451,8 +452,8 @@ An empty, non-numeric, negative, nonzero sub-minute, or overflowing `review --id
 `agent` rejects an unknown action or invalid action arguments with
 `INVALID_INPUT` and its complete multi-line usage text.
 
-`agent note` and `agent respond` raise `PRIMACY_LOST` when the reviewer has made another attached agent the primary for this review, or has disconnected this one.
-The message names the agent that holds the plan now, or says the reviewer disconnected this one, and the help entries say to stop the loop rather than retry.
+`agent note` and `agent respond` raise `NOT_PRIMARY` when the reviewer has made another attached agent the primary for this review, and `AGENT_DISCONNECTED` when the reviewer has disconnected this one.
+The message names the agent that holds the plan now, or says the reviewer disconnected this one, and both help entries say to stop the loop rather than retry.
 It carries no usage text, because the command was well formed; a harness branches on the code to end a displaced loop cleanly instead of churning.
 `agent next` reports the same two situations as ordinary results rather than errors - `role: "observer"` and `role: "disconnected"` - so a harness must branch on those too.
 

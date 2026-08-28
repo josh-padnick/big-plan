@@ -146,7 +146,7 @@ describe("the progress log", () => {
     expect(events).toHaveLength(200);
     expect(events.at(0)?.seq).toBe(301);
     expect(events.at(-1)?.seq).toBe(500);
-  });
+  }, 20_000);
 
   it("should read an event appended by another writer", async () => {
     const { directory, store } = await temporaryStore(

@@ -890,7 +890,7 @@ test("should fence live and open pushes and keep a displaced candidate private",
         "Try from another session",
       ]));
     expect(`${otherClaim.stdout}\n${otherClaim.stderr}`).toContain(
-      "PRIMACY_LOST",
+      "NOT_PRIMARY",
     );
 
     const exchange = await readAgentExchange({

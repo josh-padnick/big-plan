@@ -252,9 +252,7 @@ const pushWork = async ({
         (agent) => agent.role === "primary",
       );
       return failPrimacyLost(
-        primary === undefined
-          ? "no agent is currently the primary"
-          : agentModelLabel(primary),
+        primary === undefined ? undefined : agentModelLabel(primary),
       );
     }
 
@@ -538,15 +536,17 @@ const assertSessionIsPrimary = async ({
   if (acting.role === "primary") return;
   const primary = agents.find((agent) => agent.role === "primary");
   if (primary === undefined) {
-    return failPrimacyLost("no agent is currently the primary");
+    return failPrimacyLost();
   }
   failPrimacyLost(agentModelLabel(primary));
 };
 
 /** Refuses a command from a session that no longer owns the plan. */
-const failPrimacyLost = (holder: string): never => {
+const failPrimacyLost = (holder?: string): never => {
   throw new AgentWorkLoopRejected(
-    `This session is no longer the primary for this review; ${holder} is`,
+    holder === undefined
+      ? "This agent is an observer; no agent is currently the primary agent for this review"
+      : `This agent is an observer; ${holder} is the primary agent for this review`,
     "primacy-lost",
     [
       "Stop this loop; it cannot claim, note, or respond while it is an observer",
@@ -774,7 +774,7 @@ ${OPERATOR_AGENT_PROMPT}
 Run this command to receive the next real review request:
 ${nextCommand}
 
-Big Plan permits one live request claim for this plan at a time, and one agent answers this review at a time. If another agent is already the primary, this command attaches you as an observer instead of starting parallel plan edits: you are given the plan path and the review URL, and you may not claim, note, or respond - an observer is not handed the reviewer's comments or their conversation. Arriving is itself the request to be the primary, and the reviewer answers it; with --wait you keep observing until they do. If they move primacy away from you, agent note and agent respond refuse with the error code PRIMACY_LOST and agent next returns role: "observer" again; if they disconnect you, agent next returns role: "disconnected". Any of the three means stop this loop rather than retrying.
+Big Plan permits one live request claim for this plan at a time, and one agent answers this review at a time. If another agent is already the primary, this command attaches you as an observer instead of starting parallel plan edits: you are given the plan path and the review URL, and you may not claim, note, or respond - an observer is not handed the reviewer's comments or their conversation. Arriving is itself the request to be the primary, and the reviewer answers it; with --wait you keep observing until they do. If the reviewer makes another agent the primary, agent note and agent respond refuse with NOT_PRIMARY and explain that this agent is an observer, while agent next returns role: "observer" again; if they disconnect you, agent next returns role: "disconnected". Any of the three means stop this loop rather than retrying.
 
 For each returned work item:
 1. Read the returned candidate_plan and the request plus its conversation history.
@@ -1606,7 +1606,7 @@ const respond = async ({
     claimToken: agentToken,
   });
   if (respondingAgent === undefined) {
-    return failPrimacyLost("no attached agent holds this claim");
+    return failPrimacyLost();
   }
   const snapshot = await readAgentExchange({
     store: session.store,

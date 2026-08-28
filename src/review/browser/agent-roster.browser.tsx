@@ -23,8 +23,15 @@ import {
   selectPrimaryAgent,
   type RosterAgent,
 } from "../shared/agent-primacy.js";
+import {
+  agentClientDisplayName,
+  agentModelDisplayName,
+} from "../shared/agent-identity-catalog.js";
 import { compactDurationLabel } from "../shared/time-label.js";
-import { AgentIdentityText } from "./agent-identity.browser.js";
+import {
+  AgentIdentityChip,
+  AgentIdentityText,
+} from "./agent-identity.browser.js";
 import { Icon } from "./icon.browser.js";
 import { AlertDialog, Badge, Button, Tooltip } from "./ui.browser.js";
 
@@ -168,6 +175,30 @@ const AgentIdentity = ({
   </p>
 );
 
+/** Names an arriving agent with every identity fact it declared. */
+const ArrivalAgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
+  const sessionId = agent.model?.sessionId ?? agent.writerId;
+  const parts = [
+    agent.model?.client === undefined
+      ? undefined
+      : agentClientDisplayName(agent.model.client),
+    agent.model?.name === undefined
+      ? undefined
+      : agentModelDisplayName(agent.model.name),
+    `…${sessionId.slice(-4)}`,
+  ].filter((part): part is string => part !== undefined);
+  return (
+    <AgentIdentityChip>
+      <span
+        className="[overflow-wrap:anywhere]"
+        data-review-agent-writer={agent.writerId}
+      >
+        {parts.join(" - ")}
+      </span>
+    </AgentIdentityChip>
+  );
+};
+
 /**
  * The card's top line: who this is, and what it currently is.
  *
@@ -216,13 +247,11 @@ const AttachedSince = ({
  */
 const PrimacyRequestCard = ({
   agent,
-  label,
   nowMs,
   isReadOnly,
   onAnswer,
 }: {
   readonly agent: RosterAgent;
-  readonly label: string;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
   readonly onAnswer: AgentRosterProps["onAnswer"];
@@ -240,7 +269,7 @@ const PrimacyRequestCard = ({
       </span>
       A second agent wants to answer you
     </h3>
-    <AgentIdentity agent={agent} label={label} />
+    <ArrivalAgentIdentity agent={agent} />
     <AttachedSince agent={agent} nowMs={nowMs} />
     {isReadOnly ? (
       <p className="m-0 text-xs text-muted">
@@ -477,7 +506,6 @@ export const AgentRoster = ({
       {requesting === undefined ? null : (
         <PrimacyRequestCard
           agent={requesting}
-          label={labelFor(requesting)}
           nowMs={nowMs}
           isReadOnly={isReadOnly}
           onAnswer={onAnswer}

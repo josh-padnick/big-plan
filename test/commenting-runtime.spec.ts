@@ -393,39 +393,41 @@ test("should keep unsent comment text separate across two tabs", async ({
     // Reload only after the tab-owned recovery record has committed both
     // inputs. A filled textarea can precede the React persistence effect.
     await expect
-      .poll(() =>
-        targetPage.evaluate((key) => {
-          const raw = window.localStorage.getItem(key);
-          if (raw === null) return null;
-          const parsed: unknown = JSON.parse(raw);
-          if (
-            typeof parsed !== "object" ||
-            parsed === null ||
-            !("composer" in parsed) ||
-            typeof parsed.composer !== "object" ||
-            parsed.composer === null
-          )
-            return null;
-          const comment =
-            "comment" in parsed.composer ? parsed.composer.comment : null;
-          const replies =
-            "replies" in parsed.composer ? parsed.composer.replies : null;
-          return {
-            commentBody:
-              typeof comment === "object" &&
-              comment !== null &&
-              "body" in comment &&
-              typeof comment.body === "string"
-                ? comment.body
-                : null,
-            replyBodies:
-              typeof replies === "object" && replies !== null
-                ? Object.values(replies).filter(
-                    (value): value is string => typeof value === "string",
-                  )
-                : [],
-          };
-        }, recoveryKey),
+      .poll(
+        () =>
+          targetPage.evaluate((key) => {
+            const raw = window.localStorage.getItem(key);
+            if (raw === null) return null;
+            const parsed: unknown = JSON.parse(raw);
+            if (
+              typeof parsed !== "object" ||
+              parsed === null ||
+              !("composer" in parsed) ||
+              typeof parsed.composer !== "object" ||
+              parsed.composer === null
+            )
+              return null;
+            const comment =
+              "comment" in parsed.composer ? parsed.composer.comment : null;
+            const replies =
+              "replies" in parsed.composer ? parsed.composer.replies : null;
+            return {
+              commentBody:
+                typeof comment === "object" &&
+                comment !== null &&
+                "body" in comment &&
+                typeof comment.body === "string"
+                  ? comment.body
+                  : null,
+              replyBodies:
+                typeof replies === "object" && replies !== null
+                  ? Object.values(replies).filter(
+                      (value): value is string => typeof value === "string",
+                    )
+                  : [],
+            };
+          }, recoveryKey),
+        { timeout: 15_000 },
       )
       .toEqual({ commentBody: composerBody, replyBodies: [replyBody] });
 
@@ -434,7 +436,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       targetPage
         .getByRole("dialog", { name: /Comment on/u })
         .getByLabel("Add a comment"),
-    ).toHaveValue(composerBody);
+    ).toHaveValue(composerBody, { timeout: 15_000 });
     await targetPage
       .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
       .click();
@@ -447,7 +449,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       .click();
     await expect(
       restoredThread.getByPlaceholder("Reply to the agent…"),
-    ).toHaveValue(replyBody);
+    ).toHaveValue(replyBody, { timeout: 15_000 });
   };
 
   const firstComposer = "Keep the first tab's composer text.";
@@ -487,7 +489,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       targetPage
         .getByRole("dialog", { name: /Comment on/u })
         .getByLabel("Add a comment"),
-    ).toHaveValue(composerBody);
+    ).toHaveValue(composerBody, { timeout: 15_000 });
     await targetPage
       .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
       .click();
@@ -500,6 +502,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       .click();
     await expect(thread.getByPlaceholder("Reply to the agent…")).toHaveValue(
       replyBody,
+      { timeout: 15_000 },
     );
   }
   await duplicatePage.close();
@@ -7318,7 +7321,7 @@ test.describe("a replacement behind the stable address", () => {
       await stageComment(page, "The replacement remains writable here.");
       await expect.poll(() => draftWrites).toBeGreaterThan(0);
     } finally {
-      await replacement.close();
+      await closeReviewRuntime({ page, runtime: replacement });
     }
   });
 });

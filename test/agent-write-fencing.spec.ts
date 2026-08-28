@@ -182,8 +182,10 @@ test("should keep a lapsed agent's edits out of the plan and its Was/Now", async
     plan, and no response is stored.
     */
     const refusalText = `${refused.stdout}${refused.stderr}`;
-    expect(refusalText).toContain("PRIMACY_LOST");
-    expect(refusalText).toContain("no longer the primary");
+    expect(refusalText).toContain("NOT_PRIMARY");
+    expect(refusalText).toContain("is an observer");
+    expect(refusalText).toContain("is the primary agent");
+    expect(refusalText.toLowerCase()).not.toContain("primacy");
     await expect(
       readAgentExchange({
         store: runtime.store,

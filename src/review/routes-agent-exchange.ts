@@ -898,7 +898,7 @@ export const answerAgentPrimacy = async (
             : "Disconnected this agent",
       state: "done",
     },
-    failureMessage: "Could not record the agent primacy answer",
+    failureMessage: "Could not record which agent is primary",
   });
   return jsonResponse({ status: 200, value: { agents } });
 };
