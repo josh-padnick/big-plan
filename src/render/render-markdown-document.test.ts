@@ -769,6 +769,8 @@ Current event version. Example:
       ),
     ).toHaveLength(1);
     expect(result.markdown.match(/Current event version/gu)).toHaveLength(1);
+    expect(result.markdown.match(/\{ "status": "open" \}/gu)).toHaveLength(1);
+    expect(result.markdown.match(/"v2"/gu)).toHaveLength(1);
     expect(result.markdown).not.toContain("**anchor**");
     const html = readerHtml(result.markdown);
     expect(html).toContain(
