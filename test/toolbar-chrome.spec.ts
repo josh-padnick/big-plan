@@ -332,7 +332,11 @@ test("should hold the export dialog pending and recover from a refusal", async (
   await page.addInitScript(() => {
     const fetchRuntime = window.fetch.bind(window);
     window.fetch = (input, init) => {
-      if (String(input) !== "/api/export-markdown") {
+      const requestUrl = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.href,
+      );
+      if (!requestUrl.pathname.endsWith("/api/export-markdown")) {
         return fetchRuntime(input, init);
       }
       return new Promise<Response>((resolve) => {
