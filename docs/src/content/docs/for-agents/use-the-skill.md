@@ -46,11 +46,11 @@ There is no silent overwrite of user skill directories.
 1. Run `npx big-plan@latest guidance` and follow it.
 2. Author MDX on disk.
 3. `npx big-plan@latest validate <plan.mdx>` until clean.
-4. `npx big-plan@latest render <plan.mdx>`.
-5. Give the human the absolute path or `file://` URL of the HTML review document.
+4. `npx big-plan@latest review <plan.mdx>`.
+5. Give the human the stable review address the command prints; the session address is only for debugging.
 6. Wait for plan acceptance before implementation.
 
-Details for render presentation live in [Render a plan](/for-agents/render-a-plan/).
+Details for the review address live in [Reviewing a plan](/reference/reviewing/).
 Authoring constraints live in [Authoring plans](/for-agents/authoring-plans/).
 Both still defer style judgment to `big-plan guidance`.
 

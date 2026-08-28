@@ -14,7 +14,6 @@ import {
   readAgentExchange,
 } from "../src/review/agent-exchange.js";
 import { claimAgentRequest } from "../src/review/request-mailbox.js";
-import { startReviewRuntime } from "../src/review/server.js";
 import { AGENT_STALL_MS } from "../src/review/shared/agent-timing.js";
 import {
   agentIdOf,
@@ -24,6 +23,7 @@ import {
   expect,
   runAgentCli,
   runRefusedAgentCli,
+  startReviewRuntime,
   test,
   type Page,
 } from "./fixtures";

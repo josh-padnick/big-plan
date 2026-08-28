@@ -37,7 +37,7 @@ npx big-plan agent <file.mdx>
 Validation checks that the plan can be compiled and rendered, then applies linting rules to the authored plan without writing an output file.
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
-`review` serves the rendered plan locally so a reviewer can leave comments, and prints a permanent `link` for that plan alongside the session's own address; a small local service answers it after the session ends, and `big-plan service` inspects or stops that service.
+`review` serves the rendered plan locally so a reviewer can leave comments, and prints the stable address for that plan; the session address is a debugging detail, while a small local service keeps the plan address working across runtime restarts and `big-plan service` inspects or stops that service.
 `agent` runs the coding-agent side of that live review exchange.
 Rendered and compiled output sit next to the input by default, while the MDX file remains the canonical source and JSON is always derived output.
 See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
