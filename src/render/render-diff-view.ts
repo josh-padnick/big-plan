@@ -30,7 +30,7 @@ type DiffDocumentCompiler = (input: {
   readonly markdown: string;
 }) => CompiledMarkdown;
 
-/** Compiles the two snapshots once for every component location in one diff. */
+/** Compiles each snapshot once so every location can reuse the document pair. */
 export const compileDiffDocuments = ({
   baselineMarkdown,
   proposedMarkdown,
