@@ -8116,6 +8116,9 @@ ${lowerContent}
         }),
       )
       .toBe(true);
+    await page.evaluate(() =>
+      Object.assign(window, { __bigPlanLensJumpTargets: [] }),
+    );
     await sentThread.locator(".review-sent-target").click();
     await expect
       .poll(() =>
