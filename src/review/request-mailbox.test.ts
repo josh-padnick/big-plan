@@ -715,24 +715,29 @@ describe("request mailbox", () => {
       body: "Do not create this after its owner withdraws it.",
     });
     let permitted = true;
+    const withdrawalStarted = deferred();
+    const finishWithdrawal = deferred();
 
-    await expect(
-      cancelAgentRequest({
-        store,
-        requestId: request.requestId,
-        now: "2026-08-10T12:00:01.000Z",
-        beforeCancel: async () => {
-          permitted = false;
-        },
-      }),
-    ).rejects.toBeInstanceOf(AgentExchangeRejected);
-    await expect(
-      writeAgentRequestWhen({
-        store,
-        request,
-        permitted: async () => permitted,
-      }),
-    ).resolves.toBe(false);
+    const withdrawal = cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+      beforeCancel: async () => {
+        permitted = false;
+        withdrawalStarted.resolve();
+        await finishWithdrawal.promise;
+      },
+    });
+    await withdrawalStarted.promise;
+    const delivery = writeAgentRequestWhen({
+      store,
+      request,
+      permitted: async () => permitted,
+    });
+    finishWithdrawal.resolve();
+
+    await expect(withdrawal).rejects.toBeInstanceOf(AgentExchangeRejected);
+    await expect(delivery).resolves.toBe(false);
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({ requests: [] });
