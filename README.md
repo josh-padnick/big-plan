@@ -85,8 +85,8 @@ Big Plan ships a **thin skill shell** under `assets/skill/SKILL.md`, embedded in
 **Update story for end users:**
 
 1. Upgrade Big Plan (`npm i -g big-plan@latest`, bump the dependency, or run `npx -y big-plan@latest ...`).
-2. New guidance arrives automatically on the next `big-plan guidance` - no skill-file edits.
-3. Re-run `big-plan skill write <path>` only if the thin shell text itself changed (rare).
+2. New guidance arrives automatically on the next `npx -y big-plan@latest guidance` - no skill-file edits.
+3. Re-run `npx -y big-plan@latest skill write <path>` only if the thin shell text itself changed (rare).
 4. Prefer `npx -y big-plan@latest` for always-current one-off runs over silent global mutation.
    The CLI also exposes axi-sdk's built-in `update` for global installs when you want that path explicitly.
 

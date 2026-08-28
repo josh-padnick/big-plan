@@ -64,12 +64,12 @@ Re-run `skill write` only when this thin shell itself changed (rare).
 
 ## Workflow
 
-1. **Read live guidance.** Run `big-plan guidance` and follow it.
+1. **Read live guidance.** Run `npx -y big-plan@latest guidance` and follow it.
 2. **Research.** Inspect the real repository: files, commands, constraints, and current behavior.
 3. **Author.** Write one MDX plan on disk (for example `.big-plan/<descriptive-name>.mdx` or `plan.mdx`).
    Prefer the repository's native planning location when instructions name one.
 4. **Validate.** `npx -y big-plan@latest validate <plan.mdx>` until clean.
-   Details: `npx -y big-plan@latest validate --help` if available, otherwise top-level `big-plan --help` and the guidance text.
+   Details: `npx -y big-plan@latest validate --help` if available, otherwise top-level `npx -y big-plan@latest --help` and the guidance text.
 5. **Review.** `npx -y big-plan@latest review <plan.mdx>`.
 6. **Present.** Give the human the stable plan address the command prints.
    Treat it as the plan's address; the session address is only for debugging.
@@ -87,10 +87,10 @@ reports that the review-link service is unavailable.
 
 ## Package upgrades and update propagation
 
-| What changed                                                 | What the end user does                                                                 |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| Authoring principles, component guidance, lint, CLI behavior | Upgrade the package (or use `npx -y big-plan@latest`); re-run `big-plan guidance`      |
-| This thin skill shell (workflow framing only)                | Upgrade the package, then re-run `big-plan skill write <path>` if a copy was installed |
+| What changed                                                 | What the end user does                                                                               |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Authoring principles, component guidance, lint, CLI behavior | Upgrade the package (or use `npx -y big-plan@latest`); re-run `npx -y big-plan@latest guidance`      |
+| This thin skill shell (workflow framing only)                | Upgrade the package, then re-run `npx -y big-plan@latest skill write <path>` if a copy was installed |
 
 Prefer `npx -y big-plan@latest ...` for always-current one-off runs.
 The CLI also exposes a built-in `update` command for global installs; use it only when the human wants a global upgrade.
