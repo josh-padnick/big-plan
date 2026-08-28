@@ -82,6 +82,10 @@ const button = ({
 // a browser default.
 const PROSE = ' data-authored-prose=""';
 
+/** The frozen handoff every public setup surface gives to a coding agent. */
+export const AGENT_SETUP_PROMPT =
+  "Set up Big Plan for me: read https://big-plan.ai/setup.md and follow it.";
+
 const callout = ({
   type,
   bodyHtml,
@@ -198,6 +202,14 @@ const commandBlock = ({ command }: { readonly command: string }): string => {
 </figure>`;
 };
 
+const agentPromptBlock = (): string => {
+  const label = copyLabel("prompt");
+  return `<figure class="code-figure relative mb-6 max-w-[var(--measure)]">
+<pre class="mb-3 rounded-md border border-edge bg-well p-4 whitespace-pre-wrap"${PROSE}><code${PROSE}>${escapeHtml(AGENT_SETUP_PROMPT)}</code></pre>
+<button class="${BUTTON_BASE} ${BUTTON_DEFAULT}" type="button" aria-label="${label}" data-copy-code hidden>${lucideIconToHtml({ icon: COPY_ICON, className: "size-4" })}${lucideIconToHtml({ icon: CHECK_ICON, className: "size-4", hidden: true })}<span data-copy-label>${label}</span></button>
+</figure>`;
+};
+
 const restartBlock = ({ planPath }: { readonly planPath: string }): string =>
   `<h2${PROSE}>Start it again</h2>
 ${commandBlock({ command: `big-plan review ${quoteShellArgumentIfNeeded(planPath)}` })}
@@ -297,6 +309,9 @@ export const renderPlanUnknownPage = (): string =>
     contentHtml: `<h1${PROSE}>This machine has no review at this address.</h1>
 <p${PROSE}>The link may belong to another machine, or the plan it points at may have been removed.</p>
 <h2${PROSE}>Start a review</h2>
+<p${PROSE}>Give this prompt to your coding agent:</p>
+${agentPromptBlock()}
+<p${PROSE}>Or run this yourself:</p>
 ${commandBlock({ command: "big-plan review <your-plan.mdx>" })}`,
   });
 

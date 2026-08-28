@@ -86,7 +86,7 @@ describe("skillCommand", () => {
   it("should keep the skill shell thin and defer authoring rules to guidance", () => {
     // Packaging invariant: the shell must not grow into a second guidance doc.
     expect(SKILL_MARKDOWN.length).toBeLessThan(6000);
-    expect(SKILL_MARKDOWN).toMatch(/npx big-plan@latest guidance/);
+    expect(SKILL_MARKDOWN).toMatch(/npx -y big-plan@latest guidance/);
     expect(SKILL_MARKDOWN).toMatch(/skill write/);
     expect(SKILL_MARKDOWN).not.toMatch(/QuickSummary enforces/);
   });

@@ -20,11 +20,11 @@ Plan source is MDX on disk; plan-authored code never executes.
 Before authoring or revising a plan, run the installed CLI and follow its live output:
 
 ```sh
-npx big-plan@latest guidance
+npx -y big-plan@latest guidance
 ```
 
 If the project already depends on `big-plan`, prefer the local binary (`bunx big-plan`, `pnpm exec big-plan`, `npx big-plan`, or `./node_modules/.bin/big-plan`) over a global install.
-Use `npx big-plan@latest` when you want the newest published CLI without a local pin.
+Use `npx -y big-plan@latest` when you want the newest published CLI without a local pin.
 
 **The CLI is authoritative.**
 Do not invent authoring rules, component shapes, or lint policy from memory.
@@ -34,12 +34,12 @@ When guidance or a component changes, the package upgrade carries the new text; 
 For component judgment (when to use a component and what belongs in it):
 
 ```sh
-npx big-plan@latest guidance <Component>
+npx -y big-plan@latest guidance <Component>
 ```
 
-Example: `npx big-plan@latest guidance QuickSummary`.
+Example: `npx -y big-plan@latest guidance QuickSummary`.
 
-Before drawing any product UI, read `npx big-plan@latest guidance Wireframe`.
+Before drawing any product UI, read `npx -y big-plan@latest guidance Wireframe`.
 It owns the fixed device envelopes a drawing must fit and the visual fundamentals a drawing is judged by.
 
 ## Install or refresh this skill shell
@@ -50,13 +50,13 @@ Fast-changing authoring rules live only in `big-plan guidance` (and per-componen
 Print the skill text shipped with the installed CLI:
 
 ```sh
-npx big-plan@latest skill
+npx -y big-plan@latest skill
 ```
 
 Write it to a harness skill path only when the human asks, or when first setting up:
 
 ```sh
-npx big-plan@latest skill write <path/to/SKILL.md>
+npx -y big-plan@latest skill write <path/to/SKILL.md>
 ```
 
 After upgrading the Big Plan package, guidance updates automatically on the next `big-plan guidance`.
@@ -68,9 +68,9 @@ Re-run `skill write` only when this thin shell itself changed (rare).
 2. **Research.** Inspect the real repository: files, commands, constraints, and current behavior.
 3. **Author.** Write one MDX plan on disk (for example `.big-plan/<descriptive-name>.mdx` or `plan.mdx`).
    Prefer the repository's native planning location when instructions name one.
-4. **Validate.** `npx big-plan@latest validate <plan.mdx>` until clean.
-   Details: `npx big-plan@latest validate --help` if available, otherwise top-level `big-plan --help` and the guidance text.
-5. **Review.** `npx big-plan@latest review <plan.mdx>`.
+4. **Validate.** `npx -y big-plan@latest validate <plan.mdx>` until clean.
+   Details: `npx -y big-plan@latest validate --help` if available, otherwise top-level `big-plan --help` and the guidance text.
+5. **Review.** `npx -y big-plan@latest review <plan.mdx>`.
 6. **Present.** Give the human the stable plan address the command prints.
    Treat it as the plan's address; the session address is only for debugging.
 7. **Wait.** Do not implement until the human accepts the plan.
@@ -89,10 +89,10 @@ reports that the review-link service is unavailable.
 
 | What changed                                                 | What the end user does                                                                 |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| Authoring principles, component guidance, lint, CLI behavior | Upgrade the package (or use `npx big-plan@latest`); re-run `big-plan guidance`         |
+| Authoring principles, component guidance, lint, CLI behavior | Upgrade the package (or use `npx -y big-plan@latest`); re-run `big-plan guidance`      |
 | This thin skill shell (workflow framing only)                | Upgrade the package, then re-run `big-plan skill write <path>` if a copy was installed |
 
-Prefer `npx big-plan@latest ...` for always-current one-off runs.
+Prefer `npx -y big-plan@latest ...` for always-current one-off runs.
 The CLI also exposes a built-in `update` command for global installs; use it only when the human wants a global upgrade.
 Never overwrite installed skill files unless the human (or an explicit `skill write`) requested it.
 
@@ -100,7 +100,7 @@ Never overwrite installed skill files unless the human (or an explicit `skill wr
 
 - **Pinned old version:** local or lockfile pins keep old guidance; use `@latest` or bump the dependency when freshness matters.
 - **Offline / no registry:** use the already-installed local binary; skill text and guidance still match that installed version.
-- **Skill not installed in the harness:** the agent can still run `npx big-plan@latest skill` and follow this workflow without a harness skill entry.
+- **Skill not installed in the harness:** the agent can still run `npx -y big-plan@latest skill` and follow this workflow without a harness skill entry.
 - **Missing guidance acknowledgment:** `validate`, `render`, and `review` stay locked until `big-plan guidance` is run for the working directory.
 
 ## Out of scope for this skill
