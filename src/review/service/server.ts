@@ -309,17 +309,24 @@ export const startService = async ({
   >();
 
   /** Resolves one plan at most once per heartbeat-length cache window. */
-  const resolvePlan = async (planId: string): Promise<ServicePlanAnswer> => {
+  const resolvePlan = async (
+    planId: string,
+  ): Promise<{
+    readonly answer: ServicePlanAnswer;
+    readonly answerPromise: Promise<ServicePlanAnswer>;
+  }> => {
     const observedAtMs = clock();
     const cached = planAnswers.get(planId);
+    let answerPromise: Promise<ServicePlanAnswer>;
     if (cached !== undefined && observedAtMs < cached.expiresAtMs) {
-      return cached.answer;
+      answerPromise = cached.answer;
+    } else {
+      answerPromise = answerForPlan({ planId, now: observedAtMs });
+      planAnswers.set(planId, {
+        answer: answerPromise,
+        expiresAtMs: observedAtMs + REVIEW_HEARTBEAT_INTERVAL_MS,
+      });
     }
-    const answerPromise = answerForPlan({ planId, now: observedAtMs });
-    planAnswers.set(planId, {
-      answer: answerPromise,
-      expiresAtMs: observedAtMs + REVIEW_HEARTBEAT_INTERVAL_MS,
-    });
     const answer = await answerPromise.catch((error: unknown) => {
       if (planAnswers.get(planId)?.answer === answerPromise) {
         planAnswers.delete(planId);
@@ -335,7 +342,7 @@ export const startService = async ({
       // resolution to reuse and need to notice a newly started runtime.
       planAnswers.delete(planId);
     }
-    return answer;
+    return { answer, answerPromise };
   };
 
   const handle = async ({
@@ -418,11 +425,18 @@ export const startService = async ({
       // A malformed id is answered like an unknown one rather than with a
       // validation error, because the visitor clicked a link and cannot act
       // on the difference.
-      const answer = isServicePlanId(planId)
+      const resolution = isServicePlanId(planId)
         ? proxyEnabled
           ? await resolvePlan(planId)
-          : await answerForPlan({ planId })
-        : ({ kind: "unknown" } as const);
+          : {
+              answer: await answerForPlan({ planId }),
+              answerPromise: undefined,
+            }
+        : {
+            answer: { kind: "unknown" } as const,
+            answerPromise: undefined,
+          };
+      const { answer } = resolution;
       // Only the hop can reach a request this refusal is right for. With the
       // switch off nothing but a navigation to the plan address arrives here
       // at all, so gating on it is what keeps every switched-off answer the
@@ -458,7 +472,12 @@ export const startService = async ({
             // The session was live when it was looked up and unreachable a
             // moment later. Drop that resolution immediately so the next
             // request can discover a replacement runtime.
-            planAnswers.delete(planId);
+            if (
+              resolution.answerPromise !== undefined &&
+              planAnswers.get(planId)?.answer === resolution.answerPromise
+            ) {
+              planAnswers.delete(planId);
+            }
             if (!response.headersSent) {
               if (readablePage) {
                 sendHtml({
