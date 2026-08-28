@@ -300,14 +300,16 @@ test("should reveal a real agent edit only at commit and preserve review context
 
 test("should review, reply to, and resolve a pushed thread in chat", async ({
   page,
-}) => {
+}, testInfo) => {
   test.setTimeout(60_000);
   const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-review-"));
   const planPath = join(directory, "plan.mdx");
   await writeFile(planPath, PLAN, "utf8");
   const runtime = await startReviewRuntime({ planPath });
   const previousModel = process.env.BIG_PLAN_AGENT_MODEL;
-  process.env.BIG_PLAN_AGENT_MODEL = "live-push-review-model";
+  const previousClient = process.env.BIG_PLAN_AGENT_CLIENT;
+  process.env.BIG_PLAN_AGENT_MODEL = "claude-opus-5";
+  process.env.BIG_PLAN_AGENT_CLIENT = "claude-code 2.1.217";
 
   try {
     // The auto-open is a wide-viewport promise, and the default Desktop Chrome
@@ -386,6 +388,13 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await expect(thread).toContainText(
       "Tighten the live publication explanation.",
     );
+    const changeSetIdentity = thread.locator(
+      "[data-review-change-set-identity]",
+    );
+    await expect(changeSetIdentity).toHaveText("Claude Opus 5 · Claude Code");
+    await thread.screenshot({
+      path: testInfo.outputPath("pushed-thread-change-set-identity.png"),
+    });
 
     const replyBody = "Keep the explanation focused on the atomic boundary.";
     const replyPosted = page.waitForResponse(
@@ -614,6 +623,8 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
   } finally {
     if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
     else process.env.BIG_PLAN_AGENT_MODEL = previousModel;
+    if (previousClient === undefined) delete process.env.BIG_PLAN_AGENT_CLIENT;
+    else process.env.BIG_PLAN_AGENT_CLIENT = previousClient;
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
