@@ -299,8 +299,8 @@ test("should discard an image insertion after a comment composer unmounts", asyn
         input instanceof Request ? input.url : input,
         window.location.href,
       );
-      return ["/api/agent", "/api/progress", "/api/session"].includes(
-        url.pathname,
+      return ["/api/agent", "/api/progress", "/api/session"].some((path) =>
+        url.pathname.endsWith(path),
       )
         ? Promise.reject(new TypeError("Failed to fetch"))
         : fetchFromRuntime(input, init);

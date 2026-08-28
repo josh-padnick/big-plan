@@ -22,7 +22,6 @@ import {
   commitRequestTerminal,
 } from "../src/review/request-mailbox.js";
 import { diffSnapshots } from "../src/review/snapshot-diff.js";
-import { startReviewRuntime } from "../src/review/server.js";
 import {
   reviewStoreFor,
   writeAgentHeartbeat,
@@ -36,12 +35,22 @@ import {
   agentStatusTrigger,
   boxOf,
   expect,
+  reviewRuntimeRequestUrl,
   stageComment,
+  startReviewRuntime,
   test,
   type Page,
   closeReviewRuntime,
 } from "./fixtures";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../src/review/shared/resolved-thread-work.js";
+
+const startCompiledReviewRuntime = async (
+  options: Parameters<typeof startReviewRuntime>[0],
+) => {
+  const { startReviewRuntime: startCompiledRuntime } =
+    await import("../dist/review/server.js");
+  return startReviewRuntime(options, startCompiledRuntime);
+};
 
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -459,7 +468,7 @@ test("should keep unsent comment text separate across two tabs", async ({
   const duplicatePagePromise = context.waitForEvent("page");
   await page.evaluate((url) => window.open(url, "_blank"), reviewRuntimeUrl);
   const duplicatePage = await duplicatePagePromise;
-  await duplicatePage.waitForURL(reviewRuntimeUrl);
+  await duplicatePage.waitForLoadState();
   const duplicateComposer = "Keep the duplicated tab's composer text.";
   const duplicateReply = "Keep the duplicated tab's reply text.";
   await typeAndReload({
@@ -502,10 +511,10 @@ test("should retain detached selection text until the reviewer discards it", asy
   page,
   reviewRuntimeUrl,
 }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-    origin: new URL(reviewRuntimeUrl).origin,
-  });
   await page.goto(reviewRuntimeUrl);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: new URL(page.url()).origin,
+  });
   const recoveryKey = await ownedLiveRecoveryKey(page);
   const recovery = await page
     .locator("[data-block-kind='paragraph']")
@@ -731,11 +740,11 @@ const readRuntimeDrafts = async (
   }>;
   readonly resolvedCommentIds: ReadonlyArray<string>;
 }> => {
-  const answer: unknown = await (
-    await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
-      headers: { "x-big-plan-review-token": token },
-    })
-  ).json();
+  const requestUrl = reviewRuntimeRequestUrl(reviewRuntimeUrl, "api/drafts");
+  const response = await fetch(requestUrl, {
+    headers: { "x-big-plan-review-token": token },
+  });
+  const answer: unknown = await response.json();
   if (
     typeof answer !== "object" ||
     answer === null ||
@@ -751,7 +760,9 @@ const readRuntimeDrafts = async (
       (commentId): commentId is string => typeof commentId === "string",
     )
   ) {
-    throw new Error("The review runtime did not answer with its drafts");
+    throw new Error(
+      `The review runtime did not answer with its drafts (${response.status} from ${requestUrl.href})`,
+    );
   }
   return {
     version: answer.version,
@@ -780,14 +791,17 @@ const writeRuntimeDrafts = async ({
   readonly drafts: ReadonlyArray<unknown>;
   readonly resolvedCommentIds?: ReadonlyArray<string>;
 }): Promise<void> => {
-  const written = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
-    method: "PUT",
-    headers: {
-      "content-type": "application/json",
-      "x-big-plan-review-token": token,
+  const written = await fetch(
+    reviewRuntimeRequestUrl(reviewRuntimeUrl, "api/drafts"),
+    {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": token,
+      },
+      body: JSON.stringify({ drafts, resolvedCommentIds, version }),
     },
-    body: JSON.stringify({ drafts, resolvedCommentIds, version }),
-  });
+  );
   expect(written.ok).toBe(true);
 };
 
@@ -884,7 +898,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
           input instanceof Request ? input.url : input,
           window.location.href,
         );
-        return url.pathname.startsWith("/api/")
+        return url.pathname.includes("/api/")
           ? Promise.reject(new TypeError("Failed to fetch"))
           : runtimeFetch(input, init);
       };
@@ -968,7 +982,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
           input instanceof Request ? input.url : input,
           window.location.href,
         );
-        return url.pathname.startsWith("/api/")
+        return url.pathname.includes("/api/")
           ? Promise.reject(new TypeError("Failed to fetch"))
           : runtimeFetch(input, init);
       };
@@ -1064,7 +1078,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
           input instanceof Request ? input.url : input,
           window.location.href,
         );
-        return url.pathname.startsWith("/api/")
+        return url.pathname.includes("/api/")
           ? Promise.reject(new TypeError("Failed to fetch"))
           : runtimeFetch(input, init);
       };
@@ -1310,7 +1324,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
           input instanceof Request ? input.url : input,
           window.location.href,
         );
-        return url.pathname.startsWith("/api/")
+        return url.pathname.includes("/api/")
           ? Promise.reject(new TypeError("Failed to fetch"))
           : runtimeFetch(input, init);
       };
@@ -1467,7 +1481,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         const method =
           init?.method ?? (input instanceof Request ? input.method : "GET");
         if (
-          url.pathname === "/api/drafts" &&
+          url.pathname.endsWith("/api/drafts") &&
           method === "PUT" &&
           window.sessionStorage.getItem(key) === null
         ) {
@@ -1627,7 +1641,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         );
         const method =
           init?.method ?? (input instanceof Request ? input.method : "GET");
-        if (url.pathname === "/api/drafts" && method === "PUT") {
+        if (url.pathname.endsWith("/api/drafts") && method === "PUT") {
           const failed = Number(window.sessionStorage.getItem(key) ?? "0");
           window.sessionStorage.setItem(key, String(failed + 1));
           return Promise.reject(new TypeError("Failed to fetch"));
@@ -1660,7 +1674,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
           input instanceof Request ? input.url : input,
           window.location.href,
         );
-        return url.pathname.startsWith("/api/")
+        return url.pathname.includes("/api/")
           ? Promise.reject(new TypeError("Failed to fetch"))
           : runtimeFetch(input, init);
       };
@@ -2399,7 +2413,7 @@ test("should merge an outage-time draft with newer runtime state", async ({
         input instanceof Request ? input.url : input,
         window.location.href,
       );
-      return paths.includes(url.pathname)
+      return paths.some((path) => url.pathname.endsWith(path))
         ? Promise.reject(new TypeError("Failed to fetch"))
         : fetchFromRuntime(input, init);
     };
@@ -2447,35 +2461,38 @@ test("should merge an outage-time draft with newer runtime state", async ({
   // A drafts write is conditional on the version it was prepared against, so
   // another writer reads the current one first.
   const runtimeVersion: unknown = await (
-    await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+    await fetch(reviewRuntimeRequestUrl(reviewRuntimeUrl, "api/drafts"), {
       headers: { "x-big-plan-review-token": reviewToken },
     })
   ).json();
-  const runtimeUpdate = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
-    method: "PUT",
-    headers: {
-      "content-type": "application/json",
-      "x-big-plan-review-token": reviewToken,
+  const runtimeUpdate = await fetch(
+    reviewRuntimeRequestUrl(reviewRuntimeUrl, "api/drafts"),
+    {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": reviewToken,
+      },
+      body: JSON.stringify({
+        version:
+          typeof runtimeVersion === "object" &&
+          runtimeVersion !== null &&
+          "version" in runtimeVersion
+            ? runtimeVersion.version
+            : "",
+        drafts: [
+          {
+            id: randomBytes(8).toString("hex"),
+            body: newerRuntimeBody,
+            createdAt: new Date().toISOString(),
+            premiseSnapshot: identity.currentSnapshot,
+            target: { type: "document" },
+          },
+        ],
+        resolvedCommentIds: [],
+      }),
     },
-    body: JSON.stringify({
-      version:
-        typeof runtimeVersion === "object" &&
-        runtimeVersion !== null &&
-        "version" in runtimeVersion
-          ? runtimeVersion.version
-          : "",
-      drafts: [
-        {
-          id: randomBytes(8).toString("hex"),
-          body: newerRuntimeBody,
-          createdAt: new Date().toISOString(),
-          premiseSnapshot: identity.currentSnapshot,
-          target: { type: "document" },
-        },
-      ],
-      resolvedCommentIds: [],
-    }),
-  });
+  );
   expect(runtimeUpdate.ok).toBe(true);
 
   const replayed = page.waitForResponse(
@@ -2500,7 +2517,7 @@ test("should merge an outage-time draft with newer runtime state", async ({
     page.getByRole("complementary", { name: "Feedback" }),
   ).toContainText(newerRuntimeBody);
   const persistedResponse = await fetch(
-    new URL("/api/drafts", reviewRuntimeUrl),
+    reviewRuntimeRequestUrl(reviewRuntimeUrl, "api/drafts"),
     {
       headers: {
         "x-big-plan-review-token": reviewToken,
@@ -2530,7 +2547,7 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
   await page.goto(reviewRuntimeUrl);
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/session", {
+    const response = await fetch("api/session", {
       headers: {
         "x-big-plan-review-token": root.dataset.reviewToken ?? "",
       },
@@ -2593,7 +2610,7 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
         window.location.href,
       );
       if (!shouldHangAgentPoll) {
-        return url.pathname === "/api/agent"
+        return url.pathname.endsWith("/api/agent")
           ? Promise.reject(new TypeError("Failed to fetch"))
           : fetchFromRuntime(input, init);
       }
@@ -2602,7 +2619,7 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
       );
       headers.set("x-big-plan-test-poll-phase", "fresh-session");
       const phasedInit = { ...init, headers };
-      if (url.pathname !== "/api/agent") {
+      if (!url.pathname.endsWith("/api/agent")) {
         return fetchFromRuntime(input, phasedInit);
       }
       return new Promise<Response>((resolve, reject) => {
@@ -2657,7 +2674,7 @@ test("should expire a held connected snapshot when the reviewer returns", async 
   await page.goto(reviewRuntimeUrl);
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/session", {
+    const response = await fetch("api/session", {
       headers: {
         "x-big-plan-review-token": root.dataset.reviewToken ?? "",
       },
@@ -3373,7 +3390,7 @@ test("should pause a nonstandard request behind an explicit warning", async ({
 
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/session", {
+    const response = await fetch("api/session", {
       headers: {
         "x-big-plan-review-token": root.dataset.reviewToken ?? "",
       },
@@ -3488,7 +3505,7 @@ test("should contain working comments when resolved threads expand", async ({
 
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/session", {
+    const response = await fetch("api/session", {
       headers: {
         "x-big-plan-review-token": root.dataset.reviewToken ?? "",
       },
@@ -4148,7 +4165,7 @@ test("should restore and submit staged comments through the local review runtime
   );
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const sessionResponse = await fetch("/api/session", {
+    const sessionResponse = await fetch("api/session", {
       headers: {
         "x-big-plan-review-token": root.dataset.reviewToken ?? "",
       },
@@ -5687,8 +5704,6 @@ The release gets a full soak.
     "Ship after a one-day canary",
   );
   await writeFile(planPath, after);
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -5932,8 +5947,6 @@ test("should keep component replacements inside their slide and preserve Callout
   await writeFile(planPath, after);
   // Use the built renderer here because Playwright's source transform wraps
   // JSX values; the shipped runtime is the authoritative component path.
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -6046,8 +6059,6 @@ The runbook stays inline for the first rollout.
   await writeFile(planPath, after);
   // Use the built renderer here because Playwright's source transform wraps
   // JSX values; the shipped runtime is the authoritative component path.
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -6147,8 +6158,6 @@ test("should colour the default component switch as a diff", async ({
   await writeFile(planPath, after);
   // Use the built renderer here because Playwright's source transform wraps
   // JSX values; the shipped runtime is the authoritative component path.
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -6292,8 +6301,6 @@ ${workspace("Keep the rollback owner explicit")}
 ${unrelatedWorkspace}
 `;
   await writeFile(planPath, after);
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -6610,8 +6617,6 @@ ${survivingWireframe}
 ${survivingWireframe}
 `;
   await writeFile(planPath, after);
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -6665,8 +6670,6 @@ test("should diff an HTTP endpoint at field level inside one rendering", async (
   await writeFile(planPath, after);
   // Use the built renderer here because Playwright's source transform wraps
   // JSX values; the shipped runtime is the authoritative component path.
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -6728,8 +6731,6 @@ test("should diff a database schema at column level inside one rendering", async
   await writeFile(planPath, after);
   // Use the built renderer here because Playwright's source transform wraps
   // JSX values; the shipped runtime is the authoritative component path.
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -6786,8 +6787,6 @@ test("should diff a quick summary at facet level with word runs", async ({
   await writeFile(planPath, after);
   // Use the built renderer here because Playwright's source transform wraps
   // JSX values; the shipped runtime is the authoritative component path.
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const runtime = await startCompiledReviewRuntime({
     planPath,
     diffPreviewSource: before,
@@ -6876,8 +6875,6 @@ test("should keep shell interactions wired after an agent revision refreshes the
   await writeFile(planPath, beforeSource, "utf8");
   // Use the built renderer here because Playwright's source transform wraps
   // JSX values; the shipped runtime is the authoritative component path.
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const { renderDocument: renderCompiledDocument } =
     await import("../dist/render/render-document.js");
   const runtime = await startCompiledReviewRuntime({ planPath });
@@ -6912,7 +6909,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
 
     const session: unknown = await page.evaluate(async () => {
       const root = document.documentElement;
-      const response = await fetch("/api/session", {
+      const response = await fetch("api/session", {
         headers: {
           "x-big-plan-review-token": root.dataset.reviewToken ?? "",
         },
@@ -7033,7 +7030,8 @@ test("should keep shell interactions wired after an agent revision refreshes the
     });
     await test.step("a copy control still responds", async () => {
       const copy = page.locator(".code-figure [data-copy-code]").first();
-      await copy.click();
+      await copy.focus();
+      await copy.press("Enter");
       await expect(copy).toHaveAttribute("data-copy-state", "copied");
       await expect(copy).toHaveAccessibleName("Copied code");
     });
@@ -7240,59 +7238,89 @@ test("should turn diagram notes and decision proposals into review comments", as
   await expect(rail).toContainText("local journal.");
 });
 
-test("should mark a superseded review as read-only and link to its replacement", async ({
-  page,
-  reviewRuntimeUrl,
-}) => {
-  let draftWrites = 0;
-  page.on("request", (request) => {
-    if (request.url().endsWith("/api/drafts") && request.method() === "PUT") {
-      draftWrites += 1;
+test.describe("a replacement behind the stable address", () => {
+  test.use({
+    allowedConsoleErrors: [
+      /Failed to load resource:.*(?:409 \(Conflict\)|503 \(Service Unavailable\))/u,
+    ],
+  });
+
+  test("should follow a replacement without leaving the stable address", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    const redirectMode = process.env["BIG_PLAN_PROXY"] === "0";
+    let draftWrites = 0;
+    page.on("request", (request) => {
+      if (request.url().endsWith("/api/drafts") && request.method() === "PUT") {
+        draftWrites += 1;
+      }
+    });
+    await page.goto(reviewRuntimeUrl);
+    const session = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const response = await fetch("api/session", {
+        headers: {
+          "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+        },
+      });
+      return response.json();
+    });
+    if (
+      typeof session !== "object" ||
+      session === null ||
+      !("plan" in session) ||
+      typeof session.plan !== "string"
+    ) {
+      throw new Error("The review runtime did not identify its plan");
+    }
+    const token =
+      (await page.locator("html").getAttribute("data-review-token")) ?? "";
+    // Superseding a session that is still live is exactly what --takeover is
+    // for; without it the runtime yields to the session this page is reading.
+    if (!redirectMode) await page.goto("about:blank");
+    const replacement = await startReviewRuntime({
+      planPath: session.plan,
+      takeover: true,
+    });
+    try {
+      if (redirectMode) {
+        const readOnly = page.getByRole("button", {
+          name: /Using read-only session/,
+        });
+        await expect(readOnly).toBeVisible();
+        await readOnly.click();
+        const rail = agentSidebar(page);
+        await expect(rail).toContainText("This review was replaced");
+        expect(draftWrites).toBe(0);
+        return;
+      }
+      await expect
+        .poll(async () => {
+          const response = await fetch(`${reviewRuntimeUrl}/api/session`, {
+            headers: { "x-big-plan-review-token": token },
+          });
+          const current: unknown = await response.json();
+          return typeof current === "object" &&
+            current !== null &&
+            "sessionId" in current
+            ? current.sessionId
+            : undefined;
+        })
+        .toBe(replacement.sessionId);
+      await page.goto(reviewRuntimeUrl);
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-review-session",
+        replacement.sessionId,
+        { timeout: 10_000 },
+      );
+      await expect(page).toHaveURL(`${reviewRuntimeUrl}/`);
+      await stageComment(page, "The replacement remains writable here.");
+      await expect.poll(() => draftWrites).toBeGreaterThan(0);
+    } finally {
+      await replacement.close();
     }
   });
-  await page.goto(reviewRuntimeUrl);
-  const session = await page.evaluate(async () => {
-    const root = document.documentElement;
-    const response = await fetch("/api/session", {
-      headers: {
-        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
-      },
-    });
-    return response.json();
-  });
-  if (
-    typeof session !== "object" ||
-    session === null ||
-    !("plan" in session) ||
-    typeof session.plan !== "string"
-  ) {
-    throw new Error("The review runtime did not identify its plan");
-  }
-  // Superseding a session that is still live is exactly what --takeover is
-  // for; without it the runtime yields to the session this page is reading.
-  const replacement = await startReviewRuntime({
-    planPath: session.plan,
-    takeover: true,
-  });
-  try {
-    const readOnly = page.getByRole("button", {
-      name: /Using read-only session/,
-    });
-    await expect(readOnly).toBeVisible();
-    await readOnly.click();
-    const rail = agentSidebar(page);
-    await expect(agentStatusTrigger(page)).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-    await expect(rail).toContainText("This review was replaced");
-    await expect(
-      rail.getByRole("link", { name: "Open latest review" }),
-    ).toHaveAttribute("href", replacement.url);
-    expect(draftWrites).toBe(0);
-  } finally {
-    await replacement.close();
-  }
 });
 
 // Block ids are structural paths, so an id minted for a superseded revision
@@ -7343,7 +7371,7 @@ Reviewers confirm the output by hand.
 
     const session: unknown = await page.evaluate(async () => {
       const root = document.documentElement;
-      const response = await fetch("/api/session", {
+      const response = await fetch("api/session", {
         headers: {
           "x-big-plan-review-token": root.dataset.reviewToken ?? "",
         },
@@ -7562,8 +7590,6 @@ test("should archive a historical component inside an article that has no slides
 The current plan contains no slides.
 `;
   await writeFile(planPath, initialSource, "utf8");
-  const { startReviewRuntime: startCompiledReviewRuntime } =
-    await import("../dist/review/server.js");
   const { renderDocument: renderCompiledDocument } =
     await import("../dist/render/render-document.js");
   const runtime = await startCompiledReviewRuntime({ planPath });
@@ -7585,7 +7611,7 @@ The current plan contains no slides.
 
     const session: unknown = await page.evaluate(async () => {
       const root = document.documentElement;
-      const response = await fetch("/api/session", {
+      const response = await fetch("api/session", {
         headers: {
           "x-big-plan-review-token": root.dataset.reviewToken ?? "",
         },
@@ -7786,7 +7812,7 @@ const liveReviewSession = async (
 }> => {
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/session", {
+    const response = await fetch("api/session", {
       headers: { "x-big-plan-review-token": root.dataset.reviewToken ?? "" },
     });
     return response.json();

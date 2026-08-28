@@ -17,7 +17,6 @@ import {
   writeAgentRequestValue,
   writeResolvedCommentIds,
 } from "../src/review/store.js";
-import { startReviewRuntime } from "../src/review/server.js";
 import {
   agentIdOf,
   closeReviewRuntime,
@@ -25,6 +24,7 @@ import {
   runAgentCli,
   runRefusedAgentCli,
   stageComment,
+  startReviewRuntime,
   test,
   type Page,
 } from "./fixtures";
@@ -146,7 +146,7 @@ const settlePushWithoutChanges = async ({
 const cancelRequest = async (page: Page, requestId: string): Promise<void> => {
   const canceled = await page.evaluate(async (id) => {
     const root = document.documentElement;
-    const response = await fetch("/api/agent-cancel", {
+    const response = await fetch("api/agent-cancel", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -163,7 +163,7 @@ const cancelRequest = async (page: Page, requestId: string): Promise<void> => {
 const agentSnapshot = (page: Page): Promise<string> =>
   page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/agent", {
+    const response = await fetch("api/agent", {
       headers: {
         "x-big-plan-review-token": root.dataset.reviewToken ?? "",
       },

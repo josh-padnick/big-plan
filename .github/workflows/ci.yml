@@ -55,4 +55,9 @@ jobs:
           fi
       - run: bun run test
       - run: bunx playwright install chromium
-      - run: bun run test:e2e
+      - name: Run browser tests in proxy-default mode
+        run: bun run test:e2e
+      - name: Run browser tests through the redirect escape hatch
+        run: bun run test:e2e
+        env:
+          BIG_PLAN_PROXY: "0"

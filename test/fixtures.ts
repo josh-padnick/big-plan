@@ -15,7 +15,15 @@ import { expect, test as base } from "@playwright/test";
 import type { AttachedAgent } from "../src/review/shared/agent-primacy.js";
 import { readAgentRoster } from "../src/review/store.js";
 import type { ReviewStore } from "../src/review/store.js";
-import { startReviewRuntime } from "../src/review/server.js";
+import {
+  startReviewRuntime as startDirectReviewRuntime,
+  type ReviewRuntime,
+} from "../src/review/server.js";
+import { rememberPlan } from "../src/review/service/registry.js";
+import {
+  startService,
+  type ServiceRuntime,
+} from "../src/review/service/server.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -43,6 +51,7 @@ const renderThroughCli = async ({
 };
 
 type WorkerFixtures = {
+  readonly reviewLinkService: ServiceRuntime;
   readonly annotationCodeViewerUrl: string;
   readonly codeSnippetSyntaxMaximizeViewerUrl: string;
   readonly imageSelectionViewerUrl: string;
@@ -90,6 +99,9 @@ type TestFixtures = {
   // message rather than relaxing the render-health contract.
   readonly allowedConsoleErrors: ReadonlyArray<RegExp>;
 };
+
+let activeReviewLinkService: ServiceRuntime | undefined;
+const directReviewUrls = new Map<string, string>();
 
 const ANNOTATION_CODE_MDX = `# Annotation code
 
@@ -419,6 +431,41 @@ ${REVIEW_RUNTIME_SCROLL_TAIL}
 `;
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  reviewLinkService: [
+    async ({}, use) => {
+      const stateDirectory = await mkdtemp(
+        join(tmpdir(), "big-plan-playwright-service-"),
+      );
+      const previousStateDirectory = process.env["BIG_PLAN_STATE_DIR"];
+      const previousPort = process.env["BIG_PLAN_PORT"];
+      process.env["BIG_PLAN_STATE_DIR"] = stateDirectory;
+      const service = await startService({
+        port: 0,
+        readToken: async () => undefined,
+        version: "playwright",
+      });
+      process.env["BIG_PLAN_PORT"] = String(service.port);
+      activeReviewLinkService = service;
+      try {
+        await use(service);
+      } finally {
+        activeReviewLinkService = undefined;
+        await service.close();
+        if (previousStateDirectory === undefined) {
+          delete process.env["BIG_PLAN_STATE_DIR"];
+        } else {
+          process.env["BIG_PLAN_STATE_DIR"] = previousStateDirectory;
+        }
+        if (previousPort === undefined) {
+          delete process.env["BIG_PLAN_PORT"];
+        } else {
+          process.env["BIG_PLAN_PORT"] = previousPort;
+        }
+        await rm(stateDirectory, { recursive: true, force: true });
+      }
+    },
+    { scope: "worker", auto: true },
+  ],
   reviewRuntimeUrl: [
     async ({ page }, use) => {
       const outputDir = await mkdtemp(
@@ -1011,6 +1058,52 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
 export { expect };
 export type { Locator, Page };
+
+type StartReviewRuntime = (
+  options: Parameters<typeof startDirectReviewRuntime>[0],
+) => Promise<ReviewRuntime>;
+
+/**
+ * Starts a session on an ephemeral port and publishes its plan address through
+ * the worker's ephemeral review-link service.
+ */
+export const startReviewRuntime = async (
+  options: Parameters<typeof startDirectReviewRuntime>[0],
+  start: StartReviewRuntime = startDirectReviewRuntime,
+): Promise<ReviewRuntime> => {
+  const runtime = await start(options);
+  try {
+    const service = activeReviewLinkService;
+    if (service === undefined) {
+      throw new Error("The Playwright review-link service is not running");
+    }
+    await rememberPlan({ planId: runtime.planId, planPath: runtime.planPath });
+    const stableUrl = `${service.origin}/plan/${runtime.planId}`;
+    directReviewUrls.set(stableUrl, runtime.url);
+    return {
+      ...runtime,
+      url: stableUrl,
+      close: async () => {
+        await runtime.close();
+        if (directReviewUrls.get(stableUrl) === runtime.url) {
+          directReviewUrls.delete(stableUrl);
+        }
+      },
+    };
+  } catch (error) {
+    await runtime.close().catch(() => undefined);
+    throw error;
+  }
+};
+
+/** Resolves a test-authored runtime request against the active delivery mode. */
+export const reviewRuntimeRequestUrl = (
+  reviewUrl: string,
+  path: string,
+): URL => {
+  const base = directReviewUrls.get(reviewUrl) ?? reviewUrl;
+  return new URL(path, base.endsWith("/") ? base : `${base}/`);
+};
 
 /**
  * Ends a journey's own review runtime.

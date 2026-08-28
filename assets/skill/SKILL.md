@@ -70,22 +70,20 @@ Re-run `skill write` only when this thin shell itself changed (rare).
    Prefer the repository's native planning location when instructions name one.
 4. **Validate.** `npx big-plan@latest validate <plan.mdx>` until clean.
    Details: `npx big-plan@latest validate --help` if available, otherwise top-level `big-plan --help` and the guidance text.
-5. **Render.** `npx big-plan@latest render <plan.mdx>` (HTML defaults next to the input).
-6. **Present.** Give the human the rendered HTML as a full absolute path or `file://` URL they can open.
-   Do not paste the whole HTML body into chat.
+5. **Review.** `npx big-plan@latest review <plan.mdx>`.
+6. **Present.** Give the human the stable plan address the command prints.
+   Treat it as the plan's address; the session address is only for debugging.
 7. **Wait.** Do not implement until the human accepts the plan.
-   On feedback, revise the MDX source, re-validate, re-render, and ask again.
+   On feedback, revise the MDX source, re-validate, and ask again in the live review.
 
 `compile` produces machine-readable JSON for tools; it does not replace human review of the HTML document.
 
 ## Presenting the review document
 
-Always surface a clickable path the human can open in a browser:
-
-- Absolute filesystem path, for example `/Users/you/project/plan.html`
-- Or a `file://` URL built from that absolute path
-
-Relative paths alone are not enough when the human's working directory may differ from yours.
+Always surface the stable `http://127.0.0.1:<port>/plan/<plan-id>` address
+printed by `big-plan review`. It remains the plan's address across review-runtime
+restarts. Do not substitute the ephemeral session address unless the command
+reports that the review-link service is unavailable.
 
 ## Package upgrades and update propagation
 
