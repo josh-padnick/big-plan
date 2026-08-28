@@ -473,9 +473,9 @@ export const identifyReviews = (snapshot) => {
         .flatMap((comment) => matchMarker(comment, SUMMARY_RETRACTION))
         .map((match) => lower(match[1])),
     );
-    let remaining = accepted.length;
+    let remainingBots = acceptedBots.length;
     accepted = accepted.filter((one) => {
-      if (one.kind !== "bot" || remaining === 1) {
+      if (one.kind !== "bot" || remainingBots === 1) {
         return true;
       }
       const threads = snapshot.reviewThreads.filter((thread) =>
@@ -492,7 +492,7 @@ export const identifyReviews = (snapshot) => {
         threads.length === 0 &&
         summaryRetractions.has(one.bot.id);
       if (canRetractByResolution || canRetractSummary) {
-        remaining -= 1;
+        remainingBots -= 1;
         return false;
       }
       return true;

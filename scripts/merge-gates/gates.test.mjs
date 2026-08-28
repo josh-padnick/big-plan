@@ -372,6 +372,46 @@ test("a summary disposition does not remove the only bot review", () => {
   assert.match(report(verdict), /Reviewer: CodeRabbit/);
 });
 
+test("bot retractions never leave an attestation as the sole review", () => {
+  const attestation = comment(
+    `adversarial-review: complete ${HEAD} by claude-opus-5\nfindings: 0`,
+  );
+  const reviews = [
+    { author: "coderabbitai[bot]", state: "COMMENTED", body: "" },
+    { author: "greptile-apps[bot]", state: "COMMENTED", body: "" },
+  ];
+  const greptileFinding = {
+    ...finding("Keep the fallback deterministic."),
+    author: "greptile-apps[bot]",
+  };
+  const cases = [
+    {
+      issueComments: [signOff, attestation],
+      reviewThreads: [
+        thread([finding(), reply()]),
+        thread([greptileFinding, reply()]),
+      ],
+    },
+    {
+      issueComments: [
+        signOff,
+        attestation,
+        comment("review-triage: retract coderabbit - duplicate bot review"),
+        comment("review-triage: retract greptile - duplicate bot review"),
+      ],
+      reviewThreads: [],
+    },
+  ];
+
+  for (const one of cases) {
+    const verdict = evaluateReviewTriage(snapshot({ ...one, reviews }));
+    assert.equal(verdict.conclusion, "failure");
+    assert.match(verdict.title, /2 accepted reviews/);
+    assert.match(report(verdict), /Greptile/);
+    assert.match(report(verdict), /adversarial review/);
+  }
+});
+
 test("an adversarial attestation stands in for a bot review", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
