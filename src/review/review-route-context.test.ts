@@ -297,10 +297,11 @@ describe("createSnapshotDiffs", () => {
       });
     const beforeAcceptance = await read();
 
-    await verdicts.write({
+    await verdicts.update((current) => ({
       version: 1,
-      revision: 1,
+      revision: current.revision + 1,
       accepted: [
+        ...current.accepted,
         {
           from: FROM_SNAPSHOT,
           to: TO_SNAPSHOT,
@@ -308,7 +309,7 @@ describe("createSnapshotDiffs", () => {
           acceptedAt: "2026-08-27T12:00:00.000Z",
         },
       ],
-    });
+    }));
     const afterAcceptance = await read();
 
     expect(afterAcceptance).toBe(beforeAcceptance);
