@@ -89,7 +89,7 @@ The page then shows a **This review session has stopped accepting changes** aler
 The runtime keeps renewing its heartbeat, so the coding agent still sees the session as live, but it cannot save changes through that runtime.
 Already persisted review data remains available, and a newly staged comment stays in the page and its local recovery snapshot, so keep the tab open, stop the runtime, and start it again on the same plan.
 
-Every action that changes the review asks the same question before it sends: submitting comments, replying in a thread, asking a plan-wide question, deleting a sent comment, reverting the agent's changes, cancelling a queued request, and attaching an image.
+Every action that changes the review asks the same question before it sends: submitting comments, replying in a thread, asking a plan-wide question, deleting a sent comment, reverting the agent's changes, cancelling a queued request, changing auto-accept mode, and attaching an image.
 When the answer is no, the action is refused up front and says why, what became of what you typed, and what clears the block, rather than appearing to start and failing seconds later.
 Reading is never affected, and nothing you typed is discarded: text stays in its box, an unattached image leaves the message unchanged, and a request you could not cancel is still reported as being with the agent.
 The same refusal covers a runtime the page has lost contact with and a session a newer review runtime has replaced, so the reason you are given always matches the condition the page actually observed.
@@ -143,7 +143,8 @@ An unresolved pushed card offers **Auto-accept all changes**.
 Its confirmation separates the immediate consequence - accepting the open changes in that thread - from the ongoing consequence that later pushes arrive accepted.
 While armed, the Chat tab shows when auto-accept was turned on and offers **Switch back to review**.
 Applied cards remain conversations: you can reply, receive a follow-up push, inspect each pushed revision's summary, or revert it.
-Switching back changes only later arrivals, and starting a fresh review session always starts in review mode.
+Replies and follow-up pushes in an Applied thread remain accepted after you switch back; the switch leaves only later arrivals outside those threads open for review.
+Starting a fresh review session always starts in review mode.
 
 A push that lands while you are reading announces itself.
 The **Chat** tab leads with a **Pushed just now** entry naming the agent's model and client, plus how many blocks changed when the push revised the plan.
