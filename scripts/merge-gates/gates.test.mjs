@@ -540,6 +540,64 @@ test("a same-second later review invalidates resolved older threads", () => {
   assert.match(report(verdict), /CodeRabbit/);
 });
 
+test("summary retraction guidance includes older unresolved threads", () => {
+  const reviews = [
+    {
+      id: 1,
+      author: "coderabbitai[bot]",
+      state: "COMMENTED",
+      body: "finding review",
+      submittedAt: REVIEWED_AT,
+    },
+    {
+      id: 2,
+      author: "greptile-apps[bot]",
+      state: "COMMENTED",
+      body: "retained review",
+      submittedAt: REVIEWED_AT,
+    },
+    {
+      id: 3,
+      author: "coderabbitai[bot]",
+      state: "COMMENTED",
+      body: "new summary feedback",
+      submittedAt: "2026-08-20T12:02:00Z",
+    },
+  ];
+  const marker = {
+    ...comment("review-triage: retract coderabbit - duplicate bot review"),
+    createdAt: "2026-08-20T12:03:00Z",
+  };
+  const unresolved = thread([finding()], { reviewId: 1 });
+  const blocked = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff, marker],
+      reviews,
+      reviewThreads: [unresolved],
+    }),
+  );
+  assert.equal(blocked.conclusion, "failure");
+  assert.match(report(blocked), /1 older unresolved inline thread/);
+  assert.match(
+    report(blocked),
+    /review-triage: retract coderabbit - <reason>/,
+  );
+  assert.match(
+    report(blocked),
+    /cannot take effect while any inline thread remains unresolved/,
+  );
+
+  const retracted = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff, marker],
+      reviews,
+      reviewThreads: [thread([finding(), reply()], { reviewId: 1 })],
+    }),
+  );
+  assert.equal(retracted.conclusion, "success", report(retracted));
+  assert.match(report(retracted), /Reviewer: Greptile/);
+});
+
 test("a same-second summary marker cannot retract a review", () => {
   const verdict = evaluateReviewTriage(
     snapshot({

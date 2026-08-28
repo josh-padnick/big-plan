@@ -432,6 +432,39 @@ const latestCommentedThreads = (snapshot, reviews) => {
   );
 };
 
+const reviewerThreads = (snapshot, reviewerLogins) =>
+  snapshot.reviewThreads.filter((thread) =>
+    isReviewerThread(thread, reviewerLogins),
+  );
+
+const unresolvedReviewerThreads = (snapshot, reviewerLogins) =>
+  reviewerThreads(snapshot, reviewerLogins).filter(
+    (thread) => !isResolved(thread, reviewerLogins),
+  );
+
+const commentedRetractionGuidance = (snapshot, review) => {
+  if (latestCommentedThreads(snapshot, review.reviews).length > 0) {
+    return [
+      `  - ${review.bot.label}: reply in every inline thread it opened. Once every`,
+      "    thread has a written reply, this non-dismissible COMMENTED review is",
+      "    retracted. It keeps counting while any inline thread is unresolved.",
+    ];
+  }
+  const unresolved = unresolvedReviewerThreads(snapshot, review.bot.logins);
+  return [
+    ...(unresolved.length > 0
+      ? [
+          `  - ${review.bot.label}: reply in its ${unresolved.length} older unresolved inline thread(s),`,
+          "    then post this plain issue-comment marker with a reason. The marker",
+          "    cannot take effect while any inline thread remains unresolved:",
+        ]
+      : [
+          `  - ${review.bot.label}: post this plain issue-comment marker with a reason:`,
+        ]),
+    `    review-triage: retract ${review.bot.id} - <reason>`,
+  ];
+};
+
 /**
  * Identifies which accepted reviews exist. A bot counts while it holds either a
  * review it has not taken back or an unresolved inline thread; an attestation
@@ -504,16 +537,13 @@ export const identifyReviews = (snapshot) => {
       if (one.kind !== "bot" || remainingBots === 1) {
         return true;
       }
-      const allThreads = snapshot.reviewThreads.filter((thread) =>
-        isReviewerThread(thread, one.bot.logins),
-      );
+      const allThreads = reviewerThreads(snapshot, one.bot.logins);
       const isCommentOnly =
         one.states.size === 1 && one.states.has("COMMENTED");
       const latestCommented = latestCommentedReview(one.reviews);
       const latestThreads = latestCommentedThreads(snapshot, one.reviews);
-      const hasUnresolvedThread = allThreads.some(
-        (thread) => !isResolved(thread, one.bot.logins),
-      );
+      const hasUnresolvedThread =
+        unresolvedReviewerThreads(snapshot, one.bot.logins).length > 0;
       const canRetractByResolution =
         isCommentOnly &&
         !hasUnresolvedThread &&
@@ -642,16 +672,7 @@ export const evaluateReviewTriage = (snapshot) => {
     const retractions = accepted.flatMap((one) =>
       one.kind === "bot"
         ? one.states.size === 1 && one.states.has("COMMENTED")
-          ? latestCommentedThreads(snapshot, one.reviews).length > 0
-            ? [
-                `  - ${one.bot.label}: reply in every inline thread it opened. Once every`,
-                "    thread has a written reply, this non-dismissible COMMENTED review is",
-                "    retracted. It keeps counting while any inline thread is unresolved.",
-              ]
-            : [
-                `  - ${one.bot.label}: post this plain issue-comment marker with a reason:`,
-                `    review-triage: retract ${one.bot.id} - <reason>`,
-              ]
+          ? commentedRetractionGuidance(snapshot, one)
           : [
               `  - ${one.bot.label}: reply in every thread it opened, saying what you`,
               "    did, and then dismiss its review. Dismissing alone is not enough - a",
