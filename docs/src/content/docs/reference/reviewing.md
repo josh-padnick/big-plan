@@ -244,7 +244,7 @@ A standalone rendered document shows no approval control.
 
 Open **More actions**, choose **Export**, and confirm to download the latest committed plan as `<plan-name>.md`. The review runtime reads the authoritative plan source when you confirm, so a browser showing an older revision does not make the export stale. Candidate agent edits that have not been published are not part of that source.
 
-The file preserves ordinary Markdown and turns every built-in component into a semantic Markdown presentation. Wireframes become recursive per-screen UI outlines rather than screenshots. A separated review overlay includes current saved decision answers and an approval summary only when the approval matches the exported plan version. Comments, comment drafts, feedback dispositions, staged agent candidates, and agent status are not included.
+The file preserves ordinary Markdown and turns every built-in component into a semantic Markdown presentation. Wireframes become vocabulary-neutral, per-screen reconstruction notes rather than screenshots: they describe the device frame, layout geometry, visual hierarchy, spatial groupings, appearance, states, labels, values, and navigation targets in plain UI language. A separated review overlay includes current saved decision answers and an approval summary only when the approval matches the exported plan version. Comments, comment drafts, feedback dispositions, staged agent candidates, and agent status are not included.
 
 Export is available from live reviews, including a session that has become read-only, while its runtime remains reachable. A standalone document keeps the Settings gear and does not offer export because it has no authoritative source to refresh from.
 
