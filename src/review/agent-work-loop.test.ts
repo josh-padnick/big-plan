@@ -350,7 +350,9 @@ describe("agent work loop", () => {
       "one live request claim for this plan at a time",
     );
     expect(result.agent_prompt).toContain("this agent is an observer");
-    expect(result.agent_prompt).toContain("another agent the primary");
+    expect(result.agent_prompt).toContain(
+      "another agent is already the primary",
+    );
     expect(String(result.agent_prompt).toLowerCase()).not.toContain("primacy");
     expect(result.agent_prompt).not.toContain("PRIMACY_LOST");
     expect(result.agent_prompt).toContain(runtime.planPath);

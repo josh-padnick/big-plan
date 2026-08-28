@@ -355,7 +355,7 @@ The reviewer's answer is recorded, so a loop already waiting on `--wait` is told
 That is the same result **Disconnect agent** on the agent status card returns, because it is the same fact: the reviewer took this agent off the review.
 It states that fact twice on purpose - as the end (`ended` and `disconnected`) and as the role it is no longer in (`role`) - so a harness branches on whichever one it already reads, rather than on which control the reviewer pressed.
 That result is terminal even with `--wait`: stop the loop.
-`agent note` and `agent respond` from the same session refuse with `NOT_PRIMARY` and say the agent is an observer, for as long as the turn they belong to could still be running.
+`agent note` and `agent respond` from the same session refuse with `AGENT_DISCONNECTED` and say the reviewer disconnected the agent, for as long as the turn they belong to could still be running.
 The claim it was part way through is freed as well, so the turn it had in flight can no longer reach the plan, and no other agent's claim is touched.
 Disconnecting the agent that answers the review leaves the review with no primary until the reviewer fills the seat, and they have two ways to do it.
 No agent already attached succeeds into a seat the reviewer emptied, so an observer waits there until they pick it from **Agent Status**.
@@ -451,8 +451,8 @@ An empty, non-numeric, negative, nonzero sub-minute, or overflowing `review --id
 `agent` rejects an unknown action or invalid action arguments with
 `INVALID_INPUT` and its complete multi-line usage text.
 
-`agent note` and `agent respond` raise `NOT_PRIMARY` when the reviewer has made another attached agent the primary for this review, or has disconnected this one.
-The message names the agent that holds the plan now, or says the reviewer disconnected this one, and the help entries say to stop the loop rather than retry.
+`agent note` and `agent respond` raise `NOT_PRIMARY` when the reviewer has made another attached agent the primary for this review, and `AGENT_DISCONNECTED` when the reviewer has disconnected this one.
+The message names the agent that holds the plan now, or says the reviewer disconnected this one, and both help entries say to stop the loop rather than retry.
 It carries no usage text, because the command was well formed; a harness branches on the code to end a displaced loop cleanly instead of churning.
 `agent next` reports the same two situations as ordinary results rather than errors - `role: "observer"` and `role: "disconnected"` - so a harness must branch on those too.
 
