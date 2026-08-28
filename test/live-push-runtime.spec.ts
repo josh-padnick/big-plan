@@ -301,7 +301,7 @@ test("should reveal a real agent edit only at commit and preserve review context
 test("should review, reply to, and resolve a pushed thread in chat", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
   const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-review-"));
   const planPath = join(directory, "plan.mdx");
   await writeFile(planPath, PLAN, "utf8");
@@ -567,7 +567,9 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await expect(
       stepper.getByRole("button", { name: "Resolve thread" }),
     ).toBeVisible();
-    await stepper.getByRole("button", { name: "Resolve thread" }).click();
+    await stepper
+      .getByRole("button", { name: "Resolve thread" })
+      .press("Enter");
 
     await rail.getByText("Resolved (1)").click();
     await expect(
