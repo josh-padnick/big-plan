@@ -7125,6 +7125,125 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("does not recover a handoff after its approval was revoked", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await chmod(target.store.agentRequestDirectory, 0o500);
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        let approvalId = "";
+        try {
+          const approved = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          ({ approvalId } = (await approved.json()) as {
+            readonly approvalId: string;
+          });
+        } finally {
+          stderr.mockRestore();
+          await chmod(target.store.agentRequestDirectory, 0o700);
+        }
+        const revoked = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/revoke-approval",
+          method: "POST",
+          body: { approvalId },
+        });
+        expect(revoked.status).toBe(200);
+
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests).toEqual([]);
+        const session = await (
+          await callRuntime({ target, sessionToken, path: "/api/session" })
+        ).json();
+        expect(session).not.toHaveProperty("approval");
+      },
+    );
+  });
+
+  it("preserves an answered handoff when recovery repeats delivery", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await chmod(target.store.agentRequestDirectory, 0o500);
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        let approvalId = "";
+        let journal = "";
+        try {
+          const approved = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          ({ approvalId } = (await approved.json()) as {
+            readonly approvalId: string;
+          });
+          journal = await readFile(
+            target.store.approvalFinalizationPath,
+            "utf8",
+          );
+        } finally {
+          stderr.mockRestore();
+          await chmod(target.store.agentRequestDirectory, 0o700);
+        }
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+        const claimed = await claimAgentRequest({
+          store: target.store,
+          requestId: approvalId,
+          claimedBy: target.sessionId,
+          baselineSnapshot: digest,
+          now: new Date().toISOString(),
+        });
+        await commitRequestTerminal({
+          store: target.store,
+          claimedBy: target.sessionId,
+          response: validateAgentResponseDraft({
+            value: { requestId: approvalId },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set(),
+            currentSnapshot: digest,
+            now: new Date().toISOString(),
+          }),
+          now: new Date().toISOString(),
+        });
+        await writeFile(target.store.approvalFinalizationPath, journal);
+
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests).toHaveLength(1);
+        expect(exchange.requests[0]).toMatchObject({
+          requestId: approvalId,
+          answeredAt: expect.any(String),
+        });
+        expect(exchange.responses).toHaveLength(1);
+      },
+    );
+  });
+
   it("settles a revoke of an approval the agent already answered", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,

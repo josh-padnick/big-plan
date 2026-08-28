@@ -1188,6 +1188,22 @@ export const writeAgentRequestWhen = async ({
     requestId: checked.requestId,
     change: async (lockedStore) => {
       if (!(await permitted())) return false;
+      const value = await readAgentRequestValue({
+        store: lockedStore,
+        requestId: checked.requestId,
+      });
+      if (value !== undefined) {
+        const existing = validateAgentRequest(value);
+        if (
+          existing.requestId !== checked.requestId ||
+          requestCreation(existing) !== requestCreation(checked)
+        ) {
+          throw new AgentExchangeRejected(
+            "The stored request conflicts with this submission",
+          );
+        }
+        return true;
+      }
       await writeAgentRequestValue({
         store: lockedStore,
         requestId: checked.requestId,

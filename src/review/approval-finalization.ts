@@ -19,9 +19,13 @@ import {
   cancelAgentRequest,
   writeAgentRequestWhen,
 } from "./request-mailbox.js";
-import type { ApprovalRecord } from "./shared/approval.js";
+import {
+  inForceApproval,
+  type ApprovalRecord,
+} from "./shared/approval.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import {
+  readApprovalRecord,
   readStoreJson,
   writeApprovalRecord,
   writeStoreJson,
@@ -149,19 +153,49 @@ const settleLocked = async ({
         finalized: finalization.verdicts,
       }),
   });
-  await writeApprovalRecord({
-    store,
-    record: withCanceledCount({
-      record: finalization.approval,
-      requestsCanceled: canceledRequestIds.length,
-    }),
+  const finalizedApproval = withCanceledCount({
+    record: finalization.approval,
+    requestsCanceled: canceledRequestIds.length,
   });
+  const journaledEntry = finalizedApproval.entries.at(-1);
+  if (journaledEntry?.kind !== "approval") {
+    throw new Error("The approval finalization carries no approval entry");
+  }
+  const { record: storedApproval } = await readApprovalRecord({
+    store,
+    validate: validateApprovalRecord,
+  });
+  const hasJournaledApproval = storedApproval.entries.some(
+    (entry) =>
+      entry.kind === "approval" &&
+      entry.approvalId === journaledEntry.approvalId,
+  );
+  const currentApproval = hasJournaledApproval
+    ? storedApproval
+    : finalizedApproval;
+  if (!hasJournaledApproval) {
+    await writeApprovalRecord({ store, record: currentApproval });
+  }
+  if (
+    inForceApproval(currentApproval)?.approvalId !== journaledEntry.approvalId
+  ) {
+    await unlink(store.approvalFinalizationPath);
+    return { canceledRequestIds, delivered: false };
+  }
   let delivered = false;
   try {
     delivered = await writeAgentRequestWhen({
       store,
       request: finalization.handoff,
-      permitted: async () => true,
+      permitted: async () => {
+        const { record } = await readApprovalRecord({
+          store,
+          validate: validateApprovalRecord,
+        });
+        return (
+          inForceApproval(record)?.approvalId === journaledEntry.approvalId
+        );
+      },
     });
   } catch {
     // Approval is already durable. Retain the journal so restart recovery can
