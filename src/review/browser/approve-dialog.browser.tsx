@@ -146,7 +146,7 @@ const ApprovedStampMark = () => (
   </span>
 );
 
-/** A rubber-stamp mark just above the plan title, on the reading surface. */
+/** A persistent rubber-stamp mark above the desktop contents list. */
 const ApprovedStampOverlay = () => {
   const [slot, setSlot] = useState<HTMLElement | null>(() =>
     document.querySelector<HTMLElement>("[data-review-approval-page-stamp]"),

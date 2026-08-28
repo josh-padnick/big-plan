@@ -31,6 +31,7 @@ import {
 } from "./request-mailbox.js";
 import {
   randomId,
+  readAgentPresence,
   readSnapshot,
   writeApprovalBrief,
   writeSnapshot,
@@ -540,11 +541,20 @@ export const approvePlan = async (
       error,
     });
   }
+  const agentConnected = (
+    await readAgentPresence({
+      store: context.store,
+      sessionId: context.sessionId,
+    })
+  ).connected;
   await emitProgress({
     context,
     stepCode: "plan-approved",
     step: "Plan approved",
     requestId: entry.approvalId,
+    ...(agentConnected
+      ? {}
+      : { detail: "Approval recorded - no agent connected to notify" }),
   });
   const summary = await loadSummary(context, settledSource.digest);
   return jsonResponse({

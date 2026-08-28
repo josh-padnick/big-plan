@@ -71,10 +71,10 @@ describe("approval chrome", () => {
     expect(html).not.toContain("data-review-approval-brand-slot");
   });
 
-  it("should start the contents list at the top of the sidebar", () => {
+  it("should reserve the persistent approval stamp above the contents list", () => {
     const html = shellFor("<p>Plan.</p>");
     expect(html).toMatch(
-      /aria-label="Contents">\s*<p class="[^"]*" data-toc-header>/,
+      /aria-label="Contents">\s*<span class="[^"]*justify-center[^"]*" data-review-approval-page-stamp hidden><\/span>\s*<p class="[^"]*" data-toc-header>/,
     );
   });
 });

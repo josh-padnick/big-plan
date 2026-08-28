@@ -7105,6 +7105,16 @@ describe("review runtime approval", () => {
         });
         expect(pending[0]?.answeredAt).toBeUndefined();
         expect(pending[0]?.canceledAt).toBeUndefined();
+        const progress = await readProgress({
+          store: target.store,
+          sessionId: target.sessionId,
+        });
+        expect(progress.at(-1)).toMatchObject({
+          requestId: pending[0]?.requestId,
+          stepCode: "plan-approved",
+          step: "Plan approved",
+          detail: "Approval recorded - no agent connected to notify",
+        });
       },
     );
   });
