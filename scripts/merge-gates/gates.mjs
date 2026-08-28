@@ -414,9 +414,11 @@ export const collectAttestations = (snapshot) => {
 /**
  * Identifies which accepted reviews exist. A bot counts while it holds either a
  * review it has not taken back or an unresolved inline thread; an attestation
- * counts once it is well-formed. All attestations collapse into one identity
- * because they all stand for the same thing, our own agent reviewing in a bot's
- * place.
+ * counts once it is well-formed. A COMMENTED review cannot be dismissed, so
+ * resolving all of its inline threads retracts it when another bot review can
+ * remain. A sole COMMENTED review stays accepted, preserving the ordinary
+ * single-review path. A summary-only review stays accepted too: with no inline
+ * thread, there is no written disposition that could prove its retraction.
  *
  * The unresolved-thread half is what makes the two-review recovery honest.
  * Dismissing a review that left findings would otherwise drop the reviewer from
@@ -427,31 +429,61 @@ export const collectAttestations = (snapshot) => {
 export const identifyReviews = (snapshot) => {
   const byBot = new Map();
   for (const review of snapshot.reviews) {
-    if (!COUNTED_REVIEW_STATES.has((review.state ?? "").toUpperCase())) {
+    const state = (review.state ?? "").toUpperCase();
+    if (!COUNTED_REVIEW_STATES.has(state)) {
       continue;
     }
     const bot = botFor(review.author);
     if (bot !== null) {
-      byBot.set(bot.id, bot);
+      const entry = byBot.get(bot.id) ?? { bot, states: new Set() };
+      entry.states.add(state);
+      byBot.set(bot.id, entry);
     }
   }
   for (const thread of snapshot.reviewThreads) {
     const bot = botFor(thread.comments[0]?.author);
-    if (bot === null || byBot.has(bot.id)) {
+    if (bot === null) {
       continue;
     }
     if (!isResolved(thread, bot.logins)) {
-      byBot.set(bot.id, bot);
+      byBot.set(bot.id, byBot.get(bot.id) ?? { bot, states: new Set() });
     }
   }
   const attestations = collectAttestations(snapshot);
   const usable = attestations.filter((one) => one.problems.length === 0);
-  const accepted = [...byBot.values()].map((bot) => ({ kind: "bot", bot }));
+  let accepted = [...byBot.values()].map(({ bot, states }) => ({
+    kind: "bot",
+    bot,
+    states,
+  }));
   if (usable.length > 0) {
     accepted.push({
       kind: "adversarial",
       bot: ADVERSARIAL_REVIEWER,
       attestation: usable[usable.length - 1],
+    });
+  }
+  const acceptedBots = accepted.filter((one) => one.kind === "bot");
+  if (acceptedBots.length > 1) {
+    let remaining = accepted.length;
+    accepted = accepted.filter((one) => {
+      if (one.kind !== "bot" || remaining === 1) {
+        return true;
+      }
+      const threads = snapshot.reviewThreads.filter((thread) =>
+        isReviewerThread(thread, one.bot.logins),
+      );
+      const isCommentOnly =
+        one.states.size === 1 && one.states.has("COMMENTED");
+      const canRetractByResolution =
+        isCommentOnly &&
+        threads.length > 0 &&
+        threads.every((thread) => isResolved(thread, one.bot.logins));
+      if (canRetractByResolution) {
+        remaining -= 1;
+        return false;
+      }
+      return true;
     });
   }
   return {
@@ -558,11 +590,17 @@ export const evaluateReviewTriage = (snapshot) => {
   if (accepted.length > 1) {
     const retractions = accepted.flatMap((one) =>
       one.kind === "bot"
-        ? [
-            `  - ${one.bot.label}: reply in every thread it opened, saying what you`,
-            "    did, and then dismiss its review. Dismissing alone is not enough - a",
-            "    reviewer keeps counting while any of its inline threads is unresolved.",
-          ]
+        ? one.states.size === 1 && one.states.has("COMMENTED")
+          ? [
+              `  - ${one.bot.label}: reply in every inline thread it opened. Once every`,
+              "    thread has a written reply, this non-dismissible COMMENTED review is",
+              "    retracted. It keeps counting while any inline thread is unresolved.",
+            ]
+          : [
+              `  - ${one.bot.label}: reply in every thread it opened, saying what you`,
+              "    did, and then dismiss its review. Dismissing alone is not enough - a",
+              "    reviewer keeps counting while any of its inline threads is unresolved.",
+            ]
         : [
             `  - ${ADVERSARIAL_REVIEWER.label} by ${one.attestation.agent}: delete that`,
             `    attestation comment. ${one.attestation.url}`,

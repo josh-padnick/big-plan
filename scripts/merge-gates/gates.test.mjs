@@ -207,7 +207,7 @@ test("two accepted reviews fail, because the budget is one", () => {
           `adversarial-review: complete ${HEAD} by claude-opus-5\nfindings: 1\n1. Race on replay - resolved: fixed - guarded in ${HEAD.slice(0, 8)}`,
         ),
       ],
-      reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+      reviews: [{ author: "coderabbitai[bot]", state: "APPROVED", body: "" }],
       reviewThreads: [thread([finding(), reply()])],
     }),
   );
@@ -225,6 +225,83 @@ test("two accepted reviews fail, because the budget is one", () => {
     report(verdict),
     /by claude-opus-5: delete that\n\s+attestation comment/,
   );
+});
+
+test("resolving every thread retracts one of two commented bot reviews", () => {
+  const greptileFinding = {
+    ...finding("Keep the fallback deterministic."),
+    author: "greptile-apps[bot]",
+  };
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "" },
+      ],
+      reviewThreads: [
+        thread([finding(), reply()]),
+        thread([greptileFinding, reply()]),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "success", report(verdict));
+  assert.match(report(verdict), /Reviewer: Greptile/);
+});
+
+test("two commented bot reviews still fail while each has an unresolved thread", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "" },
+      ],
+      reviewThreads: [
+        thread([finding()]),
+        thread([
+          {
+            ...finding("Keep the fallback deterministic."),
+            author: "greptile-apps[bot]",
+          },
+        ]),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+  assert.match(report(verdict), /non-dismissible COMMENTED review is/);
+  assert.match(
+    report(verdict),
+    /keeps counting while any inline thread is unresolved/,
+  );
+});
+
+test("a summary-only commented review remains the accepted review", () => {
+  // With no inline thread there is no written disposition that can prove a
+  // retraction. Keeping the review counted avoids silently discarding summary
+  // feedback, while a second thread-bearing COMMENTED bot can still be
+  // retracted by resolving all of its threads.
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "" },
+      ],
+      reviewThreads: [
+        thread([
+          {
+            ...finding("Keep the fallback deterministic."),
+            author: "greptile-apps[bot]",
+          },
+          reply(),
+        ]),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "success", report(verdict));
+  assert.match(report(verdict), /Reviewer: CodeRabbit/);
 });
 
 test("an adversarial attestation stands in for a bot review", () => {

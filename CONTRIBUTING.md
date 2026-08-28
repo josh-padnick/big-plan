@@ -108,7 +108,10 @@ Sign off last, after every finding has a reply and after the final push.
 1. Get one review.
    Any of CodeRabbit, Greptile, or Devin counts; the gate does not care which, so BIG-143's credit-based picker can choose freely.
    Exactly one, because one review per pull request is the budget, and a second review means one of the two was never triaged.
-   A reviewer counts while it holds either a review it has not taken back or an unresolved inline thread, so dismissing a review drops that reviewer only once every finding it left is resolved.
+   A reviewer counts while it holds either a review it has not taken back or an unresolved inline thread.
+   For an `APPROVED` or `CHANGES_REQUESTED` review, reply to every finding and then dismiss the review; dismissal alone never hides an unresolved finding.
+   GitHub cannot dismiss a `COMMENTED` review, so when two bots reviewed the pull request, resolving every inline thread from one COMMENTED reviewer retracts that reviewer instead.
+   A summary-only COMMENTED review stays counted because it has no inline disposition that could prove a retraction; keep it as the one accepted review and retract the other bot.
 2. Resolve every inline finding.
    Reply in the thread saying what you did: the commit that fixes it, or the reason you decline it.
    A thread is resolved, in this gate's sense, once a comment by somebody other than the reviewer exists in it.
