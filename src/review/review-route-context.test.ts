@@ -334,6 +334,33 @@ describe("createSnapshotDiffs", () => {
     expect(builds.get(NEXT_SNAPSHOT)).toBe(2);
   });
 
+  it("should preserve recency when cache uses happen in the same clock tick", async () => {
+    const snapshotDiffs = createSnapshotDiffs({
+      maxEntries: 2,
+      now: () => 0,
+    });
+    const builds = new Map<string, number>();
+    const read = async (to: string): Promise<void> => {
+      await snapshotDiffs.forPair({
+        from: FROM_SNAPSHOT,
+        to,
+        build: () => {
+          builds.set(to, (builds.get(to) ?? 0) + 1);
+          return snapshotDiff({ from: FROM_SNAPSHOT, to, label: to });
+        },
+      });
+    };
+
+    await read(TO_SNAPSHOT);
+    await read(NEXT_SNAPSHOT);
+    await read(TO_SNAPSHOT);
+    await read("4444444444444444");
+    await read(NEXT_SNAPSHOT);
+
+    expect(builds.get(TO_SNAPSHOT)).toBe(1);
+    expect(builds.get(NEXT_SNAPSHOT)).toBe(2);
+  });
+
   it("should evict a pair after its maximum idle age", async () => {
     let nowMs = 0;
     const snapshotDiffs = createSnapshotDiffs({

@@ -255,6 +255,7 @@ const SNAPSHOT_DIFF_CACHE_MAX_AGE_MS = 30 * 60 * 1_000;
 type SnapshotDiffCacheEntry = {
   readonly value: Promise<SnapshotDiff>;
   lastUsedAtMs: number;
+  lastUsedSequence: number;
 };
 
 /**
@@ -271,6 +272,7 @@ export const createSnapshotDiffs = ({
   readonly now?: () => number;
 } = {}): SnapshotDiffs => {
   const entries = new Map<string, SnapshotDiffCacheEntry>();
+  let useSequence = 0;
 
   const evictExpired = (nowMs: number): void => {
     for (const [key, entry] of entries) {
@@ -280,11 +282,11 @@ export const createSnapshotDiffs = ({
 
   const evictOldest = (): void => {
     let oldestKey: string | undefined;
-    let oldestAtMs = Number.POSITIVE_INFINITY;
+    let oldestSequence = Number.POSITIVE_INFINITY;
     for (const [key, entry] of entries) {
-      if (entry.lastUsedAtMs < oldestAtMs) {
+      if (entry.lastUsedSequence < oldestSequence) {
         oldestKey = key;
-        oldestAtMs = entry.lastUsedAtMs;
+        oldestSequence = entry.lastUsedSequence;
       }
     }
     if (oldestKey !== undefined) entries.delete(oldestKey);
@@ -298,11 +300,16 @@ export const createSnapshotDiffs = ({
       const cached = entries.get(key);
       if (cached !== undefined) {
         cached.lastUsedAtMs = nowMs;
+        cached.lastUsedSequence = useSequence++;
         return cached.value;
       }
       while (entries.size >= maxEntries) evictOldest();
       const value = Promise.resolve().then(build);
-      entries.set(key, { value, lastUsedAtMs: nowMs });
+      entries.set(key, {
+        value,
+        lastUsedAtMs: nowMs,
+        lastUsedSequence: useSequence++,
+      });
       void value.catch(() => {
         if (entries.get(key)?.value === value) entries.delete(key);
       });
