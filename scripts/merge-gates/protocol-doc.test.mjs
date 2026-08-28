@@ -113,11 +113,33 @@ test("the documented sign-off line signs off", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
       ...triagedBotReview,
-      issueComments: [comment(fillHead(documentedLine("review-triage:")))],
+      issueComments: [
+        comment(fillHead(documentedLine("review-triage: complete"))),
+      ],
     }),
   );
   assert.equal(verdict.conclusion, "success", verdict.details.join("\n"));
   assert.equal(verdict.name, CHECK_NAMES.reviewTriage);
+});
+
+test("the documented summary retraction line retracts the named reviewer", () => {
+  const line = documentedLine("review-triage: retract")
+    .replace("<reviewer>", "coderabbit")
+    .replace("<reason>", "duplicate bot review");
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        comment(fillHead(documentedLine("review-triage: complete"))),
+        comment(line),
+      ],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "summary" },
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "success", verdict.details.join("\n"));
+  assert.match(verdict.details.join("\n"), /Reviewer: Greptile/);
 });
 
 test("the documented pass attestation attests", () => {
@@ -166,7 +188,7 @@ test("the documented attestation template stands in for a bot review", () => {
     snapshot({
       issueComments: [
         comment(attestation),
-        comment(fillHead(documentedLine("review-triage:"))),
+        comment(fillHead(documentedLine("review-triage: complete"))),
       ],
     }),
   );

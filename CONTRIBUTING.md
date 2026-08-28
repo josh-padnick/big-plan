@@ -95,6 +95,7 @@ Any account may write any of them: a human, firstmate, or the lane's own agent.
 
 ```text
 review-triage: complete <head-sha>
+review-triage: retract <reviewer> - <reason>
 no-mistakes: passed run <run-id> head <head-sha>
 no-mistakes: overridden - <reason>
 ```
@@ -111,7 +112,7 @@ Sign off last, after every finding has a reply and after the final push.
    A reviewer counts while it holds either a review it has not taken back or an unresolved inline thread.
    For an `APPROVED` or `CHANGES_REQUESTED` review, reply to every finding and then dismiss the review; dismissal alone never hides an unresolved finding.
    GitHub cannot dismiss a `COMMENTED` review, so when two bots reviewed the pull request, resolving every inline thread from one COMMENTED reviewer retracts that reviewer instead.
-   A summary-only COMMENTED review stays counted because it has no inline disposition that could prove a retraction; keep it as the one accepted review and retract the other bot.
+   A summary-only COMMENTED review stays counted unless a plain pull request comment explicitly retracts it with `review-triage: retract <reviewer> - <reason>`, using the canonical reviewer name `coderabbit`, `greptile`, or `devin` and a non-empty reason.
 2. Resolve every inline finding.
    Reply in the thread saying what you did: the commit that fixes it, or the reason you decline it.
    A thread is resolved, in this gate's sense, once a comment by somebody other than the reviewer exists in it.

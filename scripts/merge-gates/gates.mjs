@@ -78,6 +78,7 @@ export const ADVERSARIAL_REVIEWER = {
 /** The marker lines an agent posts. CONTRIBUTING.md documents each one. */
 export const MARKERS = {
   signOff: "review-triage: complete <head-sha>",
+  summaryRetraction: "review-triage: retract <reviewer> - <reason>",
   adversarial: "adversarial-review: complete <head-sha> by <agent>",
   validationPassed: "no-mistakes: passed run <run-id> head <head-sha>",
   validationOverride: "no-mistakes: overridden - <reason>",
@@ -292,6 +293,8 @@ const matchMarker = (comment, pattern) =>
 // mentioned mid-sentence does not count, and each tolerates the unicode dashes
 // an editor may substitute for a plain hyphen.
 const SIGN_OFF = /^\s*review-triage:\s*complete\s+([0-9a-f]{7,40})\s*$/i;
+const SUMMARY_RETRACTION =
+  /^\s*review-triage:\s*retract\s+(\S+)\s*[-–—]\s*(\S.*?)\s*$/i;
 const ADVERSARIAL =
   /^\s*adversarial-review:\s*complete\s+([0-9a-f]{7,40})\s+by\s+(\S.*?)\s*$/i;
 const FINDINGS_COUNT = /^\s*findings:\s*(\d+)\s*$/i;
@@ -417,8 +420,8 @@ export const collectAttestations = (snapshot) => {
  * counts once it is well-formed. A COMMENTED review cannot be dismissed, so
  * resolving all of its inline threads retracts it when another bot review can
  * remain. A sole COMMENTED review stays accepted, preserving the ordinary
- * single-review path. A summary-only review stays accepted too: with no inline
- * thread, there is no written disposition that could prove its retraction.
+ * single-review path. A summary-only review can instead be retracted by a
+ * visible issue-comment marker that names the reviewer and records why.
  *
  * The unresolved-thread half is what makes the two-review recovery honest.
  * Dismissing a review that left findings would otherwise drop the reviewer from
@@ -465,6 +468,11 @@ export const identifyReviews = (snapshot) => {
   }
   const acceptedBots = accepted.filter((one) => one.kind === "bot");
   if (acceptedBots.length > 1) {
+    const summaryRetractions = new Set(
+      snapshot.issueComments
+        .flatMap((comment) => matchMarker(comment, SUMMARY_RETRACTION))
+        .map((match) => lower(match[1])),
+    );
     let remaining = accepted.length;
     accepted = accepted.filter((one) => {
       if (one.kind !== "bot" || remaining === 1) {
@@ -479,7 +487,11 @@ export const identifyReviews = (snapshot) => {
         isCommentOnly &&
         threads.length > 0 &&
         threads.every((thread) => isResolved(thread, one.bot.logins));
-      if (canRetractByResolution) {
+      const canRetractSummary =
+        isCommentOnly &&
+        threads.length === 0 &&
+        summaryRetractions.has(one.bot.id);
+      if (canRetractByResolution || canRetractSummary) {
         remaining -= 1;
         return false;
       }
@@ -591,11 +603,18 @@ export const evaluateReviewTriage = (snapshot) => {
     const retractions = accepted.flatMap((one) =>
       one.kind === "bot"
         ? one.states.size === 1 && one.states.has("COMMENTED")
-          ? [
-              `  - ${one.bot.label}: reply in every inline thread it opened. Once every`,
-              "    thread has a written reply, this non-dismissible COMMENTED review is",
-              "    retracted. It keeps counting while any inline thread is unresolved.",
-            ]
+          ? snapshot.reviewThreads.some((thread) =>
+              isReviewerThread(thread, one.bot.logins),
+            )
+            ? [
+                `  - ${one.bot.label}: reply in every inline thread it opened. Once every`,
+                "    thread has a written reply, this non-dismissible COMMENTED review is",
+                "    retracted. It keeps counting while any inline thread is unresolved.",
+              ]
+            : [
+                `  - ${one.bot.label}: post this plain issue-comment marker with a reason:`,
+                `    review-triage: retract ${one.bot.id} - <reason>`,
+              ]
           : [
               `  - ${one.bot.label}: reply in every thread it opened, saying what you`,
               "    did, and then dismiss its review. Dismissing alone is not enough - a",

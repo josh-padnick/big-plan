@@ -278,10 +278,6 @@ test("two commented bot reviews still fail while each has an unresolved thread",
 });
 
 test("a summary-only commented review remains the accepted review", () => {
-  // With no inline thread there is no written disposition that can prove a
-  // retraction. Keeping the review counted avoids silently discarding summary
-  // feedback, while a second thread-bearing COMMENTED bot can still be
-  // retracted by resolving all of its threads.
   const verdict = evaluateReviewTriage(
     snapshot({
       issueComments: [signOff],
@@ -297,6 +293,78 @@ test("a summary-only commented review remains the accepted review", () => {
           },
           reply(),
         ]),
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "success", report(verdict));
+  assert.match(report(verdict), /Reviewer: CodeRabbit/);
+});
+
+test("two summary-only reviews require an explicit reviewer disposition", () => {
+  const reviews = [
+    { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+    { author: "greptile-apps[bot]", state: "COMMENTED", body: "summary" },
+  ];
+  const withoutDisposition = evaluateReviewTriage(
+    snapshot({ issueComments: [signOff], reviews }),
+  );
+  assert.equal(withoutDisposition.conclusion, "failure");
+  assert.match(withoutDisposition.title, /2 accepted reviews/);
+  assert.match(
+    report(withoutDisposition),
+    /review-triage: retract coderabbit - <reason>/,
+  );
+
+  for (const marker of [
+    "review-triage: retract coderabbit -",
+    "> review-triage: retract coderabbit - duplicate bot review",
+  ]) {
+    const invalidDisposition = evaluateReviewTriage(
+      snapshot({ issueComments: [signOff, comment(marker)], reviews }),
+    );
+    assert.equal(invalidDisposition.conclusion, "failure");
+    assert.match(invalidDisposition.title, /2 accepted reviews/);
+  }
+
+  const withDisposition = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        comment("review-triage: retract coderabbit - duplicate bot review"),
+      ],
+      reviews,
+    }),
+  );
+  assert.equal(withDisposition.conclusion, "success", report(withDisposition));
+  assert.match(report(withDisposition), /Reviewer: Greptile/);
+});
+
+test("a summary disposition drops only its named reviewer", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        comment("review-triage: retract devin - duplicate bot review"),
+      ],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
+        { author: "greptile-apps[bot]", state: "COMMENTED", body: "summary" },
+      ],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /2 accepted reviews/);
+});
+
+test("a summary disposition does not remove the only bot review", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        comment("review-triage: retract coderabbit - duplicate bot review"),
+      ],
+      reviews: [
+        { author: "coderabbitai[bot]", state: "COMMENTED", body: "summary" },
       ],
     }),
   );
