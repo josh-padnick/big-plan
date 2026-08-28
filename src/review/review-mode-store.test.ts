@@ -17,6 +17,7 @@ import {
   prepareStore,
   reviewStoreFor,
   writeSessionDescriptorValue,
+  writeSessionHeartbeatValue,
 } from "./store.js";
 
 const SESSION = "1111111111111111";
@@ -76,6 +77,10 @@ describe("review mode store", () => {
           plan: planPath,
         }),
       });
+      await writeSessionHeartbeatValue({
+        store,
+        value: { sessionId: SESSION, running: true, updatedAtMs: Date.now() },
+      });
       await writeArmedReviewMode({ store, sessionId: SESSION, armedAtMs: 42 });
       await expect(readActiveArmedReviewMode({ store })).resolves.toMatchObject(
         {
@@ -104,6 +109,35 @@ describe("review mode store", () => {
       ).rejects.toMatchObject({
         code: "ENOENT",
       });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should ignore armed mode after its runtime stops", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-review-mode-"));
+    const planPath = join(directory, "plan.mdx");
+    const planId = deriveReviewPlanId({ planPath });
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    try {
+      await writeSessionDescriptorValue({
+        store,
+        value: sessionDescriptor({
+          sessionId: SESSION,
+          planId,
+          plan: planPath,
+        }),
+      });
+      await writeSessionHeartbeatValue({
+        store,
+        value: { sessionId: SESSION, running: false, updatedAtMs: Date.now() },
+      });
+      await writeArmedReviewMode({ store, sessionId: SESSION, armedAtMs: 42 });
+
+      await expect(
+        readActiveArmedReviewMode({ store }),
+      ).resolves.toBeUndefined();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

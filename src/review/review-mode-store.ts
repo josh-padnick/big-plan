@@ -9,7 +9,10 @@ import {
   writeStoreJson,
   type ReviewStore,
 } from "./store.js";
-import { withReviewSessionAuthority } from "./session-authority.js";
+import {
+  reviewSessionIsRunning,
+  withReviewSessionAuthority,
+} from "./session-authority.js";
 
 const SESSION_ID = /^[a-f0-9]{16}$/u;
 
@@ -73,7 +76,8 @@ export const readReviewModeForSession = async ({
  * The mode file alone is insufficient: an old process can outlive the runtime
  * that armed it. Matching the authoritative session descriptor is what makes a
  * restart move safely back to review even before boot cleanup removes the old
- * file.
+ * file. The matching heartbeat also has to remain live: a stopped runtime can
+ * leave its descriptor behind while an interrupted mutation finishes.
  */
 export const readActiveArmedReviewMode = async ({
   store,
@@ -92,7 +96,11 @@ export const readActiveArmedReviewMode = async ({
   ) {
     return undefined;
   }
-  return armed;
+  const liveness = await reviewSessionIsRunning({
+    store,
+    sessionId: armed.sessionId,
+  });
+  return liveness.running ? armed : undefined;
 };
 
 /** Arms auto-accept for exactly one runtime session. */
