@@ -10,7 +10,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command:
-      "bun --cwd docs run build && bun --cwd docs run preview -- --host 127.0.0.1 --port 4321",
+      "npm exec --prefix docs -- astro build --root docs && npm exec --prefix docs -- astro preview --root docs --host 127.0.0.1 --port 4321",
     url: "http://127.0.0.1:4321/",
     reuseExistingServer: !process.env["CI"],
   },
