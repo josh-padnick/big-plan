@@ -6724,6 +6724,52 @@ test("should diff an HTTP endpoint at field level inside one rendering", async (
   }
 });
 
+test("should present an added HTTP endpoint as one whole card", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-added-endpoint-"));
+  const planPath = join(directory, "api.mdx");
+  const before = `# API\n\n## Endpoints\n`;
+  const after = `${before}\n<HttpEndpoint method="GET" path="/jobs">\n\nLists jobs.\n\n<Param name="status" in="query" type="string">\n\nFilters jobs.\n\n</Param>\n\n<Response status="200" label="Jobs">\n\nReturns matching jobs.\n\n</Response>\n\n</HttpEndpoint>\n`;
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const componentDiff = lens.locator("[data-component-diff]");
+    await expect(componentDiff).toHaveCount(1);
+    await expect(
+      componentDiff.locator('[data-component-diff-side="baseline"]'),
+    ).toHaveCount(0);
+    const proposed = componentDiff.locator(
+      '[data-component-diff-side="proposed"]',
+    );
+    await expect(proposed.locator("[data-http-endpoint]")).toHaveCount(1);
+    await expect(proposed).toContainText("Lists jobs.");
+    await expect(proposed).toContainText("Filters jobs.");
+    await expect(proposed).toContainText("Returns matching jobs.");
+    await expect(lens.locator("[data-review-diff-field-label]")).toHaveCount(0);
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should diff a database schema at column level inside one rendering", async ({
   page,
 }, testInfo) => {

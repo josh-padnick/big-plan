@@ -123,7 +123,20 @@ const listPresentationChanged = (location: DiffLocation): boolean =>
 const presentationLocations = (
   locations: ReadonlyArray<DiffLocation>,
 ): ReadonlyArray<DiffLocation> => {
-  let visible = locations;
+  const wholeComponentIds = new Set(
+    locations.flatMap((location) =>
+      location.isComponentRoot && location.status !== "changed"
+        ? [location.oldBlockId, location.newBlockId].filter(
+            (id): id is string => id !== undefined,
+          )
+        : [],
+    ),
+  );
+  let visible = locations.filter(
+    (location) =>
+      location.ownerId === undefined ||
+      !wholeComponentIds.has(location.ownerId),
+  );
   if (visible.some((location) => location.kind === "table-row")) {
     visible = visible.filter(
       (location) =>
