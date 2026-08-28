@@ -78,7 +78,7 @@ npx big-plan review plans/checkout-retry.mdx --takeover
 ```
 
 The replaced runtime keeps listening but loses write custody.
-Its open page and its connected agent become read-only until each moves to the new address, so prefer opening the printed address over taking custody.
+Its open page and its connected agent become read-only until each reloads, so prefer opening the printed address over taking custody.
 The command reports `custody: seized` together with the session it displaced.
 
 ## When a session stops accepting changes

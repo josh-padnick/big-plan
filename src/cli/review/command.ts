@@ -150,7 +150,7 @@ export const reviewCommand = async (
                 heldLink.reason,
               ]),
           "No second runtime started, so that session's open page and connected agent keep working",
-          `Run \`big-plan review ${quoteShellArgument(error.live.plan)} --takeover\` only to replace it; the live session keeps listening but loses write custody, so its open page and connected agent go read-only until each moves to the new address`,
+          `Run \`big-plan review ${quoteShellArgument(error.live.plan)} --takeover\` only to replace it; the live session keeps listening but loses write custody, so its open page and connected agent go read-only until each reloads`,
         ],
       };
     }
@@ -219,7 +219,7 @@ export const reviewCommand = async (
       ...(runtime.replacedSession === undefined
         ? []
         : [
-            `Took custody with --takeover from the live session ${runtime.replacedSession.sessionId} at ${runtime.replacedSession.url}; that session's open page and connected agent are now read-only until each moves to this address`,
+            `Took custody with --takeover from the live session ${runtime.replacedSession.sessionId} at ${runtime.replacedSession.url}; that session's open page and connected agent are now read-only until each reloads`,
           ]),
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,

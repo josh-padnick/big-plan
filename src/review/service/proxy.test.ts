@@ -25,13 +25,28 @@ import {
   writeSessionHeartbeatValue,
 } from "../store.js";
 import { rememberPlan } from "./registry.js";
+import { answerForPlan } from "./plan-status.js";
 import { startService } from "./server.js";
 import type { ServiceRuntime } from "./server.js";
 
 // Cold document rendering competes with the full suite's renderer workers.
 // This test still owns a finite bound, but not Vitest's too-tight 5s default.
-const PROXY_INTEGRATION_TEST_TIMEOUT_MS = 90_000;
-const MAX_PROXY_OVERHEAD_BASELINE_MULTIPLE = 8;
+const PROXY_INTEGRATION_TEST_TIMEOUT_MS = 15_000;
+const OVERHEAD_SAMPLE_COUNT = 10;
+// `test:proxy-overhead` runs this spec alone and owns the approved medians.
+// The ordinary parallel suite keeps a broad regression ceiling because its
+// worker contention is not a measurement of proxy cost.
+const STRICT_OVERHEAD_MEDIAN_TOLERANCE_MS = 2;
+const PARALLEL_OVERHEAD_SANITY_TOLERANCE_MS = 25;
+const overheadMedianToleranceMs =
+  process.env["BIG_PLAN_PROXY_BENCHMARK"] === "1"
+    ? STRICT_OVERHEAD_MEDIAN_TOLERANCE_MS
+    : PARALLEL_OVERHEAD_SANITY_TOLERANCE_MS;
+const STATED_DOCUMENT_ADDED_MS = 1.6;
+const STATED_POLL_ADDED_MS = 0.39;
+const STATED_RESOLUTION_MS = 2.2;
+const STATED_SERVICE_REDIRECT_MS = 3;
+const STATED_SERVICE_HEALTH_MS = 0.7;
 
 const reserveFreePort = async (): Promise<number> => {
   const probe = createServer();
@@ -191,14 +206,21 @@ const median = (samples: ReadonlyArray<number>): number => {
 const responseDurationMs = async ({
   url,
   headers,
+  expectedStatus = 200,
+  redirect,
 }: {
   readonly url: string;
   readonly headers?: Readonly<Record<string, string>>;
+  readonly expectedStatus?: number;
+  readonly redirect?: RequestRedirect;
 }): Promise<number> => {
   const startedAt = performance.now();
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, {
+    headers,
+    ...(redirect === undefined ? {} : { redirect }),
+  });
   await response.arrayBuffer();
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(expectedStatus);
   return performance.now() - startedAt;
 };
 
@@ -619,7 +641,7 @@ describe("the stable review proxy", () => {
     expect(statusLine).toBe("HTTP/1.1 426 Upgrade Required");
   });
 
-  it("should bound measured direct-to-stable-hop overhead", async () => {
+  it("should reproduce the approved stable-hop overhead figures", async () => {
     delete process.env["BIG_PLAN_PROXY"];
     const running = await startPair();
     const planPrefix = `/plan/${running.review.planId}/`;
@@ -627,19 +649,23 @@ describe("the stable review proxy", () => {
       "x-big-plan-review-token": running.token,
       "sec-fetch-site": "same-origin",
     };
+    const documentBytes = await fetch(running.review.url).then((response) =>
+      response.arrayBuffer(),
+    );
+    expect(documentBytes.byteLength).toBeGreaterThan(1_000_000);
     const routes = [
       {
         route: "document",
         direct: running.review.url,
         proxied: `${running.service.origin}${planPrefix}`,
-        iterations: 3,
+        statedAddedMs: STATED_DOCUMENT_ADDED_MS,
       },
       {
         route: "poll",
-        direct: `${running.review.url}api/drafts`,
-        proxied: `${running.service.origin}${planPrefix}api/drafts`,
+        direct: `${running.review.url}api/agent`,
+        proxied: `${running.service.origin}${planPrefix}api/agent`,
         headers: browserReadHeaders,
-        iterations: 10,
+        statedAddedMs: STATED_POLL_ADDED_MS,
       },
     ] as const;
 
@@ -647,7 +673,11 @@ describe("the stable review proxy", () => {
     for (const route of routes) {
       const directSamples: Array<number> = [];
       const proxiedSamples: Array<number> = [];
-      for (let iteration = 0; iteration < route.iterations; iteration += 1) {
+      for (
+        let iteration = 0;
+        iteration < OVERHEAD_SAMPLE_COUNT;
+        iteration += 1
+      ) {
         directSamples.push(
           await responseDurationMs({
             url: route.direct,
@@ -668,6 +698,7 @@ describe("the stable review proxy", () => {
         directMedianMs,
         proxiedMedianMs,
         overheadMs: proxiedMedianMs - directMedianMs,
+        statedAddedMs: route.statedAddedMs,
       });
     }
 
@@ -677,11 +708,50 @@ describe("the stable review proxy", () => {
       expect(Number.isFinite(row.proxiedMedianMs)).toBe(true);
       expect(Number.isFinite(row.overheadMs)).toBe(true);
       expect(row.overheadMs).toBeLessThanOrEqual(
-        row.directMedianMs * MAX_PROXY_OVERHEAD_BASELINE_MULTIPLE,
+        row.statedAddedMs + overheadMedianToleranceMs,
       );
     }
-    // TODO(BIG-236): At merge time, reconcile these regression bounds with the
-    // omitted authoritative plan table's exact stated figures.
+
+    const resolutionSamples: Array<number> = [];
+    const redirectSamples: Array<number> = [];
+    const healthSamples: Array<number> = [];
+    for (let iteration = 0; iteration < OVERHEAD_SAMPLE_COUNT; iteration += 1) {
+      const resolutionStartedAt = performance.now();
+      expect(
+        await answerForPlan({ planId: running.review.planId }),
+      ).toMatchObject({ kind: "live" });
+      resolutionSamples.push(performance.now() - resolutionStartedAt);
+      healthSamples.push(
+        await responseDurationMs({
+          url: `${running.service.origin}/healthz`,
+        }),
+      );
+      redirectSamples.push(
+        await responseDurationMs({
+          url: `${running.service.origin}${planPrefix.slice(0, -1)}`,
+          expectedStatus: 302,
+          redirect: "manual",
+        }),
+      );
+    }
+
+    const resolutionMedianMs = median(resolutionSamples);
+    const redirectMedianMs = median(redirectSamples);
+    const healthMedianMs = median(healthSamples);
+    expect(resolutionMedianMs).toBeLessThanOrEqual(
+      STATED_RESOLUTION_MS + overheadMedianToleranceMs,
+    );
+    expect(redirectMedianMs).toBeLessThanOrEqual(
+      STATED_SERVICE_REDIRECT_MS + overheadMedianToleranceMs,
+    );
+    expect(healthMedianMs).toBeLessThanOrEqual(
+      STATED_SERVICE_HEALTH_MS + overheadMedianToleranceMs,
+    );
+    expect(redirectMedianMs - healthMedianMs).toBeLessThanOrEqual(
+      STATED_SERVICE_REDIRECT_MS -
+        STATED_SERVICE_HEALTH_MS +
+        overheadMedianToleranceMs,
+    );
   });
 
   it("should stream a 10 MiB request without retaining one body in proxy RSS", async () => {

@@ -187,6 +187,7 @@ describe("reviewCommand", () => {
         expect.arrayContaining([
           expect.stringContaining(`Open ${stable}`),
           expect.stringContaining(`Direct runtime address: ${live.url}`),
+          expect.stringContaining("read-only until each reloads"),
         ]),
       );
     } finally {

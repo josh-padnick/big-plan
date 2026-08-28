@@ -191,8 +191,7 @@ heartbeat, so two simultaneous starts cannot both take the same plan.
 A stopped, expired, or crashed session leaves the plan free, and the next
 `review` takes custody normally.
 `--takeover` leaves the replaced runtime listening without write custody, which
-makes its open page and its connected agent read-only until each moves to the
-new address.
+makes its open page and its connected agent read-only until each reloads.
 
 `agent <input.mdx>` reads the matching live session and returns the owner-only
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
