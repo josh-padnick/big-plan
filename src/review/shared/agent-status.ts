@@ -121,27 +121,6 @@ export type CurrentAgentActivity =
       readonly headline: "Agent is unreachable";
       readonly supporting: string;
     }
-  // The approval handed to the agent, before and after it is acknowledged.
-  // Both readings are settled rather than in flight, which is why they are a
-  // state of their own rather than a step inside working.
-  | ({
-      readonly state: "handoff";
-      readonly tone: "neutral";
-      readonly headline: "Plan approved";
-      readonly supporting: string;
-      readonly updatedAtMs: number;
-    } & ActivityRequestFacts)
-  // The handoff the agent refused. It is settled like the other two and reads
-  // nothing like them: the plan is approved and nobody is acting on it, which
-  // is the reviewer's move to make, so it carries the warning register and
-  // leads with the stop rather than with the approval.
-  | ({
-      readonly state: "handoff-blocked";
-      readonly tone: "warning";
-      readonly headline: "Approval not acknowledged";
-      readonly supporting: string;
-      readonly updatedAtMs: number;
-    } & ActivityRequestFacts)
   | {
       readonly state: "idle";
       readonly tone: "neutral";
@@ -227,9 +206,6 @@ export const deriveAgentHealth = ({
   if (activity.state === "errored") {
     return { indicator: "error", label: "Agent error" };
   }
-  if (activity.state === "handoff-blocked") {
-    return { indicator: "stalled", label: "Approval not acknowledged" };
-  }
   if (activity.state === "stalled") {
     return { indicator: "stalled", label: "Agent not responding" };
   }
@@ -276,125 +252,13 @@ const requestFacts = (request: AgentActivityRequest): ActivityRequestFacts => ({
     : { targetLabel: request.targetLabel }),
 });
 
-/*
-An approval's two steps are settled the moment they exist: the reviewer owns
-"Plan approved" and the agent posts "Approval acknowledged" as its last act on
-the request. The ordinary reading of current work - unfinished narration by the
-agent holding the claim - therefore drops exactly the two steps the handoff is
-made of, so they are admitted by name (BIG-131).
-*/
-const isApprovalHandoffStep = (stepCode: ProgressStepCode): boolean =>
-  stepCode === "plan-approved" || stepCode === "approval-acknowledged";
-
 const meaningfulWork = (
   event: AgentActivityProgress,
   requestId: string,
 ): boolean =>
   event.requestId === requestId &&
-  (isApprovalHandoffStep(event.stepCode) ||
-    ((event.state === "live" || event.state === "waiting") &&
-      progressStepCodeIsAgentOwned(event.stepCode)));
-
-/**
- * The handoff reading, for a card whose other states all describe work in
- * flight.
- *
- * An approval is the one item whose whole life is settled steps: it is approved
- * before any agent sees it, and acknowledging it ends the request rather than
- * changing the plan. Judged as work, it is therefore invisible on both sides of
- * the claim - queued behind the ordinary "feedback is queued" copy before
- * pickup, and gone the instant it is answered - which left the surface that
- * names the agent's state saying nothing about the decision that was handed to
- * it (BIG-131).
- *
- * It is read from the approval thread's own steps rather than from the approval
- * record, so a revoked approval simply stops being the latest word here, the
- * same way it stops being in force, and an agent that reported a hard stop
- * instead of acknowledging says so here rather than leaving the card waiting
- * for an acknowledgment that is never coming.
- *
- * It is also the last word only until the agent has one: a later step the agent
- * itself posted on another request means it has moved on, and a card still
- * headlining an acknowledgment - timestamped before the answer the agent has
- * since published - would report the wrong moment as the current one. The
- * reviewer's own bookkeeping about queued work moves nothing here, because
- * canceling a message says nothing about where the agent is.
- */
-const approvalHandoffReading = ({
-  requests,
-  responses,
-  progressEvents,
-}: {
-  readonly requests: ReadonlyArray<AgentActivityRequest>;
-  readonly responses: ReadonlyArray<AgentActivityAnswer>;
-  readonly progressEvents: ReadonlyArray<AgentActivityProgress>;
-}): CurrentAgentActivity | undefined => {
-  const index = progressEvents.findLastIndex(
-    (event) =>
-      isApprovalHandoffStep(event.stepCode) ||
-      event.stepCode === "approval-blocked" ||
-      event.stepCode === "approval-revoked",
-  );
-  const latest = index === -1 ? undefined : progressEvents[index];
-  if (latest === undefined || latest.stepCode === "approval-revoked") {
-    return undefined;
-  }
-  const movedOn = progressEvents
-    .slice(index + 1)
-    .some(
-      (event) =>
-        event.requestId !== undefined &&
-        event.requestId !== latest.requestId &&
-        progressStepCodeIsAgentOwned(event.stepCode),
-    );
-  if (movedOn) return undefined;
-  const request = requests.find(
-    (candidate) =>
-      candidate.kind === "approval" && candidate.requestId === latest.requestId,
-  );
-  if (request === undefined || request.canceledAt !== undefined) {
-    return undefined;
-  }
-  /*
-  The answer decides, and the step only narrates it. The step that says an
-  approval was answered is appended after the answer commits and only on a best
-  effort, so a card that waited for it went on asking the reviewer to wait for
-  an acknowledgment the agent had already given - or already refused - while the
-  thread beside it said otherwise (BIG-131).
-  */
-  const answer = responses.find(
-    (candidate) => candidate.requestId === request.requestId,
-  );
-  const answered = answer !== undefined || request.answeredAt !== undefined;
-  if (
-    answer?.hardStop !== undefined ||
-    latest.stepCode === "approval-blocked"
-  ) {
-    const reason = answer?.hardStop ?? latest.detail;
-    return {
-      ...requestFacts(request),
-      state: "handoff-blocked",
-      tone: "warning",
-      headline: "Approval not acknowledged",
-      supporting:
-        reason === undefined
-          ? "The agent stopped instead of acknowledging the approval. The plan is still approved and nobody is acting on it."
-          : `The agent stopped instead of acknowledging: ${reason}`,
-      updatedAtMs: latest.atMs ?? 0,
-    };
-  }
-  return {
-    ...requestFacts(request),
-    state: "handoff",
-    tone: "neutral",
-    headline: "Plan approved",
-    supporting:
-      answered || latest.stepCode === "approval-acknowledged"
-        ? "Approval acknowledged. The agent has the approved plan and the decisions recorded with it."
-        : "Waiting for the agent to acknowledge the approval.",
-    updatedAtMs: latest.atMs ?? 0,
-  };
-};
+  (event.state === "live" || event.state === "waiting") &&
+  progressStepCodeIsAgentOwned(event.stepCode);
 
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";
@@ -839,7 +703,6 @@ export const selectPendingAgentRequest = <
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
   requests,
-  responses = [],
   cancelPendingRequestIds,
   progressEvents,
   agentConnected,
@@ -972,22 +835,6 @@ export const deriveCurrentAgentActivity = ({
           heldWorkQuiet({ requests, cancelPendingRequestIds, now }) === "stale",
       }),
     };
-  }
-  // An approval waiting to be picked up is not ordinary queued feedback, and
-  // one already acknowledged is the last thing that happened on this review.
-  // Approving cancels every request older than it, so an unanswered approval is
-  // the oldest thing still open and the queue agrees it is next; a message
-  // queued behind it waits its turn here as it does everywhere else.
-  const handoff = approvalHandoffReading({
-    requests,
-    responses,
-    progressEvents,
-  });
-  if (
-    handoff !== undefined &&
-    (request === undefined || request.kind === "approval")
-  ) {
-    return handoff;
   }
   if (request === undefined) {
     return {
