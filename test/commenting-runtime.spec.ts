@@ -6119,7 +6119,7 @@ The runbook stays inline for the first rollout.
     };
 
     await test.step("the changed danger callout is danger on both sides", async () => {
-      await stepTo("Rollback risk");
+      await stepTo("Body");
       const callouts = lens.locator("[data-callout]");
       await expect(callouts).toHaveCount(2);
       // The component's own diff must replay the recorded danger kind from
