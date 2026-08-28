@@ -8,7 +8,6 @@
 
 import { asQuotedBody } from "./feedback-package.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
-import { asQuotedBody } from "./feedback-package.js";
 import { APPROVAL_MESSAGE_LIMIT } from "./shared/approval-message.js";
 import {
   APPROVAL_ID,
