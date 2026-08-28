@@ -11,8 +11,10 @@
 //      are gone. Exactly one, because BIG-143 buys one review per pull request;
 //      two reviews mean one of them was never paid for or never triaged.
 //      A reviewer counts while it has either a review it has not taken back or
-//      an unresolved inline thread, so dismissing a review drops it from the
-//      count only once every finding it left is resolved.
+//      an unresolved inline thread. Dismissible reviews drop only after every
+//      finding is resolved; when another bot remains, a COMMENTED review drops
+//      after its inline findings are resolved or its summary-only review is
+//      explicitly retracted.
 //   b. Every inline finding that reviewer raised is resolved, which here means
 //      a written reply from somebody other than the reviewer. Resolved is this
 //      gate's word, not GitHub's: ticking GitHub's resolve checkbox resolves

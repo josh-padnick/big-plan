@@ -145,7 +145,7 @@ findings: <n>
 
 The sha must be a commit on this pull request, and the number of findings declared must not exceed the number of disposition lines.
 Post at most one accepted review per pull request: an attestation posted while a bot has already reviewed fails the gate.
-Clear it by deleting the attestation comment, or by resolving the bot's findings and then dismissing its review - dismissal alone leaves the bot counted while any of its threads is unresolved.
+Clear it by deleting the attestation comment, or by removing the bot review through the applicable process under [When to sign off](#when-to-sign-off).
 
 ### The override rule
 
