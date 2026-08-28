@@ -57,6 +57,22 @@ const { prompt } = Astro.props;
     trigger.innerHTML = triggerLink.innerHTML;
     trigger.addEventListener("click", () => dialog.showModal());
     dialog.addEventListener("close", () => trigger.focus());
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      const controls = Array.from(
+        dialog.querySelectorAll<HTMLElement>("button, a[href]"),
+      );
+      const firstControl = controls.at(0);
+      const lastControl = controls.at(-1);
+      if (firstControl === undefined || lastControl === undefined) return;
+      if (event.shiftKey && document.activeElement === firstControl) {
+        event.preventDefault();
+        lastControl.focus();
+      } else if (!event.shiftKey && document.activeElement === lastControl) {
+        event.preventDefault();
+        firstControl.focus();
+      }
+    });
     triggerLink.replaceWith(trigger);
   }
 
