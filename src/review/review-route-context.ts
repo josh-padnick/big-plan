@@ -20,12 +20,12 @@ import {
 import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
 import {
   readApprovalRecord,
-  readChangeDispositions,
+  readChangeVerdicts,
   readComments,
   readResolvedCommentIds,
   readStagedInputs,
   writeApprovalRecord,
-  writeChangeDispositions,
+  writeChangeVerdicts,
   writeStagedInputs,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
@@ -35,8 +35,8 @@ import {
 } from "./decision-inventory.js";
 import { validateStagedInputs } from "./plan-inputs-store.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
-import { validateChangeDispositions } from "./change-dispositions-store.js";
-import type { StoredChangeDispositions } from "./change-dispositions-store.js";
+import { validateChangeVerdicts } from "./change-verdicts-store.js";
+import type { StoredChangeVerdicts } from "./change-verdicts-store.js";
 import { validateApprovalRecord } from "./approval-record.js";
 import type { ApprovalRecord } from "./shared/approval.js";
 import {
@@ -190,13 +190,13 @@ export type DecisionAnswers = {
 };
 
 /**
- * The change dispositions this review has recorded. Unlike the answer record
- * there is no inventory to join against: a disposition names the two snapshot
+ * The change verdicts this review has recorded. Unlike the answer record
+ * there is no inventory to join against: a verdict names the two snapshot
  * digests it closed, so it already refers to exactly one revision's content.
  */
-export type ChangeDispositions = {
-  readonly read: () => Promise<StoredChangeDispositions>;
-  readonly write: (dispositions: StoredChangeDispositions) => Promise<void>;
+export type ChangeVerdicts = {
+  readonly read: () => Promise<StoredChangeVerdicts>;
+  readonly write: (verdicts: StoredChangeVerdicts) => Promise<void>;
 };
 
 /** The append-only approval log this review has recorded. */
@@ -223,7 +223,7 @@ export type ReviewRouteContext = {
   readonly recoveryPrompt: string;
   readonly planRenderer: PlanRenderer;
   readonly decisionAnswers: DecisionAnswers;
-  readonly changeDispositions: ChangeDispositions;
+  readonly changeVerdicts: ChangeVerdicts;
   readonly approvals: Approvals;
   readonly readerProgress: ReaderProgress;
   readonly writeGate: WriteGate;
@@ -405,7 +405,7 @@ export const createDecisionAnswers = ({
 };
 
 /**
- * Owns every read and write of the change-disposition record.
+ * Owns every read and write of the change-verdict record.
  *
  * The revision a browser has applied is its guard against stale responses, so
  * within one runtime the revision this object answers with never decreases:
@@ -413,26 +413,25 @@ export const createDecisionAnswers = ({
  * empty, or replaced out of band - is served at the highest revision already
  * handed out, and the next accepted write advances from there.
  */
-export const createChangeDispositions = ({
+export const createChangeVerdicts = ({
   store,
 }: {
   readonly store: ReviewStore;
-}): ChangeDispositions => {
-  return createRevisionedRecord<StoredChangeDispositions>({
+}): ChangeVerdicts => {
+  return createRevisionedRecord<StoredChangeVerdicts>({
     initial: { version: 1, revision: 0, accepted: [] },
     readStored: () =>
-      readChangeDispositions({
+      readChangeVerdicts({
         store,
-        validate: validateChangeDispositions,
+        validate: validateChangeVerdicts,
       }),
-    writeStored: (dispositions) =>
-      writeChangeDispositions({ store, dispositions }),
+    writeStored: (verdicts) => writeChangeVerdicts({ store, verdicts }),
   });
 };
 
 /**
  * Owns every read and write of the approval log. Unlike the answer and
- * disposition records there is no revision token: the log is append-only, the
+ * verdict records there is no revision token: the log is append-only, the
  * derived status is computed against the current source digest, and a stale
  * write is refused by the digest compare-and-swap on approve rather than by
  * a count.

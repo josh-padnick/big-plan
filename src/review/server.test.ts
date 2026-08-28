@@ -6926,12 +6926,12 @@ describe("review runtime approval", () => {
             },
           },
         });
-        const dispositions = await callRuntime({
+        const verdicts = await callRuntime({
           target,
           sessionToken,
-          path: "/api/change-dispositions",
+          path: "/api/change-verdicts",
         });
-        await expect(dispositions.json()).resolves.toMatchObject({
+        await expect(verdicts.json()).resolves.toMatchObject({
           accepted: [
             expect.objectContaining({ from: digest, to: publishedDigest }),
           ],

@@ -17,7 +17,7 @@ import type {
 import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
 import { readSnapshot } from "./store.js";
 import { encodeSnapshotDiff } from "./shared/review-wire.js";
-import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
+import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 
 // Honest rollout scaffolding. Every definition has compileDiff once the
 // contract exists, so presence cannot say which kinds have completed the
