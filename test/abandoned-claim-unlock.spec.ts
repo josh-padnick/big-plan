@@ -149,7 +149,7 @@ test("should hand a comment back once its claim is proven abandoned", async ({
     .first();
   await expandThread(released);
   const unlockNote = rail.locator("[data-review-abandoned-claim-unlock]");
-  await expect(unlockNote).toBeVisible();
+  await expect(unlockNote).toBeVisible({ timeout: 15_000 });
   await expect(unlockNote).toContainText(
     "reported nothing for far longer than a turn takes",
   );

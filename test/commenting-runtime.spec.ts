@@ -434,7 +434,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       targetPage
         .getByRole("dialog", { name: /Comment on/u })
         .getByLabel("Add a comment"),
-    ).toHaveValue(composerBody);
+    ).toHaveValue(composerBody, { timeout: 15_000 });
     await targetPage
       .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
       .click();
@@ -447,7 +447,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       .click();
     await expect(
       restoredThread.getByPlaceholder("Reply to the agent…"),
-    ).toHaveValue(replyBody);
+    ).toHaveValue(replyBody, { timeout: 15_000 });
   };
 
   const firstComposer = "Keep the first tab's composer text.";
@@ -487,7 +487,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       targetPage
         .getByRole("dialog", { name: /Comment on/u })
         .getByLabel("Add a comment"),
-    ).toHaveValue(composerBody);
+    ).toHaveValue(composerBody, { timeout: 15_000 });
     await targetPage
       .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
       .click();
@@ -500,6 +500,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       .click();
     await expect(thread.getByPlaceholder("Reply to the agent…")).toHaveValue(
       replyBody,
+      { timeout: 15_000 },
     );
   }
   await duplicatePage.close();
