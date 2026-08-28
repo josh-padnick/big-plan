@@ -1083,6 +1083,12 @@ export const startReviewRuntime = async (
   return {
     ...runtime,
     url: stableUrl,
+    close: async () => {
+      await runtime.close();
+      if (directReviewUrls.get(stableUrl) === runtime.url) {
+        directReviewUrls.delete(stableUrl);
+      }
+    },
   };
 };
 
