@@ -397,6 +397,7 @@ export default tseslint.config(
           "src/render/service-page*.ts",
         ],
         imports: [
+          "**/compile-semantic-model.js",
           "**/compile-plan-model.js",
           "**/plan-id.js",
           "**/render-document.js",
