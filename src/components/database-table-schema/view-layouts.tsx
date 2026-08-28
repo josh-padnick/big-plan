@@ -330,9 +330,7 @@ const IndexEntry = ({
     ].join(" ")}
     data-schema-index={String(offset + 1)}
     data-commentable-kind={FIELD_KIND}
-    data-commentable-label={`Index: ${
-      index.name ?? index.columns.join(", ")
-    }`}
+    data-commentable-label={`Index: ${index.name ?? index.columns.join(", ")}`}
   >
     <Badge kind="idx" label={indxLabel(offset + 1)} />
     <span className="min-w-0 flex-1">

@@ -1,3 +1,5 @@
+// Derives DataTable diffs by stable row identity while retaining column metadata.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,
@@ -27,10 +29,11 @@ const alignChangedRows = (
     proposedIndex < proposed.length;
     proposedIndex += 1
   ) {
+    const proposedRow = proposed[proposedIndex];
+    if (proposedRow === undefined) continue;
     const baselineIndex = baseline.findIndex(
       (row, index) =>
-        !baselineMatched.has(index) &&
-        rowLabel(row) === rowLabel(proposed[proposedIndex]!),
+        !baselineMatched.has(index) && rowLabel(row) === rowLabel(proposedRow),
     );
     if (baselineIndex !== -1) {
       baselineMatched.add(baselineIndex);
@@ -57,20 +60,23 @@ const alignChangedRows = (
   for (const index of remainingProposed.slice(fallbackCount)) {
     pairs.push([undefined, index]);
   }
-  const changed = pairs.filter(([baselineIndex, proposedIndex]) =>
-    !sameDiffValue(
-      baselineIndex === undefined ? undefined : baseline[baselineIndex],
-      proposedIndex === undefined ? undefined : proposed[proposedIndex],
-    ),
+  const changed = pairs.filter(
+    ([baselineIndex, proposedIndex]) =>
+      !sameDiffValue(
+        baselineIndex === undefined ? undefined : baseline[baselineIndex],
+        proposedIndex === undefined ? undefined : proposed[proposedIndex],
+      ),
   );
   return {
-    names: changed.map(([baselineIndex, proposedIndex]) =>
-      rowLabel(
+    names: changed.map(([baselineIndex, proposedIndex]) => {
+      const row =
         proposedIndex === undefined
-          ? baseline[baselineIndex!]!
-          : proposed[proposedIndex]!,
-      ),
-    ),
+          ? baselineIndex === undefined
+            ? undefined
+            : baseline[baselineIndex]
+          : proposed[proposedIndex];
+      return row === undefined ? "Table row" : rowLabel(row);
+    }),
     baselineIndexes: changed.flatMap(([index]) =>
       index === undefined ? [] : [index],
     ),

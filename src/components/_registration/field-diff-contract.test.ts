@@ -1,3 +1,5 @@
+// Verifies registered component diff contracts name fields and preserve structural targets.
+
 import type { ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";

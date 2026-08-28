@@ -1,3 +1,5 @@
+// Derives GrpcMethod diffs from stable request, response, and error identities.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,

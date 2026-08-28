@@ -1,3 +1,5 @@
+// Presents changed HttpEndpoint fields without duplicating whole cards.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledHttpEndpoint } from "./compile.js";
 import type { CompiledHttpEndpointDiff } from "./compile-diff.js";

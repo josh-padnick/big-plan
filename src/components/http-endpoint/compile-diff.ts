@@ -1,3 +1,5 @@
+// Derives HttpEndpoint diffs from stable endpoint-field identities.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,

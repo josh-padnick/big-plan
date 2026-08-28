@@ -1,3 +1,5 @@
+// Owns reusable model-level derivation for component diffs expressed as named fields.
+
 import type { ComponentDiffInput } from "./contract.js";
 
 export type NamedField<Model> = {

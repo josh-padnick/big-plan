@@ -1,3 +1,5 @@
+// Derives the CodeSnippet diff model from its authored metadata and source text.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,

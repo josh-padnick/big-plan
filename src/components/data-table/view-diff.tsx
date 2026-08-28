@@ -1,3 +1,5 @@
+// Presents changed DataTable rows with the table component's own controls.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledDataTable } from "./compile.js";
 import type { CompiledDataTableDiff } from "./compile-diff.js";

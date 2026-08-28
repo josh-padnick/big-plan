@@ -1,3 +1,5 @@
+// Presents changed GraphqlOperation fields through the shared diff view.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledGraphqlOperation } from "./compile.js";
 import type { CompiledGraphqlOperationDiff } from "./compile-diff.js";

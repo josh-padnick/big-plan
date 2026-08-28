@@ -1,3 +1,5 @@
+// Presents CodeDiff changes through the shared named-field diff view.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledCodeDiff } from "./compile.js";
 import type { CompiledCodeDiffDiff } from "./compile-diff.js";

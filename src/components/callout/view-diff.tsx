@@ -1,3 +1,5 @@
+// Presents Callout changes through the shared named-field diff view.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledCallout } from "./compile.js";
 import type { CompiledCalloutDiff } from "./compile-diff.js";

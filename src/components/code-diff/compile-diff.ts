@@ -1,3 +1,5 @@
+// Derives the CodeDiff diff model from its authored metadata and diff text.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,

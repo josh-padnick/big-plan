@@ -1,3 +1,5 @@
+// Derives DatabaseTableSchema diffs from stable schema-field identities.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,

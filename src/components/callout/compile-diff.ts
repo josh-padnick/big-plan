@@ -1,3 +1,5 @@
+// Derives the Callout diff model from component-owned text and type fields.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,

@@ -1,3 +1,5 @@
+// Presents changed database schema fields without duplicating whole cards.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledDatabaseTableSchema } from "./compile.js";
 import type { CompiledDatabaseTableSchemaDiff } from "./compile-diff.js";

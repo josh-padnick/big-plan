@@ -1,3 +1,5 @@
+// Presents changed QuickSummary facets through the shared diff view.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledQuickSummary } from "./compile.js";
 import type { CompiledQuickSummaryDiff } from "./compile-diff.js";

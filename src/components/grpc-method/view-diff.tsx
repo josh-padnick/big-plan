@@ -1,3 +1,5 @@
+// Presents changed GrpcMethod fields through the shared diff view.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledGrpcMethod } from "./compile.js";
 import type { CompiledGrpcMethodDiff } from "./compile-diff.js";

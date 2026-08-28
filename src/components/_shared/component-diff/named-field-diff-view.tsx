@@ -1,3 +1,5 @@
+// Renders the shared Was/Now presentation used by named-field component diffs.
+
 import type { ComponentType } from "react";
 import type { NamedFieldDiff } from "../../_model/component-diff/named-fields.js";
 import { ComponentDiffSide } from "./component-diff-context.js";

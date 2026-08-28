@@ -1,3 +1,5 @@
+// Presents CodeSnippet changes through the shared named-field diff view.
+
 import { NamedFieldDiffView } from "../_shared/component-diff/named-field-diff-view.js";
 import type { CompiledCodeSnippet } from "./compile.js";
 import type { CompiledCodeSnippetDiff } from "./compile-diff.js";

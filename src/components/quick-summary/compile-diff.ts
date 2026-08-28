@@ -1,3 +1,5 @@
+// Derives QuickSummary diffs from the component's declared facets.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,

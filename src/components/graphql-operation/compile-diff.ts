@@ -1,3 +1,5 @@
+// Derives GraphqlOperation diffs from stable operation-field identities.
+
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import {
   compileNamedFieldDiff,
