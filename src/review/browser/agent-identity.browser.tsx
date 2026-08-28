@@ -7,7 +7,19 @@
 // connector declared to what a vendor writes; this owns the one line those
 // lookups are arranged into, and nothing else.
 
+import type { ReactNode } from "react";
 import { agentClientDisplayName } from "../shared/agent-identity-catalog.js";
+
+/** The quiet identity chip shared by agent-facing review entries. */
+export const AgentIdentityChip = ({
+  children,
+}: {
+  readonly children: ReactNode;
+}) => (
+  <span className="w-fit rounded-sm bg-surface px-1.5 py-0.5 text-2xs font-semibold text-ink">
+    {children}
+  </span>
+);
 
 /**
  * The agent's name, and the tool it is connected through when it declared one.

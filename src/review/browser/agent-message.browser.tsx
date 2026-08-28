@@ -21,7 +21,10 @@ import {
   UNRECORDABLE_ACCEPTANCE_LABEL,
   useDiffTour,
 } from "./diff-tour.browser.js";
-import { AgentIdentityText } from "./agent-identity.browser.js";
+import {
+  AgentIdentityChip,
+  AgentIdentityText,
+} from "./agent-identity.browser.js";
 import { Icon } from "./icon.browser.js";
 import {
   renderMessageNode,
@@ -415,15 +418,14 @@ export const AgentChangeIdentity = ({
   const client = identity?.client;
   if (model === undefined && client === undefined) return null;
   return (
-    <span
-      className="w-fit rounded-sm bg-surface px-1.5 py-0.5 text-2xs font-semibold text-ink"
-      data-review-change-set-identity=""
-    >
-      <AgentIdentityText
-        label={model === undefined ? "Agent" : agentModelDisplayName(model)}
-        client={client}
-      />
-    </span>
+    <AgentIdentityChip>
+      <span data-review-change-set-identity="">
+        <AgentIdentityText
+          label={model === undefined ? "Agent" : agentModelDisplayName(model)}
+          client={client}
+        />
+      </span>
+    </AgentIdentityChip>
   );
 };
 

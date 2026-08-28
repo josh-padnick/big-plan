@@ -136,6 +136,11 @@ export const agentForClaimToken = ({
  */
 const SHORT_WRITER_ID_LENGTH = 4;
 
+/** The short roster id shown when a reviewer needs to distinguish an agent. */
+export const agentWriterIdLabel = (
+  agent: Pick<AttachedAgent, "writerId">,
+): string => `…${agent.writerId.slice(-SHORT_WRITER_ID_LENGTH)}`;
+
 /**
  * Names one attached agent, always carrying the disambiguating id.
  *
@@ -156,7 +161,7 @@ export const agentModelLabel = (
   // card said "…586687" about an id that starts with those characters - a
   // reader checking the card against the id the CLI printed found the two
   // disagreeing about which end had been cut.
-  const short = `…${agent.writerId.slice(-SHORT_WRITER_ID_LENGTH)}`;
+  const short = agentWriterIdLabel(agent);
   const name = agent.model?.name;
   return name === undefined
     ? short

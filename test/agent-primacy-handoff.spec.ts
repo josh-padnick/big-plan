@@ -233,6 +233,10 @@ test("should offer to make a newcomer primary after the incumbent's closed claim
       store: runtime.store,
       sessionId: runtime.sessionId,
       writerId: "new-observer",
+      model: {
+        client: "claude-code 2.1.217",
+        name: "claude-opus-4-8",
+      },
       now: startedAtMs + 3,
     });
     await requestAgentPrimacy({
@@ -248,9 +252,42 @@ test("should offer to make a newcomer primary after the incumbent's closed claim
       '[data-review-agent-card="request"]',
     );
     await expect(requestCard).toBeVisible();
+    await expect(requestCard).toContainText(
+      "Claude Code - claude-opus-4-8 - …rver",
+    );
     await expect(
       requestCard.getByRole("button", { name: "Make it primary" }),
     ).toBeVisible();
+
+    const settled = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/agent-primacy") &&
+        response.request().method() === "POST",
+    );
+    await requestCard
+      .getByRole("button", { name: "Leave as observer" })
+      .click();
+    expect((await settled).ok()).toBe(true);
+
+    await attachAgentToRoster({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "identity-free-observer",
+      now: startedAtMs + 5,
+    });
+    await requestAgentPrimacy({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      writerId: "identity-free-observer",
+      now: startedAtMs + 6,
+    });
+    await page.reload();
+    await agentStatusTrigger(page).click();
+    const fallbackCard = agentSidebar(page).locator(
+      '[data-review-agent-card="request"]',
+    );
+    await expect(fallbackCard).toBeVisible();
+    await expect(fallbackCard).toContainText("…rver");
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
