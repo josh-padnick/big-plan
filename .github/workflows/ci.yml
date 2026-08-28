@@ -43,20 +43,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
       - run: bun install --frozen-lockfile
-      - name: Runtime dependencies must have no high or critical vulnerabilities
-        run: npm audit --no-package-lock --omit=dev --audit-level=high
-      - run: bun run lint
-      - run: bun run build
-      # Generated modules are committed; build just regenerated them, so any
-      # difference means a source changed without its generated output.
-      - name: Generated files must not drift from their sources
-        run: |
-          if [ -n "$(git status --porcelain -- '*.generated.ts' '*.generated.css')" ]; then
-            git status --porcelain -- '*.generated.ts' '*.generated.css'
-            echo "::error::Generated files drifted from their sources. Run 'bun run gen' and commit the result."
-            exit 1
-          fi
-      - run: bun run test
       - name: Read Playwright version
         id: playwright-version
         run: echo "version=$(bunx playwright --version | sed 's/^Version //')" >> "$GITHUB_OUTPUT"
@@ -71,4 +57,18 @@ jobs:
       - name: Install Playwright browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: bunx playwright install chromium
+      - name: Runtime dependencies must have no high or critical vulnerabilities
+        run: npm audit --no-package-lock --omit=dev --audit-level=high
+      - run: bun run lint
+      - run: bun run build
+      # Generated modules are committed; build just regenerated them, so any
+      # difference means a source changed without its generated output.
+      - name: Generated files must not drift from their sources
+        run: |
+          if [ -n "$(git status --porcelain -- '*.generated.ts' '*.generated.css')" ]; then
+            git status --porcelain -- '*.generated.ts' '*.generated.css'
+            echo "::error::Generated files drifted from their sources. Run 'bun run gen' and commit the result."
+            exit 1
+          fi
+      - run: bun run test
       - run: bun run test:e2e
