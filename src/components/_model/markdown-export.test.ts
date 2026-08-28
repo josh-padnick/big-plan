@@ -326,11 +326,21 @@ describe("Markdown export primitives", () => {
     });
     expect(
       markdownTableProse([
-        paragraph({ type: "text", value: "Lead sentence." }),
+        paragraph(
+          { type: "text", value: "Lead " },
+          {
+            type: "element",
+            tagName: "strong",
+            properties: {},
+            children: [{ type: "text", value: "sentence" }],
+          },
+          { type: "text", value: "." },
+        ),
+        { type: "text", value: "\n" },
         paragraph({ type: "text", value: "Additional detail." }),
       ]),
     ).toEqual({
-      cell: "Lead sentence.",
+      cell: "Lead **sentence**.",
       blocks: "Additional detail.",
     });
     expect(markdownTableProse([fence("{}")])).toEqual({
