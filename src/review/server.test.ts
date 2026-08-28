@@ -7118,6 +7118,9 @@ describe("review runtime approval", () => {
         });
         expect(recovered.requests).toHaveLength(1);
         expect(recovered.requests[0]).toMatchObject({ kind: "approval" });
+        await expect(
+          readFile(target.store.approvalFinalizationPath, "utf8"),
+        ).rejects.toMatchObject({ code: "ENOENT" });
       },
     );
   });
