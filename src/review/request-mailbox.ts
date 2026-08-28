@@ -393,6 +393,33 @@ const assertCommentIsRemovable = async ({
 };
 
 /**
+ * A cancel the mailbox refused because the answer it would withdraw has already
+ * landed or is landing. It is a distinct class because it is the opposite news
+ * from the ordinary rejection a caller expects here: a request that is missing
+ * or already canceled leaves nothing to do, while this one means the record and
+ * the mailbox now disagree and somebody has to be told.
+ */
+export class AgentRequestNotWithdrawable extends AgentExchangeRejected {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentRequestNotWithdrawable";
+  }
+}
+
+/**
+ * A cancel that found the request already answered. It is settled news rather
+ * than a failure - the answer is in, so there is nothing left to withdraw - and
+ * it is a class rather than a message so a caller can say so without matching
+ * the sentence Big Plan happens to phrase it with.
+ */
+export class AgentRequestAlreadyAnswered extends AgentExchangeRejected {
+  constructor() {
+    super("The agent has already answered this request");
+    this.name = "AgentRequestAlreadyAnswered";
+  }
+}
+
+/**
  * Refuses every state in which withdrawing one request would contradict work
  * that already reached the plan. A canceled request is not refused: cancel is
  * idempotent.
@@ -406,9 +433,7 @@ const assertRequestIsWithdrawable = async ({
 }): Promise<void> => {
   if (request.canceledAt !== undefined) return;
   if (request.answeredAt !== undefined) {
-    throw new AgentExchangeRejected(
-      "The agent has already answered this request",
-    );
+    throw new AgentRequestAlreadyAnswered();
   }
   // The commit writes its journal under this same request lock, so a journal
   // on disk here means the answer has published or is one rename from
@@ -418,12 +443,12 @@ const assertRequestIsWithdrawable = async ({
     store,
     requestId: request.requestId,
   }).catch(() => {
-    throw new AgentExchangeRejected(
+    throw new AgentRequestNotWithdrawable(
       "Big Plan cannot tell whether the agent's answer for this request is already publishing, so it cannot be canceled",
     );
   });
   if (publishing) {
-    throw new AgentExchangeRejected(
+    throw new AgentRequestNotWithdrawable(
       "The agent's answer for this request is already publishing, so it can no longer be canceled",
     );
   }
@@ -1109,15 +1134,19 @@ export const cancelAgentRequest = async ({
   store,
   requestId,
   now,
+  beforeCancel,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
   readonly now: string;
+  /** Commits the owning withdrawal while this request cannot be created. */
+  readonly beforeCancel?: () => Promise<void>;
 }): Promise<AgentRequest> =>
   withRequestLock({
     store,
     requestId,
     change: async (lockedStore) => {
+      await beforeCancel?.();
       const request = await readCurrentRequest({
         store: lockedStore,
         requestId,
@@ -1137,6 +1166,37 @@ export const cancelAgentRequest = async ({
       return canceled;
     },
   });
+
+/**
+ * Writes one runtime-authored request only while its owning state still permits
+ * delivery. The condition runs under the same request lock cancellation uses,
+ * so a mutation that resumes after its HTTP gate timed out cannot recreate
+ * work a later reviewer action already withdrew.
+ */
+export const writeAgentRequestWhen = async ({
+  store,
+  request,
+  permitted,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+  readonly permitted: () => Promise<boolean>;
+}): Promise<boolean> => {
+  const checked = validateAgentRequest(request);
+  return withRequestLock({
+    store,
+    requestId: checked.requestId,
+    change: async (lockedStore) => {
+      if (!(await permitted())) return false;
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId: checked.requestId,
+        value: checked,
+      });
+      return true;
+    },
+  });
+};
 
 /** Recognizes a reply whose thread was opened by an agent push. */
 const requestTargetsPushedThread = async ({
@@ -1172,7 +1232,11 @@ const committedRevisionOf = async ({
   readonly at: string;
 }): Promise<CommittedPlanRevision | undefined> => {
   const baseSnapshot = requestBaselineSnapshot(request);
-  if (request.kind === "push" && response.resultSnapshot === baseSnapshot) {
+  if (
+    request.kind === "approval" ||
+    response.kind === "approval" ||
+    (request.kind === "push" && response.resultSnapshot === baseSnapshot)
+  ) {
     return undefined;
   }
   return {
@@ -1406,7 +1470,11 @@ const readQueuedMessage = async ({
   readonly nowMs: number;
 }): Promise<AgentReplyRequest | AgentChatRequest> => {
   const request = await readCurrentRequest({ store, requestId });
-  if (request.kind === "feedback" || request.kind === "push") {
+  if (
+    request.kind === "feedback" ||
+    request.kind === "push" ||
+    request.kind === "approval"
+  ) {
     throw new AgentExchangeRejected(
       `Only a reply or plan question can be ${verb} while it waits`,
     );
@@ -1485,7 +1553,7 @@ export const reviseQueuedRequest = async ({
         body,
         attachments,
       });
-      if (revised.kind === "feedback" || revised.kind === "push") {
+      if (revised.kind !== "reply" && revised.kind !== "chat") {
         throw new AgentExchangeRejected(
           "Revising this message changed the request kind",
         );

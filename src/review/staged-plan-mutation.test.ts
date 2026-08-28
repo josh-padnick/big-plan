@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  approvalAgentRequest,
   deriveSnapshotDigest,
   messageAgentRequest,
   readAgentExchange,
@@ -248,6 +249,64 @@ describe("staged plan mutation", () => {
       await expect(
         readAgentExchange({ store, sessionId: SESSION, planId }),
       ).resolves.toMatchObject({ responses: [] });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should write nothing into the plan's assets when an approval answers", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({
+        store,
+        request: approvalAgentRequest({
+          approvalId: REQUEST,
+          sessionId: SESSION,
+          planId,
+          planPath,
+          pinnedSnapshot: deriveSnapshotDigest(BASE),
+          createdAt: "2026-08-17T12:00:00.000Z",
+          recordedAnswers: [],
+          unansweredDecisions: [],
+          message: "Start on it now.",
+        }),
+      });
+      const claimed = await claim({ store, claimedBy: AGENT_A });
+      const stage = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(claimed),
+      });
+      // The agent scribbled in its candidate and then refused to start, so
+      // nothing it prepared may reach the repository the plan lives in.
+      await writeFile(stage.candidatePath, RESULT, "utf8");
+      const assetPath = join(directory, "assets", "scribbled.png");
+      const resultSnapshot = deriveSnapshotDigest(RESULT);
+      await commitStagedPlanMutation({
+        store,
+        planPath,
+        request: claimed,
+        generation: stage.generation,
+        claimedBy: AGENT_A,
+        baseSnapshot: stage.baseSnapshot,
+        resultSnapshot,
+        resultSource: RESULT,
+        assets: [{ path: assetPath, bytes: Uint8Array.from([1, 2, 3]) }],
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: REQUEST,
+            hardStop: "The plan no longer matches the pinned snapshot.",
+          },
+          request: claimed,
+          commentsById: new Map(),
+          changedBlocks: new Set<string>(),
+          currentSnapshot: resultSnapshot,
+          now: new Date().toISOString(),
+        }),
+        now: new Date().toISOString(),
+      });
+      await expect(readFile(planPath, "utf8")).resolves.toBe(BASE);
+      await expect(readFile(assetPath)).rejects.toThrow();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

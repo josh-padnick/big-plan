@@ -83,7 +83,7 @@ const FILE_MODE = 0o600;
 // A status file is writable by any local process, so a relayed event carries
 // only these states and a bounded amount of text.
 const PROGRESS_TEXT_LIMIT = 160;
-const PROGRESS_EVENT_LIMIT = 200;
+export const PROGRESS_EVENT_LIMIT = 200;
 const REVIEW_PLAN_ID_LENGTH = 16;
 const REVIEW_IMAGE_METADATA_BYTES = 4096;
 const PUBLISHED_JSON_FILE = /^[a-f0-9]{16}\.json$/;
@@ -1545,6 +1545,31 @@ export const writeFeedbackPackage = async ({
   return { jsonPath, briefPath };
 };
 
+/**
+ * Writes one approval brief beside feedback briefs under a generated name, so
+ * no reviewer or plan text ever reaches a filename.
+ */
+export const writeApprovalBrief = async ({
+  store,
+  approvalId,
+  createdAt,
+  brief,
+}: {
+  readonly store: ReviewStore;
+  readonly approvalId: string;
+  readonly createdAt: string;
+  readonly brief: string;
+}): Promise<string> => {
+  const stamp = createdAt.replace(/[^0-9]/g, "").slice(0, 14);
+  const briefPath = inside({
+    base: store.feedbackDirectory,
+    leaf: `${stamp}-approval-${approvalId}.md`,
+  });
+  await writeFile(briefPath, brief, { mode: FILE_MODE });
+  await chmod(briefPath, FILE_MODE);
+  return briefPath;
+};
+
 const feedbackSubmissionPath = ({
   store,
   submissionId,
@@ -1792,6 +1817,33 @@ export const agentMutationJournalPath = ({
     base: store.agentMutationJournalDirectory,
     leaf: `${requestId}.json`,
   });
+};
+
+/**
+ * Whether the mailbox holds this request.
+ *
+ * Absence is answered from ENOENT alone. Every other failure is raised, because
+ * "the file is not there" and "Big Plan could not look" are different facts and
+ * a caller deciding what to tell a reviewer needs to tell them apart.
+ */
+export const hasAgentRequest = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<boolean> => {
+  try {
+    await stat(
+      exchangePath({ directory: store.agentRequestDirectory, requestId }),
+    );
+    return true;
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
 };
 
 /**

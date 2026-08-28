@@ -16,9 +16,11 @@ import {
   readAgentExchange,
   readValidatedAgentRequests,
   requestIsTerminal,
+  type AgentApprovalResponse,
+  type AgentResponse,
 } from "./agent-exchange.js";
 import { readMutationStage } from "./staged-plan-mutation.js";
-import type { ReviewStore } from "./store.js";
+import type { ProgressEvent, ReviewStore } from "./store.js";
 import {
   appendProgressEvent,
   cancelAgentRequest,
@@ -43,6 +45,7 @@ import {
   readAgentPresence,
   readAgentRoster,
   readProgress,
+  PROGRESS_EVENT_LIMIT,
   writeAgentDisconnectRequest,
   writeSnapshot,
   type AgentRequestDeletionResult,
@@ -58,6 +61,7 @@ import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 import { AGENT_DISCONNECTED_REASON } from "./shared/agent-disconnect.js";
 import { heldAgentClaim } from "./shared/agent-claim.js";
 import { settlementRefusal } from "./review-route-settlement.js";
+import type { ApprovalRecord } from "./shared/approval.js";
 import {
   agentForClaimToken,
   agentIsAttached,
@@ -156,12 +160,91 @@ export const readAgentSnapshot = async (
 export const readProgressEvents = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
-  const events = await readProgress({
-    store: context.store,
-    sessionId: context.sessionId,
-  });
+  const [storedEvents, approvalRecord, exchange] = await Promise.all([
+    readProgress({
+      store: context.store,
+      sessionId: context.sessionId,
+    }),
+    context.approvals.read(),
+    readAgentExchange({
+      store: context.store,
+      sessionId: context.sessionId,
+      planId: context.planId,
+    }),
+  ]);
+  const events = [
+    ...storedEvents.filter(
+      (event) =>
+        event.stepCode !== "plan-approved" &&
+        event.stepCode !== "approval-acknowledged" &&
+        event.stepCode !== "approval-blocked",
+    ),
+    ...approvalProgressEvents({
+      sessionId: context.sessionId,
+      record: approvalRecord,
+      responses: exchange.responses,
+    }),
+  ]
+    .sort((left, right) => (left.atMs ?? 0) - (right.atMs ?? 0))
+    .slice(-PROGRESS_EVENT_LIMIT)
+    .map((event, index) => ({ ...event, seq: index + 1 }));
   return jsonResponse({ status: 200, value: encodeProgress({ events }) });
 };
+
+function approvalProgressEvents({
+  sessionId,
+  record,
+  responses,
+}: {
+  readonly sessionId: string;
+  readonly record: ApprovalRecord;
+  readonly responses: ReadonlyArray<AgentResponse>;
+}): ReadonlyArray<ProgressEvent> {
+  return record.entries.flatMap((entry): ReadonlyArray<ProgressEvent> => {
+    if (entry.kind !== "approval") return [];
+    const response = responses.find(
+      (candidate): candidate is AgentApprovalResponse =>
+        candidate.kind === "approval" &&
+        candidate.requestId === entry.approvalId,
+    );
+    const approved: ProgressEvent = {
+      sessionId,
+      requestId: entry.approvalId,
+      atMs: Date.parse(entry.at),
+      seq: 0,
+      stepCode: "plan-approved",
+      step: "Plan approved",
+      state: "done",
+      ...(entry.agentConnected
+        ? {}
+        : { detail: "Approval recorded - no agent connected to notify" }),
+    };
+    if (response === undefined) return [approved];
+    return [
+      approved,
+      response.hardStop === undefined
+        ? {
+            sessionId,
+            requestId: entry.approvalId,
+            atMs: Date.parse(response.createdAt),
+            seq: 0,
+            stepCode: "approval-acknowledged",
+            step: "Approval acknowledged",
+            state: "done",
+          }
+        : {
+            sessionId,
+            requestId: entry.approvalId,
+            atMs: Date.parse(response.createdAt),
+            seq: 0,
+            stepCode: "approval-blocked",
+            step: "Approval not acknowledged",
+            state: "failed",
+            detail: response.hardStop,
+          },
+    ];
+  });
+}
 
 /**
  * Queues one reply or plan question for the agent. The plan as it stands right

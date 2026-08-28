@@ -833,7 +833,17 @@ export const commitStagedPlanMutation = async ({
   withPlanMutationLock({
     store,
     change: async (lockedStore) => {
-      const journal: MutationJournal = {
+      const publishes = response.kind !== "approval";
+      /*
+      What the journal names has to be true of the file, because recovery reads
+      it as the two revisions an interrupted commit could be caught between. An
+      answer that publishes nothing is caught between nothing: it is settled
+      wherever the plan already stands, so both sides are the revision on disk.
+      Naming the candidate instead would leave a crash-window journal matching
+      neither side, and the next agent command would report the reviewer's own
+      edit as an outside writer and offer to throw it away (BIG-131).
+      */
+      let journal: MutationJournal = {
         version: JOURNAL_VERSION,
         requestId: request.requestId,
         generation,
@@ -843,22 +853,40 @@ export const commitStagedPlanMutation = async ({
         answeredAt: now,
         response,
       };
+      let settledSource = resultSource;
       const answered = await commitRequestTerminal({
         store: lockedStore,
         response,
         claimedBy,
         now,
         publish: async () => {
-          const currentSnapshot = deriveSnapshotDigest(
-            await readFile(planPath, "utf8"),
-          );
-          if (currentSnapshot !== baseSnapshot) {
+          const source = await readFile(planPath, "utf8");
+          const currentSnapshot = deriveSnapshotDigest(source);
+          if (!publishes) {
+            journal = {
+              ...journal,
+              baseSnapshot: currentSnapshot,
+              resultSnapshot: currentSnapshot,
+            };
+            settledSource = source;
+          }
+          /*
+          The check asks whether this candidate may still be published over the
+          source, so it has nothing to ask of an answer that publishes nothing.
+          An approval held to it was refused outright whenever the reviewer
+          edited the plan between the pickup and the answer: the acknowledgment
+          could not land, and neither could the hard stop reporting that very
+          edit - the mailbox kept the request open with the claim's baseline
+          frozen, so every retry failed the same way and the reviewer waited on
+          an answer the agent had already tried twice to give (BIG-131).
+          */
+          if (currentSnapshot !== baseSnapshot && publishes) {
             throw new StagedPlanMutationRejected(
               "source-moved",
               "The plan source changed while this claim was working, so its candidate can no longer be published. Take the work again from the current plan.",
             );
           }
-          await publishPreparedPlanAssets(assets);
+          if (publishes) await publishPreparedPlanAssets(assets);
           await writeStoreJson({
             path: journalPath({
               store: lockedStore,
@@ -866,7 +894,16 @@ export const commitStagedPlanMutation = async ({
             }),
             value: journal,
           });
-          if (resultSnapshot !== baseSnapshot) {
+          /*
+          An approval answer publishes nothing, whatever its candidate holds.
+          Acknowledging is a statement about the revision the reviewer pinned,
+          not an edit of it, and a hard stop is a refusal to start - so neither
+          may reach the source. Left to the digest alone, an agent that wrote to
+          its candidate would swap the plan through a kind that records no
+          revision and no change set, and the bytes would land with nothing
+          naming them (BIG-131).
+          */
+          if (resultSnapshot !== baseSnapshot && publishes) {
             await replacePlanSource({ path: planPath, source: resultSource });
           }
           // Auto-accept builds the same diff the reader counts, so its result
@@ -889,7 +926,7 @@ export const commitStagedPlanMutation = async ({
       await finalizeCommittedMutation({
         store: lockedStore,
         journal,
-        resultSource,
+        resultSource: settledSource,
       });
       return answered;
     },

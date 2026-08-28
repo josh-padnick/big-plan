@@ -11,6 +11,7 @@ import type { ReviewComment } from "./shared/comment.js";
 import { projectCommentThread } from "./shared/thread-projection.js";
 import {
   AgentExchangeRejected,
+  approvalAgentRequest,
   commentsFromExchange,
   deriveSnapshotDigest,
   feedbackAgentRequest,
@@ -1064,5 +1065,145 @@ describe("agent exchange filesystem", () => {
         nowMs: (blocker.claimExpiresAtMs ?? nowMs) + 1,
       }),
     ).toEqual(blocker);
+  });
+});
+
+describe("approval request contract", () => {
+  const pinned = deriveSnapshotDigest(before);
+  const approvalRequest = () =>
+    approvalAgentRequest({
+      approvalId: "a1b2c3d4e5f60718",
+      sessionId,
+      planId,
+      planPath: "/tmp/plan.mdx",
+      pinnedSnapshot: pinned,
+      createdAt: "2026-08-13T17:41:00.000Z",
+      recordedAnswers: [
+        {
+          decisionId: "decision-which-release-path",
+          optionId: "decision-which-release-path-option-gradual-rollout",
+        },
+      ],
+      unansweredDecisions: ["decision-what-should-trigger-rollback"],
+      message: "This plan is approved and we are ready to begin.",
+    });
+
+  const claimedApproval = () =>
+    validateAgentRequest({
+      ...approvalRequest(),
+      baselineSnapshot: pinned,
+      claimedAt: "2026-08-13T17:41:30.000Z",
+      claimedBy: "cccc0000cccc0000",
+      claimExpiresAtMs: 1_775_000_000_000,
+      claimGeneration: 1,
+    });
+
+  it("should validate an approval request and prefill its acknowledgment template", () => {
+    const request = approvalRequest();
+    expect(request).toMatchObject({
+      kind: "approval",
+      requestId: "a1b2c3d4e5f60718",
+      approvalId: "a1b2c3d4e5f60718",
+      planPath: "/tmp/plan.mdx",
+      pinnedSnapshot: pinned,
+      premiseSnapshot: pinned,
+    });
+    expect(responseTemplateFor(request)).toEqual({
+      requestId: request.requestId,
+    });
+  });
+
+  it("should refuse an approval request whose approvalId does not match requestId", () => {
+    expect(() =>
+      validateAgentRequest({
+        ...approvalRequest(),
+        approvalId: "b2c3d4e5f6071819",
+      }),
+    ).toThrow(/approvalId.*requestId/u);
+  });
+
+  it("should refuse an approval request with a relative planPath", () => {
+    expect(() =>
+      validateAgentRequest({
+        ...approvalRequest(),
+        planPath: "plans/retry-queue.mdx",
+      }),
+    ).toThrow(/absolute path/u);
+  });
+
+  it("should refuse an approval request that carries attachments", () => {
+    const image = {
+      id: "a".repeat(64),
+      sha256: "a".repeat(64),
+      mimeType: "image/png",
+      byteLength: 1,
+      width: 1,
+      height: 1,
+      path: "/tmp/.big-plan/review/plan/agent/attachments/image.png",
+      alt: "Evidence",
+    };
+    expect(() =>
+      validateAgentRequest({
+        ...approvalRequest(),
+        attachmentManifest: [image],
+        attachments: [image],
+      }),
+    ).toThrow(/cannot contain attachments/u);
+  });
+
+  it("should accept an acknowledgment that leaves the pinned snapshot unchanged", () => {
+    const claimed = claimedApproval();
+    expect(
+      validateAgentResponseDraft({
+        value: { requestId: claimed.requestId },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: pinned,
+        now: "2026-08-13T17:42:00.000Z",
+      }),
+    ).toMatchObject({
+      kind: "approval",
+      requestId: claimed.requestId,
+      resultSnapshot: pinned,
+    });
+  });
+
+  it("should refuse an acknowledgment whose result snapshot differs from the pin", () => {
+    const claimed = claimedApproval();
+    expect(() =>
+      validateAgentResponseDraft({
+        value: { requestId: claimed.requestId },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: deriveSnapshotDigest(after),
+        now: "2026-08-13T17:42:00.000Z",
+      }),
+    ).toThrow(
+      'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
+    );
+  });
+
+  // The pin is exactly what a hard stop reports it could not reach, so holding
+  // the report to it would leave the agent with nothing it could ever send.
+  it("should accept a reported hard stop the pin refuses as an acknowledgment", () => {
+    const claimed = claimedApproval();
+    expect(
+      validateAgentResponseDraft({
+        value: {
+          requestId: claimed.requestId,
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: deriveSnapshotDigest(after),
+        now: "2026-08-13T17:42:00.000Z",
+      }),
+    ).toMatchObject({
+      kind: "approval",
+      hardStop: "The plan no longer matches the pinned snapshot.",
+    });
   });
 });

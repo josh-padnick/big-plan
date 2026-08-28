@@ -2,10 +2,7 @@
 // change sets, canceled leftover work, and an approval record.
 
 import { readFile, unlink } from "node:fs/promises";
-import {
-  AgentExchangeRejected,
-  deriveSnapshotDigest,
-} from "./agent-exchange.js";
+import { deriveSnapshotDigest } from "./agent-exchange.js";
 import { validateApprovalRecord } from "./approval-record.js";
 import {
   mergeFinalizedChangeVerdicts,
@@ -13,7 +10,10 @@ import {
   validateChangeVerdicts,
   type StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
-import { cancelAgentRequest } from "./request-mailbox.js";
+import {
+  AgentRequestAlreadyAnswered,
+  cancelAgentRequest,
+} from "./request-mailbox.js";
 import type { ApprovalRecord } from "./shared/approval.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import {
@@ -121,12 +121,7 @@ const settleLocked = async ({
         canceledRequestIds.push(requestId);
       }
     } catch (error: unknown) {
-      if (
-        !(error instanceof AgentExchangeRejected) ||
-        error.message !== "The agent has already answered this request"
-      ) {
-        throw error;
-      }
+      if (!(error instanceof AgentRequestAlreadyAnswered)) throw error;
     }
   }
   await updateStoredChangeVerdicts({

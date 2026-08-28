@@ -316,7 +316,7 @@ const renderApprovalMessageControls = (): string =>
   `<div class="mt-3 min-w-0 wide:mt-4">
 <label class="mb-1 block text-xs font-medium text-muted" for="big-plan-approval-message">Message</label>
 <textarea class="block min-h-32 w-full resize-y rounded-md border border-edge-strong bg-input px-3 py-2 text-sm leading-normal text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-approval-message" data-approval-message-input maxlength="${APPROVAL_MESSAGE_LIMIT}" aria-describedby="big-plan-approval-message-hint">${escapeHtml(DEFAULT_APPROVAL_MESSAGE)}</textarea>
-<p class="mt-2 text-xs leading-normal text-muted" id="big-plan-approval-message-hint">Your recorded answers are always attached. This text is saved with the approval record for the agent handoff.</p>
+<p class="mt-2 text-xs leading-normal text-muted" id="big-plan-approval-message-hint">Your recorded answers are always attached. This text is sent to the agent with the approval.</p>
 <p class="mt-2 text-xs leading-normal text-[var(--callout-warning-c)]" id="big-plan-approval-message-error" data-approval-message-error hidden>This note could not be saved. It is still here, but it will be lost if you close this page.</p>
 <div class="mt-3">
 <button class="-ml-2 inline-flex min-h-9 cursor-pointer items-center rounded-md border-0 bg-transparent px-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-approval-message-reset>Reset to default</button>
@@ -546,7 +546,7 @@ ${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="relative min-w-0" id="${overviewId}">
-<span class="pointer-events-none absolute -top-8 left-0 -rotate-2" data-review-approval-page-stamp hidden></span>
+<span class="pointer-events-none absolute -top-10 left-0 z-10 -rotate-3" data-review-approval-page-stamp hidden></span>
 <article>
 ${contentHtml}
 </article>
