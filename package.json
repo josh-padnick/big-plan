@@ -24,7 +24,8 @@
   },
   "scripts": {
     "prepare": "node scripts/git-hooks/install.mjs",
-    "gen": "bun run gen:fonts && bun run gen:review && bun run gen:css && bun run gen:assets && bun run gen:guidance && bun run gen:skill",
+    "gen": "bun run gen:fonts && bun run gen:review && bun run gen:agent-prompt && bun run gen:css && bun run gen:assets && bun run gen:guidance && bun run gen:skill",
+    "gen:agent-prompt": "node scripts/gen-agent-prompt.mjs",
     "gen:assets": "node scripts/gen-assets.mjs",
     "gen:css": "node scripts/gen-css.mjs",
     "gen:fonts": "node scripts/gen-fonts.mjs",
