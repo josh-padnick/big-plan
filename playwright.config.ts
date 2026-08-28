@@ -11,7 +11,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command:
-      "npm exec --prefix docs -- astro build --root docs && npm exec --prefix docs -- astro preview --root docs --host 127.0.0.1 --port 4321",
+      "node docs/node_modules/astro/bin/astro.mjs build --root docs && node docs/node_modules/astro/bin/astro.mjs preview --root docs --host 127.0.0.1 --port 4321",
     url: "http://127.0.0.1:4321/",
     reuseExistingServer: !process.env["CI"],
   },
