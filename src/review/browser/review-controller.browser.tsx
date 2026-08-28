@@ -7263,6 +7263,7 @@ export const ReviewController = () => {
         body: { mode, ...(threadId === undefined ? {} : { threadId }) },
       });
       if (isRecord(value)) {
+        runtimeSessionOrder.invalidatePendingRequests();
         const armedAtMs =
           typeof value.armedAtMs === "number" ? value.armedAtMs : undefined;
         setRuntimeSession((current) =>
