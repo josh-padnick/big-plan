@@ -257,7 +257,7 @@ test("an attestation over a commit that is not on this pull request is ignored",
   assert.match(report(verdict), /not a commit on this pull request/);
 });
 
-test("an attestation that lists fewer dispositions than findings is ignored", () => {
+test("an attestation that lists fewer resolutions than findings is ignored", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
       issueComments: [

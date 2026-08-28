@@ -295,7 +295,7 @@ const SIGN_OFF = /^\s*review-triage:\s*complete\s+([0-9a-f]{7,40})\s*$/i;
 const ADVERSARIAL =
   /^\s*adversarial-review:\s*complete\s+([0-9a-f]{7,40})\s+by\s+(\S.*?)\s*$/i;
 const FINDINGS_COUNT = /^\s*findings:\s*(\d+)\s*$/i;
-const DISPOSITION = /\bresolved:\s*(fixed|declined|deferred)\b/i;
+const RESOLUTION = /\bresolved:\s*(fixed|declined|deferred)\b/i;
 const VALIDATION_PASSED =
   /^\s*no-mistakes:\s*passed\s+run\s+(\S+)\s+head\s+([0-9a-f]{7,40})\s*$/i;
 const VALIDATION_OVERRIDE =
@@ -332,7 +332,7 @@ const wrote = (logins, login) =>
  *
  * A minimized root still gates: a finding the reviewer really did withdraw
  * costs one honest reply saying so, and the reply is the record.
- * A minimized reply does not resolve: a hidden disposition is not a written
+ * A minimized reply does not resolve: a hidden resolution is not a written
  * one, which is the same reason GitHub's resolve checkbox does not count.
  */
 const isReviewerThread = (thread, reviewerLogins) => {
@@ -367,7 +367,7 @@ const isResolved = (thread, authorLogins) =>
  * review carries: the commit it read, who read it, and what it found. The sha
  * must belong to this pull request - not necessarily the head, because a bot
  * review is not re-run on every push either - and every finding it counts must
- * carry a disposition, so a reader can see that the findings were resolved
+ * carry a resolution, so a reader can see that the findings were resolved
  * rather than merely listed.
  */
 export const collectAttestations = (snapshot) => {
@@ -379,9 +379,7 @@ export const collectAttestations = (snapshot) => {
       const countLine = lines
         .map((line) => FINDINGS_COUNT.exec(line))
         .find(Boolean);
-      const dispositions = lines.filter((line) =>
-        DISPOSITION.test(line),
-      ).length;
+      const resolutions = lines.filter((line) => RESOLUTION.test(line)).length;
       const reviewedCommit =
         snapshot.commitShas.find((commit) => shaNames(sha, commit)) ?? null;
       const problems = [];
@@ -392,9 +390,9 @@ export const collectAttestations = (snapshot) => {
       }
       if (countLine === undefined) {
         problems.push(`it has no "findings: <n>" line`);
-      } else if (dispositions < Number(countLine[1])) {
+      } else if (resolutions < Number(countLine[1])) {
         problems.push(
-          `it claims ${countLine[1]} finding(s) but carries ${dispositions} line(s) with "resolved: fixed|declined|deferred"`,
+          `it claims ${countLine[1]} finding(s) but carries ${resolutions} line(s) with "resolved: fixed|declined|deferred"`,
         );
       }
       attestations.push({
@@ -550,7 +548,7 @@ export const evaluateReviewTriage = (snapshot) => {
         "    1. <finding> - resolved: fixed|declined|deferred - <how, or why not>",
         "",
         "The sha must be a commit on this pull request, and every counted finding",
-        "needs its own disposition line.",
+        "needs its own resolution line.",
       ],
     );
   }
@@ -632,7 +630,7 @@ export const evaluateReviewTriage = (snapshot) => {
     const { attestation } = review;
     findingLines.push(
       `Reviewer: ${ADVERSARIAL_REVIEWER.label} by ${attestation.agent}, over commit ${short(attestation.reviewedCommit)}.`,
-      `Findings declared: ${attestation.findings}, each with a disposition. ${attestation.url}`,
+      `Findings declared: ${attestation.findings}, each with a resolution. ${attestation.url}`,
     );
   }
 
