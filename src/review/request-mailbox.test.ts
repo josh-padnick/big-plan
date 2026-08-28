@@ -18,6 +18,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./shared/comment.js";
 import {
+  AgentExchangeRejected,
   deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
@@ -695,6 +696,41 @@ describe("request mailbox", () => {
         store,
         request,
         permitted: async () => false,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should let a withdrawal prevent a delayed request from being created", async () => {
+    const { store } = await preparedReview();
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Do not create this after its owner withdraws it.",
+    });
+    let permitted = true;
+
+    await expect(
+      cancelAgentRequest({
+        store,
+        requestId: request.requestId,
+        now: "2026-08-10T12:00:01.000Z",
+        beforeCancel: async () => {
+          permitted = false;
+        },
+      }),
+    ).rejects.toBeInstanceOf(AgentExchangeRejected);
+    await expect(
+      writeAgentRequestWhen({
+        store,
+        request,
+        permitted: async () => permitted,
       }),
     ).resolves.toBe(false);
     await expect(
