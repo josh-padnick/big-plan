@@ -72,6 +72,56 @@ describe("last-wave component diff fields", () => {
     });
   });
 
+  it("keeps duplicate-label DataTable rows aligned around an insertion", () => {
+    const first = { cells: [cell("Job"), cell("Queued")] };
+    const second = { cells: [cell("Job"), cell("Running")] };
+    const inserted = { cells: [cell("Job"), cell("Blocked")] };
+    const baseline: CompiledDataTable = {
+      id: "table",
+      filter: false,
+      fit: "wrap",
+      columns: [
+        { label: "Job", type: "text", align: "left" },
+        { label: "State", type: "text", align: "left" },
+      ],
+      rows: [first, second],
+      groups: [],
+      groupColumn: -1,
+    };
+
+    const diff = compileDataTableDiff({
+      status: "changed",
+      baseline,
+      proposed: { ...baseline, rows: [inserted, first, second] },
+      runs,
+    });
+
+    expect(diff.baselineRowIndexes).toEqual([]);
+    expect(diff.proposedRowIndexes).toEqual([0]);
+    expect(diff.changedFields).toEqual(["Job"]);
+  });
+
+  it("names DataTable configuration changes", () => {
+    const baseline: CompiledDataTable = {
+      id: "table",
+      title: "Jobs",
+      filter: false,
+      fit: "wrap",
+      columns: [{ label: "Job", type: "text", align: "left" }],
+      rows: [{ cells: [cell("Refresh")] }],
+      groups: [],
+      groupColumn: -1,
+    };
+    expect(
+      compileDataTableDiff({
+        status: "changed",
+        baseline,
+        proposed: { ...baseline, filter: true },
+        runs,
+      }).changedFields,
+    ).toEqual(["Filtering"]);
+  });
+
   it("names QuickSummary facets", () => {
     const baseline: CompiledQuickSummary = {
       facets: [{ name: "Why", items: [text("Faster")] }],

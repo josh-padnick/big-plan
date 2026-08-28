@@ -115,6 +115,33 @@ const elementByDataValue = ({
   return null;
 };
 
+/** Returns reader-visible text for disambiguating same-label subtargets. */
+const elementText = (node: Element): string =>
+  node.children
+    .map((child) =>
+      child.type === "text"
+        ? child.value
+        : child.type === "element"
+          ? elementText(child)
+          : "",
+    )
+    .join("");
+
+/** Collects rendered descendants that already carry compiler block identity. */
+const identifiedElements = (node: Element): ReadonlyArray<Element> => {
+  const found: Array<Element> = [];
+  const visit = (candidate: Element): void => {
+    if (typeof candidate.properties["data-block-id"] === "string") {
+      found.push(candidate);
+    }
+    for (const child of candidate.children) {
+      if (isElement(child)) visit(child);
+    }
+  };
+  visit(node);
+  return found;
+};
+
 const blockById = ({
   blocks,
   blockId,
@@ -198,16 +225,26 @@ const inheritProposedSubtargetIdentity = ({
   });
   if (proposedSide === null) return;
   const available = blocks.filter((block) => block.ownerId === proposed.id);
+  const proposedElements = identifiedElements(proposedRoot);
   const claimed = new Set<string>();
   const visit = (node: Element): void => {
     const kind = node.properties["data-commentable-kind"];
     const label = node.properties["data-commentable-label"];
     if (typeof kind === "string" && typeof label === "string") {
+      const normalizedLabel = label.replaceAll("`", "");
+      const source = proposedElements.find(
+        (element) =>
+          element.properties["data-block-kind"] === kind &&
+          element.properties["data-block-label"] === normalizedLabel &&
+          elementText(element) === elementText(node),
+      );
+      const sourceId = source?.properties["data-block-id"];
       const target = available.find(
         (block) =>
           !claimed.has(block.id) &&
           block.kind === kind &&
-          block.label === label.replaceAll("`", ""),
+          block.label === normalizedLabel &&
+          (typeof sourceId !== "string" || block.id === sourceId),
       );
       if (target !== undefined) {
         claimed.add(target.id);

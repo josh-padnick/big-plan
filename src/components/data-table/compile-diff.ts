@@ -17,6 +17,9 @@ export type CompiledDataTableDiff = NamedFieldDiff<CompiledDataTable> & {
 const rowLabel = (row: CompiledDataTableRow): string =>
   row.cells[0]?.text || "Table row";
 
+const rowIndexes = (rows: ReadonlyArray<CompiledDataTableRow>) =>
+  rows.map((_, index) => index);
+
 const alignChangedRows = (
   baseline: ReadonlyArray<CompiledDataTableRow>,
   proposed: ReadonlyArray<CompiledDataTableRow>,
@@ -24,11 +27,31 @@ const alignChangedRows = (
   const baselineMatched = new Set<number>();
   const proposedMatched = new Set<number>();
   const pairs: Array<readonly [number | undefined, number | undefined]> = [];
+  // Preserve unchanged duplicate-label rows before using their human label to
+  // pair actual edits. Otherwise an insertion can consume the wrong twin.
   for (
     let proposedIndex = 0;
     proposedIndex < proposed.length;
     proposedIndex += 1
   ) {
+    const proposedRow = proposed[proposedIndex];
+    if (proposedRow === undefined) continue;
+    const baselineIndex = baseline.findIndex(
+      (row, index) =>
+        !baselineMatched.has(index) && sameDiffValue(row, proposedRow),
+    );
+    if (baselineIndex !== -1) {
+      baselineMatched.add(baselineIndex);
+      proposedMatched.add(proposedIndex);
+      pairs.push([baselineIndex, proposedIndex]);
+    }
+  }
+  for (
+    let proposedIndex = 0;
+    proposedIndex < proposed.length;
+    proposedIndex += 1
+  ) {
+    if (proposedMatched.has(proposedIndex)) continue;
     const proposedRow = proposed[proposedIndex];
     if (proposedRow === undefined) continue;
     const baselineIndex = baseline.findIndex(
@@ -41,12 +64,12 @@ const alignChangedRows = (
       pairs.push([baselineIndex, proposedIndex]);
     }
   }
-  const remainingBaseline = baseline
-    .map((_, index) => index)
-    .filter((index) => !baselineMatched.has(index));
-  const remainingProposed = proposed
-    .map((_, index) => index)
-    .filter((index) => !proposedMatched.has(index));
+  const remainingBaseline = rowIndexes(baseline).filter(
+    (index) => !baselineMatched.has(index),
+  );
+  const remainingProposed = rowIndexes(proposed).filter(
+    (index) => !proposedMatched.has(index),
+  );
   const fallbackCount = Math.min(
     remainingBaseline.length,
     remainingProposed.length,
@@ -123,9 +146,28 @@ export const compileDataTableDiff = (
       ),
     ),
   );
+  const configuration = compileNamedFieldDiff(input, [
+    { name: "Title", value: (model) => model.title },
+    { name: "Filtering", value: (model) => model.filter },
+    { name: "Fit", value: (model) => model.fit },
+    { name: "Columns", value: (model) => model.columns },
+    {
+      name: "Grouping",
+      value: (model) => ({
+        groups: model.groups,
+        groupColumn: model.groupColumn,
+      }),
+    },
+  ]);
   return {
     ...summary,
-    changedFields: [...rows.names, ...new Set(summary.changedFields)],
+    changedFields: [
+      ...new Set([
+        ...configuration.changedFields,
+        ...rows.names,
+        ...summary.changedFields,
+      ]),
+    ],
     baselineRowIndexes: rows.baselineIndexes,
     proposedRowIndexes: rows.proposedIndexes,
   };

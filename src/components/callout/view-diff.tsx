@@ -16,6 +16,14 @@ export const CalloutDiffView = ({
     model={model}
     controlId={controlId}
     view={Callout}
-    project={(value: CompiledCallout) => value}
+    project={(value: CompiledCallout) => ({
+      // The view requires a type to choose its panel chrome; preserve it while
+      // omitting unchanged authored title and body content.
+      type: value.type,
+      ...(model.changedFields.includes("Title") && value.title !== undefined
+        ? { title: value.title }
+        : {}),
+      body: model.changedFields.includes("Body") ? value.body : [],
+    })}
   />
 );

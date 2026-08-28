@@ -41,6 +41,17 @@ const elements = (node: Root | Element): ReadonlyArray<Element> =>
     child.type === "element" ? [child, ...elements(child)] : [],
   );
 
+const visibleText = (node: Root | Element): string =>
+  node.children
+    .map((child) =>
+      child.type === "text"
+        ? child.value
+        : child.type === "element"
+          ? visibleText(child)
+          : "",
+    )
+    .join("");
+
 const decisionBlockId = (markdown: string): string => {
   const block = compileMarkdown({ markdown }).blocks.find(
     (candidate) => candidate.kind === "decision",
@@ -135,6 +146,75 @@ ${description}
     expect(
       nodes.filter((node) => node.properties.dataBlockId === declaredField?.id),
     ).toHaveLength(1);
+  });
+
+  it("should omit unchanged Callout content from a one-field diff", () => {
+    const compile = (type: "note" | "warning") =>
+      compileMarkdown({
+        markdown: `# Plan\n\n## Notice\n\n<Callout type="${type}" title="Keep me">\n\nUnchanged body.\n\n</Callout>`,
+      });
+    const baselineDocument = compile("note");
+    const proposedDocument = compile("warning");
+    const baselineRoot = baselineDocument.blocks.find(
+      (block) => block.kind === "callout",
+    );
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "callout",
+    );
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineRoot?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+    });
+
+    const text = visibleText(
+      fromHtml(rendered?.view ?? "", { fragment: true }),
+    );
+    expect(text).not.toContain("Keep me");
+    expect(text).not.toContain("Unchanged body.");
+    expect(text).toContain("Type");
+  });
+
+  it("should preserve the later duplicate-label DataTable row identity", () => {
+    const compile = (state: string) =>
+      compileMarkdown({
+        markdown: `# Plan\n\n## Jobs\n\n<DataTable>\n\n\`\`\`table\n| Job | State |\n| --- | --- |\n| Same | First |\n| Same | ${state} |\n\`\`\`\n\n</DataTable>`,
+      });
+    const baselineDocument = compile("Old");
+    const proposedDocument = compile("New");
+    const baselineRoot = baselineDocument.blocks.find(
+      (block) => block.kind === "data-table",
+    );
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "data-table",
+    );
+    const proposedRows = proposedDocument.blocks.filter(
+      (block) => block.ownerId === proposedRoot?.id && block.label === "Same",
+    );
+    expect(proposedRows).toHaveLength(2);
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineRoot?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+    });
+    const nodes = elements(fromHtml(rendered?.view ?? "", { fragment: true }));
+
+    expect(
+      nodes.filter(
+        (node) => node.properties.dataBlockId === proposedRows[1]?.id,
+      ),
+    ).toHaveLength(1);
+    expect(
+      nodes.filter(
+        (node) => node.properties.dataBlockId === proposedRows[0]?.id,
+      ),
+    ).toHaveLength(0);
   });
 
   it.each([
