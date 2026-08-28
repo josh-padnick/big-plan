@@ -118,8 +118,12 @@ describe("last-wave component diff fields", () => {
         baseline,
         proposed: { ...baseline, filter: true },
         runs,
-      }).changedFields,
-    ).toEqual(["Filtering"]);
+      }),
+    ).toMatchObject({
+      changedFields: ["Filtering"],
+      baselineRowIndexes: [0],
+      proposedRowIndexes: [0],
+    });
   });
 
   it("names QuickSummary facets", () => {

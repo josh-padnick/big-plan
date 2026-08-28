@@ -221,6 +221,36 @@ ${description}
     ).toHaveLength(0);
   });
 
+  it("should keep table rows as evidence for a configuration-only change", () => {
+    const compile = (filter: boolean) =>
+      compileMarkdown({
+        markdown: `# Plan\n\n## Jobs\n\n<DataTable${filter ? " filter" : ""}>\n\n\`\`\`table\n| Job | State |\n| --- | --- |\n| Refresh | Queued |\n\`\`\`\n\n</DataTable>`,
+      });
+    const baselineDocument = compile(false);
+    const proposedDocument = compile(true);
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineDocument.blocks.find(
+        (block) => block.kind === "data-table",
+      )?.id,
+      proposedBlockId: proposedDocument.blocks.find(
+        (block) => block.kind === "data-table",
+      )?.id,
+      status: "changed",
+      runs: [],
+    });
+    const root = fromHtml(rendered?.view ?? "", { fragment: true });
+
+    expect(visibleText(root)).toContain("Filtering");
+    expect(visibleText(root).match(/Refresh/g)).toHaveLength(2);
+    expect(
+      elements(root).filter(
+        (node) => node.properties.dataTableMenuButton !== undefined,
+      ),
+    ).toHaveLength(2);
+  });
+
   it.each([
     {
       kind: "http-endpoint",

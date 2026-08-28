@@ -159,6 +159,7 @@ export const compileDataTableDiff = (
       }),
     },
   ]);
+  const configurationChanged = configuration.changedFields.length > 0;
   return {
     ...summary,
     changedFields: [
@@ -168,7 +169,16 @@ export const compileDataTableDiff = (
         ...summary.changedFields,
       ]),
     ],
-    baselineRowIndexes: rows.baselineIndexes,
-    proposedRowIndexes: rows.proposedIndexes,
+    // Configuration changes need the complete grid as evidence: column,
+    // grouping, and fit settings cannot be understood from an empty table.
+    // Row-only changes stay focused on the rows that actually changed.
+    baselineRowIndexes:
+      configurationChanged && input.status !== "added"
+        ? rowIndexes(input.baseline.rows)
+        : rows.baselineIndexes,
+    proposedRowIndexes:
+      configurationChanged && input.status !== "removed"
+        ? rowIndexes(input.proposed.rows)
+        : rows.proposedIndexes,
   };
 };
