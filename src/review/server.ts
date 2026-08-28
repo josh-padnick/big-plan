@@ -11,8 +11,9 @@
 //  - A per-session token, minted at start and injected into the one document
 //    this runtime serves, is required on every API request and travels in a
 //    header so it stays out of history, referrers, and logs.
-//  - Any request whose Host header is not this runtime's own address is
-//    refused. That, not the address check, is what defeats DNS rebinding.
+//  - Any request whose Host header is not this runtime's or the local review
+//    service's address is refused. That allow-list, not the socket address, is
+//    what defeats DNS rebinding while permitting the opt-in service hop.
 //  - No CORS allowance is ever sent, and a foreign Origin or a Sec-Fetch-Site
 //    other than same-origin is refused outright. CORS hides a response; it
 //    does not stop a write, so it is not the control here.
@@ -94,6 +95,7 @@ import {
 import type { ReviewRuntimeDiagnostics } from "./runtime-watchdog.js";
 import { RAW_IMAGE_BODY_LIMIT } from "./shared/review-image.js";
 import { reviewIdleDurationLabel } from "./shared/review-lifetime.js";
+import { servicePort } from "./service/paths.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import {
   agentConnectCommand,
@@ -119,7 +121,7 @@ import type { ReviewSessionDescriptor } from "./session-authority.js";
 import {
   createActivityClock,
   createApprovals,
-  createChangeDispositions,
+  createChangeVerdicts,
   createDecisionAnswers,
   createPlanRenderer,
   createReaderProgress,
@@ -158,9 +160,9 @@ import {
   stageDecisionAnswer,
 } from "./routes-inputs.js";
 import {
-  disposeOfChanges,
-  readChangeDispositionState,
-} from "./routes-dispositions.js";
+  readChangeVerdictState,
+  recordChangeVerdicts,
+} from "./routes-verdicts.js";
 import { readCommittedChangeSetState } from "./routes-change-sets.js";
 import { readReviewInputContract } from "./routes-input-contract.js";
 import {
@@ -223,8 +225,8 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
   { method: "POST", path: "/api/inputs", handler: stageDecisionAnswer },
   {
     method: "GET",
-    path: "/api/change-dispositions",
-    handler: readChangeDispositionState,
+    path: "/api/change-verdicts",
+    handler: readChangeVerdictState,
   },
   {
     method: "GET",
@@ -238,8 +240,8 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
   },
   {
     method: "POST",
-    path: "/api/change-dispositions",
-    handler: disposeOfChanges,
+    path: "/api/change-verdicts",
+    handler: recordChangeVerdicts,
   },
   { method: "PUT", path: "/api/drafts", handler: updateReviewState },
   { method: "POST", path: "/api/feedback", handler: submitFeedback },
@@ -764,6 +766,25 @@ export const startReviewRuntime = async ({
   const port =
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
+  // The anti-rebinding allow-list, and nothing wider than the hop needs: this
+  // session's own published address, plus the two authorities the review-link
+  // service answers on, because the hop forwards the browser's Host untouched
+  // and a page opened at either of them sends that name here.
+  //
+  // `localhost:${port}` is deliberately absent. Nothing publishes a session
+  // under that name - the runtime prints, and the service redirects to,
+  // `http://127.0.0.1:${port}/` - so admitting it would widen the one control
+  // that defeats DNS rebinding without any request to justify it. Every name
+  // this list does not carry is a name a rebound page cannot spend.
+  const allowedHosts = new Set([
+    `127.0.0.1:${port}`,
+    `127.0.0.1:${servicePort()}`,
+    `localhost:${servicePort()}`,
+  ]);
+  const allowedOrigins = new Set(
+    Array.from(allowedHosts, (host) => `http://${host}`),
+  );
+  const planRoutePrefix = `/plan/${planId}`;
 
   // The early check cannot settle a tie: two runtimes may both have passed it
   // before either wrote a descriptor. This one runs inside the custody lock, so
@@ -937,7 +958,7 @@ export const startReviewRuntime = async ({
       resolvedPlanPath,
       reportDiagnostic,
     }),
-    changeDispositions: createChangeDispositions({ store }),
+    changeVerdicts: createChangeVerdicts({ store }),
     approvals: createApprovals({ store, reportDiagnostic }),
     readerProgress: createReaderProgress({
       initialSnapshot,
@@ -1011,21 +1032,26 @@ export const startReviewRuntime = async ({
       const address = server.address();
       const port =
         typeof address === "object" && address !== null ? address.port : 0;
-      const expectedHost = `127.0.0.1:${port}`;
-      const origin = `http://${expectedHost}`;
+      const runtimeOrigin = `http://127.0.0.1:${port}`;
 
       // Anti-rebinding, first and unconditionally: a name that resolves to
       // 127.0.0.1 is same-origin to the browser, so the address a request
       // arrived on proves nothing and the Host header is what must match.
-      if (request.headers.host !== expectedHost) {
+      if (
+        request.headers.host === undefined ||
+        !allowedHosts.has(request.headers.host)
+      ) {
         refuse({ response, status: 403, reason: "Unrecognised host" });
         return;
       }
 
-      const target = new URL(request.url ?? "/", origin);
+      const target = new URL(request.url ?? "/", runtimeOrigin);
       const method = request.method ?? "GET";
+      const routedPathname = target.pathname.startsWith(`${planRoutePrefix}/`)
+        ? target.pathname.slice(planRoutePrefix.length)
+        : target.pathname;
 
-      if (method === DOCUMENT_ROUTE.method && target.pathname === "/") {
+      if (method === DOCUMENT_ROUTE.method && routedPathname === "/") {
         requestLabel = `${method} /`;
         context.activityClock.touch();
         await handleDocument(response);
@@ -1033,7 +1059,7 @@ export const startReviewRuntime = async ({
       }
       if (method === DOCUMENT_ROUTE.method) {
         for (const asset of ASSET_HANDLERS) {
-          const value = await asset(context, { pathname: target.pathname });
+          const value = await asset(context, { pathname: routedPathname });
           if (value !== undefined) {
             sendRouteResponse({ response, value });
             return;
@@ -1042,7 +1068,7 @@ export const startReviewRuntime = async ({
       }
 
       const onPath = API_ROUTES.filter(
-        (candidate) => candidate.path === target.pathname,
+        (candidate) => candidate.path === routedPathname,
       );
       if (onPath.length === 0) {
         refuse({ response, status: 404, reason: "No such route" });
@@ -1060,7 +1086,7 @@ export const startReviewRuntime = async ({
       // a simple cross-origin POST still arrives, and would still be executed
       // without this check. These two headers are what refuse the write.
       const requestOrigin = request.headers.origin;
-      if (requestOrigin !== undefined && requestOrigin !== origin) {
+      if (requestOrigin !== undefined && !allowedOrigins.has(requestOrigin)) {
         refuse({ response, status: 403, reason: "Foreign origin" });
         return;
       }

@@ -29,6 +29,44 @@ import {
   type Page,
 } from "./fixtures";
 
+/** What the settle probe records into the page, so the spec can read it back. */
+type SettleRecord = { readonly settledBlockIds: ReadonlyArray<string> };
+
+/**
+ * Records every block that takes the settle mark, in the order it takes it.
+ *
+ * The island clears the mark when the wash ends, so a query made afterwards
+ * cannot tell a settle that never ran from one that has already finished -
+ * which is the difference the reduced-motion journey exists to prove. Armed
+ * before the push, this record never forgets and answers both journeys.
+ */
+const armSettleProbe = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const taken: Array<string> = [];
+    Object.defineProperty(window, "settledBlockIds", { value: taken });
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const element = record.target as HTMLElement;
+        const blockId = element.getAttribute("data-block-id");
+        if (
+          blockId === null ||
+          !element.hasAttribute("data-review-settled") ||
+          taken.includes(blockId)
+        ) {
+          continue;
+        }
+        taken.push(blockId);
+      }
+    }).observe(document.body, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-review-settled"],
+    });
+  });
+
+const settledBlockIds = (page: Page): Promise<ReadonlyArray<string>> =>
+  page.evaluate(() => (window as unknown as SettleRecord).settledBlockIds);
+
 const PLAN = `# Live push runtime probe
 
 The reviewer keeps reading while an agent prepares a revision.
@@ -262,16 +300,22 @@ test("should reveal a real agent edit only at commit and preserve review context
 
 test("should review, reply to, and resolve a pushed thread in chat", async ({
   page,
-}) => {
+}, testInfo) => {
   test.setTimeout(60_000);
   const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-review-"));
   const planPath = join(directory, "plan.mdx");
   await writeFile(planPath, PLAN, "utf8");
   const runtime = await startReviewRuntime({ planPath });
   const previousModel = process.env.BIG_PLAN_AGENT_MODEL;
-  process.env.BIG_PLAN_AGENT_MODEL = "live-push-review-model";
+  const previousClient = process.env.BIG_PLAN_AGENT_CLIENT;
+  process.env.BIG_PLAN_AGENT_MODEL = "claude-opus-5";
+  process.env.BIG_PLAN_AGENT_CLIENT = "claude-code 2.1.217";
 
   try {
+    // The auto-open is a wide-viewport promise, and the default Desktop Chrome
+    // width is the breakpoint exactly - a scrollbar or a nudged breakpoint
+    // would make this journey fail as though the product were broken.
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(runtime.url);
     const opened = await runAgentCli([
       "push",
@@ -324,9 +368,14 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       "publishes the reviewed candidate atomically",
       { timeout: 15_000 },
     );
-    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    // The arrival opens the rail on Chat itself, so pressing the toolbar
+    // control here would close the rail this journey needs open.
     const rail = page.getByRole("complementary", { name: "Feedback" });
-    await rail.getByRole("tab", { name: "Chat" }).click();
+    await expect(rail).toBeVisible();
+    await expect(rail.getByRole("tab", { name: "Chat" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     const thread = rail.locator(`[data-review-pushed-thread="${threadId}"]`);
     const pushedHeader = thread.getByRole("button", {
       name: "Added by agent",
@@ -339,6 +388,13 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await expect(thread).toContainText(
       "Tighten the live publication explanation.",
     );
+    const changeSetIdentity = thread.locator(
+      "[data-review-change-set-identity]",
+    );
+    await expect(changeSetIdentity).toHaveText("Claude Opus 5 · Claude Code");
+    await thread.screenshot({
+      path: testInfo.outputPath("pushed-thread-change-set-identity.png"),
+    });
 
     const replyBody = "Keep the explanation focused on the atomic boundary.";
     const replyPosted = page.waitForResponse(
@@ -407,7 +463,9 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await stepper.getByRole("button", { name: "Accept this change" }).click();
     await expect(stepper).toContainText("2 of 2");
     await stepper.getByRole("button", { name: "Accept this change" }).click();
-    await page.keyboard.press("Escape");
+    await expect(stepper).toContainText("All changes accepted (2 of 2)");
+    await stepper.getByRole("button", { name: "Keep chatting" }).click();
+    await expect(stepper).toBeHidden();
 
     const continuedPush = await runAgentCli([
       "push",
@@ -567,6 +625,8 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
   } finally {
     if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
     else process.env.BIG_PLAN_AGENT_MODEL = previousModel;
+    if (previousClient === undefined) delete process.env.BIG_PLAN_AGENT_CLIENT;
+    else process.env.BIG_PLAN_AGENT_CLIENT = previousClient;
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
@@ -980,6 +1040,255 @@ test("should refuse a push whose source moved and preserve the moving revision",
     await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
     await cancelRequest(page, requestId);
   } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Drives one push to its commit and hands back what the reviewer should now be
+ * able to see. Both arrival journeys need the same setup and differ only in
+ * what the rail was doing when it landed, so the shape is shared rather than
+ * copied.
+ */
+const pushRevisionFrom = async ({
+  planPath,
+  prompt,
+}: {
+  readonly planPath: string;
+  readonly prompt: string;
+}): Promise<{ readonly threadId: string; readonly revised: string }> => {
+  const opened = await runAgentCli(["push", planPath, "--prompt", prompt]);
+  const requestId = agentIdOf(opened.stdout, "requestId");
+  const threadId = agentIdOf(opened.stdout, "threadId");
+  const agentToken = agentIdOf(opened.stdout, "agent_token");
+  const connectionToken = agentIdOf(opened.stdout, "connection_token");
+  const revised = PLAN.replace(
+    "The reviewer keeps reading while an agent prepares a revision.",
+    "The reviewer keeps reading while an agent quietly prepares a revision.",
+  ).replace(
+    "The terminal response publishes the candidate atomically.",
+    "The terminal response publishes the arriving candidate atomically.",
+  );
+  await writeFile(candidatePlanOf(opened.stdout), revised, "utf8");
+  await writeFile(
+    responseDraftOf(opened.stdout),
+    JSON.stringify({
+      requestId,
+      outcomes: [
+        {
+          commentId: threadId,
+          state: "changed",
+          message: "Named the arriving candidate.",
+          changeTargets: [
+            "document/paragraph-1",
+            "section/delivery-boundary/paragraph-1",
+          ],
+        },
+      ],
+    }),
+    "utf8",
+  );
+  await runAgentCli([
+    "respond",
+    planPath,
+    responseDraftOf(opened.stdout),
+    "--agent",
+    agentToken,
+    "--connection",
+    connectionToken,
+  ]);
+  return { threadId, revised };
+};
+
+test("should open the rail, name the agent, and settle the changed blocks when a push arrives mid-read", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-live-push-arrival-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  const previousModel = process.env.BIG_PLAN_AGENT_MODEL;
+  const previousClient = process.env.BIG_PLAN_AGENT_CLIENT;
+  process.env.BIG_PLAN_AGENT_MODEL = "claude-opus-5";
+  process.env.BIG_PLAN_AGENT_CLIENT = "claude-code 2.1.217";
+
+  try {
+    // The rail reserves a gutter beside the reading column only on a wide
+    // viewport; opening it anywhere narrower would cover the text, which is
+    // why the auto-open is a wide-viewport promise and is proven as one.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(runtime.url);
+
+    // The reader is left mid-comment across the push on purpose. Reserving the
+    // rail's gutter moves an open composer out of the margin and into the
+    // reading column, and React remounts it on the way, which takes their
+    // caret with it - so the arrival, which nobody asked for, has to wait for
+    // them to finish rather than take the sentence away.
+    const deliverySlide = page.locator("[data-slide]").filter({
+      has: page.getByRole("heading", { name: "Delivery boundary" }),
+    });
+    await deliverySlide.hover();
+    await deliverySlide
+      .getByRole("button", { name: "Comment on slide" })
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/u });
+    await composer.getByLabel("Add a comment").fill("Half a sentence");
+    const scrollY = await page.evaluate(() => window.scrollY);
+    expect(scrollY).toBeGreaterThan(0);
+    await expect(
+      page.getByRole("complementary", { name: "Feedback" }),
+    ).toBeHidden();
+
+    // Armed before the push commits, so the one-shot settle cannot finish
+    // between the swap landing and the assertion being made.
+    const settled = page.waitForSelector("[data-review-settled]", {
+      timeout: 20_000,
+    });
+    await armSettleProbe(page);
+    const { threadId } = await pushRevisionFrom({
+      planPath,
+      prompt: "Say plainly what the reviewer is about to see.",
+    });
+
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    // The swap has landed, so the arrival has been seen - and the rail is
+    // still shut, with the half-written sentence where the reader left it.
+    await expect(page.locator("article")).toContainText(
+      "publishes the arriving candidate atomically",
+      { timeout: 15_000 },
+    );
+    await expect(composer.getByLabel("Add a comment")).toHaveValue(
+      "Half a sentence",
+    );
+    await expect(rail).toBeHidden();
+
+    // Done writing, so the offer is taken up.
+    await composer.getByRole("button", { name: "Cancel" }).click();
+    await expect(rail).toBeVisible({ timeout: 15_000 });
+    await expect(rail.getByRole("tab", { name: "Chat" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    // Asserted before the plan swap is awaited, because the freshness label is
+    // a live clock: "just now" is what it says on sight and it ages honestly
+    // from there, so pinning that one word would be pinning how long the swap
+    // and the next poll happened to take. What the entry owes the reader is
+    // that a push landed, who pushed it, and how much it touched.
+    const entry = rail.locator("[data-review-push-arrival]");
+    await expect(entry).toBeVisible({ timeout: 15_000 });
+    await expect(entry).toContainText(
+      /Pushed (?:just now|\d+[sm] ago|over an hour ago)/u,
+    );
+    await expect(entry).toContainText("Claude Opus 5");
+    await expect(entry).toContainText("Claude Code");
+    // One connector is attached, so its model already names it. A writer id
+    // here would mean the entry is naming the pusher by an identity the
+    // roster does not draw cards under, which reads as a second agent.
+    await expect(entry).not.toContainText(/\(…[0-9a-f]{4}\)/u);
+    await expect(entry).toContainText("2 blocks changed in the plan.");
+
+    await expect(settled).resolves.toBeTruthy();
+    // Both changed blocks are laid out in this plan, so the settle reaches
+    // exactly the blocks the outcome named and nothing else.
+    await expect
+      .poll(() => settledBlockIds(page))
+      .toEqual([
+        "document/paragraph-1",
+        "section/delivery-boundary/paragraph-1",
+      ]);
+
+    // The arrival is an offer, never a shove: neither the rail opening nor the
+    // article swap may move the reader off the sentence they were on.
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollY);
+
+    // Opening the thread is an acknowledgement, so the entry stands down.
+    await entry.getByRole("button", { name: "Open thread" }).click();
+    await expect(entry).toBeHidden();
+    await expect(
+      rail.locator(`[data-review-pushed-thread="${threadId}"]`),
+    ).toContainText("Named the arriving candidate.");
+  } finally {
+    if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
+    else process.env.BIG_PLAN_AGENT_MODEL = previousModel;
+    if (previousClient === undefined) delete process.env.BIG_PLAN_AGENT_CLIENT;
+    else process.env.BIG_PLAN_AGENT_CLIENT = previousClient;
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should announce an arrival in an open rail without motion when the reader asked for less", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-live-push-arrival-still-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  const previousModel = process.env.BIG_PLAN_AGENT_MODEL;
+  process.env.BIG_PLAN_AGENT_MODEL = "live-push-still-model";
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    await page.evaluate(() =>
+      window.scrollBy({ top: 240, behavior: "instant" }),
+    );
+    const scrollY = await page.evaluate(() => window.scrollY);
+
+    await armSettleProbe(page);
+    await pushRevisionFrom({
+      planPath,
+      prompt: "Arrive while the rail is already open.",
+    });
+    await expect(page.locator("article")).toContainText(
+      "publishes the arriving candidate atomically",
+      { timeout: 15_000 },
+    );
+
+    const entry = rail.locator("[data-review-push-arrival]");
+    await expect(entry).toBeVisible();
+    await expect(entry).toContainText("live-push-still-model");
+    // The entry leads the thread list rather than appearing beneath it.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const arrival = document.querySelector("[data-review-push-arrival]");
+          const thread = document.querySelector("[data-review-pushed-thread]");
+          if (arrival === null || thread === null) return "missing";
+          return (arrival.compareDocumentPosition(thread) &
+            Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0
+            ? "arrival-first"
+            : "thread-first";
+        }),
+      )
+      .toBe("arrival-first");
+
+    // A reader who asked for less motion gets no settle at all, rather than a
+    // stilled one that would leave a highlight they never dismissed. Read from
+    // the probe rather than from the document: the swap has already happened
+    // by now, so an empty live query would be equally true of a wash that ran
+    // and faded, while an empty record can only mean no block was ever marked.
+    expect(await settledBlockIds(page)).toEqual([]);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollY);
+
+    await entry.getByRole("button", { name: "Dismiss" }).click();
+    await expect(entry).toBeHidden();
+  } finally {
+    if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
+    else process.env.BIG_PLAN_AGENT_MODEL = previousModel;
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }

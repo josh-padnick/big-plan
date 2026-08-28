@@ -60,7 +60,9 @@ export const requestJson = async ({
     REQUEST_TIMEOUT_MS,
   );
   try {
-    const response = await fetch(path, {
+    // The document can live at the runtime root or beneath the service's plan
+    // prefix. A relative request follows whichever address served the page.
+    const response = await fetch(path.replace(/^\/+/u, ""), {
       method,
       mode: "same-origin",
       credentials: "omit",

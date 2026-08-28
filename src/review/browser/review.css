@@ -5,7 +5,53 @@ positioning, selection, and association rules that cross into inert HTML live
 here; all values use the document theme's closed token vocabulary.
 */
 
+/* The settle a pushed revision leaves on the blocks it changed. A keyframe
+   definition has no layer of its own; the rule that uses it is layered below.
+   There is deliberately no reduced-motion arm: the island skips the mark
+   entirely for a reader who asked for less motion, because a brief wash that
+   fades is the whole effect and a stilled version of it would be a permanent
+   highlight the reader never dismissed.
+
+   The ring is drawn on an overlay rather than on the block, and nothing the
+   block declares for itself is animated. A settled block is whatever the agent
+   changed: a callout with its own fill, a decision card with its own
+   elevation, a table with both. Animating the block's background or shadow
+   beats those declarations for as long as it runs, so the reader would watch
+   the component's own colour drain or its card flatten and pop back - the
+   opposite of "this one is new". An overlay says the same thing and takes
+   nothing away, and it cannot displace the outline a comment mark may be
+   drawing on the very same block either. */
+@keyframes review-push-settle {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
 @layer components {
+  /* A push replaces plan DOM under a reader who did not ask for it, and the
+     swap is otherwise silent by design. This is the only evidence the words
+     changed, so it paints the arriving blocks once; the island removes the
+     attribute when the animation ends. */
+  [data-block-id][data-review-settled] {
+    position: relative;
+  }
+
+  [data-block-id][data-review-settled]::after {
+    content: "";
+    position: absolute;
+    z-index: 3;
+    inset: -0.25rem;
+    border-radius: inherit;
+    box-shadow:
+      inset 0 0 0 2px color-mix(in srgb, var(--accent-c) 55%, var(--bg)),
+      0 0 0 0.25rem color-mix(in srgb, var(--accent-c) 16%, transparent);
+    pointer-events: none;
+    animation: review-push-settle 1.6s ease-out 1;
+  }
   [data-block-id]:not([data-block-kind="part"]),
   [data-slide][data-review-slide-selectable],
   [data-quick-summary][data-review-slide-selectable] {

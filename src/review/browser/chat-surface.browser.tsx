@@ -2,7 +2,7 @@
 // runtime state and request turns; this surface owns the empty, compose, and
 // conversation presentation states.
 
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import type { AgentStatus } from "../shared/agent-status.js";
 import { AgentStatePill } from "./agent-message.browser.js";
 import { ComposeImages } from "./compose-images.browser.js";
@@ -24,10 +24,19 @@ export type ChatSurfaceModel = {
   readonly isSending: boolean;
   readonly exchanges: ReactNode;
   readonly hasExchanges: boolean;
+  /** The arrival entry for a push that landed while the reader was reading. */
+  readonly arrivalEntry: ReactNode;
   readonly pushedThreads: ReactNode;
   readonly pushedThreadCount: number;
   readonly resolvedPushedThreads: ReactNode;
   readonly resolvedPushedThreadCount: number;
+  /**
+   * The Resolved disclosure, so the controller can reveal it at the moment a
+   * reader asks to open a thread inside it. A push can land in a thread the
+   * reviewer already resolved, and opening that thread while the disclosure
+   * stays shut mounts a card nobody can see.
+   */
+  readonly resolvedThreadsRef: RefObject<HTMLDetailsElement | null>;
   readonly archivedExchanges: ReactNode;
   readonly archivedCount: number;
   readonly onBodyChange: (body: string) => void;
@@ -111,6 +120,7 @@ export const ChatSurface = ({
               )}
             </div>
           </div>
+          {model.arrivalEntry}
           {model.pushedThreadCount === 0 ? null : (
             <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
               <h3 className="m-0 text-xs font-bold uppercase tracking-caps text-muted">
@@ -151,7 +161,10 @@ export const ChatSurface = ({
             </details>
           )}
           {model.resolvedPushedThreadCount === 0 ? null : (
-            <details className="group border-t border-edge pt-3">
+            <details
+              ref={model.resolvedThreadsRef}
+              className="group border-t border-edge pt-3"
+            >
               <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                 Resolved ({model.resolvedPushedThreadCount})
               </summary>

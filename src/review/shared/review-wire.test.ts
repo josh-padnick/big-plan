@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { PROGRESS_STEP_CODES } from "./progress-code.js";
 import {
   decodeAgentSnapshot,
-  decodeChangeDispositions,
+  decodeChangeVerdicts,
   decodeCommittedChangeSets,
   decodeProgress,
   decodeRuntimeSession,
@@ -276,6 +276,20 @@ describe("review wire contract", () => {
       state: { answeredAt: "2026-08-10T12:01:00.000Z" },
     },
     {
+      name: "malformed claimed connection",
+      state: {
+        baselineSnapshot: "a".repeat(16),
+        claimedAt: "2026-08-10T12:00:30.000Z",
+        claimedBy: "b".repeat(16),
+        claimedByConnection: "not-an-id",
+        claimExpiresAtMs: 1_775_000_000_000,
+      },
+    },
+    {
+      name: "claimed connection without a claim",
+      state: { claimedByConnection: "c".repeat(16) },
+    },
+    {
       name: "two terminal states",
       state: {
         answeredAt: "2026-08-10T12:01:00.000Z",
@@ -307,6 +321,40 @@ describe("review wire contract", () => {
         recoveryPrompt: "Reconnect this review",
       }).requests,
     ).toEqual([]);
+  });
+
+  // Two ids ride on one claim and they mean different things: the pickup token
+  // names a turn, the connection names the connector the roster draws a card
+  // for. Only the second can name who did something to a reader.
+  it("should carry the connection a claim recorded, not just its pickup token", () => {
+    const decoded = decodeAgentSnapshot(
+      encodeSnapshot({
+        currentSnapshot: "a".repeat(16),
+        presence: { connected: true, state: "working" },
+        requests: [
+          {
+            requestId: "1".repeat(16),
+            premiseSnapshot: "a".repeat(16),
+            baselineSnapshot: "a".repeat(16),
+            claimedAt: "2026-08-10T12:00:00.000Z",
+            claimedBy: "b".repeat(16),
+            claimedByConnection: "c".repeat(16),
+            claimExpiresAtMs: 1_775_000_000_000,
+            createdAt: "2026-08-10T11:59:00.000Z",
+            kind: "chat",
+          },
+        ],
+        responses: [],
+        connectionLog: [],
+        plan: "/tmp/plan.mdx",
+        agentCommand: "big-plan agent /tmp/plan.mdx",
+        recoveryPrompt: "Reconnect this review",
+      }),
+    );
+    expect(decoded.requests[0]).toMatchObject({
+      claimedBy: "b".repeat(16),
+      claimedByConnection: "c".repeat(16),
+    });
   });
 
   // The heartbeat may be written by a different, waiting agent than the one
@@ -762,8 +810,8 @@ describe("review wire contract", () => {
     }
   });
 
-  it("should drop change dispositions a browser could not act on", () => {
-    const decoded = decodeChangeDispositions({
+  it("should drop change verdicts a browser could not act on", () => {
+    const decoded = decodeChangeVerdicts({
       revision: 4,
       accepted: [
         {
@@ -774,7 +822,7 @@ describe("review wire contract", () => {
         },
         { from: "not-a-digest", to: "b".repeat(16), placeId: "place-2" },
         { from: "a".repeat(16), to: "b".repeat(16), placeId: "" },
-        "not a disposition",
+        "not a verdict",
       ],
     });
     expect(decoded.revision).toBe(4);
@@ -783,9 +831,9 @@ describe("review wire contract", () => {
 
   // A body this build cannot read must never displace state the page already
   // applied, so it decodes older than any accepted write rather than as empty.
-  it("should decode an unreadable disposition body as older than any write", () => {
+  it("should decode an unreadable verdict body as older than any write", () => {
     for (const value of [null, {}, { accepted: [] }, { revision: "4" }]) {
-      expect(decodeChangeDispositions(value).revision).toBe(-1);
+      expect(decodeChangeVerdicts(value).revision).toBe(-1);
     }
   });
 
@@ -801,9 +849,9 @@ describe("review wire contract", () => {
       Number.NaN,
       Number.POSITIVE_INFINITY,
     ]) {
-      expect(
-        decodeChangeDispositions({ accepted: [], revision }).revision,
-      ).toBe(-1);
+      expect(decodeChangeVerdicts({ accepted: [], revision }).revision).toBe(
+        -1,
+      );
       expect(decodeReviewState({ answers: [], revision }).revision).toBe(-1);
       // The contract has no place to put an unorderable revision: it is the
       // one record whose reader starts at -1, so a body carrying one would
@@ -881,9 +929,9 @@ describe("review wire contract", () => {
   // predicate that refused it would report a fresh record as unreadable.
   it("should keep a whole write count, including the first one", () => {
     for (const revision of [0, 7]) {
-      expect(
-        decodeChangeDispositions({ accepted: [], revision }).revision,
-      ).toBe(revision);
+      expect(decodeChangeVerdicts({ accepted: [], revision }).revision).toBe(
+        revision,
+      );
       expect(decodeReviewState({ answers: [], revision }).revision).toBe(
         revision,
       );

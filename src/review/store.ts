@@ -36,7 +36,7 @@ import { readBoundedRegularFile } from "./bounded-regular-file.js";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
-import type { StoredChangeDispositions } from "./change-dispositions-store.js";
+import type { StoredChangeVerdicts } from "./change-verdicts-store.js";
 import type { ApprovalRecord } from "./shared/approval.js";
 import {
   isReviewImageId,
@@ -128,7 +128,7 @@ export type ReviewStore = {
   readonly snapshotDirectory: string;
   readonly draftsPath: string;
   readonly inputsPath: string;
-  readonly changeDispositionsPath: string;
+  readonly changeVerdictsPath: string;
   readonly approvalPath: string;
   readonly approvalFinalizationPath: string;
   readonly sentPath: string;
@@ -512,9 +512,9 @@ export const reviewStoreFor = ({
     }),
     draftsPath: inside({ base: reviewDirectory, leaf: "drafts.json" }),
     inputsPath: inside({ base: reviewDirectory, leaf: "inputs.json" }),
-    changeDispositionsPath: inside({
+    changeVerdictsPath: inside({
       base: reviewDirectory,
-      leaf: "dispositions.json",
+      leaf: "verdicts.json",
     }),
     approvalPath: inside({ base: reviewDirectory, leaf: "approval.json" }),
     approvalFinalizationPath: inside({
@@ -1361,19 +1361,19 @@ export const writeStagedInputs = async ({
 };
 
 /**
- * Reads recorded change dispositions back through their owned validator. A
+ * Reads recorded change verdicts back through their owned validator. A
  * record this build cannot read is answered as empty rather than thrown,
- * because an unreadable disposition record reopens change sets the reviewer
+ * because an unreadable verdict record reopens change sets the reviewer
  * has to look at again - a visible, recoverable loss, unlike a lost answer.
  */
-export const readChangeDispositions = async ({
+export const readChangeVerdicts = async ({
   store,
   validate,
 }: {
   readonly store: ReviewStore;
-  readonly validate: (value: unknown) => StoredChangeDispositions;
-}): Promise<StoredChangeDispositions> => {
-  const stored = await readStoreJson(store.changeDispositionsPath);
+  readonly validate: (value: unknown) => StoredChangeVerdicts;
+}): Promise<StoredChangeVerdicts> => {
+  const stored = await readStoreJson(store.changeVerdictsPath);
   try {
     return validate(stored);
   } catch {
@@ -1381,17 +1381,17 @@ export const readChangeDispositions = async ({
   }
 };
 
-/** Atomically replaces the recorded change dispositions. */
-export const writeChangeDispositions = async ({
+/** Atomically replaces the recorded change verdicts. */
+export const writeChangeVerdicts = async ({
   store,
-  dispositions,
+  verdicts,
 }: {
   readonly store: ReviewStore;
-  readonly dispositions: StoredChangeDispositions;
+  readonly verdicts: StoredChangeVerdicts;
 }): Promise<void> => {
   await writeStoreJson({
-    path: store.changeDispositionsPath,
-    value: dispositions,
+    path: store.changeVerdictsPath,
+    value: verdicts,
   });
 };
 

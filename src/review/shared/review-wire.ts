@@ -5,9 +5,9 @@ import { isStoredCommentTarget, type ReviewComment } from "./comment.js";
 import {
   PLACE_ID_LIMIT,
   SNAPSHOT_DIGEST,
-  type ChangeDisposition,
-  type ChangeDispositionState,
-} from "./change-disposition.js";
+  type ChangeVerdict,
+  type ChangeVerdictState,
+} from "./change-verdict.js";
 import {
   decodeAgentModelIdentity,
   type AgentModelIdentity,
@@ -90,6 +90,15 @@ export type AgentRequest = TerminalAgentRequest & {
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly claimedBy?: string;
+  /**
+   * The roster identity of the agent that holds the claim.
+   *
+   * Distinct from `claimedBy`, which is a pickup token: the token identifies a
+   * turn, while this identifies the connector the roster draws a card for. Any
+   * surface that names who did something needs this one, because the token
+   * matches no card.
+   */
+  readonly claimedByConnection?: string;
   readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   readonly createdAt: string;
@@ -261,7 +270,7 @@ export type ReviewSnapshotSource = ReviewSnapshot;
 
 export type ReviewStateSource = ReviewState;
 
-export type ChangeDispositionStateSource = ChangeDispositionState;
+export type ChangeVerdictStateSource = ChangeVerdictState;
 
 export type AgentSnapshotSource = {
   readonly currentSnapshot: string;
@@ -410,45 +419,42 @@ const storedRevision = (candidate: unknown): number =>
     ? candidate
     : -1;
 
-/** Encodes the change dispositions a review has recorded. */
-export const encodeChangeDispositions = (
-  value: ChangeDispositionStateSource,
-): ChangeDispositionStateSource => value;
+/** Encodes the change verdicts a review has recorded. */
+export const encodeChangeVerdicts = (
+  value: ChangeVerdictStateSource,
+): ChangeVerdictStateSource => value;
 
 /**
- * Decodes recorded dispositions while dropping malformed transport entries.
+ * Decodes recorded verdicts while dropping malformed transport entries.
  * An unusable revision decodes to -1 for the same reason the answers store
  * does: it is older than any accepted write, so a body this build cannot read
  * can never displace state the page already applied.
  */
-export const decodeChangeDispositions = (
-  value: unknown,
-): ChangeDispositionState => {
+export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
   if (!isReviewWireRecord(value) || !Array.isArray(value.accepted)) {
     return { accepted: [], revision: -1 };
   }
   return {
     revision: storedRevision(value.revision),
-    accepted: value.accepted.flatMap(
-      (entry): ReadonlyArray<ChangeDisposition> =>
-        isReviewWireRecord(entry) &&
-        typeof entry.from === "string" &&
-        SNAPSHOT_DIGEST.test(entry.from) &&
-        typeof entry.to === "string" &&
-        SNAPSHOT_DIGEST.test(entry.to) &&
-        typeof entry.placeId === "string" &&
-        entry.placeId !== "" &&
-        entry.placeId.length <= PLACE_ID_LIMIT &&
-        typeof entry.acceptedAt === "string"
-          ? [
-              {
-                from: entry.from,
-                to: entry.to,
-                placeId: entry.placeId,
-                acceptedAt: entry.acceptedAt,
-              },
-            ]
-          : [],
+    accepted: value.accepted.flatMap((entry): ReadonlyArray<ChangeVerdict> =>
+      isReviewWireRecord(entry) &&
+      typeof entry.from === "string" &&
+      SNAPSHOT_DIGEST.test(entry.from) &&
+      typeof entry.to === "string" &&
+      SNAPSHOT_DIGEST.test(entry.to) &&
+      typeof entry.placeId === "string" &&
+      entry.placeId !== "" &&
+      entry.placeId.length <= PLACE_ID_LIMIT &&
+      typeof entry.acceptedAt === "string"
+        ? [
+            {
+              from: entry.from,
+              to: entry.to,
+              placeId: entry.placeId,
+              acceptedAt: entry.acceptedAt,
+            },
+          ]
+        : [],
     ),
   };
 };
@@ -749,6 +755,11 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           typeof request.claimExpiresAtMs === "number" &&
           Number.isSafeInteger(request.claimExpiresAtMs) &&
           request.claimExpiresAtMs > 0;
+        const claimedByConnection =
+          typeof request.claimedByConnection === "string" &&
+          /^[a-f0-9]{16}$/.test(request.claimedByConnection)
+            ? request.claimedByConnection
+            : undefined;
         const claimedModel = decodeAgentModelIdentity(request.claimedModel);
         const answeredAt = isWireTimestamp(request.answeredAt)
           ? request.answeredAt
@@ -758,6 +769,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : undefined;
         if (
           (hasAnyClaim && !hasCompleteClaim) ||
+          (request.claimedByConnection !== undefined &&
+            (claimedByConnection === undefined || !hasCompleteClaim)) ||
           (request.claimedModel !== undefined &&
             (claimedModel === undefined || !hasCompleteClaim)) ||
           (request.answeredAt !== undefined && answeredAt === undefined) ||
@@ -785,6 +798,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
                   claimedAt: request.claimedAt as string,
                   claimedBy: request.claimedBy as string,
                   claimExpiresAtMs: request.claimExpiresAtMs as number,
+                  ...(claimedByConnection === undefined
+                    ? {}
+                    : { claimedByConnection }),
                   ...(claimedModel === undefined ? {} : { claimedModel }),
                 }
               : {}),

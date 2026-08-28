@@ -41,6 +41,18 @@ the same plan, and it keeps answering after the session ends. Save or share the
 address the command printed rather than one you assembled from the default port:
 `BIG_PLAN_PORT` moves the service, and every link with it.
 
+`BIG_PLAN_PROXY=1` makes the service keep a live review on that stable address
+instead of redirecting the browser to the session port. The switch is read once
+when the service starts; unset it or set it to `0` to retain the default
+redirect. Setting it changes nothing while a service started without it is
+still running, because later commands adopt that process rather than replacing
+it: export the variable and then run `big-plan service restart` - or
+`big-plan service stop` before the next command - for the change to take
+effect. Each review still runs on its own unique session port so its process,
+custody, and write fences remain isolated—the service only supplies the hop.
+If that hop cannot reach a live runtime, it answers as a gateway with `502` or
+`504`; a live runtime's `503` remains its own refusal while a write is stalled.
+
 Opening it while a review is running takes you straight to the running session.
 Opening it afterwards gives a page saying what happened - stopped normally after
 inactivity, stopped by the reviewer, or stopped unexpectedly - along with the
@@ -130,6 +142,17 @@ A push that relays reviewer wording needs no extra origin marker, while an agent
 Open the card to reply, review and accept its changes, revert a response, or resolve the thread after its pending work finishes.
 When the agent continues a pushed thread, Big Plan adds another exchange to the same card.
 The card keeps the opener's presentation.
+
+A push that lands while you are reading announces itself.
+The **Chat** tab leads with a **Pushed just now** entry naming the agent's model and client, plus how many blocks changed when the push revised the plan.
+**Open thread** takes you to the conversation, and **Dismiss** clears the entry; either way the entry names the newest arrival, and a newer push replaces it.
+On a wide screen, where the sidebar sits beside the plan rather than over it, an arrival opens the sidebar on **Chat** for you, unless you are part-way through writing a comment or reply or a pointer press is in flight: reserving the sidebar's gutter would move or recreate the control you are using, so the arrival waits until that interaction finishes.
+On a narrower screen it waits as well, because the sidebar would cover the sentence you are reading.
+The entry waits on **Chat** without adding a closed-sidebar toolbar indicator; once the sidebar is open on another tab, **Chat** carries a mark until you view the entry.
+Your reading position is kept either way.
+
+The blocks the revision changed settle briefly in place, so you can see what moved without hunting for it.
+Readers who ask their system for reduced motion get the entry without the highlight.
 
 A comment reaches the agent with the scope it was left at.
 Selecting text inside a paragraph, list, or table cell anchors the note to that block alone.
@@ -376,6 +399,9 @@ happen.
 **What changed** compares the request's claim-time baseline snapshot with the
 validated result snapshot. Each changed answer carries its own attributed
 places; plan-wide chat carries a grouped digest.
+Every change digest names the model and client declared for that request with
+the same identity presentation as **Agent Status**; undeclared fields remain
+absent. This applies equally to reviewer-started work and pushed threads.
 The in-place lens shows word-level edits for close rewrites and stacked **Was**/**Now** bands for larger rewrites, additions, removals, tables, and code.
 Component changes that use the component diff contract render the component's compiled presentation on both **Was** and **Now** sides.
 The change replaces the component in the plan instead of sitting beside a hidden copy.
@@ -424,9 +450,9 @@ fuzzy matching or silently attach it to nearby prose.
 
 Loopback is not an authentication boundary.
 The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
-It checks the `Host` header on every request and refuses a value that is not its own address.
+It checks the `Host` header on every request and refuses any value outside a short allow-list: its own address and the review-link service's, so the opt-in service hop can reach it while a rebound name still cannot.
 
-The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: it redirects to this runtime rather than proxying it, so every check below still happens here.
+The service that answers saved links is a separate process on its own fixed loopback port, holding no review content: by default it redirects to this runtime, and with `BIG_PLAN_PROXY=1` it forwards the request instead, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
 [The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
 
 Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:

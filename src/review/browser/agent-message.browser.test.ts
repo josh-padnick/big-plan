@@ -1,7 +1,39 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AgentStatePill, RequestStatusStrip } from "./agent-message.browser.js";
+import {
+  AgentChangeIdentity,
+  AgentStatePill,
+  RequestStatusStrip,
+} from "./agent-message.browser.js";
+
+describe("agent change identity", () => {
+  it("should show the declared model and client in the change digest", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChangeIdentity, {
+        identity: {
+          name: "claude-opus-5",
+          client: "claude-code 2.1.217",
+        },
+      }),
+    );
+
+    expect(html).toContain("Claude Opus 5");
+    expect(html).toContain("Claude Code");
+    expect(html).toContain('data-review-change-set-identity=""');
+    expect(html).toContain('class="font-normal text-muted"');
+  });
+
+  it("should omit the chip when neither model nor client was declared", () => {
+    expect(
+      renderToStaticMarkup(
+        createElement(AgentChangeIdentity, {
+          identity: { effort: "high" },
+        }),
+      ),
+    ).toBe("");
+  });
+});
 
 describe("request status strip", () => {
   it("should show queue position when another request is ahead", () => {

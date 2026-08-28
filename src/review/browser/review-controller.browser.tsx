@@ -64,6 +64,13 @@ import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
 import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
+import {
+  announcedArrival,
+  pendingPushArrival,
+  pushSettleTargets,
+  scanPushArrivals,
+  type PushArrival,
+} from "../shared/push-arrival.js";
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
@@ -120,6 +127,7 @@ import {
 import { AgentSurface } from "./agent-surface.browser.js";
 import {
   PrimacyHandoffDialog,
+  readAgentRosterFor,
   type AgentRosterProps,
   type PrimacyAnswer,
 } from "./agent-roster.browser.js";
@@ -139,6 +147,8 @@ import {
   type MessageSurface,
 } from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
+import { PushArrivalEntry } from "./push-arrival-entry.browser.js";
+import { settleChangedBlocks } from "./push-settle.browser.js";
 import { renderReviewerNode } from "./message-markdown-view.browser.js";
 import { ComposeImages } from "./compose-images.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
@@ -438,7 +448,7 @@ const AGENT_STATE_BADGE_LABEL: Record<CurrentAgentActivity["state"], string> = {
 const TOOLBAR_CONTROL_CLASS =
   "inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-review-panel-edge bg-transparent px-1.5 py-1 text-xs text-muted shadow-none hover:border-review-panel-edge-strong hover:bg-toolbar-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-review-panel-edge-strong aria-expanded:bg-toolbar-surface aria-expanded:text-ink aria-expanded:inset-shadow-pressed wide:px-2";
 const FEEDBACK_TAB_CLASS =
-  "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>span]:min-w-5 [&>span]:justify-center [&>span]:bg-[var(--annotation-bg)] [&>span]:text-2xs [&>span]:text-[var(--annotation-c)]";
+  "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>[data-review-tab-count]]:min-w-5 [&>[data-review-tab-count]]:justify-center [&>[data-review-tab-count]]:bg-[var(--annotation-bg)] [&>[data-review-tab-count]]:text-2xs [&>[data-review-tab-count]]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
 const APPLE_PLATFORM = /Mac|iPhone|iPad/u.test(navigator.platform);
 const MODIFIER_SHORTCUT = APPLE_PLATFORM ? "⌘+Enter" : "Ctrl+Enter";
@@ -1931,6 +1941,24 @@ const useWide = (): boolean => {
   return isWide;
 };
 
+/**
+ * Whether the caret sits in a field inside a comment or thread card.
+ *
+ * Asked of focus rather than of draft state because an empty reply the reader
+ * is about to type into is exactly as costly to remount as a half-typed one:
+ * what a remount destroys is the caret, not the text. Asked of the field
+ * rather than of the card, because the card is also a chevron, a Resolve, and
+ * a reply toggle - a reader who clicked one of those and read on is not
+ * writing anything, and treating them as though they were would hold an
+ * affordance back until they happened to click somewhere else.
+ */
+const isWritingInPlace = (): boolean =>
+  document.activeElement instanceof Element &&
+  document.activeElement.matches(
+    'textarea, input, [contenteditable]:not([contenteditable="false"])',
+  ) &&
+  document.activeElement.closest("[data-review-comment-ui]") !== null;
+
 const useInlineComposeHost = (
   compose: ComposeState | null,
   isOpen: boolean,
@@ -3179,6 +3207,7 @@ const ChangeAttachment = ({
   return (
     <AgentChangeDigest
       diff={diff}
+      agentIdentity={request.claimedModel}
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
       isSuperseded={
@@ -4236,7 +4265,35 @@ export const ReviewController = () => {
   const [selectionControl, setSelectionControl] =
     useState<SelectionControlState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  // Whether the rail can sit beside the reading column rather than over it,
+  // which is what decides whether an arrival may open it without covering the
+  // sentence the reader is on.
+  const isWide = useWide();
   const [tab, setTab] = useState<FeedbackTab>("comments");
+  // The push the reader has not acknowledged yet, and the seed that decides
+  // what counts as new. The seed is a ref because it is bookkeeping the reader
+  // never sees: writing it must not repaint the plan.
+  const [pushArrival, setPushArrival] = useState<PushArrival | null>(null);
+  const [arrivalWantsRail, setArrivalWantsRail] = useState(false);
+  // Whether a pointer button is down anywhere on the page right now. Held
+  // across effect instances because a press already in flight when an arrival
+  // lands is exactly the one that must not be interrupted.
+  const pointerPressed = useRef(false);
+  const seenPushResponseIds = useRef<ReadonlySet<string> | null>(null);
+  // The blocks the next plan-DOM replacement should settle. Armed immediately
+  // before the swap a push drove and consumed by the announcement it makes, so
+  // a lens replacing plan DOM for the same revision cannot inherit them.
+  const armedSettleTargets = useRef<ReadonlyArray<string> | null>(null);
+  // The arrival the next swap is showing, which is what decides whether that
+  // swap settles anything at all. A ref because the swap reads it from inside
+  // an in-flight fetch, and making it a dependency would restart that fetch on
+  // every poll; consumed by the swap so a later revert onto the same snapshot
+  // finds nothing to settle.
+  const pendingSettleArrival = useRef<PushArrival | null>(null);
+  // The Chat tab's Resolved disclosure, so a thread inside it can be revealed
+  // when the reader asks for it.
+  const resolvedThreadsRef = useRef<HTMLDetailsElement>(null);
+  const [revealResolvedThreads, setRevealResolvedThreads] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const [sidebarView, setSidebarView] = useState<SidebarView>("feedback");
   const [isHydrated, setIsHydrated] = useState(false);
@@ -4355,6 +4412,15 @@ export const ReviewController = () => {
   const pushedThreadComments = useMemo(
     () => pushedThreadOpeners.map((opener) => opener.comment),
     [pushedThreadOpeners],
+  );
+  /* The roster's own ambiguity set, so the arrival entry and the card the
+     reviewer compares it against never disagree about how many words it takes
+     to name one agent. Two connectors on the same model are two agents, and
+     only the writer id says which. */
+  const attachedAgents = useMemo(
+    () =>
+      readAgentRosterFor({ agents: agent.agents, nowMs: statusNowMs }).attached,
+    [agent.agents, statusNowMs],
   );
   const pollIsOffline = reviewPollIsOffline(pollHealth);
   const serverGone = reviewRuntimeIsDown(pollHealth);
@@ -5940,6 +6006,169 @@ export const ReviewController = () => {
     };
   }, [agent.presence.updatedAtMs, identity]);
 
+  /*
+  Both arrival affordances hang off one observation, because a push the entry
+  names and a rail the arrival opened have to be describing the same push.
+
+  The rail opens only where it sits beside the reading column. Below the wide
+  breakpoint it is a fixed overlay across the text, so opening it on the
+  reader's behalf would cover the sentence they are reading - the one thing an
+  arrival affordance must never do. The entry is still waiting on the Chat tab
+  when they open it themselves.
+  */
+  useEffect(() => {
+    // The empty snapshot the island mounts with is not an observation, and
+    // seeding against it would report every push already in the plan as one
+    // that just landed. The first accepted payload is what gets seeded.
+    if (!hasObservedAgentSnapshot) return;
+    const scan = scanPushArrivals({
+      requests: agent.requests,
+      responses: agent.responses,
+      seenPushResponseIds: seenPushResponseIds.current,
+    });
+    seenPushResponseIds.current = scan.seenPushResponseIds;
+    const announced = announcedArrival(scan.arrivals);
+    if (announced === undefined) return;
+    setPushArrival(announced);
+    pendingSettleArrival.current = pendingPushArrival({
+      pending: pendingSettleArrival.current,
+      arrived: announced,
+    });
+    if (isOpen || !isWide) return;
+    setArrivalWantsRail(true);
+  }, [
+    agent.requests,
+    agent.responses,
+    hasObservedAgentSnapshot,
+    isOpen,
+    isWide,
+  ]);
+
+  /*
+  A press is an intent already in flight, and the reader is owed its result.
+  Pressing a control inside a thread card focuses it, which takes focus off the
+  reply field beside it and answers the rail deferral's question below - so
+  without this the rail could open between the press and the release, and
+  opening it re-creates every floating card. The button the pointer is still
+  down on is detached, the browser then dispatches the click at whatever
+  ancestor survived, and the Resolve or the Reply the reader asked for never
+  runs and never says so.
+
+  Tracked at mount rather than inside the effect that consults it, because an
+  arrival can land on a press that began long before it and an effect that only
+  subscribes when the arrival does would never have seen that press start. Read
+  from the buttons each event reports rather than latched by event type, so a
+  release the page never received - the pointer let go past the window edge -
+  is corrected by the next move over the page instead of holding the rail shut
+  for good.
+  */
+  useEffect(() => {
+    const notePointer = (event: PointerEvent) => {
+      pointerPressed.current =
+        event.type === "pointerdown" || event.buttons !== 0;
+    };
+    const options = { capture: true, passive: true } as const;
+    document.addEventListener("pointerdown", notePointer, options);
+    document.addEventListener("pointerup", notePointer, options);
+    document.addEventListener("pointercancel", notePointer, options);
+    document.addEventListener("pointermove", notePointer, options);
+    return () => {
+      document.removeEventListener("pointerdown", notePointer, options);
+      document.removeEventListener("pointerup", notePointer, options);
+      document.removeEventListener("pointercancel", notePointer, options);
+      document.removeEventListener("pointermove", notePointer, options);
+    };
+  }, []);
+
+  /*
+  The rail opens on the reader's behalf only once opening it costs them
+  nothing. Reserving the gutter moves an open composer and every floating
+  thread out of the margin and into the reading column, and React remounts
+  them on the way: the text survives in review state, the caret and the
+  selection do not. A reader who opened the rail themselves accepted that
+  trade; an arrival did not ask, so it holds the intent and spends it the
+  moment they stop writing. Until then the Chat tab carries its mark and the
+  entry is waiting on the tab when they get there.
+  */
+  useEffect(() => {
+    if (!arrivalWantsRail) return;
+    if (isOpen || !isWide) {
+      setArrivalWantsRail(false);
+      return;
+    }
+    let frame = 0;
+    const openRail = () => {
+      if (pointerPressed.current || compose !== null || isWritingInPlace()) {
+        return;
+      }
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      setArrivalWantsRail(false);
+      openFeedbackSidebar("chat");
+      // Reserving the rail's gutter reflows the reading column. Restoring the
+      // reader's position afterwards is the same continuity the article swap
+      // already keeps, for the same reason: they did not ask to be moved.
+      requestAnimationFrame(() =>
+        window.scrollTo({ left: scrollX, top: scrollY }),
+      );
+    };
+    // Focus has not reached its new element while `focusout` is dispatching,
+    // so the question is asked a frame later, once it has.
+    const recheck = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(openRail);
+    };
+    openRail();
+    // The press itself is tracked at mount, above; these only re-ask once it
+    // ends, because a release is the moment the reader is owed an answer.
+    document.addEventListener("pointerup", recheck, true);
+    document.addEventListener("pointercancel", recheck, true);
+    document.addEventListener("focusin", recheck);
+    document.addEventListener("focusout", recheck);
+    // A field that is removed while it holds the caret takes the caret to the
+    // body and reports nothing, so the one moment the island replaces plan DOM
+    // wholesale is asked again rather than assumed to be quiet.
+    document.addEventListener("bigplan:article-replaced", recheck);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("pointerup", recheck, true);
+      document.removeEventListener("pointercancel", recheck, true);
+      document.removeEventListener("focusin", recheck);
+      document.removeEventListener("focusout", recheck);
+      document.removeEventListener("bigplan:article-replaced", recheck);
+    };
+  }, [arrivalWantsRail, compose, isOpen, isWide, openFeedbackSidebar]);
+
+  useEffect(() => {
+    const settleReplacement = () => {
+      const targets = armedSettleTargets.current;
+      armedSettleTargets.current = null;
+      if (targets !== null) settleChangedBlocks(targets);
+    };
+    document.addEventListener("bigplan:article-replaced", settleReplacement);
+    return () =>
+      document.removeEventListener(
+        "bigplan:article-replaced",
+        settleReplacement,
+      );
+  }, []);
+
+  /*
+  Applied on whichever commit first has the disclosure to apply it to, which
+  is why this runs on every commit rather than on a dependency list: the ask
+  can be made from Agent Status, where the Chat tab is not mounted yet, and
+  waiting on the state that happens to mount it would be guessing at which one
+  that is. Before paint, so a reader asking for a resolved thread never sees
+  the collapsed disclosure the request was meant to open.
+  */
+  useLayoutEffect(() => {
+    if (!revealResolvedThreads) return;
+    const disclosure = resolvedThreadsRef.current;
+    if (disclosure === null) return;
+    disclosure.open = true;
+    setRevealResolvedThreads(false);
+  });
+
   useEffect(() => {
     if (
       identity === null ||
@@ -5959,7 +6188,23 @@ export const ReviewController = () => {
       })
       .then((html) => {
         if (!current) return;
-        replacePlanArticle(new DOMParser().parseFromString(html, "text/html"));
+        armedSettleTargets.current = pushSettleTargets({
+          arrival: pendingSettleArrival.current,
+          resultSnapshot: agent.currentSnapshot,
+        });
+        pendingSettleArrival.current = null;
+        try {
+          replacePlanArticle(
+            new DOMParser().parseFromString(html, "text/html"),
+          );
+        } catch (error: unknown) {
+          // A replacement that threw dispatched nothing, so nobody consumed
+          // the arming. Left in place it would be spent by the next plan-DOM
+          // replacement from any source - a lens open, say - painting arrival
+          // rings on blocks that arrival never touched.
+          armedSettleTargets.current = null;
+          throw error;
+        }
         setDisplayedSnapshot(agent.currentSnapshot);
         window.scrollTo({ left: scrollX, top: scrollY });
         setStatus(
@@ -6854,6 +7099,60 @@ export const ReviewController = () => {
       </li>
     );
   };
+  /*
+  A pushed thread the reviewer already resolved sits inside a disclosure that
+  is collapsed until they ask for it, so opening that thread without opening
+  the disclosure mounts a card nobody can see - the control that appears to do
+  nothing. The ask is recorded rather than acted on here, because the request
+  can arrive from a surface where that disclosure is not mounted at all: the
+  activity list lives on Agent Status, and the rail only becomes the Chat tab
+  on the render after. The reveal is then written to the element itself rather
+  than driven by a prop, because a native toggle is invisible to React - a
+  reader who collapsed the disclosure by hand would leave a controlled prop
+  stuck at its old value, and the next request to open it would write nothing.
+  */
+  const openPushedThread = (threadId: string) => {
+    setThreadOpenState((state) =>
+      setThreadOpen({
+        state,
+        commentId: threadId,
+        kind: "sent",
+        surface: "rail",
+        isRailOpen: isOpen,
+        open: true,
+      }),
+    );
+    if (resolvedCommentIds.has(threadId)) setRevealResolvedThreads(true);
+  };
+  /*
+  The entry names one arrival and stops as soon as that arrival has been acted
+  on: both controls clear it, and so does resolving the thread it points at,
+  because a reader looking at the thread does not need to be told there is one.
+  A newer push replaces it rather than stacking, because two "just now" entries
+  cannot both be the thing that just happened.
+
+  What it deliberately does not do is stay silent because the thread was
+  already resolved. A push into a resolved thread is still a change the
+  reviewer did not ask for, and a resolution they made before it landed cannot
+  have been an acknowledgement of it - so the arrival is announced, and the
+  thread it names is a thread that needs them again.
+  */
+  const pushArrivalEntry =
+    pushArrival === null ||
+    !pushedThreadComments.some(
+      (comment) => comment.id === pushArrival.threadId,
+    ) ? null : (
+      <PushArrivalEntry
+        arrival={pushArrival}
+        nowMs={statusNowMs}
+        attached={attachedAgents}
+        onOpenThread={() => {
+          openPushedThread(pushArrival.threadId);
+          setPushArrival(null);
+        }}
+        onDismiss={() => setPushArrival(null)}
+      />
+    );
   const unresolvedSent = sent.filter(
     (comment) => !resolvedCommentIds.has(comment.id),
   );
@@ -6969,6 +7268,7 @@ export const ReviewController = () => {
     setResolveRefusal(null);
     const current = latestReviewStateRef.current.state;
     if (!current.resolvedCommentIds.has(commentId)) {
+      if (pushArrival?.threadId === commentId) setPushArrival(null);
       closeTour();
       if (selectedCommentId === commentId) setSelectedCommentId(null);
       const comment = [...current.drafts, ...sent].find(
@@ -7018,17 +7318,7 @@ export const ReviewController = () => {
       request?.kind === "push" &&
       request.threadId !== undefined
     ) {
-      const threadId = request.threadId;
-      setThreadOpenState((current) =>
-        setThreadOpen({
-          state: current,
-          commentId: threadId,
-          kind: "sent",
-          surface: "rail",
-          isRailOpen: isOpen,
-          open: true,
-        }),
-      );
+      openPushedThread(request.threadId);
       openFeedbackSidebar("chat");
       return;
     }
@@ -7411,7 +7701,9 @@ export const ReviewController = () => {
                   <Icon icon={MESSAGE_SQUARE_ICON} />
                   Comments
                   {unresolvedDrafts.length > 0 ? (
-                    <Badge size="compact">{unresolvedDrafts.length}</Badge>
+                    <Badge size="compact" data-review-tab-count="">
+                      {unresolvedDrafts.length}
+                    </Badge>
                   ) : null}
                 </button>
                 <button
@@ -7426,6 +7718,19 @@ export const ReviewController = () => {
                 >
                   <Icon icon={MESSAGES_SQUARE_ICON} />
                   Chat
+                  {/* A reader already in the rail on another tab is not
+                      interrupted, so the arrival has to be discoverable
+                      without taking their tab from them. */}
+                  {pushArrivalEntry === null || tab === "chat" ? null : (
+                    <>
+                      <span
+                        className="size-1.5 rounded-full bg-accent"
+                        data-review-chat-arrival=""
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only">, a push just arrived</span>
+                    </>
+                  )}
                 </button>
                 {identity === null ? null : (
                   <button
@@ -7670,6 +7975,7 @@ export const ReviewController = () => {
                 shortcutLabel: MODIFIER_SHORTCUT,
                 isSending: isSendingChat,
                 hasExchanges: activeChatRequests.length > 0,
+                arrivalEntry: pushArrivalEntry,
                 exchanges: activeChatRequests.map(renderChatExchange),
                 pushedThreadCount: unresolvedPushedThreadComments.length,
                 pushedThreads:
@@ -7677,6 +7983,7 @@ export const ReviewController = () => {
                 resolvedPushedThreadCount: resolvedPushedThreadComments.length,
                 resolvedPushedThreads:
                   resolvedPushedThreadComments.map(renderPushedThread),
+                resolvedThreadsRef,
                 archivedCount: archivedChatRequests.length,
                 archivedExchanges: archivedChatRequests.map(renderChatExchange),
                 onBodyChange: setChatBody,

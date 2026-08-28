@@ -38,7 +38,7 @@ describe("review images", () => {
   });
 
   it("should address a stored picture by digest alone", () => {
-    expect(reviewImageSource(id)).toBe(`/review-images/${id}`);
+    expect(reviewImageSource(id)).toBe(`review-images/${id}`);
     expect(() => reviewImageSource("not-a-digest")).toThrow(
       "Invalid review image id",
     );
