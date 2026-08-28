@@ -324,6 +324,15 @@ describe("Markdown export primitives", () => {
       cell: "Lead sentence.",
       blocks: "```json\n{}\n```",
     });
+    expect(
+      markdownTableProse([
+        paragraph({ type: "text", value: "Lead sentence." }),
+        paragraph({ type: "text", value: "Additional detail." }),
+      ]),
+    ).toEqual({
+      cell: "Lead sentence.",
+      blocks: "Additional detail.",
+    });
     expect(markdownTableProse([fence("{}")])).toEqual({
       cell: "",
       blocks: "```json\n{}\n```",
