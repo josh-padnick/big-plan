@@ -7321,7 +7321,7 @@ test.describe("a replacement behind the stable address", () => {
       await stageComment(page, "The replacement remains writable here.");
       await expect.poll(() => draftWrites).toBeGreaterThan(0);
     } finally {
-      await replacement.close();
+      await closeReviewRuntime({ page, runtime: replacement });
     }
   });
 });
