@@ -1072,24 +1072,28 @@ export const startReviewRuntime = async (
   start: StartReviewRuntime = startDirectReviewRuntime,
 ): Promise<ReviewRuntime> => {
   const runtime = await start(options);
-  const service = activeReviewLinkService;
-  if (service === undefined) {
+  try {
+    const service = activeReviewLinkService;
+    if (service === undefined) {
+      throw new Error("The Playwright review-link service is not running");
+    }
+    await rememberPlan({ planId: runtime.planId, planPath: runtime.planPath });
+    const stableUrl = `${service.origin}/plan/${runtime.planId}`;
+    directReviewUrls.set(stableUrl, runtime.url);
+    return {
+      ...runtime,
+      url: stableUrl,
+      close: async () => {
+        await runtime.close();
+        if (directReviewUrls.get(stableUrl) === runtime.url) {
+          directReviewUrls.delete(stableUrl);
+        }
+      },
+    };
+  } catch (error) {
     await runtime.close();
-    throw new Error("The Playwright review-link service is not running");
+    throw error;
   }
-  await rememberPlan({ planId: runtime.planId, planPath: runtime.planPath });
-  const stableUrl = `${service.origin}/plan/${runtime.planId}`;
-  directReviewUrls.set(stableUrl, runtime.url);
-  return {
-    ...runtime,
-    url: stableUrl,
-    close: async () => {
-      await runtime.close();
-      if (directReviewUrls.get(stableUrl) === runtime.url) {
-        directReviewUrls.delete(stableUrl);
-      }
-    },
-  };
 };
 
 /** Resolves a test-authored runtime request against the active delivery mode. */
