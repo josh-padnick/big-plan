@@ -539,7 +539,6 @@ export const identifyReviews = (snapshot) => {
       if (one.kind !== "bot" || remainingBots === 1) {
         return true;
       }
-      const allThreads = reviewerThreads(snapshot, one.bot.logins);
       const isCommentOnly =
         one.states.size === 1 && one.states.has("COMMENTED");
       const latestCommented = latestCommentedReview(one.reviews);
