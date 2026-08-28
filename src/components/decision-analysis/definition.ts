@@ -5,6 +5,7 @@ import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileDecisionAnalysisComponent } from "./compile.js";
 import { DecisionAnalysis } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { decisionAnalysisMarkdown } from "./markdown.js";
 
 const bodyPolicy = (name: string): ScopedChildDefinition["markdownBody"] => ({
   prohibited: {
@@ -19,6 +20,7 @@ const bodyPolicy = (name: string): ScopedChildDefinition["markdownBody"] => ({
 export const DECISION_ANALYSIS_COMPONENT_DEFINITION = defineComponent({
   compile: compileDecisionAnalysisComponent,
   view: DecisionAnalysis,
+  markdown: decisionAnalysisMarkdown,
   scopedChildren: {
     Criterion: {
       kind: "scoped-child",

@@ -1,6 +1,6 @@
-// Declares Wireframe's component integration contract: the compiler, the view
-// presenting it, the bespoke screen-level diff, and the scoped names a plan
-// author may write inside a wireframe.
+// Declares Wireframe's component integration contract: the compiler, the view,
+// its Markdown and bespoke screen-level diff presentations, and the scoped
+// names a plan author may write inside a wireframe.
 
 import { compileWireframe } from "./compile.js";
 import { compileWireframeDiff } from "./compile-diff.js";
@@ -9,6 +9,7 @@ import { Wireframe } from "./view.js";
 import { WireframeDiffView } from "./view-diff.js";
 import type { ScopedChildDefinition } from "../_authoring/contract.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { wireframeMarkdown } from "./markdown.js";
 
 // The wireframe vocabulary nests without a fixed depth, so the scoped-name
 // graph deliberately points back at itself: the Markdown layer only needs to
@@ -29,6 +30,7 @@ const buildScopedChildren = (): Readonly<
 export const WIREFRAME_COMPONENT_DEFINITION = defineComponent({
   compile: compileWireframe,
   view: Wireframe,
+  markdown: wireframeMarkdown,
   diff: compileWireframeDiff,
   diffView: WireframeDiffView,
   scopedChildren: buildScopedChildren(),

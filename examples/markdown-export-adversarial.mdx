@@ -1,0 +1,113 @@
+# Release safety workflow
+
+Ship a staged release whose scoring, runtime sequence, implementation guard,
+and operator-visible states remain understandable outside the review viewer.
+
+## Storage decision
+
+Compare the weighted tradeoffs and keep the rationale beside every score.
+
+<DecisionAnalysis question="Which state store should the release use?" state="proposed" interaction="audit" scoring="weighted">
+  <Criterion title="Integrity" impact="5">
+
+Related release records must commit together.
+
+</Criterion>
+  <Criterion title="Local setup" impact="2">
+
+The first operator should start without another service.
+
+</Criterion>
+  <Option title="PostgreSQL" recommended summary="Use the shared relational store.">
+    <Score criterion="Integrity" verdict="Excellent" tone="good" score="5">
+
+Transactions keep the release and audit rows atomic.
+
+</Score>
+    <Score criterion="Local setup" verdict="Needs server" tone="mixed" score="2">
+
+A database service must already be running.
+
+</Score>
+  </Option>
+  <Option title="SQLite" summary="Keep one embedded file.">
+    <Score criterion="Integrity" verdict="Strong" tone="good" score="4">
+
+Local transactions cover the related rows.
+
+</Score>
+    <Score criterion="Local setup" verdict="No setup" tone="good" score="5">
+
+The process opens the file directly.
+
+</Score>
+  </Option>
+  <Reversibility rating="somewhat-hard">
+
+Changing stores later requires migrating release history.
+
+</Reversibility>
+</DecisionAnalysis>
+
+## Runtime sequence
+
+Show the validation edge that gates the canary release.
+
+<FlowDiagram>
+  <Stage title="Prepare">
+    <Node id="candidate" label="Build candidate" tone="source" badge="Pending" badgeTone="warning" />
+  </Stage>
+  <Stage title="Release">
+    <Node id="canary" label="Publish canary" tone="destination" badge="Blocked until checks pass" badgeTone="warning" />
+  </Stage>
+  <Edge from="candidate" to="canary" label="unblocks after validation" />
+
+The canary never starts before validation succeeds.
+
+</FlowDiagram>
+
+## Implementation guard
+
+Keep the ordering constraint attached to the exact lines that enforce it.
+
+<CodeSnippet file="src/release/publish.ts" startLine="40" showLineNumbers>
+
+```ts
+export const publish = async (candidate: Candidate): Promise<void> => {
+  await validate(candidate);
+  await release(candidate);
+};
+```
+
+<Annotation lines="41-42">
+
+Validation must settle before the release write begins.
+
+</Annotation>
+</CodeSnippet>
+
+![Operator confirmation state](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==)
+
+## Operator states
+
+Walk the operator from a ready release into visible progress and back again.
+
+<Wireframe id="release-flow" title="Canary release" initialScreen="ready">
+  <Screen id="ready" name="Ready to release" device="phone">
+    <Stack>
+      <TopBar title="Release candidate" />
+      <Badge label="Checks passed" tone="success" />
+      <Text text="Version 2.4.0 is ready for the canary group." role="body" />
+      <Button label="Release canary" emphasis="primary" navigateTo="releasing" />
+    </Stack>
+  </Screen>
+  <Screen id="releasing" name="Release in progress" device="phone">
+    <Stack>
+      <TopBar title="Release candidate" />
+      <Progress label="Canary rollout" value="40" valueLabel="40% complete" detail="2 of 5 hosts" />
+      <TextField label="Approval code" value="Confirmed" disabled />
+      <Button label="Release canary" emphasis="primary" />
+      <Button label="Back to summary" emphasis="tertiary" navigateTo="ready" />
+    </Stack>
+  </Screen>
+</Wireframe>

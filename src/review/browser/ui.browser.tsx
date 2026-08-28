@@ -614,6 +614,8 @@ type AlertDialogProps = {
   readonly width?: "default" | "wide";
   /** Split puts cancel on the left and the action on the right. */
   readonly footerAlign?: "end" | "split";
+  /** Disables both choices while the dialog's action is in flight. */
+  readonly pending?: boolean;
   /** When set, the panel hangs below this control instead of the viewport center. */
   readonly anchorRef?: RefObject<HTMLElement | null>;
 };
@@ -637,6 +639,7 @@ export const AlertDialog = ({
   footnote,
   width = "default",
   footerAlign = "end",
+  pending = false,
   anchorRef,
 }: AlertDialogProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -658,6 +661,14 @@ export const AlertDialog = ({
       if (previousFocus?.isConnected === true) previousFocus.focus();
     };
   }, [open]);
+
+  // Both choices are disabled while the action is in flight, which drops focus
+  // to the body and takes Escape and Tab out of this dialog's key handler.
+  // Holding focus on the panel keeps the trap and the post-refusal position.
+  useLayoutEffect(() => {
+    if (!open || !pending) return;
+    dialogRef.current?.focus();
+  }, [open, pending]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -692,7 +703,7 @@ export const AlertDialog = ({
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      onDismiss();
+      if (!pending) onDismiss();
       return;
     }
     if (
@@ -701,7 +712,7 @@ export const AlertDialog = ({
       event.target === dialogRef.current
     ) {
       event.preventDefault();
-      onAction();
+      if (!pending) onAction();
       return;
     }
     if (event.key !== "Tab") return;
@@ -804,13 +815,19 @@ export const AlertDialog = ({
               : "justify-end",
           )}
         >
-          <Button variant="outline" size="md" onClick={onCancel}>
+          <Button
+            variant="outline"
+            size="md"
+            onClick={onCancel}
+            disabled={pending}
+          >
             {cancelLabel}
           </Button>
           <Button
             variant={resolvedActionVariant}
             size="md"
             onClick={onAction}
+            disabled={pending}
             aria-describedby={footnote === undefined ? undefined : footnoteId}
             className={
               width === "wide" && footerAlign === "split"

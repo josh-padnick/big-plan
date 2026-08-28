@@ -356,6 +356,7 @@ test("should keep unsent comment text separate across two tabs", async ({
     readonly composerBody: string;
     readonly replyBody: string;
   }): Promise<void> => {
+    const recoveryKey = await ownedLiveRecoveryKey(targetPage);
     const feedbackButton = targetPage.getByRole("button", {
       name: /^Feedback(?: \d+)?$/u,
     });
@@ -379,6 +380,45 @@ test("should keep unsent comment text separate across two tabs", async ({
       .getByRole("dialog", { name: /Comment on/u })
       .getByLabel("Add a comment")
       .fill(composerBody);
+
+    // Reload only after the tab-owned recovery record has committed both
+    // inputs. A filled textarea can precede the React persistence effect.
+    await expect
+      .poll(() =>
+        targetPage.evaluate((key) => {
+          const raw = window.localStorage.getItem(key);
+          if (raw === null) return null;
+          const parsed: unknown = JSON.parse(raw);
+          if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            !("composer" in parsed) ||
+            typeof parsed.composer !== "object" ||
+            parsed.composer === null
+          )
+            return null;
+          const comment =
+            "comment" in parsed.composer ? parsed.composer.comment : null;
+          const replies =
+            "replies" in parsed.composer ? parsed.composer.replies : null;
+          return {
+            commentBody:
+              typeof comment === "object" &&
+              comment !== null &&
+              "body" in comment &&
+              typeof comment.body === "string"
+                ? comment.body
+                : null,
+            replyBodies:
+              typeof replies === "object" && replies !== null
+                ? Object.values(replies).filter(
+                    (value): value is string => typeof value === "string",
+                  )
+                : [],
+          };
+        }, recoveryKey),
+      )
+      .toEqual({ commentBody: composerBody, replyBodies: [replyBody] });
 
     await targetPage.reload();
     await expect(
@@ -3874,7 +3914,7 @@ test("should restore and submit staged comments through the local review runtime
     name: "Feedback",
     exact: true,
   });
-  const settingsAction = page.getByRole("button", { name: "Open settings" });
+  const moreActions = page.getByRole("button", { name: "More actions" });
   await expect(agentStatus).toBeVisible();
   // The control draws exactly one state mark, and with no agent connected it is
   // not the working one. Asserting the mark exists first keeps the second
@@ -3888,7 +3928,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(feedbackAction).toBeVisible();
   const approveAction = page.getByRole("button", { name: "Approve plan" });
   await expect(approveAction).toBeVisible();
-  await expect(settingsAction).toBeVisible();
+  await expect(moreActions).toBeVisible();
   await expect(
     page.locator('input[type="range"], input[type="color"]'),
   ).toHaveCount(0);
@@ -3904,19 +3944,19 @@ test("should restore and submit staged comments through the local review runtime
     approveAction.boundingBox(),
     feedbackAction.boundingBox(),
     agentStatus.boundingBox(),
-    settingsAction.boundingBox(),
-  ]).then(([approve, feedback, status, settings]) => {
+    moreActions.boundingBox(),
+  ]).then(([approve, feedback, status, more]) => {
     if (
       status === null ||
       feedback === null ||
       approve === null ||
-      settings === null
+      more === null
     )
       throw new Error("The review toolbar actions were not rendered");
     return [
       feedback.x - approve.x - approve.width,
       status.x - feedback.x - feedback.width,
-      settings.x - status.x - status.width,
+      more.x - status.x - status.width,
     ];
   });
   expect(toolbarGaps).toEqual([8, 8, 8]);

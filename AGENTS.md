@@ -63,7 +63,7 @@ Human delivery enforces the same linting rules before packaging, and a guidance 
 
 ## Architecture at a glance
 
-Big Plan uses one compilation path to produce either machine-readable JSON or a human-readable review document.
+Big Plan uses one compilation path to produce machine-readable JSON, a human-readable review document, or a portable Markdown export from a live review.
 The framework-free plan vocabulary is the shared bottom tier for guidance-bearing concepts consumed by compilation, lint, and rendering.
 The validate command checks that the review document can be rendered, then applies linting rules to the authored plan; the render command applies the same linting rules before writing:
 
@@ -72,14 +72,17 @@ MDX plan source
   -> CLI command
   -> parse and validate allowed Markdown and component syntax
   -> validate and translate built-in components
-  -> React view -> HAST -> document transforms -> block identity
+  -> delivery-specific component presentation
+     -> React view -> HAST -> document transforms -> block identity
      -> machine output -> machine-readable JSON
      -> human output -> self-contained HTML review document
+     -> Markdown view -> portable Markdown plus current review overlay
   -> validate and human output -> linting rules on the authored plan
 ```
 
 Each component validates its authored attributes and content into plain data describing what it should show.
-Both deliveries then give that data to the component's React view, cross one React-to-HAST boundary, and apply document-wide transforms; only what they publish differs.
+Machine and human delivery give that data to the component's React view, cross one React-to-HAST boundary, and apply document-wide transforms; only what they publish differs.
+Live Markdown export uses the same compiler and component traversal, but gives the validated data to each component's framework-free Markdown presentation before applying Markdown-wide transforms.
 Human delivery packages the result as inert HTML.
 Machine delivery publishes the collected models as JSON, which is why it renders too: each model carries the block address its rendered root was given, and a block address only exists over a finished deck.
 That address is present only where the component's root became a block a reader can point at, so a component rendered privately inside another component's markup, and a slide, which is a scope rather than a block, each publish a model with no address.
