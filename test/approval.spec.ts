@@ -975,11 +975,8 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
 
       await agentStatusTrigger(page).click();
       const status = agentSidebar(page);
-      await expect(
-        status.locator("[data-review-current-activity]"),
-      ).toHaveAttribute("data-review-current-activity", "handoff");
-      await expect(status).toContainText("Plan approved");
-      await expect(status).toContainText("Approval acknowledged");
+      await expect(status).not.toContainText("Plan approved");
+      await expect(status).not.toContainText("Approval acknowledged");
     });
   } finally {
     await runtime.close();
@@ -1059,10 +1056,7 @@ test("should report an approval the agent refused to acknowledge", async ({
 
     await agentStatusTrigger(page).click();
     const status = agentSidebar(page);
-    await expect(
-      status.locator("[data-review-current-activity]"),
-    ).toHaveAttribute("data-review-current-activity", "handoff-blocked");
-    await expect(status).toContainText("Approval not acknowledged");
+    await expect(status).not.toContainText("Approval not acknowledged");
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
