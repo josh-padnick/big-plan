@@ -448,7 +448,6 @@ const renderDesktopToc = ({
     partHeaderClasses: TOC_PART_HEADER_CLASSES,
   });
   return `<nav class="${DESKTOP_TOC_CLASSES}" data-desktop-toc aria-label="Contents">
-<span class="mb-3 flex shrink-0 justify-center" data-review-approval-page-stamp hidden></span>
 <p class="${TOC_EYEBROW_CLASSES}" data-toc-header><a class="rounded-sm text-subtle hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
 <ol class="min-h-0 overflow-y-auto overscroll-contain pr-1" data-desktop-toc-list>
 ${items}
@@ -547,6 +546,7 @@ ${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="relative min-w-0" id="${overviewId}">
+<span class="pointer-events-none absolute -top-12 left-3 z-10 -rotate-3" data-review-approval-page-stamp hidden></span>
 <article>
 ${contentHtml}
 </article>

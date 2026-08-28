@@ -133,20 +133,22 @@ const STAMP_FRAME =
   "inline-flex rounded-md border-2 border-accent p-0.5 bg-paper";
 
 const STAMP_INNER =
-  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5";
+  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-3 py-1";
 
 const STAMP_TYPE =
-  "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase";
+  "text-xl font-bold tracking-caps whitespace-nowrap text-accent uppercase";
 
 const ApprovedStampMark = () => (
   <span className={STAMP_FRAME}>
     <span className={STAMP_INNER}>
-      <span className={STAMP_TYPE}>Approved</span>
+      <span className={STAMP_TYPE} data-review-approval-stamp-type="">
+        Approved
+      </span>
     </span>
   </span>
 );
 
-/** A persistent rubber-stamp mark above the desktop contents list. */
+/** A persistent rubber-stamp mark above the plan title. */
 const ApprovedStampOverlay = () => {
   const [slot, setSlot] = useState<HTMLElement | null>(() =>
     document.querySelector<HTMLElement>("[data-review-approval-page-stamp]"),

@@ -752,6 +752,14 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     const approved = page.waitForResponse((response) =>
       response.url().endsWith("/api/approve"),
     );
+    const title = page.locator("article h1[data-authored-prose]").first();
+    const [titleBoxBeforeApproval, tocBoxBeforeApproval] = await Promise.all([
+      title.boundingBox(),
+      page.locator("[data-desktop-toc]").boundingBox(),
+    ]);
+    if (titleBoxBeforeApproval === null || tocBoxBeforeApproval === null) {
+      throw new Error("The plan title and contents were not laid out");
+    }
     await dialog.getByRole("button", { name: "Approve plan" }).click();
     expect((await approved).ok()).toBe(true);
 
@@ -797,44 +805,31 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     expect(approvedBox.x + approvedBox.width).toBeLessThanOrEqual(
       feedbackBox.x,
     );
-    expect(stampBox.x).toBeLessThan(approvedBox.x);
-    expect(
-      Math.abs(stampBox.x + stampBox.width / 2 - (tocBox.x + tocBox.width / 2)),
-    ).toBeLessThan(2);
+    expect(stampBox.x).toBeGreaterThan(tocBox.x + tocBox.width);
+    const titleBox = await title.boundingBox();
+    if (titleBox === null) {
+      throw new Error("The plan title left the layout after approval");
+    }
+    expect(stampBox.y + stampBox.height).toBeLessThanOrEqual(titleBox.y);
+    expect(Math.abs(titleBox.x - titleBoxBeforeApproval.x)).toBeLessThan(2);
+    expect(Math.abs(titleBox.y - titleBoxBeforeApproval.y)).toBeLessThan(2);
+    expect(Math.abs(tocBox.x - tocBoxBeforeApproval.x)).toBeLessThan(2);
+    expect(Math.abs(tocBox.y - tocBoxBeforeApproval.y)).toBeLessThan(2);
     expect(stampBox.y).toBeGreaterThan(headerBox.y + headerBox.height);
     const stampLayer = await stamp.evaluate((element) => {
-      const toc = element.closest("[data-desktop-toc]");
-      if (toc === null) return null;
-      const style = getComputedStyle(toc);
+      const slot = element.parentElement;
+      if (slot === null) return null;
+      const style = getComputedStyle(slot);
+      const type = element.querySelector("[data-review-approval-stamp-type]");
       return {
         position: style.position,
-        zIndex: style.zIndex,
+        transform: style.transform,
+        fontSize: type === null ? null : getComputedStyle(type).fontSize,
       };
     });
-    expect(stampLayer?.position).toBe("sticky");
-    const stampTopBefore = stampBox.y;
-    const scrolled = await page.evaluate(() => {
-      const html = document.documentElement;
-      const previous = html.style.scrollBehavior;
-      html.style.scrollBehavior = "auto";
-      window.scrollBy(0, 240);
-      const y = window.scrollY;
-      html.style.scrollBehavior = previous;
-      return y;
-    });
-    expect(scrolled).toBeGreaterThanOrEqual(200);
-    const stampTopAfter = (await stamp.boundingBox())?.y;
-    if (stampTopAfter === undefined) {
-      throw new Error("The approved stamp left the layout while scrolling");
-    }
-    expect(Math.abs(stampTopAfter - stampTopBefore)).toBeLessThan(2);
-    await page.evaluate(() => {
-      const html = document.documentElement;
-      const previous = html.style.scrollBehavior;
-      html.style.scrollBehavior = "auto";
-      window.scrollTo(0, 0);
-      html.style.scrollBehavior = previous;
-    });
+    expect(stampLayer?.position).toBe("absolute");
+    expect(stampLayer?.transform).not.toBe("none");
+    expect(stampLayer?.fontSize).toBe("20px");
 
     await approvedButton.click();
     const details = page.locator("[data-review-approval-details]");
