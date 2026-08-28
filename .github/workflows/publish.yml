@@ -139,7 +139,18 @@ jobs:
           tar -xzf "$smoke_root/$archive" -C "$smoke_root/package"
           plan="$smoke_root/package/package/examples/diff-gallery-before.mdx"
           cd "$smoke_root/work"
-          npx -y big-plan@next guidance > guidance.md
+          npx -y big-plan@next guidance > guidance-next.md
           npx -y big-plan@next validate "$plan"
-          npx -y big-plan@next render "$plan" release-smoke.html
+          npx -y big-plan@next render "$plan" next-smoke.html
+          test -s next-smoke.html
+
+          npx -y "big-plan@${RELEASE_VERSION}" guidance > guidance-release.md
+          npx -y "big-plan@${RELEASE_VERSION}" validate "$plan"
+          npx -y "big-plan@${RELEASE_VERSION}" render "$plan" release-smoke.html
           test -s release-smoke.html
+
+          final_next_version="$(npm view big-plan@next version)"
+          if [[ "$final_next_version" != "$RELEASE_VERSION" ]]; then
+            echo "::error::big-plan@next moved to ${final_next_version} during the smoke test."
+            exit 1
+          fi
