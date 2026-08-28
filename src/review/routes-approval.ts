@@ -27,7 +27,6 @@ import {
   AgentRequestNotWithdrawable,
   appendProgressEvent,
   cancelAgentRequest,
-  writeAgentRequestWhen,
 } from "./request-mailbox.js";
 import {
   randomId,
@@ -498,10 +497,13 @@ export const approvePlan = async (
     requestIds,
     approval: next,
     verdicts,
+    handoff,
   };
-  let canceledRequestIds: ReadonlyArray<string>;
+  let finalizationResult: Awaited<
+    ReturnType<typeof commitApprovalFinalization>
+  >;
   try {
-    canceledRequestIds = await commitApprovalFinalization({
+    finalizationResult = await commitApprovalFinalization({
       store: context.store,
       planPath: context.resolvedPlanPath,
       finalization,
@@ -519,6 +521,7 @@ export const approvePlan = async (
     }
     throw error;
   }
+  const { canceledRequestIds, delivered } = finalizationResult;
   context.readerProgress.accept(settledSource.digest);
   for (const requestId of canceledRequestIds) {
     await emitProgress({
@@ -526,22 +529,6 @@ export const approvePlan = async (
       stepCode: "request-canceled",
       step: "Request canceled by approval",
       requestId,
-    });
-  }
-  let delivered: boolean;
-  try {
-    delivered = await writeAgentRequestWhen({
-      store: context.store,
-      request: handoff,
-      permitted: async () =>
-        inForceApproval(await context.approvals.read())?.approvalId ===
-        entry.approvalId,
-    });
-  } catch (error: unknown) {
-    delivered = false;
-    context.reportDiagnostic({
-      message: "The approval could not be delivered to the agent mailbox",
-      error,
     });
   }
   try {

@@ -195,7 +195,10 @@ const approvalEntry = (value: unknown): ApprovalEntry => {
   if (!Array.isArray(candidate.unansweredDecisions)) {
     throw new ApprovalRecordRejected('"unansweredDecisions" must be an array');
   }
-  if (typeof candidate.agentConnected !== "boolean") {
+  if (
+    candidate.agentConnected !== undefined &&
+    typeof candidate.agentConnected !== "boolean"
+  ) {
     throw new ApprovalRecordRejected('"agentConnected" must be true or false');
   }
   return {
@@ -206,7 +209,9 @@ const approvalEntry = (value: unknown): ApprovalEntry => {
       value: candidate.pinnedSnapshot,
       field: "pinnedSnapshot",
     }),
-    agentConnected: candidate.agentConnected,
+    // Version-1 records written before approval handoff did not capture
+    // presence. Preserve those approvals and report the conservative state.
+    agentConnected: candidate.agentConnected ?? false,
     message: text({
       value: candidate.message,
       field: "message",

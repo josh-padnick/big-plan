@@ -39,6 +39,7 @@ import {
   withResolvedCommentLock,
 } from "./request-mailbox.js";
 import { recordCommittedRevision } from "./change-set-commit.js";
+import { recoverApprovalFinalization } from "./approval-finalization.js";
 import {
   decodeCommittedChangeSets,
   type CommittedChangeSetState,
@@ -7106,6 +7107,17 @@ describe("review runtime approval", () => {
         expect(session).toMatchObject({
           approval: { status: "approved", delivered: false },
         });
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+        const recovered = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(recovered.requests).toHaveLength(1);
+        expect(recovered.requests[0]).toMatchObject({ kind: "approval" });
       },
     );
   });

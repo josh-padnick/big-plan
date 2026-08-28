@@ -53,6 +53,13 @@ describe("approval record", () => {
     expect(validateApprovalRecord(undefined)).toEqual(emptyApprovalRecord());
   });
 
+  it("loads approvals written before agent presence was recorded", () => {
+    const { agentConnected: _agentConnected, ...legacy } = approval();
+    expect(
+      validateApprovalRecord({ version: 1, entries: [legacy] }).entries[0],
+    ).toEqual({ ...legacy, agentConnected: false });
+  });
+
   it("appends an approval and reports it in force", () => {
     const entry = approval();
     const record = appendApproval({
