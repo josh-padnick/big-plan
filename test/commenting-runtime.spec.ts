@@ -7920,6 +7920,23 @@ test("should jump to the visible lens standing in for a hidden commented block",
   page,
 }) => {
   test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Object.assign(window, { __bigPlanLensJumped: false });
+    Element.prototype.scrollIntoView = function scrollIntoView(
+      options?: boolean | ScrollIntoViewOptions,
+    ): void {
+      if (
+        this instanceof HTMLElement &&
+        this.matches("[data-review-diff-lens-for]") &&
+        typeof options === "object" &&
+        options?.block === "center"
+      ) {
+        Object.assign(window, { __bigPlanLensJumped: true });
+      }
+      originalScrollIntoView.call(this, options);
+    };
+  });
   const directory = await mkdtemp(join(tmpdir(), "big-plan-hidden-jump-"));
   const planPath = join(directory, "plan.mdx");
   const lowerContent = Array.from(
@@ -8081,15 +8098,16 @@ ${lowerContent}
       `[data-block-id="${comment.target.blockId}"]`,
     );
     await expect(targetBlock).toBeHidden();
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await expect
-      .poll(() => page.evaluate(() => window.scrollY))
-      .toBeGreaterThan(0);
-    const beforeJump = await page.evaluate(() => window.scrollY);
     await sentThread.locator(".review-sent-target").click();
     await expect
-      .poll(() => page.evaluate(() => window.scrollY))
-      .toBeLessThan(beforeJump);
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __bigPlanLensJumped: boolean })
+              .__bigPlanLensJumped,
+        ),
+      )
+      .toBe(true);
     await expect
       .poll(() =>
         page.evaluate(() => {
