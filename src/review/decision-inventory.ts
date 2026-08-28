@@ -15,7 +15,7 @@ import {
   isCriticalDecisionCard,
   type CompiledDecisionCard,
 } from "../components/_model/decision-card.js";
-import { compileMarkdownModel } from "../render/markdown/compile-markdown.js";
+import { compileMarkdownModel } from "../render/compile-semantic-model.js";
 
 /** One decision the plan currently asks, with the content it is asking about. */
 export type DecisionInventoryEntry = {
