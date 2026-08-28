@@ -149,12 +149,12 @@ test("the documented attestation template stands in for a bot review", () => {
     block[0].startsWith("adversarial-review:"),
   );
   assert.ok(template, "the section prints no adversarial-review template");
-  const resolutions = template.filter((line) => /^\d+\./.test(line));
-  assert.ok(resolutions.length >= 1, "the template lists no resolution line");
+  const dispositions = template.filter((line) => /^\d+\./.test(line));
+  assert.ok(dispositions.length >= 1, "the template lists no disposition line");
   const attestation = [
     fillHead(template[0]).replace("<agent>", "claude-opus-5"),
-    documentedLine("findings:").replace("<n>", String(resolutions.length)),
-    ...resolutions.map((line, index) =>
+    documentedLine("findings:").replace("<n>", String(dispositions.length)),
+    ...dispositions.map((line, index) =>
       line
         .replace("<finding>", `Finding ${index + 1}`)
         .replace("fixed|declined|deferred", "fixed")

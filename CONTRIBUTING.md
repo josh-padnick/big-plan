@@ -130,7 +130,7 @@ The gate binds at merge, through branch protection.
 ### When no reviewer is available
 
 When reviewer credits are gone, run the adversarial review yourself and attest to it.
-The attestation stands in for the bot review, so it carries what a bot review carries: the commit it read, who read it, and what it found with each finding's resolution.
+The attestation stands in for the bot review, so it carries what a bot review carries: the commit it read, who read it, and what it found with each finding's disposition.
 
 ```text
 adversarial-review: complete <head-sha> by <agent>
@@ -139,7 +139,7 @@ findings: <n>
 2. <finding> - resolved: fixed|declined|deferred - <how, or why not>
 ```
 
-The sha must be a commit on this pull request, and the number of findings declared must not exceed the number of resolution lines.
+The sha must be a commit on this pull request, and the number of findings declared must not exceed the number of disposition lines.
 Post at most one accepted review per pull request: an attestation posted while a bot has already reviewed fails the gate.
 Clear it by deleting the attestation comment, or by resolving the bot's findings and then dismissing its review - dismissal alone leaves the bot counted while any of its threads is unresolved.
 
