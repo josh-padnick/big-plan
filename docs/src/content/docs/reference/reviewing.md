@@ -143,7 +143,7 @@ An unresolved pushed card offers **Auto-accept all changes**.
 Its confirmation separates the immediate consequence - accepting the open changes in that thread - from the ongoing consequence that later pushes arrive accepted.
 While armed, the Chat tab shows when auto-accept was turned on and offers **Switch back to review**.
 Applied cards remain conversations: you can reply, receive a follow-up push, inspect each pushed revision's summary, or revert it.
-Replies and follow-up pushes in an Applied thread remain accepted after you switch back; the switch leaves only later arrivals outside those threads open for review.
+Switching back changes only later arrivals: it leaves the card and its conversation available, while the next pushed change arrives open for review.
 Starting a fresh review session always starts in review mode.
 
 A push that lands while you are reading announces itself.
