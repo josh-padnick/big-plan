@@ -414,6 +414,24 @@ export const collectAttestations = (snapshot) => {
   return attestations;
 };
 
+const latestCommentedReview = (reviews) =>
+  reviews
+    .filter((review) => review.state === "COMMENTED")
+    .reduce(
+      (latest, review) =>
+        latest === null || review.submittedAt >= latest.submittedAt
+          ? review
+          : latest,
+      null,
+    );
+
+const latestCommentedThreads = (snapshot, reviews) => {
+  const latest = latestCommentedReview(reviews);
+  return snapshot.reviewThreads.filter(
+    (thread) => thread.reviewId === latest?.id,
+  );
+};
+
 /**
  * Identifies which accepted reviews exist. A bot counts while it holds either a
  * review it has not taken back or an unresolved inline thread; an attestation
@@ -491,18 +509,8 @@ export const identifyReviews = (snapshot) => {
       );
       const isCommentOnly =
         one.states.size === 1 && one.states.has("COMMENTED");
-      const latestCommented = one.reviews
-        .filter((review) => review.state === "COMMENTED")
-        .reduce(
-          (latest, review) =>
-            latest === null || review.submittedAt >= latest.submittedAt
-              ? review
-              : latest,
-          null,
-        );
-      const latestThreads = allThreads.filter(
-        (thread) => thread.reviewId === latestCommented?.id,
-      );
+      const latestCommented = latestCommentedReview(one.reviews);
+      const latestThreads = latestCommentedThreads(snapshot, one.reviews);
       const hasUnresolvedThread = allThreads.some(
         (thread) => !isResolved(thread, one.bot.logins),
       );
@@ -634,9 +642,7 @@ export const evaluateReviewTriage = (snapshot) => {
     const retractions = accepted.flatMap((one) =>
       one.kind === "bot"
         ? one.states.size === 1 && one.states.has("COMMENTED")
-          ? snapshot.reviewThreads.some((thread) =>
-              isReviewerThread(thread, one.bot.logins),
-            )
+          ? latestCommentedThreads(snapshot, one.reviews).length > 0
             ? [
                 `  - ${one.bot.label}: reply in every inline thread it opened. Once every`,
                 "    thread has a written reply, this non-dismissible COMMENTED review is",

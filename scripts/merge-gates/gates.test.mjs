@@ -479,7 +479,30 @@ test("a later review invalidates older retraction evidence", () => {
     assert.equal(verdict.conclusion, "failure");
     assert.match(verdict.title, /2 accepted reviews/);
     assert.match(report(verdict), /CodeRabbit/);
+    assert.match(
+      report(verdict),
+      /review-triage: retract coderabbit - <reason>/,
+    );
+    assert.doesNotMatch(report(verdict), /CodeRabbit: reply in every inline/);
   }
+
+  const retracted = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        signOff,
+        {
+          ...comment(
+            "review-triage: retract coderabbit - duplicate bot review",
+          ),
+          createdAt: "2026-08-20T12:03:00Z",
+        },
+      ],
+      reviews,
+      reviewThreads: [oldResolvedThread],
+    }),
+  );
+  assert.equal(retracted.conclusion, "success", report(retracted));
+  assert.match(report(retracted), /Reviewer: Greptile/);
 });
 
 test("a same-second later review invalidates resolved older threads", () => {
