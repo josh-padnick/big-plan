@@ -90,35 +90,6 @@ test("a triaged review with a matching sign-off passes", () => {
   assert.match(verdict.title, /signed off/);
 });
 
-test("a Greptile conversation summary counts as its completed review", () => {
-  const verdict = evaluateReviewTriage(
-    snapshot({
-      issueComments: [
-        comment(
-          "<details open><summary><h3>Greptile Summary</h3></summary>\n\nThe change is safe to merge.</details>",
-          "greptile-apps[bot]",
-        ),
-        signOff,
-      ],
-    }),
-  );
-  assert.equal(verdict.conclusion, "success", report(verdict));
-  assert.match(verdict.title, /signed off/);
-});
-
-test("a reviewer availability notice does not count as a completed review", () => {
-  const verdict = evaluateReviewTriage(
-    snapshot({
-      issueComments: [
-        comment("Review limit reached. Try again later.", "coderabbitai[bot]"),
-        signOff,
-      ],
-    }),
-  );
-  assert.equal(verdict.conclusion, "failure");
-  assert.match(verdict.title, /No accepted review/);
-});
-
 test("an unresolved finding fails the gate and names where it is", () => {
   const verdict = evaluateReviewTriage(
     snapshot({

@@ -61,7 +61,6 @@ export const REVIEW_BOTS = [
     id: "greptile",
     label: "Greptile",
     logins: ["greptile-apps[bot]", "greptileai[bot]", "greptile[bot]"],
-    issueCommentReview: /<h3>Greptile Summary<\/h3>/i,
   },
   {
     id: "devin",
@@ -433,15 +432,6 @@ export const identifyReviews = (snapshot) => {
     }
     const bot = botFor(review.author);
     if (bot !== null) {
-      byBot.set(bot.id, bot);
-    }
-  }
-  for (const comment of snapshot.issueComments) {
-    const bot = botFor(comment.author);
-    if (
-      bot?.issueCommentReview !== undefined &&
-      bot.issueCommentReview.test(comment.body)
-    ) {
       byBot.set(bot.id, bot);
     }
   }
