@@ -1525,7 +1525,7 @@ export const reviseQueuedRequest = async ({
  *
  * The displaced agent is fenced exactly as a takeover fences it: its stage is
  * dropped, so the generation it drafted for can never publish, and its next
- * command answers PRIMACY_LOST rather than silence.
+ * command answers NOT_PRIMARY rather than silence.
  *
  * `claimedBy` narrows that to one agent's own claims, and every caller that
  * means one agent must pass it. A reviewer's answer about agent A must not be

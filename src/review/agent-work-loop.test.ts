@@ -349,6 +349,10 @@ describe("agent work loop", () => {
     expect(result.agent_prompt).toContain(
       "one live request claim for this plan at a time",
     );
+    expect(result.agent_prompt).toContain("this agent is an observer");
+    expect(result.agent_prompt).toContain("another agent the primary");
+    expect(String(result.agent_prompt).toLowerCase()).not.toContain("primacy");
+    expect(result.agent_prompt).not.toContain("PRIMACY_LOST");
     expect(result.agent_prompt).toContain(runtime.planPath);
     expect(result.codex).toContain('codex "$(cat ');
     expect(result.claude).toContain('claude "$(cat ');
@@ -358,6 +362,7 @@ describe("agent work loop", () => {
     const writtenPrompt = await readFile(result.prompt_file, "utf8");
     expect(writtenPrompt).toContain(runtime.planPath);
     expect(writtenPrompt).toContain('agent push <plan> --about "<why>"');
+    expect(writtenPrompt.toLowerCase()).not.toContain("primacy");
   });
 
   it("should return the oldest pending work and its response contract", async () => {

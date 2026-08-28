@@ -3569,8 +3569,10 @@ export const clearInheritedDraft = async ({
  * An agent that arrives while the incumbent is between turns cannot yet be
  * called a second agent, so it attaches without asking (see
  * `attachAgentToRoster`). This is where that held question is raised, and it is
- * raised on one condition: a primary is still attached and is plainly not
- * between turns, so this newcomer really is a second agent.
+ * raised whenever a primary is still attached. A closed claim with no later
+ * signal proves the incumbent has finished its last turn; keeping the question
+ * parked until that departed agent returns strands the newcomer forever
+ * (BIG-253).
  *
  * An empty seat raises nothing. There is no second agent to ask about - the
  * one this session arrived beside has gone - and a card reading "a second
@@ -3600,7 +3602,7 @@ export const requestAgentPrimacy = async ({
     now,
     change: (agents) => {
       const incumbent = selectPrimaryAgent({ agents, nowMs: now });
-      if (incumbent === undefined || agentIsBetweenTurns(incumbent)) {
+      if (incumbent === undefined) {
         return agents;
       }
       return agents.map((agent) => {

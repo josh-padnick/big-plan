@@ -105,8 +105,8 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   Held work stops holding the reviewer's own message only where both signals agree: a claim is proven abandoned when presence reports nothing attached and the pickup has also been quiet past the horizon, and `agentStillOwnsRequest` in `src/review/shared/request-ownership.ts` is the one definition of that, so the mailbox's refusal and the browser's offered affordance cannot drift apart.
   Editing or deleting a message under a proven-abandoned claim releases the claim and drops the stages it can no longer publish from, so a late returner is refused through the ownership gate that already guards delivery rather than through a second rule.
 - Which agent speaks for a plan is decided in one place, and never by whichever agent process wrote the shared store last: `src/review/shared/agent-primacy.ts` reads the roster of attached agents and answers who the primary is and whether the reviewer is being asked to decide, and the work loop, the exchange routes, and the rail's roster all read that answer instead of forming their own.
-  A later connector attaches as an observer that may read the plan, is handed neither the reviewer's comments nor request state, and may not claim, note, or respond; primacy then moves on the reviewer's answer, or - the one self-service case - to an observer once a seat the reviewer did not empty has stayed empty longer than a turn's own quiet, and the module's header owns why the authority exists.
-  A session that loses primacy is told at its next command rather than at publication - `PRIMACY_LOST` from `agent note` and `agent respond`, an observer result from `agent next` - so a displaced loop can stop instead of paying for a turn nothing will accept.
+  A later connector attaches as an observer that may read the plan, is handed neither the reviewer's comments nor request state, and may not claim, note, or respond; it becomes the primary on the reviewer's answer, or - the one self-service case - once a seat the reviewer did not empty has stayed empty longer than a turn's own quiet, and the module's header owns why the authority exists.
+  A session that is no longer the primary is told at its next command rather than at publication - `NOT_PRIMARY` from `agent note` and `agent respond`, an observer result from `agent next` - so a displaced loop can stop instead of paying for a turn nothing will accept.
 - A thread-resolution action that conflicts with a queued or in-flight message for that thread is a request-lifecycle invariant, enforced where request claims and terminal states land (`request-mailbox.ts`), not a thread-semantics concern.
   The invariant holds both ways: new work naming a still-resolved thread is refused at the same request-creation boundary.
   Both directions take `.resolved.lock` around their check and their write, so a resolve and a create cannot interleave into a resolved thread that holds outstanding work; session custody and the HTTP write gate order requests but do not replace that lock.
@@ -179,7 +179,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 Three conceptual refinements constrain how the subsystems above implement their work.
 
-**Change-set primacy (Change Engine).**
+**The change set is primary (Change Engine).**
 The change set, baseline plus current plus acceptance plus provenance plus an optional conversation, is the primary entity.
 The thread is one container for it, not the reverse.
 Provenance is modeled as an attribute of the change set (reviewer comment, plan-wide chat, or agent-push), so each origin fits without remodeling the set.

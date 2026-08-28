@@ -150,7 +150,7 @@ describe("attachAgentToRoster", () => {
     ).toBe("working");
   });
 
-  it("should reap an agent that has been silent past the recovery horizon", async () => {
+  it("should release a stale primary so a newcomer becomes primary (BIG-253)", async () => {
     const store = await temporaryStore();
     await attachAgentToRoster({
       store,
@@ -706,7 +706,7 @@ describe("the question an arrival raises", () => {
     expect(agent.unsettledArrivalAtMs).toBeUndefined();
   });
 
-  it("should keep holding it while the answer is still unknown", async () => {
+  it("should surface the hand-off prompt when a closed-claim primary has departed (BIG-253)", async () => {
     const store = await betweenTurns();
     await attachAgentToRoster({
       store,
@@ -722,7 +722,9 @@ describe("the question an arrival raises", () => {
       now: 2_200,
     });
 
-    expect(pendingPrimacyRequest({ agents, nowMs: 2_200 })).toBeUndefined();
+    expect(pendingPrimacyRequest({ agents, nowMs: 2_200 })?.writerId).toBe(
+      "arriving",
+    );
   });
 
   it("should never re-raise a question the reviewer has answered", async () => {
