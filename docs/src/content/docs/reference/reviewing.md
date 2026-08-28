@@ -399,6 +399,9 @@ happen.
 **What changed** compares the request's claim-time baseline snapshot with the
 validated result snapshot. Each changed answer carries its own attributed
 places; plan-wide chat carries a grouped digest.
+Every change digest names the model and client declared for that request with
+the same identity presentation as **Agent Status**; undeclared fields remain
+absent. This applies equally to reviewer-started work and pushed threads.
 The in-place lens shows word-level edits for close rewrites and stacked **Was**/**Now** bands for larger rewrites, additions, removals, tables, and code.
 Component changes that use the component diff contract render the component's compiled presentation on both **Was** and **Now** sides.
 The change replaces the component in the plan instead of sitting beside a hidden copy.
