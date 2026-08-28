@@ -637,7 +637,7 @@ Restricts the result set. Example:
     expect(html).toContain("<p>Another item</p>");
   });
 
-  it("should keep a soft-wrapped description in its row without repeating it", () => {
+  it("should keep API table lead prose in its row without repeating it", () => {
     const result = render(`# Plan
 
 <HttpEndpoint method="POST" path="/api/events">
@@ -660,11 +660,41 @@ Restricts the result set. Example:
 </Param>
 
 </HttpEndpoint>
+
+<GraphqlOperation kind="query" name="event">
+
+<Field in="payload" name="status" type="String">
+
+Current event status. Example:
+
+\`\`\`json
+"open"
+\`\`\`
+
+</Field>
+
+</GraphqlOperation>
+
+<GrpcMethod service="events.v1.EventService" name="GetEvent" request="GetEventRequest" response="Event">
+
+<Field in="response" name="version" type="string">
+
+Current event version. Example:
+
+\`\`\`json
+"v2"
+\`\`\`
+
+</Field>
+
+</GrpcMethod>
 `);
 
     expect(
       result.markdown.match(/Source location the event refers to/gu),
     ).toHaveLength(1);
+    expect(result.markdown.match(/Current event status/gu)).toHaveLength(1);
+    expect(result.markdown.match(/Current event version/gu)).toHaveLength(1);
     expect(result.markdown).not.toContain("**anchor**");
     const html = readerHtml(result.markdown);
     expect(html).toContain(
