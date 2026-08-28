@@ -579,7 +579,7 @@ describe("review wire contract", () => {
     ).toEqual([]);
   });
 
-  it("should round-trip per-side presentation facts through a snapshot diff", () => {
+  it("should round-trip structural ownership through a snapshot diff", () => {
     const diff: SnapshotDiff = {
       from: "a".repeat(16),
       to: "b".repeat(16),
@@ -588,12 +588,11 @@ describe("review wire contract", () => {
           status: "changed",
           scope: "section/risks",
           kind: "callout",
+          isComponentRoot: true,
           label: "Rollback risk",
           section: "Risks",
           oldText: "Old body.",
           newText: "New body.",
-          oldPresentation: { aspect: "callout", calloutType: "danger" },
-          newPresentation: { aspect: "callout", calloutType: "warning" },
           runs: [],
         },
       ],
@@ -601,10 +600,7 @@ describe("review wire contract", () => {
     };
 
     const decoded = decodeSnapshotDiff(encodeSnapshotDiff(diff));
-    expect(decoded?.locations[0]).toMatchObject({
-      oldPresentation: { aspect: "callout", calloutType: "danger" },
-      newPresentation: { aspect: "callout", calloutType: "warning" },
-    });
+    expect(decoded?.locations[0]).toMatchObject({ isComponentRoot: true });
   });
 
   it("should carry a picture's source, words, and replaced note across the wire", () => {
@@ -680,11 +676,11 @@ describe("review wire contract", () => {
           section: "Risks",
           oldText: "Freeze writes.",
           newText: "",
-          // Neither fact is in the wire vocabulary: an out-of-range callout
-          // type and a non-boolean ordering must decode to absence, so the
-          // browser renders its neutral fallback rather than a guessed kind.
+          // Neither fact is in the wire vocabulary: an unknown aspect and a
+          // non-boolean ordering must decode to absence, so the browser renders
+          // its neutral fallback rather than a guessed presentation.
           oldPresentation: { aspect: "list", isOrdered: "yes" },
-          newPresentation: { aspect: "callout", calloutType: "sparkly" },
+          newPresentation: { aspect: "unknown", value: "sparkly" },
           runs: [],
         },
       ],

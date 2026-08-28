@@ -2,7 +2,9 @@
 // scoped Ddl policy; rendering lives in the React component library.
 
 import { compileDatabaseTableSchema } from "./compile.js";
+import { compileDatabaseTableSchemaDiff } from "./compile-diff.js";
 import { DatabaseTableSchema } from "./view.js";
+import { DatabaseTableSchemaDiffView } from "./view-diff.js";
 import { defineComponent } from "../_registration/define-component.js";
 import { databaseTableSchemaMarkdown } from "./markdown.js";
 
@@ -11,6 +13,8 @@ export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = defineComponent({
   compile: compileDatabaseTableSchema,
   view: DatabaseTableSchema,
   markdown: databaseTableSchemaMarkdown,
+  diff: compileDatabaseTableSchemaDiff,
+  diffView: DatabaseTableSchemaDiffView,
   scopedChildren: {
     Ddl: {
       kind: "scoped-child",

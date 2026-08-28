@@ -95,6 +95,47 @@ describe("render diff view", () => {
       ),
     ).toHaveLength(4);
   });
+
+  it("should keep a proposed field's declared target id inside its diff", () => {
+    const endpoint = (description: string): string => `# Plan
+
+## API
+
+<HttpEndpoint method="POST" path="/queue" summary="Queue a refresh">
+
+${description}
+
+</HttpEndpoint>`;
+    const baselineDocument = compileMarkdown({
+      markdown: endpoint("Queues a refresh."),
+    });
+    const proposedDocument = compileMarkdown({
+      markdown: endpoint("Queues one refresh."),
+    });
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "http-endpoint",
+    );
+    const declaredField = proposedDocument.blocks.find(
+      (block) =>
+        block.ownerId === proposedRoot?.id && block.label === "Description",
+    );
+    expect(declaredField).toBeDefined();
+
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineDocument.blocks.find(
+        (block) => block.kind === "http-endpoint",
+      )?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+    });
+    const nodes = elements(fromHtml(rendered?.view ?? "", { fragment: true }));
+    expect(
+      nodes.filter((node) => node.properties.dataBlockId === declaredField?.id),
+    ).toHaveLength(1);
+  });
 });
 
 describe("renderIsolatedBlockView", () => {

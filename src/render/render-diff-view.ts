@@ -175,6 +175,55 @@ const inheritProposedRootIdentity = ({
   }
 };
 
+// A bespoke diff view renders the component's declared subtargets after the
+// document identity pass has already completed. Reattach the exact addresses
+// the proposed document minted by structural ownership and declaration, so a
+// field remains the same comment target when the diff replaces its card.
+const inheritProposedSubtargetIdentity = ({
+  diffRoot,
+  proposedRoot,
+  proposed,
+  blocks,
+}: {
+  readonly diffRoot: Element;
+  readonly proposedRoot: Element | null;
+  readonly proposed: BlockDescriptor | undefined;
+  readonly blocks: ReadonlyArray<BlockDescriptor>;
+}): void => {
+  if (proposedRoot === null || proposed === undefined) return;
+  const proposedSide = elementByDataValue({
+    node: diffRoot,
+    attribute: "data-component-diff-side",
+    value: "proposed",
+  });
+  if (proposedSide === null) return;
+  const available = blocks.filter((block) => block.ownerId === proposed.id);
+  const claimed = new Set<string>();
+  const visit = (node: Element): void => {
+    const kind = node.properties["data-commentable-kind"];
+    const label = node.properties["data-commentable-label"];
+    if (typeof kind === "string" && typeof label === "string") {
+      const target = available.find(
+        (block) =>
+          !claimed.has(block.id) &&
+          block.kind === kind &&
+          block.label === label.replaceAll("`", ""),
+      );
+      if (target !== undefined) {
+        claimed.add(target.id);
+        node.properties["data-block-id"] = target.id;
+        node.properties["data-block-kind"] = target.kind;
+        node.properties["data-block-label"] = target.label;
+        node.properties["data-block-section"] = target.section;
+      }
+    }
+    for (const child of node.children) {
+      if (isElement(child)) visit(child);
+    }
+  };
+  visit(proposedSide);
+};
+
 /** Compiles and renders one component-root location through its diff contract. */
 export const renderDiffView = ({
   baselineDocument,
@@ -238,6 +287,18 @@ export const renderDiffView = ({
             node: proposedDocument.root,
             blockId: proposedBlockId,
           }),
+  });
+  inheritProposedSubtargetIdentity({
+    diffRoot,
+    proposedRoot:
+      proposedBlockId === undefined
+        ? null
+        : elementByBlockId({
+            node: proposedDocument.root,
+            blockId: proposedBlockId,
+          }),
+    proposed,
+    blocks: proposedDocument.blocks,
   });
   return {
     model: compiled.model,

@@ -7,7 +7,6 @@ import {
   diffRunSimilarity,
   diffSnapshots,
   diffWords,
-  usesRenderedSnapshot,
   type BlockPresentation,
 } from "./snapshot-diff.js";
 
@@ -19,6 +18,7 @@ const block = ({
   isComponentRoot = false,
   ownerId,
   presentation,
+  model,
 }: {
   readonly id: string;
   readonly text: string;
@@ -27,6 +27,7 @@ const block = ({
   readonly isComponentRoot?: boolean;
   readonly ownerId?: string;
   readonly presentation?: BlockPresentation;
+  readonly model?: unknown;
 }) => ({
   id,
   kind,
@@ -36,6 +37,7 @@ const block = ({
   isComponentRoot,
   ...(ownerId === undefined ? {} : { ownerId }),
   ...(presentation === undefined ? {} : { presentation }),
+  ...(model === undefined ? {} : { model }),
 });
 
 describe("snapshot word diff", () => {
@@ -186,7 +188,7 @@ describe("snapshot block alignment", () => {
     });
   });
 
-  it("should carry each side's own presentation facts through a change, removal, and addition", () => {
+  it("should carry list presentation facts through a change, removal, and addition", () => {
     const before = [
       block({
         id: "section/approach/callout-1",
@@ -194,7 +196,7 @@ describe("snapshot block alignment", () => {
         text: "Rollback risk\nData loss stays possible until the backfill completes.",
         label: "Rollback risk",
         isComponentRoot: true,
-        presentation: { aspect: "callout", calloutType: "danger" },
+        model: { type: "danger" },
       }),
       block({
         id: "section/approach/list-1",
@@ -210,7 +212,7 @@ describe("snapshot block alignment", () => {
         text: "Rollback risk\nData loss stays possible until the backfill is verified.",
         label: "Rollback risk",
         isComponentRoot: true,
-        presentation: { aspect: "callout", calloutType: "warning" },
+        model: { type: "warning" },
       }),
       block({
         id: "section/approach/list-2",
@@ -230,8 +232,8 @@ describe("snapshot block alignment", () => {
     ).toEqual([
       {
         status: "changed",
-        oldPresentation: { aspect: "callout", calloutType: "danger" },
-        newPresentation: { aspect: "callout", calloutType: "warning" },
+        oldPresentation: undefined,
+        newPresentation: undefined,
       },
       {
         status: "removed",
@@ -529,12 +531,12 @@ describe("snapshot block alignment", () => {
     expect(locations[0]?.runs.map((run) => run.op)).toEqual(["del", "ins"]);
   });
 
-  it("should keep word-level runs when a component root has a dedicated text treatment", () => {
+  it("should replace every component root wholesale without consulting its kind", () => {
     const locations = diffSnapshots({
       before: [
         block({
           id: "document/quick-summary-1",
-          kind: "quick-summary",
+          kind: "a-future-component",
           text: "Quick summary\nWhy\nValue holds.",
           isComponentRoot: true,
         }),
@@ -542,13 +544,38 @@ describe("snapshot block alignment", () => {
       after: [
         block({
           id: "document/quick-summary-1",
-          kind: "quick-summary",
+          kind: "a-future-component",
           text: "Quick summary\nWhy\nValue compounds.",
           isComponentRoot: true,
         }),
       ],
     });
-    expect(locations[0]?.runs.some((run) => run.op === "same")).toBe(true);
+    expect(locations[0]?.runs.map((run) => run.op)).toEqual(["del", "ins"]);
+  });
+
+  it("should ignore diagnostic source positions inside a component model", () => {
+    const component = (offset: number) =>
+      block({
+        id: "document/future-component-1",
+        kind: "a-future-component",
+        text: "Unchanged component",
+        isComponentRoot: true,
+        model: {
+          body: [
+            {
+              type: "text",
+              value: "Unchanged component",
+              position: {
+                start: { line: offset, column: 1, offset },
+                end: { line: offset, column: 20, offset: offset + 19 },
+              },
+            },
+          ],
+        },
+      });
+    expect(
+      diffSnapshots({ before: [component(1)], after: [component(20)] }),
+    ).toEqual([]);
   });
 
   it("should group a component root with its non-adjacent declared internal when both change", () => {
@@ -674,39 +701,6 @@ describe("snapshot block alignment", () => {
     });
 
     expect(diff.places).toHaveLength(2);
-  });
-});
-
-describe("rendered snapshot rule", () => {
-  it("should give every component root a rendered snapshot when no text treatment exists", () => {
-    for (const kind of ["wireframe", "decision", "a-future-component"]) {
-      expect(usesRenderedSnapshot({ kind, isComponentRoot: true })).toBe(true);
-    }
-  });
-
-  it("should keep text-treatment components and ordinary blocks on the text path", () => {
-    for (const kind of [
-      "callout",
-      "code-snippet",
-      "code-diff",
-      "data-table",
-      "quick-summary",
-      "http-endpoint",
-      "graphql-operation",
-      "grpc-method",
-      "database-table-schema",
-    ]) {
-      expect(usesRenderedSnapshot({ kind, isComponentRoot: true })).toBe(false);
-    }
-    expect(
-      usesRenderedSnapshot({ kind: "paragraph", isComponentRoot: false }),
-    ).toBe(false);
-  });
-
-  it("should give an authored picture a rendered snapshot even though it is no component", () => {
-    expect(
-      usesRenderedSnapshot({ kind: "image", isComponentRoot: false }),
-    ).toBe(true);
   });
 });
 

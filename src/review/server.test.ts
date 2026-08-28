@@ -3144,8 +3144,8 @@ Restores the selected snapshot as a new current plan.
     const httpEndpoint = byKind("http-endpoint");
     const quickSummary = byKind("quick-summary");
     const quickSummaryFacet = byKind("quick-summary-facet");
-    // Every migrated component root answers with exactly one component-owned
-    // diff view holding both sides.
+    // Every component root answers with exactly one component-owned diff view
+    // holding both sides.
     for (const location of [
       part,
       quickDecision,
@@ -3187,22 +3187,21 @@ Restores the selected snapshot as a new current plan.
       ...(mermaid?.view ?? "").matchAll(/data-block-id=/gu),
     ]).toHaveLength(1);
     expect(mermaid?.view).toContain('data-diff-side="baseline"');
-    // A component with a dedicated text treatment keeps the text path so the
-    // lens can diff its declared sub-targets instead of stacking two cards.
-    for (const location of [
-      httpEndpoint,
-      quickSummary,
-      quickSummaryFacet,
-    ] as const) {
-      expect(location).toBeDefined();
-      expect(location?.view).toBeUndefined();
+    // The last field-bearing roots now answer through their own diff contract;
+    // the declared facet remains an engine location, not a second component.
+    for (const location of [httpEndpoint, quickSummary] as const) {
+      expect(location?.isComponentRoot).toBe(true);
+      expect(location?.view).toBeTypeOf("string");
     }
+    expect(quickSummaryFacet).toBeDefined();
+    expect(quickSummaryFacet?.view).toBeUndefined();
     // The payload-size tripwire. Shipping a scrubbed copy per side, or
     // putting a component's compiled diff model on the wire beside the view
     // that already shows it, is what made this response large enough to be
     // worth measuring; both would roughly double it. The ceiling is generous
-    // against the measured 228 KB so ordinary content growth never trips it.
-    expect(JSON.stringify(value).length).toBeLessThan(300_000);
+    // against the measured 305 KB after the last field-bearing views joined
+    // the contract, while staying well below the former 372 KB payload.
+    expect(JSON.stringify(value).length).toBeLessThan(320_000);
     // This case compiles both snapshots through every first-class component,
     // including the Mermaid renderer, so it needs the same headroom the
     // renderer's own suites take rather than the default per-test timeout.

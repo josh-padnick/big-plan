@@ -11,11 +11,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { LucideIcon } from "../../icons/lucide-icon.js";
-import { INFO_ICON } from "../../icons/lucide/info.js";
-import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
-import { OCTAGON_ALERT_ICON } from "../../icons/lucide/octagon-alert.js";
-import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type {
   BlockPresentation,
   DiffLocation,
@@ -24,7 +19,6 @@ import type {
   SnapshotDiff,
 } from "../shared/review-wire.js";
 import type { LensPlacement } from "./diff-anchor.js";
-import { Icon } from "./icon.browser.js";
 import {
   foundElement,
   LENS_STAND_IN_ATTRIBUTE,
@@ -120,18 +114,6 @@ const listPresentationChanged = (location: DiffLocation): boolean =>
   location.newPresentation?.aspect === "list" &&
   location.oldPresentation.isOrdered !== location.newPresentation.isOrdered;
 
-// The field-bearing components: each declares its reviewable fields as
-// sub-targets of this kind, and when a field changed the fields own the
-// presentation, so the owning root kind on the right is suppressed instead of
-// restating the whole card as one text wall.
-const COMPONENT_FIELD_KINDS: Readonly<Record<string, string>> = {
-  "quick-summary-facet": "quick-summary",
-  "http-endpoint-field": "http-endpoint",
-  "graphql-operation-field": "graphql-operation",
-  "grpc-method-field": "grpc-method",
-  "database-table-schema-field": "database-table-schema",
-};
-
 // A block that declares sub-targets deliberately overlaps with them for
 // attribution: a table with its rows, columns, and cells, and a component
 // root with its declared internals. A presentation must choose one
@@ -151,12 +133,18 @@ const presentationLocations = (
         location.kind !== "table-cell",
     );
   }
-  for (const [fieldKind, ownerKind] of Object.entries(COMPONENT_FIELD_KINDS)) {
-    if (visible.some((location) => location.kind === fieldKind)) {
-      visible = visible.filter((location) => location.kind !== ownerKind);
-    }
-  }
-  return visible;
+  const declaredOwners = new Set(
+    visible.flatMap((location) =>
+      location.ownerId === undefined ? [] : [location.ownerId],
+    ),
+  );
+  return visible.filter(
+    (location) =>
+      !location.isComponentRoot ||
+      ![location.oldBlockId, location.newBlockId].some(
+        (id) => id !== undefined && declaredOwners.has(id),
+      ),
+  );
 };
 
 type ProsePresentation =
@@ -349,54 +337,6 @@ const SnapshotTable = ({
   </div>
 );
 
-type SnapshotCalloutType = "note" | "tip" | "warning" | "danger";
-
-const SNAPSHOT_CALLOUT_ICONS = {
-  note: INFO_ICON,
-  tip: LIGHTBULB_ICON,
-  warning: TRIANGLE_ALERT_ICON,
-  danger: OCTAGON_ALERT_ICON,
-} satisfies Readonly<Record<SnapshotCalloutType, LucideIcon>>;
-
-const SnapshotCallout = ({
-  location,
-  side,
-}: {
-  readonly location: DiffLocation;
-  readonly side: "old" | "new";
-}) => {
-  const presentation = sidePresentation(location, side);
-  const type: SnapshotCalloutType | undefined =
-    presentation?.aspect === "callout" ? presentation.calloutType : undefined;
-  const title = location.label.trim() || "Callout";
-  const text = sideText(location, side).trim();
-  const body = text.startsWith(title) ? text.slice(title.length).trim() : text;
-  return (
-    // An unknown kind renders neutrally - no kind attribute, no kind icon,
-    // edge-toned accents - because asserting "note" would misstate the risk
-    // the authored callout may have claimed.
-    <aside
-      className={`callout mb-0 max-w-[var(--measure)] rounded-r-md border-l-4 px-4 py-3 ${
-        type === undefined ? "border-edge bg-surface text-ink" : ""
-      }`}
-      {...(type === undefined ? {} : { "data-callout": type })}
-      data-review-diff-callout=""
-    >
-      <header className="callout-header mb-2 flex items-center gap-2 font-semibold text-[var(--callout-accent)] [&_svg]:size-4 [&_svg]:shrink-0">
-        {type === undefined ? null : (
-          <Icon icon={SNAPSHOT_CALLOUT_ICONS[type]} />
-        )}
-        <span className="callout-title text-sm leading-5">{title}</span>
-      </header>
-      <div className="callout-body text-[var(--callout-ink)]">
-        <p className="m-0" data-authored-prose="">
-          {body}
-        </p>
-      </div>
-    </aside>
-  );
-};
-
 // The words a field's body repeats from its label: a plain label repeats
 // itself ("Why"), while a prefixed label repeats only its subject
 // ("Column: user_id" opens with "user_id").
@@ -508,10 +448,7 @@ const SnapshotBlock = ({
       </div>
     );
   }
-  if (location.kind === "callout") {
-    return <SnapshotCallout location={location} side={side} />;
-  }
-  if (location.kind in COMPONENT_FIELD_KINDS) {
+  if (location.ownerId !== undefined) {
     return <SnapshotFieldBlock location={location} side={side} />;
   }
   if (location.kind === "heading") {
@@ -592,11 +529,11 @@ const SnapshotSideContent = ({
  * survives but the lens hides it and stands in front of it, because a revision
  * the plan has already moved past is evidence rather than a live question.
  *
- * Both paths need the same thing. The view's only review identity is what
- * `inheritProposedRootIdentity` copied onto its root, so removing it there is
- * complete rather than defensive: an address the plan still holds - which the
- * superseded path proves is not hypothetical - must never appear twice in one
- * document. Held inert for the same reason, since neither path is answerable.
+ * Both paths need the same thing. The view carries the root and any proposed
+ * field addresses the renderer copied into it. Remove all of them here: an
+ * address the plan still holds - which the superseded path proves is not
+ * hypothetical - must never appear twice in one document. Held inert for the
+ * same reason, since neither path is answerable.
  */
 const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -606,8 +543,18 @@ const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
     const parsed = new DOMParser().parseFromString(view, "text/html");
     const root = parsed.body.firstElementChild;
     if (root === null) return;
-    for (const attribute of root.getAttributeNames()) {
-      if (attribute.startsWith("data-block-")) root.removeAttribute(attribute);
+    const addressed = [
+      root,
+      ...root.querySelectorAll(
+        "[data-block-id], [data-block-kind], [data-block-label], [data-block-section]",
+      ),
+    ];
+    for (const element of addressed) {
+      for (const attribute of element.getAttributeNames()) {
+        if (attribute.startsWith("data-block-")) {
+          element.removeAttribute(attribute);
+        }
+      }
     }
     host.replaceChildren(document.importNode(root, true));
     return () => host.replaceChildren();
@@ -648,7 +595,7 @@ export const DiffLensContent = ({
       only.kind === "heading" ||
       only.kind === "quote" ||
       only.kind === "list" ||
-      only.kind in COMPONENT_FIELD_KINDS);
+      only.ownerId !== undefined);
   const hasOldText = visibleLocations.some((location) =>
     hasSideContent(location, "old"),
   );
@@ -692,7 +639,7 @@ export const DiffLensContent = ({
       ) : canUseWordRuns && only !== undefined ? (
         only.kind === "list" ? (
           <ListRunContent runs={only.runs} location={only} />
-        ) : only.kind in COMPONENT_FIELD_KINDS ? (
+        ) : only.ownerId !== undefined ? (
           <FieldRunContent runs={only.runs} location={only} />
         ) : (
           <WordRunContent runs={only.runs} presentation={presentation} />

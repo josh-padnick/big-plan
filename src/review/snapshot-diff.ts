@@ -43,56 +43,11 @@ const REWRITTEN_SURVIVAL = 0.2;
 const PLACE_LABEL_LIMIT = 90;
 const DERIVED_BLOCK_KINDS = new Set(["table-of-contents"]);
 
-// Component roots whose changes read better as text diffs than as their own
-// compiled rendering. Every OTHER component root defaults to the rendered
-// treatment - a component's flattened text extraction is presentation
-// evidence, not authored prose, so word-diffing it degrades into noise while
-// its compiled rendering stays first-class. A new component therefore needs no
-// registration here; list a kind only when the review lens has a dedicated
-// text-level treatment that beats the rendered treatment:
-// - callout: the lens re-renders the callout with its type, icon, and title.
-// - code-snippet / code-diff: authored code diffs as preformatted text.
-// - data-table: the lens diffs the declared table-row sub-targets row by row.
-// - quick-summary: the lens diffs the declared quick-summary-facet sub-targets
-//   with word-level runs, which shows the exact edit inside a facet.
-// - http-endpoint, graphql-operation, grpc-method, database-table-schema:
-//   field-bearing cards whose views declare every reviewable field with
-//   data-commentable-kind and a reviewer-worded label, so the lens diffs the
-//   changed fields the way quick-summary diffs its facets instead of stacking
-//   two complete card renderings.
-//
-// wireframe stays rendered permanently: a picture has no field-level units
-// worth marking, so its own compiled Was and Now is the honest presentation.
-const TEXT_DIFF_COMPONENT_KINDS: ReadonlySet<string> = new Set([
-  "callout",
-  "code-snippet",
-  "code-diff",
-  "data-table",
-  "quick-summary",
-  "http-endpoint",
-  "graphql-operation",
-  "grpc-method",
-  "database-table-schema",
-]);
-
-// An authored picture is the same case as a wireframe and the strongest one:
-// its extracted text is the alt words, so a text-only lens says a picture
-// changed while showing none of it, and a change a reviewer cannot see is a
-// change a reviewer cannot review. It is also the last block the engine
-// renders on a component's behalf: a picture is not a component, so nothing
-// else owns showing it.
+// Every component root owns its diff through the component contract. An
+// authored picture is the one non-component block whose compiled markup is
+// still the evidence: its extracted text is only the alt words, so a text-only
+// lens would say the picture changed while showing none of it.
 const RENDERED_SNAPSHOT_KINDS: ReadonlySet<string> = new Set(["image"]);
-
-/** Whether a block's change is evidenced by its compiled rendering. */
-export const usesRenderedSnapshot = ({
-  kind,
-  isComponentRoot,
-}: {
-  readonly kind: string;
-  readonly isComponentRoot: boolean;
-}): boolean =>
-  RENDERED_SNAPSHOT_KINDS.has(kind) ||
-  (isComponentRoot && !TEXT_DIFF_COMPONENT_KINDS.has(kind));
 
 const runsFor = ({
   kind,
@@ -105,7 +60,7 @@ const runsFor = ({
   readonly before: string;
   readonly after: string;
 }): ReadonlyArray<DiffRun> =>
-  usesRenderedSnapshot({ kind, isComponentRoot })
+  isComponentRoot || RENDERED_SNAPSHOT_KINDS.has(kind)
     ? [
         ...(before === "" ? [] : [{ op: "del" as const, text: before }]),
         ...(after === "" ? [] : [{ op: "ins" as const, text: after }]),
@@ -272,20 +227,25 @@ const samePresentation = (
 ): boolean => {
   if (left === undefined || right === undefined) return left === right;
   if (left.aspect !== right.aspect) return false;
-  if (left.aspect === "callout" && right.aspect === "callout") {
-    return left.calloutType === right.calloutType;
-  }
   if (left.aspect === "list" && right.aspect === "list") {
     return left.isOrdered === right.isOrdered;
   }
   if (left.aspect === "image" && right.aspect === "image") {
     return left.source === right.source && left.alt === right.alt;
   }
-  if (left.aspect === "wireframe" && right.aspect === "wireframe") {
-    return left.currentScreenId === right.currentScreenId;
-  }
   return false;
 };
+
+// Compiler source positions are diagnostic provenance, not plan meaning. A
+// revision above a component can move every HAST position in its model without
+// changing anything the component presents.
+const sameComponentModel = (left: unknown, right: unknown): boolean =>
+  JSON.stringify(left, (key, value: unknown) =>
+    key === "position" ? undefined : value,
+  ) ===
+  JSON.stringify(right, (key, value: unknown) =>
+    key === "position" ? undefined : value,
+  );
 
 const pairScore = ({
   oldBlock,
@@ -429,7 +389,9 @@ export const diffSnapshots = ({
     if (oldBlock === undefined || newBlock === undefined) continue;
     if (
       oldBlock.text === newBlock.text &&
-      samePresentation(oldBlock.presentation, newBlock.presentation)
+      samePresentation(oldBlock.presentation, newBlock.presentation) &&
+      (!newBlock.isComponentRoot ||
+        sameComponentModel(oldBlock.model, newBlock.model))
     )
       continue;
     locations.push({
@@ -439,6 +401,7 @@ export const diffSnapshots = ({
       newBlockId: newBlock.id,
       kind: newBlock.kind,
       isComponentRoot: newBlock.isComponentRoot,
+      ...(newBlock.ownerId === undefined ? {} : { ownerId: newBlock.ownerId }),
       label: newBlock.label,
       section: newBlock.section,
       oldText: oldBlock.text,
@@ -490,6 +453,7 @@ export const diffSnapshots = ({
       oldBlockId: oldBlock.id,
       kind: oldBlock.kind,
       isComponentRoot: oldBlock.isComponentRoot,
+      ...(oldBlock.ownerId === undefined ? {} : { ownerId: oldBlock.ownerId }),
       label: oldBlock.label,
       section: oldBlock.section,
       oldText: oldBlock.text,
@@ -516,6 +480,7 @@ export const diffSnapshots = ({
       newBlockId: newBlock.id,
       kind: newBlock.kind,
       isComponentRoot: newBlock.isComponentRoot,
+      ...(newBlock.ownerId === undefined ? {} : { ownerId: newBlock.ownerId }),
       label: newBlock.label,
       section: newBlock.section,
       oldText: "",
@@ -553,18 +518,30 @@ const placeNote = (
     return "added";
   if (locations.every((location) => location.status === "removed"))
     return "removed";
+  const declaredOwners = new Set(
+    locations.flatMap((location) =>
+      location.ownerId === undefined ? [] : [location.ownerId],
+    ),
+  );
+  const measured = locations.filter(
+    (location) =>
+      ![location.oldBlockId, location.newBlockId].some(
+        (id) => id !== undefined && declaredOwners.has(id),
+      ),
+  );
   // A picture carries no words, so the word-survival measure below would call
   // every swap a rewording. Say what actually happened instead.
   if (
-    locations.every((location) => RENDERED_SNAPSHOT_KINDS.has(location.kind))
+    measured.length > 0 &&
+    measured.every((location) => RENDERED_SNAPSHOT_KINDS.has(location.kind))
   ) {
     return "replaced";
   }
-  const oldLength = locations.reduce(
+  const oldLength = measured.reduce(
     (total, location) => total + location.oldText.replace(/\s/g, "").length,
     0,
   );
-  const sameLength = locations
+  const sameLength = measured
     .flatMap((location) => location.runs)
     .filter((run) => run.op === "same")
     .reduce((total, run) => total + run.text.replace(/\s/g, "").length, 0);
@@ -699,21 +676,24 @@ export const buildSnapshotDiff = ({
       previous === undefined
         ? undefined
         : componentKeyFor({ location: previous, before, after });
-    const renderedComponent = usesRenderedSnapshot(location);
-    const previousRenderedComponent =
-      previous !== undefined && usesRenderedSnapshot(previous);
+    const renderedEvidence =
+      location.isComponentRoot || RENDERED_SNAPSHOT_KINDS.has(location.kind);
+    const previousRenderedEvidence =
+      previous !== undefined &&
+      (previous.isComponentRoot || RENDERED_SNAPSHOT_KINDS.has(previous.kind));
+    const sameOwner =
+      currentOwnerKey !== undefined && currentOwnerKey === previousOwnerKey;
     if (
       group !== undefined &&
       previous !== undefined &&
-      !renderedComponent &&
-      !previousRenderedComponent &&
       previous.section === location.section &&
       (currentComponentKey === undefined ||
         previousComponentKey === undefined ||
         currentComponentKey === previousComponentKey) &&
-      ((currentOwnerKey !== undefined &&
-        currentOwnerKey === previousOwnerKey) ||
-        currentPosition - previousPosition <= 1)
+      (sameOwner ||
+        (!renderedEvidence &&
+          !previousRenderedEvidence &&
+          currentPosition - previousPosition <= 1))
     ) {
       group.push(index);
     } else {
