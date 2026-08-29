@@ -16,6 +16,11 @@ Report security issues privately through GitHub, not in a public issue:
 
 Please do not open a public issue, pull request, or discussion for a suspected vulnerability, and please do not post a working exploit publicly before a fix ships.
 
+:::caution[Private reporting is still being switched on]
+GitHub's private vulnerability reporting is not yet enabled for this repository, so the advisory link above returns a 404 until the maintainer turns it on.
+If that happens, **do not describe the issue in a public issue, pull request, or discussion.** Ask the maintainer to enable private vulnerability reporting, saying only that you have a security report and nothing about what it is, and send the details once the form opens.
+:::
+
 **Do not report** issues that require an attacker who already runs code as you on your own machine.
 Big Plan's local runtime is explicitly not a boundary against that; see [Local review runtime](#local-review-runtime) below.
 
@@ -41,7 +46,7 @@ There are no backports to earlier versions; the fix for a reported issue is to u
 Big Plan ships as the [`big-plan`](https://www.npmjs.com/package/big-plan) npm package and is normally run with `npx big-plan` or installed with `npm install -g big-plan`.
 Two properties of that model are worth knowing:
 
-- **An unversioned `npx` run may use a local package.** A machine that runs `npx big-plan` may execute a matching version already installed in the local project rather than fetch a release. Use `npm view big-plan dist-tags` to see which versions npm's `latest` and `next` channels currently select. Pin an exact version (`npx big-plan@0.0.1`) or install that version globally if your environment requires a fixed, reviewed release.
+- **An unversioned `npx` run may use a local package.** A machine that runs `npx big-plan` may execute a matching version already installed in the local project rather than fetch a release. Use `npm view big-plan dist-tags` to see which versions npm's `latest` and `next` channels currently select. Pin an exact version (`npx big-plan@<version>`) or install that version globally if your environment requires a fixed, reviewed release.
 - **Releases are published with npm provenance, from CI only.** Publishing happens exclusively in the tagged-release GitHub Actions workflow, using npm Trusted Publishing over OIDC rather than a long-lived token. That workflow refuses to publish unless the tag equals the package version and points at a commit on `main`, and it runs the full lint, build, generated-file-drift, unit, and end-to-end suites first. Every release is published to the `next` dist-tag, then both `big-plan@next` and the exact published version are smoke-tested from a clean environment. The provenance attestation lets you verify a published tarball was built by that workflow from this repository:
 
   ```sh
@@ -50,6 +55,8 @@ Two properties of that model are worth knowing:
   npm --prefix "$audit_dir" install "big-plan@$version"
   npm --prefix "$audit_dir" audit signatures
   ```
+
+  `npm audit signatures` needs npm 9.5 or newer, and it verifies the registry signatures and provenance attestations of the **whole installed dependency graph** in that directory, not Big Plan alone. Installing into an empty prefix first is what keeps its answer about the release you meant to check. See [npm's documentation on viewing package provenance](https://docs.npmjs.com/viewing-package-provenance/).
 
 Big Plan makes no outbound network requests to remote services. It reads and writes plan files and its own state directory on your machine, and the local review runtime communicates only over loopback.
 
@@ -71,14 +78,12 @@ Because arbitrary HTML is arbitrary script, `big-plan review` always renders the
 - No CORS allowance is ever sent, and a foreign `Origin` or a `Sec-Fetch-Site` other than `same-origin` is refused outright. CORS hides a response; it does not stop a write, so it is not the control here.
 - Routes and methods are a fixed allow-list. There is no general static-file route and no directory listing. The plan-picture route serves only supported picture types, requires the requested and real paths to stay inside the plan directory with no dot-prefixed segment, and enforces a size limit.
 
-One local filesystem limit is accepted and documented rather than fixed: Node offers no file-open relative to an already-open directory handle, so someone who can already write inside your plan directory can swap an ancestor directory between path validation and file open. That attacker already has access to your local files, and the runtime listens only on loopback, so this is out of scope for a report.
-
-## Writes to your plan
-
-The authoritative plan source has exactly one writer. Agent edits go into a claim-scoped stage and publish only under a lock, only when the recorded holder, the claim generation, and the source's base digest all still hold, and only through a single atomic rename that a journal written beforehand can settle after a crash. A reviewer's revert crosses the same boundary and re-proves its digest, so a revision published in the meantime refuses the revert instead of disappearing under it.
+The authoritative plan source has exactly one writer, so an agent edit and a reviewer's revert cannot silently overwrite each other. How that is enforced, and one local filesystem limit Big Plan accepts rather than fixes, are described in [How Big Plan works](/architecture/#one-writer-owns-the-plan-source).
 
 ## Scope
 
-In scope: anything that lets a plan, a web page, or a remote party read or write your files, reach the review runtime's API, or execute code through Big Plan.
+**In scope:** anything that lets a plan, a web page, or a remote party read or write your files, reach the review runtime's API, or execute code through Big Plan.
 
-Out of scope: attacks that require an attacker already executing code as you locally; vulnerabilities in Node.js, npm, or third-party dependencies (report those upstream, though please tell us if Big Plan's use of one makes it exploitable); and issues that need physical access to your machine.
+A defect in Node.js, npm, or a third-party dependency **is in scope when Big Plan's use of it gives you a way to exploit Big Plan**. Report it here, and report it upstream too. The question is not where the flawed code lives; it is whether there is a path to it through Big Plan.
+
+**Out of scope:** an upstream defect with no Big-Plan-specific path to exploit it — report those to the upstream project; attacks that require an attacker already executing code as you locally; and issues that need physical access to your machine.

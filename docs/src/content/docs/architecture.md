@@ -107,3 +107,16 @@ The rendered document embeds everything it needs, makes no external requests, an
 See the [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0001-two-artifact-plan-delivery.md) for the authoritative artifact definitions and script-dependent behavior.
 Rendering the static artifact touches no server, account, or other machine.
 The live `review` command adds a loopback runtime with a per-session API token so the browser and local coding agent can exchange comments, progress, and responses; its owner-only state remains beside the plan on the reviewer's machine.
+
+## One writer owns the plan source
+
+The plan file on disk is authoritative, and exactly one code path may write it.
+An agent's edits go into a claim-scoped stage rather than the plan itself.
+A stage publishes only under the plan-mutation lock, only while the recorded lock holder, the claim generation, and the source's base digest all still hold, and only through a single atomic rename, with a journal written beforehand so an interrupted publish can be settled after a crash.
+
+A reviewer's revert crosses that same boundary and re-proves the digest it was computed against.
+That is why a revision an agent published while you were deciding refuses the revert instead of disappearing under it: the revert is rejected rather than silently applied to content it never saw.
+
+One local filesystem limit is accepted rather than fixed.
+Node offers no file-open relative to an already-open directory handle, so someone who can already write inside your plan directory can swap an ancestor directory between the moment a path is validated and the moment it is opened.
+Closing that race is not possible with the available primitives, and an attacker who can write in that directory already has the access the check would protect, so Big Plan documents the limit instead of pretending to remove it.
