@@ -125,6 +125,29 @@ describe("approval record", () => {
     ]);
   });
 
+  it("ignores a revocation that appears before the approval it names", () => {
+    const entry = approval();
+    expect(
+      approvalHistory({
+        version: 1,
+        entries: [
+          {
+            kind: "revocation",
+            approvalId: entry.approvalId,
+            at: "2026-08-19T17:40:00.000Z",
+          },
+          entry,
+        ],
+      }),
+    ).toEqual([
+      {
+        approvalId: entry.approvalId,
+        at: entry.at,
+        pinnedSnapshot: entry.pinnedSnapshot,
+      },
+    ]);
+  });
+
   it("carries the whole history on the summary of the approval in force", () => {
     const first = approval();
     const record = appendApproval({

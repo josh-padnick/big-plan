@@ -145,9 +145,16 @@ export const approvalHistory = (
   record: ApprovalRecord,
 ): ReadonlyArray<ApprovalHistoryItem> => {
   const revokedAtById = new Map<string, string>();
+  const seenApprovalIds = new Set<string>();
   for (const entry of record.entries) {
-    if (entry.kind !== "revocation") continue;
-    if (!revokedAtById.has(entry.approvalId)) {
+    if (entry.kind === "approval") {
+      seenApprovalIds.add(entry.approvalId);
+      continue;
+    }
+    if (
+      seenApprovalIds.has(entry.approvalId) &&
+      !revokedAtById.has(entry.approvalId)
+    ) {
       revokedAtById.set(entry.approvalId, entry.at);
     }
   }

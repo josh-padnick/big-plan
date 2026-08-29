@@ -689,7 +689,9 @@ const decodeApprovalHistory = (
       Number.isNaN(Date.parse(item.at)) ||
       typeof item.pinnedSnapshot !== "string" ||
       !SNAPSHOT_DIGEST.test(item.pinnedSnapshot) ||
-      (item.revokedAt !== undefined && typeof item.revokedAt !== "string")
+      (item.revokedAt !== undefined &&
+        (typeof item.revokedAt !== "string" ||
+          Number.isNaN(Date.parse(item.revokedAt))))
     ) {
       return [];
     }
@@ -699,10 +701,7 @@ const decodeApprovalHistory = (
         approvalId: item.approvalId,
         at: item.at,
         pinnedSnapshot: item.pinnedSnapshot,
-        ...(typeof revokedAt === "string" &&
-        !Number.isNaN(Date.parse(revokedAt))
-          ? { revokedAt }
-          : {}),
+        ...(typeof revokedAt === "string" ? { revokedAt } : {}),
       },
     ];
   });
