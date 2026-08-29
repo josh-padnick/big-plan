@@ -5881,11 +5881,11 @@ The release gets a full soak.
       ).toHaveAttribute("tabindex", "-1");
       await expect(reinstalled.getByRole("tooltip")).toBeHidden();
 
-      await diff.getByText("Was", { exact: true }).click();
+      await diff.locator('[data-component-diff-label="baseline"]').click();
       await expect(
         diff.locator('[data-component-diff-side="baseline"]'),
       ).toBeVisible();
-      await diff.getByText("Now", { exact: true }).click();
+      await diff.locator('[data-component-diff-label="proposed"]').click();
       await expect(proposed).toBeVisible();
     });
 
@@ -6184,8 +6184,10 @@ test("should colour the default component switch as a diff", async ({
     const proposed = componentDiff.locator(
       '[data-component-diff-side="proposed"]',
     );
-    const now = componentDiff.getByText("Now", { exact: true });
-    const was = componentDiff.getByText("Was", { exact: true });
+    // The option is the label, not the word inside it: the radio fills that
+    // label so the exposed node and the drawn control are one box.
+    const now = componentDiff.locator('[data-component-diff-label="proposed"]');
+    const was = componentDiff.locator('[data-component-diff-label="baseline"]');
     const toggleThumb = componentDiff.locator(
       "[data-component-diff-toggle-thumb]",
     );
@@ -6543,6 +6545,81 @@ ${unrelatedWorkspace}
       await page.setViewportSize({ width: 1600, height: 1000 });
     });
 
+    await test.step("draw each toggle option on the node it exposes", async () => {
+      // A visually hidden radio parked at its own layout position is what the
+      // accessibility tree and every automation aim at, so it has to be the
+      // box the reader sees. When it is not, the aimed-at point lands on
+      // whatever prose happens to occupy it and the activation flips nothing,
+      // silently, for exactly the readers who cannot see that it did not.
+      await now.click();
+      for (const side of ["baseline", "proposed"] as const) {
+        const measured = await componentDiff.evaluate((node, which) => {
+          const box = (element: Element) => {
+            const rect = element.getBoundingClientRect();
+            return [rect.x, rect.y, rect.width, rect.height].join();
+          };
+          const radio = node.querySelector(
+            `[data-component-diff-choice="${which}"]`,
+          );
+          const option = node.querySelector(
+            `[data-component-diff-label="${which}"]`,
+          );
+          if (radio === null || option === null) {
+            throw new Error("the toggle must offer both options");
+          }
+          const rect = radio.getBoundingClientRect();
+          return {
+            radio: box(radio),
+            option: box(option),
+            hitTestsAsTheRadio:
+              document.elementFromPoint(
+                rect.x + rect.width / 2,
+                rect.y + rect.height / 2,
+              ) === radio,
+          };
+        }, side);
+        expect(measured.radio).toBe(measured.option);
+        expect(measured.hitTestsAsTheRadio).toBe(true);
+      }
+
+      // Aimed at the exposed node itself rather than at the label a sighted
+      // pointer happens to hit, because that is the aim the defect broke.
+      const baselineRadio = componentDiff.locator(
+        '[data-component-diff-choice="baseline"]',
+      );
+      await baselineRadio.click();
+      await expect(baselineRadio).toBeChecked();
+      await expect(baseline).toBeVisible();
+      await expect(proposed).toBeHidden();
+
+      // And reachable by keyboard from the reading order the card sits in,
+      // rather than only by a pointer that already knows where to look.
+      await page.evaluate(() => {
+        document.querySelector("article h1")?.scrollIntoView();
+      });
+      await componentDiff
+        .locator("[data-component-diff-toggle]")
+        .scrollIntoViewIfNeeded();
+      await page.evaluate(() => {
+        (document.activeElement as HTMLElement | null)?.blur();
+      });
+      let reached = false;
+      for (let press = 0; press < 40 && !reached; press += 1) {
+        await page.keyboard.press("Tab");
+        reached = await page.evaluate(
+          () =>
+            document.activeElement?.hasAttribute(
+              "data-component-diff-choice",
+            ) === true,
+        );
+      }
+      expect(reached).toBe(true);
+      await page.keyboard.press("ArrowRight");
+      await expect(
+        componentDiff.locator('[data-component-diff-choice="proposed"]'),
+      ).toBeChecked();
+    });
+
     let baselineTargetId = "";
     let baselineSnapshot = "";
     await test.step("leave a comment on the Was-side wireframe screen", async () => {
@@ -6552,14 +6629,35 @@ ${unrelatedWorkspace}
         (await screen.getAttribute("data-baseline-block-id")) ?? "";
       baselineSnapshot =
         (await screen.getAttribute("data-baseline-snapshot")) ?? "";
+      // The same affordance sits on the Was side, on the Now side, and on the
+      // live block the Now side copies. Naming the side is what stops a
+      // comment aimed at one from landing on another without the reviewer
+      // ever seeing which they reached.
       const comment = screen.getByRole("button", {
-        name: "Comment on Queue",
+        name: "Comment on Queue (Was)",
+        exact: true,
       });
       await screen.hover();
       await expect(comment).toBeVisible();
       await comment.click();
       const composer = page.getByRole("dialog", { name: /Comment on/u });
       await expect(composer).toBeVisible();
+      // The composer says which side it is bound to, and carries the address
+      // it will send, so the answer is on screen before the comment is typed.
+      await expect(composer).toHaveAttribute(
+        "data-review-compose-side",
+        "baseline",
+      );
+      await expect(composer).toHaveAttribute(
+        "data-review-compose-target",
+        `block:${baselineSnapshot}:${baselineTargetId}`,
+      );
+      await expect(composer.locator(".review-compose-title")).toContainText(
+        "Comment on Queue",
+      );
+      await expect(
+        composer.locator("[data-review-compose-side-badge]"),
+      ).toHaveText("Was");
       const submitRightAway = composer.getByRole("switch", {
         name: "Submit right away",
       });
@@ -6578,16 +6676,63 @@ ${unrelatedWorkspace}
       await now.click();
       const screen = proposed.locator('[data-wireframe-screen="queue"]');
       const comment = screen.getByRole("button", {
-        name: "Comment on Queue",
+        name: "Comment on Queue (Now)",
+        exact: true,
       });
       await screen.hover();
       await expect(comment).toBeVisible();
       await comment.click();
       const composer = page.getByRole("dialog", { name: /Comment on/u });
+      await expect(composer).toHaveAttribute(
+        "data-review-compose-side",
+        "proposed",
+      );
+      await expect(
+        composer.locator("[data-review-compose-side-badge]"),
+      ).toHaveText("Now");
       await composer
         .getByLabel("Add a comment")
         .fill("Name the rollback owner on the Now queue screen.");
       await composer.getByRole("button", { name: "Add Comment" }).click();
+    });
+
+    await test.step("hold a side-bound composer to its side when the stepper closes", async () => {
+      // The trap this closes: the Was side and the live plan carry the same
+      // affordance, so a card that closes under an open composer must not
+      // leave it quietly addressing the proposed block instead.
+      await was.click();
+      const screen = baseline.locator('[data-wireframe-screen="queue"]');
+      await screen.hover();
+      await screen
+        .getByRole("button", { name: "Comment on Queue (Was)", exact: true })
+        .click();
+      const composer = page.getByRole("dialog", { name: /Comment on/u });
+      const boundAddress = `block:${baselineSnapshot}:${baselineTargetId}`;
+      await expect(composer).toHaveAttribute(
+        "data-review-compose-target",
+        boundAddress,
+      );
+      if (!(await rail.isVisible())) {
+        await page
+          .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+          .click();
+      }
+      await rail.getByRole("button", { name: "Exit review" }).first().click();
+      await expect(componentDiff).toHaveCount(0);
+      await expect(composer).toHaveAttribute(
+        "data-review-compose-target",
+        boundAddress,
+      );
+      await expect(
+        composer.locator("[data-review-compose-side-badge]"),
+      ).toHaveText("Was");
+      // The live plan's own control is back, and it is plainly not the one
+      // this composer was opened from.
+      await expect(
+        page.locator('article button[aria-label="Comment on Queue"]'),
+      ).toHaveCount(1);
+      await composer.getByRole("button", { name: "Cancel" }).click();
+      await expect(composer).toHaveCount(0);
     });
 
     await test.step("send both comments with their distinct side addresses", async () => {
