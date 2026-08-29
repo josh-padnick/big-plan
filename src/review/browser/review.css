@@ -52,7 +52,13 @@ here; all values use the document theme's closed token vocabulary.
     pointer-events: none;
     animation: review-push-settle 1.6s ease-out 1;
   }
+  /* A block that can host a comment affordance is the box that affordance is
+     placed against. An isolated baseline block is one of those: its host is
+     absolutely positioned, so without this it resolves against whatever
+     ancestor happens to be positioned and lands on top of another side's
+     control - visible, and impossible to hit. */
   [data-block-id]:not([data-block-kind="part"]),
+  [data-baseline-block-id],
   [data-slide][data-review-slide-selectable],
   [data-quick-summary][data-review-slide-selectable] {
     position: relative;

@@ -7020,6 +7020,59 @@ test("should diff a database schema at column level inside one rendering", async
     // The other columns did not change, so the schema root never claims the
     // change and their text stays out of the lens.
     await expect(lens).not.toContainText("customer_id");
+
+    // A field-level change stacks both sides with no Was/Now toggle, so both
+    // comment affordances are on screen at once. Each is placed against its
+    // own addressed block: without that they resolve against a shared
+    // positioned ancestor, land on the same pixels, and a pointer aimed at
+    // one side silently reaches the other.
+    const wasComment = sides
+      .first()
+      .locator('button[aria-label$="(Was)"]')
+      .first();
+    const nowComment = sides
+      .last()
+      .locator('button[aria-label$="(Now)"]')
+      .first();
+    await expect(wasComment).toHaveCount(1);
+    await expect(nowComment).toHaveCount(1);
+    const placement = await lens.evaluate((node) => {
+      const box = (selector: string) => {
+        const button = node.querySelector<HTMLElement>(selector);
+        if (button === null) return null;
+        const owner = button.closest<HTMLElement>(
+          "[data-block-id], [data-baseline-block-id]",
+        );
+        return {
+          button: button.getBoundingClientRect(),
+          owner: owner?.getBoundingClientRect() ?? null,
+        };
+      };
+      const was = box(
+        '[data-component-diff-side="baseline"] [aria-label$="(Was)"]',
+      );
+      const now = box(
+        '[data-component-diff-side="proposed"] [aria-label$="(Now)"]',
+      );
+      if (was === null || now === null || was.owner === null) {
+        return { overlap: true, anchoredToOwnBlock: false };
+      }
+      return {
+        overlap:
+          was.button.left < now.button.right &&
+          now.button.left < was.button.right &&
+          was.button.top < now.button.bottom &&
+          now.button.top < was.button.bottom,
+        // Its own block is the box it is placed against: same right edge, and
+        // within one control's height of that block's top.
+        anchoredToOwnBlock:
+          Math.abs(was.button.right - was.owner.right) < 4 &&
+          Math.abs(was.button.bottom - was.owner.top) < 4,
+      };
+    });
+    expect(placement.overlap).toBe(false);
+    expect(placement.anchoredToOwnBlock).toBe(true);
+
     await page.screenshot({
       path: testInfo.outputPath("database-table-schema-field-diff.png"),
     });
