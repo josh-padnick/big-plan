@@ -1009,11 +1009,18 @@ const Screen = ({
   const phone = screen.device === "phone";
   const workspaceViewport =
     desktop && screen.children.some((child) => child.element === "AppShell");
+  const live =
+    useComponentDiffPresentation()?.side === "baseline"
+      ? { [DIFF_LIVE_ATTRIBUTE]: "" }
+      : {};
   return (
     <figure
       className="wireframe-screen mx-auto w-full overflow-x-auto [container-type:inline-size]"
       data-wireframe-screen={screen.id}
+      data-commentable-kind="wireframe-screen"
+      data-commentable-label={screen.name || screen.id}
       data-wireframe-device={screen.device}
+      {...live}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
       <div className="wireframe-frame-card mx-auto block w-fit">

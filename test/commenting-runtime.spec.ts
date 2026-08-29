@@ -39,6 +39,7 @@ import {
   stageComment,
   startReviewRuntime,
   test,
+  type Locator,
   type Page,
   closeReviewRuntime,
 } from "./fixtures";
@@ -6546,10 +6547,11 @@ ${unrelatedWorkspace}
     await test.step("leave a comment on the wireframe from inside the diff", async () => {
       // The diff root inherits the proposed component's one address, so the
       // change offers exactly one comment control however many sides it draws.
-      const comment = componentDiff.getByRole("button", {
-        name: /^Comment on /u,
-      });
-      await expect(comment).toHaveCount(1);
+      const comment = proposed
+        .getByRole("button", {
+          name: /^Comment on /u,
+        })
+        .first();
       await expect(comment).toBeVisible();
       await comment.click();
       const composer = page.getByRole("dialog", { name: /Comment on/u });
@@ -6582,6 +6584,81 @@ ${unrelatedWorkspace}
         "data-review-comment-associated",
         "",
       );
+    });
+
+    await test.step("keep baseline and proposed screen comments distinct", async () => {
+      const comments = rail.locator("[data-review-comment-ui]");
+      const initialCommentCount = await comments.count();
+      const commentScreen = async (side: Locator, body: string) => {
+        const button = side
+          .locator('[data-wireframe-screen="queue"]')
+          .getByRole("button", { name: /^Comment on /u });
+        await expect(button).toHaveCount(1);
+        await button.evaluate((node) =>
+          node.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, composed: true }),
+          ),
+        );
+        const composer = page.getByRole("dialog", { name: /Comment on/u });
+        await composer.getByLabel("Add a comment").fill(body);
+        const submitRightAway = composer.getByRole("switch", {
+          name: "Submit right away",
+        });
+        if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+          await submitRightAway.click();
+        }
+        await composer.getByRole("button", { name: "Add Comment" }).click();
+        await expect(
+          rail.locator("[data-review-comment-ui]").filter({ hasText: body }),
+        ).toBeVisible();
+      };
+      await was.click();
+      await expect(baseline).toBeVisible();
+      await commentScreen(baseline, "Was screen needs clarification.");
+      await now.click();
+      await expect(proposed).toBeVisible();
+      await commentScreen(proposed, "Now screen needs clarification.");
+      await expect(
+        comments.filter({ hasText: "Was screen needs clarification." }),
+      ).toBeVisible();
+      await expect(
+        comments.filter({ hasText: "Now screen needs clarification." }),
+      ).toBeVisible();
+      const wasIdentity = await baseline
+        .locator('[data-wireframe-screen="queue"]')
+        .evaluate((node) => ({
+          blockId: node.getAttribute("data-baseline-block-id"),
+          snapshot: node.getAttribute("data-baseline-snapshot"),
+        }));
+      const nowIdentity = await proposed
+        .locator('[data-wireframe-screen="queue"]')
+        .evaluate((node) => ({
+          blockId: node.getAttribute("data-block-id"),
+          snapshot: node.getAttribute("data-baseline-snapshot"),
+        }));
+      expect(wasIdentity.blockId).not.toBeNull();
+      expect(wasIdentity.snapshot).not.toBeNull();
+      expect(nowIdentity.blockId).not.toBeNull();
+      expect(nowIdentity.snapshot).toBeNull();
+      await expect(comments).toHaveCount(initialCommentCount + 2);
+      await comments
+        .filter({ hasText: "Was screen needs clarification." })
+        .hover();
+      await expect(
+        baseline.locator('[data-wireframe-screen="queue"]'),
+      ).toHaveAttribute("data-review-comment-associated", "");
+      await expect(
+        proposed.locator('[data-wireframe-screen="queue"]'),
+      ).not.toHaveAttribute("data-review-comment-associated");
+      await comments
+        .filter({ hasText: "Now screen needs clarification." })
+        .hover();
+      await expect(
+        proposed.locator('[data-wireframe-screen="queue"]'),
+      ).toHaveAttribute("data-review-comment-associated", "");
+      await expect(
+        baseline.locator('[data-wireframe-screen="queue"]'),
+      ).not.toHaveAttribute("data-review-comment-associated");
     });
   } finally {
     await closeReviewRuntime({ page, runtime });
@@ -6941,6 +7018,17 @@ test("should diff DataTable rows with the table's own column controls", async ({
         .locator('[data-component-diff-side="proposed"]')
         .getByRole("button", { name: "Choose columns" }),
     ).toBeVisible();
+    await test.step("offer row anchors and no cell anchors", async () => {
+      const proposedTable = lens.locator(
+        '[data-component-diff-side="proposed"]',
+      );
+      await expect(
+        proposedTable.locator('[data-commentable-kind="table-row"]'),
+      ).toHaveCount(1);
+      await expect(
+        proposedTable.locator('[data-commentable-kind="table-cell"] button'),
+      ).toHaveCount(0);
+    });
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });

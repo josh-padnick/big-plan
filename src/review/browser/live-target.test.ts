@@ -2,9 +2,10 @@
 // its content identity still matches, and which miss reason wins. The DOM half
 // is proven by the commenting browser journeys, per the testing ladder.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   candidateMatchesLivePicture,
+  liveBlock,
   lensMissReason,
   pickLiveCandidate,
   type LiveCandidate,
@@ -115,5 +116,65 @@ describe("candidateMatchesLivePicture", () => {
         livePicture: { source: "./assets/b.png", alt: "Map" },
       }),
     ).toBe(true);
+  });
+});
+
+describe("liveBlock", () => {
+  const globals = globalThis as unknown as {
+    CSS?: { escape(value: string): string };
+    document?: {
+      querySelector<TElement>(selector: string): TElement | null;
+    };
+  };
+  const originalCSS = globals.CSS;
+  const originalDocument = globals.document;
+
+  afterEach(() => {
+    globals.CSS = originalCSS;
+    globals.document = originalDocument;
+  });
+
+  it("resolves qualified identity through both escaped baseline attributes", () => {
+    const element = {
+      closest: () => null,
+      getClientRects: () => [{}],
+    } as unknown as HTMLElement;
+    const selectors: string[] = [];
+    const article = {
+      querySelectorAll: (selector: string) => {
+        selectors.push(selector);
+        return [element];
+      },
+    };
+    globals.CSS = {
+      escape: (value) => `escaped(${value})`,
+    };
+    globals.document = {
+      querySelector: () => article,
+    };
+
+    expect(liveBlock("block]id", "abcdef012345")).toEqual({ found: element });
+    expect(selectors).toEqual([
+      `[${"data-baseline-" + "block-id"}="escaped(block]id)"][${"data-baseline-" + "snapshot"}="escaped(abcdef012345)"]`,
+    ]);
+  });
+
+  it("reports a missing snapshot without falling back to a proposed match", () => {
+    const proposedElement = {
+      closest: () => null,
+      getClientRects: () => [{}],
+    } as unknown as HTMLElement;
+    const article = {
+      querySelectorAll: (selector: string) =>
+        selector.startsWith(`[${"data-block-id"}="`) ? [proposedElement] : [],
+    };
+    globals.CSS = { escape: (value) => value };
+    globals.document = {
+      querySelector: () => article,
+    };
+
+    expect(liveBlock("same-id", "abcdef012345")).toEqual({
+      missing: "missing-snapshot",
+    });
   });
 });

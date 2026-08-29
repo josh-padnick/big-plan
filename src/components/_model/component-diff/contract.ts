@@ -13,6 +13,15 @@ export type ComponentCommentableAnchor = {
   readonly sides: ComponentCommentableSides;
 };
 
+/** Whether one declared anchor accepts a comment on the requested side. */
+export const componentCommentableAnchorAllows = ({
+  anchor,
+  side,
+}: {
+  readonly anchor: ComponentCommentableAnchor;
+  readonly side: DiffSide;
+}): boolean => anchor.sides === "both" || anchor.sides === side;
+
 /** The word-level alignment the engine already computed for the pair. */
 export type ComponentDiffRun = {
   readonly op: "same" | "del" | "ins";

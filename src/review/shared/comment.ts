@@ -21,6 +21,8 @@ type TargetBlockIdentity = {
   readonly blockId: string;
   readonly kind: string;
   readonly label: string;
+  /** Absent means the current proposed document. */
+  readonly snapshot?: string;
   readonly section?: string;
   readonly slideText?: string;
   readonly isSlideTextExcerpt?: boolean;
@@ -265,6 +267,16 @@ const asSnapshotDigest = (value: unknown): string => {
   return digest;
 };
 
+const asTargetSnapshot = (value: unknown): string => {
+  const digest = asText({ value, field: "snapshot", limit: 64 });
+  if (!/^[a-f0-9]{16,64}$/.test(digest)) {
+    throw new CommentRejected(
+      '"snapshot" must be a hexadecimal snapshot digest',
+    );
+  }
+  return digest;
+};
+
 const asOffset = ({
   value,
   field,
@@ -284,9 +296,11 @@ const asOffset = ({
 const resolveBlock = ({
   value,
   blocks,
+  snapshot,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly snapshot?: string;
 }): BlockMapEntry => {
   if (typeof value !== "string") {
     throw new CommentRejected("A block target must name a block");
@@ -294,7 +308,9 @@ const resolveBlock = ({
   const block = blocks.get(value);
   if (block === undefined) {
     throw new CommentRejected(
-      "A comment points at a block this document does not contain",
+      snapshot === undefined
+        ? "A comment points at a block this document does not contain"
+        : "A comment points at a snapshot this review no longer retains",
     );
   }
   return block;
@@ -303,21 +319,39 @@ const resolveBlock = ({
 const validateTarget = ({
   value,
   blocks,
+  snapshots,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly snapshots?: ReadonlyMap<string, ReadonlyMap<string, BlockMapEntry>>;
 }): CommentTarget => {
   const target = asRecord({ value, field: "target" });
   const type = target.type;
   if (type === "document") {
     return { type: "document" };
   }
-  const block = resolveBlock({ value: target.blockId, blocks });
+  const snapshot =
+    target.snapshot === undefined
+      ? undefined
+      : asTargetSnapshot(target.snapshot);
+  const targetBlocks =
+    snapshot === undefined ? blocks : snapshots?.get(snapshot);
+  if (targetBlocks === undefined) {
+    throw new CommentRejected(
+      "A comment points at a snapshot this review no longer retains",
+    );
+  }
+  const block = resolveBlock({
+    value: target.blockId,
+    blocks: targetBlocks,
+    ...(snapshot === undefined ? {} : { snapshot }),
+  });
   // Kind, label, and slide scope come back from the block map rather than from
   // the request, so the label a tray showed can never become the label an agent
   // reads, and no request can claim to address a slide it does not name.
   const identity = {
     blockId: block.id,
+    ...(snapshot === undefined ? {} : { snapshot }),
     label: block.label,
     ...(block.section === undefined ? {} : { section: block.section }),
     ...slideScopeOf(block),
@@ -330,14 +364,19 @@ const validateTarget = ({
     const end = asOffset({ value: target.end, field: "end" });
     const endBlock =
       type === "selection" && target.endBlockId !== undefined
-        ? resolveBlock({ value: target.endBlockId, blocks })
+        ? resolveBlock({
+            value: target.endBlockId,
+            blocks: targetBlocks,
+            ...(snapshot === undefined ? {} : { snapshot }),
+          })
         : undefined;
     const imageBlockIds =
       type === "selection" && Array.isArray(target.imageBlockIds)
         ? boundedImageBlockIds(target.imageBlockIds).map((value, index) => {
             const image = resolveBlock({
               value,
-              blocks,
+              blocks: targetBlocks,
+              ...(snapshot === undefined ? {} : { snapshot }),
             });
             if (image.kind !== "image") {
               throw new CommentRejected(
@@ -423,6 +462,9 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
   }
   const identity = {
     blockId: target.blockId,
+    ...(target.snapshot === undefined
+      ? {}
+      : { snapshot: asTargetSnapshot(target.snapshot) }),
     kind: asTargetText({ value: target.kind, field: "kind", limit: 100 }),
     label: asTargetText({ value: target.label, field: "label", limit: 300 }),
     ...(target.section === undefined
@@ -637,11 +679,13 @@ export const validateStoredComments = ({
 export const validateCommentUpdates = ({
   value,
   blocks,
+  snapshots,
   existing,
   now,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly snapshots?: ReadonlyMap<string, ReadonlyMap<string, BlockMapEntry>>;
   readonly existing: ReadonlyArray<ReviewComment>;
   readonly now: string;
 }): ReadonlyArray<ReviewComment> => {
@@ -654,7 +698,7 @@ export const validateCommentUpdates = ({
     limit: COMMENT_LIMIT,
     targetFor: (comment, id) =>
       existingById.get(id)?.target ??
-      validateTarget({ value: comment.target, blocks }),
+      validateTarget({ value: comment.target, blocks, snapshots }),
     createdAtFor: (comment, id) =>
       existingById.get(id)?.createdAt ?? asTimestamp(comment.createdAt, now),
     premiseSnapshotFor: (comment, id) =>

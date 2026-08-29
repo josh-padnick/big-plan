@@ -27,7 +27,7 @@ import eslintConfigPrettier from "eslint-config-prettier";
 // deliberate answer rather than a copied query.
 const PLAN_IDENTITY_SELECTOR = {
   selector:
-    'TemplateElement[value.raw=/data-(block-id|flow-anchor)="/], Literal[value=/data-(block-id|flow-anchor)="/]',
+    'TemplateElement[value.raw=/data-(block-id|baseline-block-id|flow-anchor)="/], Literal[value=/data-(block-id|baseline-block-id|flow-anchor)="/]',
   message:
     "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
 };

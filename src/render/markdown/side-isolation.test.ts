@@ -3,6 +3,8 @@ import type { Element, ElementContent, Root, RootContent } from "hast";
 import { fromHtml } from "hast-util-from-html";
 import { compileMarkdown } from "./compile-markdown.js";
 import { rehypeBlockIdentity, type BlockDescriptor } from "./block-identity.js";
+import { COMPONENT_INSTANCE_ATTRIBUTE } from "./component-pipeline/component-instance.js";
+import type { CollectedComponentModels } from "./component-pipeline/deliver.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -200,6 +202,9 @@ const nestedBaselineCopy = (root: Element, key: string): Element => {
 
 const documentWithBothSides = () => {
   const compiled = compileMarkdown({ markdown: BOTH_SIDES_FIXTURE });
+  const componentModels: CollectedComponentModels = new Map(
+    compiled.components.map((component) => [component.instanceKey, component]),
+  );
   const decision = collect({
     node: compiled.root,
     match: (candidate) => candidate.properties["data-component"] === "Decision",
@@ -212,9 +217,23 @@ const documentWithBothSides = () => {
   if (decision === undefined || table === undefined) {
     throw new Error("expected a Decision and a DataTable");
   }
+  const usedComponentKeys = new Set<string>();
+  for (const root of [decision, table]) {
+    const component = compiled.components.find(
+      (candidate) =>
+        candidate.component === root.properties["data-component"] &&
+        !usedComponentKeys.has(candidate.instanceKey),
+    );
+    if (component === undefined) {
+      throw new Error("expected a component model");
+    }
+    usedComponentKeys.add(component.instanceKey);
+    root.properties[COMPONENT_INSTANCE_ATTRIBUTE] = component.instanceKey;
+  }
   return {
     root: compiled.root,
     blocks: compiled.blocks,
+    componentModels,
     decision,
     table,
     baselineDecision: nestedBaselineCopy(decision, "decision"),
@@ -783,9 +802,12 @@ describe("side isolation", () => {
 
   it("should mint the same proposed-side block ids as the same document without a baseline side", () => {
     const withoutBaseline = compileMarkdown({ markdown: BOTH_SIDES_FIXTURE });
-    const { root } = documentWithBothSides();
+    const { root, componentModels } = documentWithBothSides();
     const blocks: Array<BlockDescriptor> = [];
-    rehypeBlockIdentity({ blocks })(root);
+    rehypeBlockIdentity({
+      blocks,
+      componentModels,
+    })(root);
     expect(blocks.map((block) => block.id)).toEqual(
       withoutBaseline.blocks.map((block) => block.id),
     );

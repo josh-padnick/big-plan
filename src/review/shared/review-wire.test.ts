@@ -38,6 +38,38 @@ const encodeSnapshot = (
 ) => encodeAgentSnapshot({ agents: [], ...value }, { nowMs });
 
 describe("review wire contract", () => {
+  it("should round-trip qualified and legacy unqualified comment targets", () => {
+    const snapshot = "a".repeat(16);
+    const qualified = {
+      id: "aabbccdd",
+      body: "Historical note.",
+      createdAt: "2026-08-10T12:00:00.000Z",
+      premiseSnapshot: snapshot,
+      target: {
+        type: "block",
+        blockId: "section/status-quo/paragraph-1",
+        snapshot,
+        kind: "paragraph",
+        label: "Historical reality",
+      },
+    };
+    const unqualified = {
+      ...qualified,
+      id: "bbccddee",
+      target: {
+        type: "block",
+        blockId: "section/status-quo/paragraph-1",
+        kind: "paragraph",
+        label: "Current reality",
+      },
+    };
+    const decoded = decodeReviewSnapshot({
+      drafts: [qualified, unqualified],
+      sent: [],
+      resolvedCommentIds: [],
+    });
+    expect(decoded.drafts).toEqual([qualified, unqualified]);
+  });
   it("should load reviewer state a runtime of another vintage stored", () => {
     const decoded = decodeReviewSnapshot({
       drafts: [

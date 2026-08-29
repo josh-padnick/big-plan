@@ -5,6 +5,7 @@ import {
   CommentRejected,
   QUOTE_LIMIT,
   validateComments,
+  validateCommentUpdates,
   validateResolvedCommentIds,
   validateStoredComments,
 } from "./comment.js";
@@ -79,6 +80,19 @@ const validate = (value: unknown) =>
 const commentOn = (target: unknown) => [
   { id: "aabbccdd", body: "A note.", createdAt: NOW, target },
 ];
+
+const SNAPSHOT = "a".repeat(16);
+const SNAPSHOT_BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
+  [
+    "section/status-quo/paragraph-1",
+    {
+      id: "section/status-quo/paragraph-1",
+      kind: "paragraph",
+      label: "Historical reality",
+      section: "Status quo",
+    },
+  ],
+]);
 
 describe("validateComments acceptance", () => {
   it("should accept a whole-plan note when it names no block", () => {
@@ -160,6 +174,76 @@ describe("validateComments acceptance", () => {
 
   it("should accept an empty batch when nothing is pending", () => {
     expect(validate([])).toEqual([]);
+  });
+
+  it("should resolve a qualified target only through its retained snapshot map", () => {
+    const [comment] = validateCommentUpdates({
+      value: [
+        {
+          premiseSnapshot: PREMISE,
+          target: {
+            type: "block",
+            blockId: "section/status-quo/paragraph-1",
+            snapshot: SNAPSHOT,
+          },
+          id: "aabbccdd",
+          body: "A note.",
+          createdAt: NOW,
+        },
+      ],
+      blocks: BLOCKS,
+      snapshots: new Map([[SNAPSHOT, SNAPSHOT_BLOCKS]]),
+      existing: [],
+      now: NOW,
+    });
+    expect(comment?.target).toEqual({
+      type: "block",
+      blockId: "section/status-quo/paragraph-1",
+      snapshot: SNAPSHOT,
+      kind: "paragraph",
+      label: "Historical reality",
+      section: "Status quo",
+    });
+  });
+
+  it("should refuse a qualified target when its snapshot is not retained", () => {
+    expect(() =>
+      validateCommentUpdates({
+        value: [
+          {
+            premiseSnapshot: PREMISE,
+            target: {
+              type: "block",
+              blockId: "section/status-quo/paragraph-1",
+              snapshot: SNAPSHOT,
+            },
+            id: "aabbccdd",
+            body: "A note.",
+            createdAt: NOW,
+          },
+        ],
+        blocks: BLOCKS,
+        snapshots: new Map(),
+        existing: [],
+        now: NOW,
+      }),
+    ).toThrow("snapshot this review no longer retains");
+  });
+
+  it("should reject a qualified target with an invalid digest shape", () => {
+    expect(() =>
+      validateCommentUpdates({
+        value: commentOn({
+          type: "block",
+          blockId: "section/status-quo/paragraph-1",
+          snapshot: "not-a-digest",
+        }),
+        blocks: BLOCKS,
+        snapshots: new Map(),
+        existing: [],
+        now: NOW,
+      }),
+    ).toThrow(CommentRejected);
   });
 });
 
@@ -473,6 +557,35 @@ describe("validateComments shape and bounds", () => {
     expect(validateStoredComments({ value: history, now: NOW })).toHaveLength(
       201,
     );
+  });
+
+  it("should preserve a qualified stored target and accept old unqualified targets", () => {
+    const qualified = {
+      id: "aabbccdd",
+      body: "Historical note.",
+      createdAt: NOW,
+      premiseSnapshot: PREMISE,
+      target: {
+        type: "block",
+        blockId: "section/status-quo/paragraph-1",
+        snapshot: SNAPSHOT,
+        kind: "paragraph",
+        label: "Historical reality",
+      },
+    };
+    const unqualified = {
+      ...qualified,
+      id: "bbccddee",
+      target: {
+        type: "block",
+        blockId: "section/status-quo/paragraph-1",
+        kind: "paragraph",
+        label: "Today's reality",
+      },
+    };
+    expect(
+      validateStoredComments({ value: [qualified, unqualified], now: NOW }),
+    ).toEqual([qualified, unqualified]);
   });
 
   it("should refuse a body beyond the length limit", () => {

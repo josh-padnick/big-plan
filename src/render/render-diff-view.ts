@@ -7,6 +7,7 @@ import type {
   ComponentCommentableAnchor,
   ComponentDiffInput,
 } from "../components/_model/component-diff/contract.js";
+import { componentCommentableAnchorAllows } from "../components/_model/component-diff/contract.js";
 import {
   COMPONENT_REGISTRY,
   definitionFor,
@@ -164,21 +165,6 @@ const blockById = ({
     ? undefined
     : blocks.find((block) => block.id === blockId);
 
-const anchorAllows = ({
-  anchors,
-  kind,
-  side,
-}: {
-  readonly anchors: ReadonlyArray<ComponentCommentableAnchor>;
-  readonly kind: string;
-  readonly side: "baseline" | "proposed";
-}): boolean =>
-  anchors.some(
-    (anchor) =>
-      anchor.kind === kind &&
-      (anchor.sides === "both" || anchor.sides === side),
-  );
-
 const declaredAnchor = (
   node: Element,
 ): { readonly kind: string; readonly label: string } | undefined => {
@@ -193,10 +179,7 @@ const declaredAnchor = (
       label: node.properties["data-commentable-label"],
     };
   }
-  const screen = node.properties["data-wireframe-screen"];
-  return typeof screen === "string"
-    ? { kind: "wireframe-screen", label: screen }
-    : undefined;
+  return undefined;
 };
 
 const inputFor = ({
@@ -279,7 +262,14 @@ const inheritProposedSubtargetIdentity = ({
     const anchor = declaredAnchor(node);
     if (
       anchor !== undefined &&
-      anchorAllows({ anchors, kind: anchor.kind, side: "proposed" })
+      anchors.some(
+        (declared) =>
+          declared.kind === anchor.kind &&
+          componentCommentableAnchorAllows({
+            anchor: declared,
+            side: "proposed",
+          }),
+      )
     ) {
       const { kind } = anchor;
       const normalizedLabel = anchor.label.replaceAll("`", "");
@@ -337,7 +327,14 @@ const inheritBaselineSubtargetIdentity = ({
     const anchor = declaredAnchor(node);
     if (
       anchor !== undefined &&
-      anchorAllows({ anchors, kind: anchor.kind, side: "baseline" })
+      anchors.some(
+        (declared) =>
+          declared.kind === anchor.kind &&
+          componentCommentableAnchorAllows({
+            anchor: declared,
+            side: "baseline",
+          }),
+      )
     ) {
       const { kind } = anchor;
       const normalizedLabel = anchor.label.replaceAll("`", "");

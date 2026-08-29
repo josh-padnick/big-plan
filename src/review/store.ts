@@ -1489,6 +1489,8 @@ export const readSnapshot = async ({
   readonly snapshot: string;
 }): Promise<string> => readFile(snapshotPath({ store, snapshot }), "utf8");
 
+export const readSourceSnapshot = readSnapshot;
+
 /** Reads the durable set of locally resolved thread ids. */
 export const readResolvedCommentIds = async ({
   store,

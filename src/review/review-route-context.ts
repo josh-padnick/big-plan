@@ -13,6 +13,7 @@ import { basename, extname } from "node:path";
 import { renderDocument } from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
+  CommentRejected,
   validateCommentUpdates,
   validateResolvedCommentIds,
   validateStoredComments,
@@ -23,6 +24,7 @@ import {
   readChangeVerdicts,
   readComments,
   readResolvedCommentIds,
+  readSourceSnapshot,
   readStagedInputs,
   writeApprovalRecord,
   writeChangeVerdicts,
@@ -363,6 +365,60 @@ export const createPlanRenderer = ({
   // carry their already-validated target metadata across later revisions.
   const blocks = new Map<string, BlockMapEntry>();
   let blockMapMarkdown: string | undefined;
+  const snapshotBlockMaps = new Map<
+    string,
+    Promise<ReadonlyMap<string, BlockMapEntry> | undefined>
+  >();
+  const MAX_TARGET_SNAPSHOTS = 8;
+
+  const targetSnapshotsOf = (value: unknown): ReadonlyArray<string> => {
+    if (!Array.isArray(value)) return [];
+    const snapshots = new Set<string>();
+    for (const entry of value) {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+        continue;
+      }
+      const target = (entry as Readonly<Record<string, unknown>>).target;
+      if (
+        typeof target !== "object" ||
+        target === null ||
+        Array.isArray(target)
+      ) {
+        continue;
+      }
+      const snapshot = (target as Readonly<Record<string, unknown>>).snapshot;
+      if (typeof snapshot === "string" && /^[a-f0-9]{16,64}$/.test(snapshot)) {
+        snapshots.add(snapshot);
+      }
+    }
+    if (snapshots.size > MAX_TARGET_SNAPSHOTS) {
+      throw new CommentRejected(
+        `A comment batch may name at most ${MAX_TARGET_SNAPSHOTS} snapshots`,
+      );
+    }
+    return [...snapshots];
+  };
+
+  const snapshotBlocks = (
+    snapshot: string,
+    readStore: ReviewStore,
+  ): Promise<ReadonlyMap<string, BlockMapEntry> | undefined> => {
+    const cached = snapshotBlockMaps.get(snapshot);
+    if (cached !== undefined) return cached;
+    const pending = readSourceSnapshot({ store: readStore, snapshot })
+      .then((markdown) => {
+        const rendered = renderDocument({
+          markdown,
+          fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+        });
+        return new Map(
+          rendered.blocks.map((block) => [block.id, block] as const),
+        );
+      })
+      .catch(() => undefined);
+    snapshotBlockMaps.set(snapshot, pending);
+    return pending;
+  };
 
   const validateStored = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateStoredComments({
@@ -387,16 +443,23 @@ export const createPlanRenderer = ({
   const validateUpdates = async (
     value: unknown,
     readStore: ReviewStore = store,
-  ): Promise<ReadonlyArray<ReviewComment>> =>
-    validateCommentUpdates({
+  ): Promise<ReadonlyArray<ReviewComment>> => {
+    const retained = new Map<string, ReadonlyMap<string, BlockMapEntry>>();
+    for (const snapshot of targetSnapshotsOf(value)) {
+      const map = await snapshotBlocks(snapshot, readStore);
+      if (map !== undefined) retained.set(snapshot, map);
+    }
+    return validateCommentUpdates({
       value,
       blocks,
+      snapshots: retained,
       existing: [
         ...(await readStoredComments(readStore.draftsPath)),
         ...(await readStoredComments(readStore.sentPath)),
       ],
       now: new Date().toISOString(),
     });
+  };
 
   const readBootstrap = async (markdown: string): Promise<string> => {
     const drafts = await readStoredComments(store.draftsPath);
