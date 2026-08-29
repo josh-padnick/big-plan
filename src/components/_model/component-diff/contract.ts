@@ -62,14 +62,19 @@ export type ComponentDiffModel = unknown;
  * baseline side: a control the reader may operate, and the evidence that
  * control reveals.
  *
- * Baseline isolation holds the whole Was rendering inert, because a second
- * live copy of a component fights the proposed side for the same frame. A
- * component that annotates the baseline with something only the baseline can
- * reach - a screen the change removed, a screen it moved - would otherwise
- * advertise a control that silently does nothing. Marking is the narrow
- * exception: isolation holds everything off the path to a mark inert
- * instead, because `inert` is inherited and a descendant cannot opt back out
- * of an inert ancestor.
+ * Baseline isolation holds the Was rendering inert, because a second live copy
+ * of a component fights the proposed side for the same frame. A component that
+ * annotates the baseline with something only the baseline can reach - a screen
+ * the change removed, a screen it moved - would otherwise advertise a control
+ * that silently does nothing. Marking is the narrow exception: isolation holds
+ * everything off the path to a mark inert instead, because `inert` is
+ * inherited and a descendant cannot opt back out of an inert ancestor.
+ *
+ * A commentable anchor earns the same path without this mark, because
+ * isolation reads the address it was given. That is the weaker claim - the
+ * addressed element becomes reachable, and everything inside it that leads
+ * nowhere stays inert - and it never revives a control, which only this mark
+ * does.
  *
  * Mark the revealed content as well as the control that reveals it. `inert`
  * takes content out of the accessibility tree and out of selection, so a

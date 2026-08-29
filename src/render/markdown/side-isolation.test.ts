@@ -709,6 +709,109 @@ describe("side isolation", () => {
     expect(trigger).toBeDefined();
   });
 
+  it("should keep an addressed baseline element reachable without reviving its controls", () => {
+    // An address is the component saying a reader may point at this element.
+    // `inert` takes it out of the accessibility tree and out of hit testing,
+    // so an addressed element held inert is an address in name only - the
+    // reader is offered a comment affordance no pointer can reach. The
+    // freeze is unchanged: the figure's own controls still do nothing.
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "strong",
+          properties: {},
+          children: [{ type: "text", value: "Was" }],
+        },
+        {
+          type: "element",
+          tagName: "figure",
+          properties: { [MAXIMIZABLE_ATTRIBUTE]: "table" },
+          children: [
+            {
+              type: "element",
+              tagName: "button",
+              properties: { [TRIGGER_ATTRIBUTE]: "" },
+              children: [],
+            },
+            {
+              type: "element",
+              tagName: "tr",
+              properties: { "data-commentable-kind": "table-row" },
+              children: [{ type: "text", value: "Stripe" }],
+            },
+          ],
+        },
+      ],
+    };
+    isolateBaselineSide({
+      subtree,
+      key: "addressed",
+      snapshot: "snapshot-1",
+      addressFor: (node) =>
+        node.properties["data-commentable-kind"] === "table-row"
+          ? { blockId: "table/row-1", kind: "table-row", label: "Stripe" }
+          : undefined,
+    });
+
+    const row = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "tr",
+    })[0];
+    if (row === undefined) throw new Error("Expected the addressed row");
+    expect(row.properties[BASELINE_BLOCK_ID_ATTRIBUTE]).toBe("table/row-1");
+    expect(row.properties.inert).toBeUndefined();
+    const figure = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "figure",
+    })[0];
+    if (figure === undefined) throw new Error("Expected the figure");
+    // The figure carries the addressed row, so it may not be taken out of the
+    // tree - but it loses the attribute a script wires either way.
+    expect(figure.properties.inert).toBeUndefined();
+    expect(figure.properties[MAXIMIZABLE_ATTRIBUTE]).toBeUndefined();
+    // Its own control leads nowhere a reader may point, so it stays frozen.
+    const trigger = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "button",
+    })[0];
+    if (trigger === undefined) throw new Error("Expected the maximize trigger");
+    expect(trigger.properties.inert).toBe(true);
+    expect(trigger.properties.disabled).toBe(true);
+    // Everything the address does not lead to keeps the isolation it had.
+    const heading = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "strong",
+    })[0];
+    expect(heading?.properties.inert).toBe(true);
+  });
+
+  it("should hold a baseline side with no address and no mark inert as one root", () => {
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "p",
+          properties: {},
+          children: [{ type: "text", value: "Evidence" }],
+        },
+      ],
+    };
+    isolateBaselineSide({ subtree, key: "unaddressed" });
+    expect(subtree.properties.inert).toBe(true);
+    const paragraph = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "p",
+    })[0];
+    expect(paragraph?.properties.inert).toBeUndefined();
+  });
+
   it("should keep the evidence a marked control reveals out of the inert region", () => {
     // `inert` takes content out of the accessibility tree and out of
     // selection, so a control whose target stays inert still does nothing

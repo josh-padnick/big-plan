@@ -1668,6 +1668,22 @@ const ownedPresentationDescendant = (
       ) === block,
   ) ?? null;
 
+/**
+ * The same descendant, but only where a comment control mounted into it would
+ * still answer a pointer. An isolated baseline keeps its component's own
+ * control bar in the markup while holding it inert, so a host prepended there
+ * would look like the live side's control and do nothing at all. Falling back
+ * to the block's own anchor host is the honest answer: the block is reachable,
+ * which is the whole reason it carries an address.
+ */
+const mountableOwnedDescendant = (
+  block: HTMLElement,
+  selector: string,
+): HTMLElement | null => {
+  const element = ownedPresentationDescendant(block, selector);
+  return element !== null && canMountReviewBlockHost(element) ? element : null;
+};
+
 // A comment control that stands alone - floating beside a card, hovering over
 // a block, or sitting by itself in a component header - rests at the quieter
 // comment-rest colour. Only a control mounted beside other controls in a real
@@ -1717,7 +1733,7 @@ const useBlockHosts = () => {
       blocks.map((block) => {
         const host = document.createElement("span");
         if (blockKind(block) === "data-table" || blockKind(block) === "table") {
-          const tableActions = ownedPresentationDescendant(
+          const tableActions = mountableOwnedDescendant(
             block,
             ".figure-action-group",
           );
@@ -1737,28 +1753,33 @@ const useBlockHosts = () => {
           const plainCodeFigure = block.parentElement?.matches(".code-figure")
             ? block.parentElement
             : null;
-          const plainCodeActions = plainCodeFigure?.querySelector<HTMLElement>(
-            ".figure-control-bar",
-          );
+          const plainCodeControlBar =
+            plainCodeFigure?.querySelector<HTMLElement>(".figure-control-bar");
+          const plainCodeActions =
+            plainCodeControlBar !== undefined &&
+            plainCodeControlBar !== null &&
+            canMountReviewBlockHost(plainCodeControlBar)
+              ? plainCodeControlBar
+              : null;
           const plainCodeCopy =
             plainCodeActions?.querySelector<HTMLElement>("[data-copy-code]");
-          const copyControl = ownedPresentationDescendant(
+          const copyControl = mountableOwnedDescendant(
             block,
             "[data-copy-source], [data-copy-code]",
           );
-          const actionGroup = ownedPresentationDescendant(
+          const actionGroup = mountableOwnedDescendant(
             block,
             ".figure-action-group, .figure-control-bar",
           );
-          const inlineHeader = ownedPresentationDescendant(
+          const inlineHeader = mountableOwnedDescendant(
             block,
             ".file-tree-header, .callout-header, .wireframe-screen-caption",
           );
-          const overlayHeader = ownedPresentationDescendant(
+          const overlayHeader = mountableOwnedDescendant(
             block,
             ".decision-zone-question",
           );
-          if (plainCodeActions !== undefined && plainCodeActions !== null) {
+          if (plainCodeActions !== null) {
             host.dataset.reviewToolbarHost = "";
             if (plainCodeCopy === undefined || plainCodeCopy === null) {
               plainCodeActions.prepend(host);

@@ -7142,6 +7142,143 @@ test("should diff DataTable rows with the table's own column controls", async ({
         .locator('[data-component-diff-side="proposed"]')
         .getByRole("button", { name: "Choose columns" }),
     ).toBeVisible();
+
+    // Both sides answer a pointer. The Was side is isolated evidence, so its
+    // own controls do nothing - but the address the component gave it is
+    // reachable, which is the whole point of addressing it.
+    const baselineSide = lens.locator('[data-component-diff-side="baseline"]');
+    // Reaching the address must not revive the plan's own controls: every
+    // control the table draws on the Was side stays frozen, so none of them
+    // advertises an action that silently does nothing.
+    const liveBaselineControls = await baselineSide.evaluate((node) =>
+      Array.from(node.querySelectorAll<HTMLElement>("button, input, a[href]"))
+        .filter(
+          (control) => control.closest("[data-review-anchor-host]") === null,
+        )
+        .filter(
+          (control) =>
+            control.closest("[inert]") === null &&
+            !control.hasAttribute("disabled"),
+        )
+        .map(
+          (control) => control.getAttribute("aria-label") ?? control.tagName,
+        ),
+    );
+    expect(liveBaselineControls).toEqual([]);
+    await baselineSide.hover();
+    const wasComment = baselineSide.getByRole("button", {
+      name: "Comment on this table (Was)",
+      exact: true,
+    });
+    await expect(wasComment).toBeVisible();
+    await wasComment.click();
+    const composer = page.getByRole("dialog", { name: /Comment on/u });
+    await expect(composer).toHaveAttribute(
+      "data-review-compose-side",
+      "baseline",
+    );
+    const baselineAddress = await baselineSide.evaluate((node) => {
+      const owner = node.closest<HTMLElement>("[data-baseline-block-id]");
+      return `block:${owner?.dataset.baselineSnapshot}:${owner?.dataset.baselineBlockId}`;
+    });
+    await expect(composer).toHaveAttribute(
+      "data-review-compose-target",
+      baselineAddress,
+    );
+    await expect(
+      composer.locator("[data-review-compose-side-badge]"),
+    ).toHaveText("Was");
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should comment on either side of a CodeSnippet change", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-snippet-diff-"));
+  const planPath = join(directory, "snippet.mdx");
+  const after = `# Snippet diff
+
+## Delivery
+
+<CodeSnippet file="src/review/service.ts" showLineNumbers>
+
+\`\`\`ts
+export const appendReviewEvent = async (
+  command: AppendReviewEvent,
+): Promise<ReviewThread> => repository.appendOne(command);
+\`\`\`
+
+</CodeSnippet>
+`;
+  const before = after.replace(
+    "repository.appendOne(command)",
+    "repository.append(command)",
+  );
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: /^Review change/u }).click();
+    const lens = page.locator("[data-component-diff]");
+    await expect(lens).toHaveCount(1);
+    const baselineSide = lens.locator('[data-component-diff-side="baseline"]');
+    await expect(baselineSide).toContainText("repository.append(command)");
+
+    // The Was side is isolated evidence, and it is still a place a reader can
+    // point at: without that, the address the component gave it would be an
+    // address no pointer or screen reader could reach.
+    await baselineSide.hover();
+    const wasComment = baselineSide.getByRole("button", {
+      name: "Comment on this code snippet (Was)",
+      exact: true,
+    });
+    await expect(wasComment).toBeVisible();
+    await wasComment.click();
+    const composer = page.getByRole("dialog", { name: /Comment on/u });
+    await expect(composer).toHaveAttribute(
+      "data-review-compose-side",
+      "baseline",
+    );
+    const baselineAddress = await baselineSide.evaluate((node) => {
+      const owner = node.closest<HTMLElement>("[data-baseline-block-id]");
+      return `block:${owner?.dataset.baselineSnapshot}:${owner?.dataset.baselineBlockId}`;
+    });
+    await expect(composer).toHaveAttribute(
+      "data-review-compose-target",
+      baselineAddress,
+    );
+    await expect(
+      composer.locator("[data-review-compose-side-badge]"),
+    ).toHaveText("Was");
+    await composer.getByRole("button", { name: "Cancel" }).click();
+
+    // And the Now side keeps its own, distinctly named affordance.
+    const proposedSide = lens.locator('[data-component-diff-side="proposed"]');
+    await proposedSide.hover();
+    const nowComment = proposedSide.getByRole("button", {
+      name: "Comment on this code snippet (Now)",
+      exact: true,
+    });
+    await expect(nowComment).toBeVisible();
+    await nowComment.click();
+    await expect(
+      page.getByRole("dialog", { name: /Comment on/u }),
+    ).toHaveAttribute("data-review-compose-side", "proposed");
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
