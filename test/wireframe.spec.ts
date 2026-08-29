@@ -747,9 +747,12 @@ test("should draw marks, a two-ended toolbar, and a surface that covers the page
         ...root.querySelectorAll("[data-wireframe-glyph-with-text] > svg"),
       ];
       return marks.map((mark) => {
-        const words = mark.closest(
-          ".wireframe-button, .wireframe-icon, .wireframe-reference",
-        ) as HTMLElement;
+        const words = mark.closest<HTMLElement>(
+          ".wireframe-button, .wireframe-icon, .wireframe-reference, .wireframe-list-disclosure",
+        );
+        if (words === null) {
+          throw new Error("inline wireframe glyph has no text-bearing owner");
+        }
         const markBox = mark.getBoundingClientRect();
         const wordsBox = words.getBoundingClientRect();
         // An artboard lays out at its true device width and is then scaled as
