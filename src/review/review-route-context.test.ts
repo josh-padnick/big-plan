@@ -509,7 +509,7 @@ describe("createPlanRenderer snapshot target maps", () => {
     });
   });
 
-  it("loads a retained snapshot from disk after the diff cache misses", async () => {
+  it("refuses a retained snapshot when the diff cache misses", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
     created.push(directory);
     const planPath = join(directory, "plan.mdx");
@@ -536,26 +536,23 @@ describe("createPlanRenderer snapshot target maps", () => {
     });
 
     await renderer.renderPlan();
-    const [comment] = await renderer.validateUpdates([
-      {
-        id: "bbccddee",
-        body: "A retained note.",
-        createdAt: "2026-08-29T00:00:00.000Z",
-        premiseSnapshot: snapshot,
-        target: {
-          type: "block",
-          blockId: block.id,
-          snapshot,
+    await expect(
+      renderer.validateUpdates([
+        {
+          id: "bbccddee",
+          body: "A retained note.",
+          createdAt: "2026-08-29T00:00:00.000Z",
+          premiseSnapshot: snapshot,
+          target: {
+            type: "block",
+            blockId: block.id,
+            snapshot,
+          },
         },
-      },
-    ]);
-
-    expect(comment?.target).toMatchObject({
-      type: "block",
-      blockId: block.id,
-      snapshot,
-      label: block.label,
-    });
+      ]),
+    ).rejects.toThrow(
+      "A comment points at a snapshot this review no longer retains",
+    );
   });
 
   it("refuses a qualified target when its snapshot has been pruned", async () => {
