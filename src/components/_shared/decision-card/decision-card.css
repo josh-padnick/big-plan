@@ -944,9 +944,11 @@
     display: flex;
     background: var(--decision-pro-bg);
   }
-  /* Only a review with an approval in force may say so, and only a reader who
-     could act on it: a read-only reader cannot revoke, so the sentence would
-     name a door they cannot open. */
+  /* This sentence is a review-session overlay, island-gated like the other
+     approval affordances, so it is absent with scripts disabled. Only a review
+     with an approval in force may say so, and only a reader who could act on
+     it: a read-only reader cannot revoke, so the sentence would name a door
+     they cannot open. */
   article .decision-decided-approval {
     display: none;
   }

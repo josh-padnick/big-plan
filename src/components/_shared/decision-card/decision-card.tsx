@@ -305,9 +305,10 @@ const ApprovedNotice = () => (
 // options, and what they need at the end is the outcome and why it cannot be
 // changed here, in the place the confirm step used to sit.
 //
-// It is server-rendered visible rather than revealed by the island, because
-// the record lives in the plan source rather than in this reader's session: it
-// is true on first paint, with scripts disabled, and in a standalone document.
+// Its plan-source record is server-rendered visible on first paint, with
+// scripts disabled, and in a standalone document. The conditional approval
+// sentence is a review-session overlay, island-gated like the other approval
+// affordances, so it is absent with scripts disabled.
 const DecidedRecord = () => (
   <div
     className="decision-decided gap-3 px-6 py-4"
