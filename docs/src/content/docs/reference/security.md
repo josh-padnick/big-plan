@@ -45,7 +45,10 @@ Two properties of that model are worth knowing:
 - **Releases are published with npm provenance, from CI only.** Publishing happens exclusively in the tagged-release GitHub Actions workflow, using npm Trusted Publishing over OIDC rather than a long-lived token. That workflow refuses to publish unless the tag equals the package version and points at a commit on `main`, and it runs the full lint, build, generated-file-drift, unit, and end-to-end suites first. Every release is published to the `next` dist-tag, then both `big-plan@next` and the exact published version are smoke-tested from a clean environment. The provenance attestation lets you verify a published tarball was built by that workflow from this repository:
 
   ```sh
-  npm audit signatures
+  version="$(npm view big-plan@latest version)"
+  audit_dir="$(mktemp -d)"
+  npm --prefix "$audit_dir" install "big-plan@$version"
+  npm --prefix "$audit_dir" audit signatures
   ```
 
 Big Plan makes no network requests of its own. It reads and writes plan files and its own state directory on your machine, and the local review runtime listens only on loopback.
@@ -62,7 +65,7 @@ Because arbitrary HTML is arbitrary script, `big-plan review` always renders the
 
 `big-plan review` starts a local server. Loopback is deliberately **not** treated as an authentication boundary — any page your browser happens to be showing can reach `127.0.0.1`, and any process running as you can too — so every request is authorised on its own merits:
 
-- The runtime binds explicitly to `127.0.0.1` on an ephemeral port. Never `0.0.0.0`, never a hostname. The saved-link service on the fixed port `8790` binds the same way.
+- The runtime binds explicitly to `127.0.0.1` on an ephemeral port. Never `0.0.0.0`, never a hostname. The saved-link service binds the same way on port `8790` by default; `BIG_PLAN_PORT` changes that port when the default collides with another local service.
 - A per-session token is minted at start and injected into the one document the runtime serves. Every API request must carry it, in a header, so it stays out of browser history, referrers, and server logs.
 - Requests whose `Host` header is not the runtime's or the local service's address are refused. That allow-list, not the socket address, is what defeats DNS rebinding.
 - No CORS allowance is ever sent, and a foreign `Origin` or a `Sec-Fetch-Site` other than `same-origin` is refused outright. CORS hides a response; it does not stop a write, so it is not the control here.
