@@ -3,9 +3,10 @@
 
 import { toHtml } from "hast-util-to-html";
 import type { Element, Root, RootContent } from "hast";
-import type {
-  ComponentCommentableAnchor,
-  ComponentDiffInput,
+import {
+  componentCommentableAnchorAllows,
+  type ComponentCommentableAnchor,
+  type ComponentDiffInput,
 } from "../components/_model/component-diff/contract.js";
 import {
   COMPONENT_REGISTRY,
@@ -216,21 +217,6 @@ const inheritProposedRootIdentity = ({
   }
 };
 
-const anchorAllows = ({
-  anchors,
-  kind,
-  side,
-}: {
-  readonly anchors: ReadonlyArray<ComponentCommentableAnchor>;
-  readonly kind: string;
-  readonly side: "baseline" | "proposed";
-}): boolean =>
-  anchors.some(
-    (anchor) =>
-      anchor.kind === kind &&
-      (anchor.sides === "both" || anchor.sides === side),
-  );
-
 const addressForRenderedNode = ({
   node,
   sideRoot,
@@ -264,13 +250,14 @@ const addressForRenderedNode = ({
   const kind = node.properties["data-commentable-kind"];
   const label = node.properties["data-commentable-label"];
   if (typeof kind !== "string" || typeof label !== "string") return undefined;
-  if (!anchorAllows({ anchors, kind, side })) return undefined;
-  const normalizedLabel = (
-    kind === "wireframe-screen" &&
-    typeof node.properties["data-wireframe-screen"] === "string"
-      ? node.properties["data-wireframe-screen"]
-      : label
-  ).replaceAll("`", "");
+  const anchor = anchors.find((candidate) => candidate.kind === kind);
+  if (
+    anchor === undefined ||
+    !componentCommentableAnchorAllows({ anchor, side })
+  ) {
+    return undefined;
+  }
+  const normalizedLabel = label.replaceAll("`", "");
   const sourceRowIndex = node.properties["data-table-row"];
   const source = sourceElements.find(
     (element) =>
