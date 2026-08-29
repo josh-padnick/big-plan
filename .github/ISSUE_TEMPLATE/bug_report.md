@@ -22,4 +22,4 @@ assignees: ""
 
 ## Environment and version
 
-<!-- Include the Big Plan version, operating system, runtime, and any other relevant details. -->
+<!-- Include the Big Plan version, operating system, runtime, and any other relevant details. Remove secrets and other sensitive information. -->
