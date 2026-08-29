@@ -36,20 +36,48 @@ const WORK_PARAGRAPH_OPENER = "Work in the plan's repository.";
 const waitForReviewUrl = (child) =>
   new Promise((settle, reject) => {
     let buffered = "";
+    const cleanup = () => {
+      clearTimeout(timer);
+      child.stdout.off("data", onChunk);
+      child.stderr.off("data", onChunk);
+      child.off("exit", onExit);
+    };
     const onChunk = (chunk) => {
       buffered += String(chunk);
       const match = buffered.match(/http:\/\/[^\s"']+/);
-      if (match) settle(match[0]);
+      if (match) {
+        cleanup();
+        settle(match[0]);
+      }
     };
+    const onExit = (code) => {
+      cleanup();
+      reject(new Error(`review exited early (${code}): ${buffered}`));
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`review never printed a URL: ${buffered}`));
+    }, 30_000);
     child.stdout.on("data", onChunk);
     child.stderr.on("data", onChunk);
-    child.on("exit", (code) =>
-      reject(new Error(`review exited early (${code}): ${buffered}`)),
-    );
-    setTimeout(
-      () => reject(new Error(`review never printed a URL: ${buffered}`)),
-      30_000,
-    );
+    child.on("exit", onExit);
+  });
+
+const waitForExit = (child) =>
+  new Promise((settle) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      settle();
+      return;
+    }
+    const onExit = () => {
+      clearTimeout(timer);
+      settle();
+    };
+    const timer = setTimeout(() => {
+      child.off("exit", onExit);
+      settle();
+    }, 10_000);
+    child.once("exit", onExit);
   });
 
 /** Runs one live review session and returns the prompt `agent` hands over. */
@@ -86,10 +114,7 @@ const captureCurrentPrompt = async () => {
     review.kill("SIGTERM");
     // The review server writes its store as it shuts down, so removing the
     // workspace before it exits races that write and fails with ENOTEMPTY.
-    await new Promise((settle) => {
-      review.on("exit", settle);
-      setTimeout(settle, 10_000);
-    });
+    await waitForExit(review);
     await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
   }
 };
