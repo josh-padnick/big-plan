@@ -551,7 +551,7 @@ export const AgentRoster = ({
   agents,
   nowMs,
   isReadOnly,
-  rolesApply = true,
+  rolesApply = !isReadOnly,
   carriedByActivity,
   onAnswer,
 }: AgentRosterProps) => {

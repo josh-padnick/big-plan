@@ -36,7 +36,7 @@ describe("review comment submit availability", () => {
       reason: "review-runtime",
       label: "Review session unreachable",
       status:
-        "The review session is unreachable. Your comment is saved. It can accept changes again after reconnecting.",
+        "Review session unreachable. Your comment is saved. Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
     });
   });
 

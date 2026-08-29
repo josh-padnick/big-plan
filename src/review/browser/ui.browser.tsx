@@ -638,7 +638,20 @@ of the control is the caller's.
 export const useCopyToClipboard = (value: string) => {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
+  const resetTimeout = useRef<number | undefined>(undefined);
+  useEffect(
+    () => () => {
+      if (resetTimeout.current !== undefined) {
+        window.clearTimeout(resetTimeout.current);
+      }
+    },
+    [],
+  );
   const copy = async () => {
+    if (resetTimeout.current !== undefined) {
+      window.clearTimeout(resetTimeout.current);
+      resetTimeout.current = undefined;
+    }
     setCopied(false);
     setFailed(false);
     try {
@@ -649,7 +662,10 @@ export const useCopyToClipboard = (value: string) => {
       setFailed(true);
       return;
     }
-    window.setTimeout(() => setCopied(false), 1_500);
+    resetTimeout.current = window.setTimeout(() => {
+      resetTimeout.current = undefined;
+      setCopied(false);
+    }, 1_500);
   };
   return { copied, failed, copy };
 };

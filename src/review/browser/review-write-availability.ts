@@ -6,6 +6,10 @@
 // after the reviewer has already been told the action was under way.
 
 import {
+  REVIEW_SESSION_UNREACHABLE_HEADLINE,
+  REVIEW_SESSION_UNREACHABLE_SUPPORTING,
+} from "../shared/agent-status.js";
+import {
   reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
   type ReviewPollHealth,
@@ -52,9 +56,9 @@ const BLOCKS = {
      refuses while the rail explains why - and "offline" against "unreachable"
      read as two separate faults (BIG-273). */
   "runtime-offline": {
-    cause: "The review session is unreachable.",
-    remedy: "It can accept changes again after reconnecting.",
-    label: "Review session unreachable",
+    cause: `${REVIEW_SESSION_UNREACHABLE_HEADLINE}.`,
+    remedy: REVIEW_SESSION_UNREACHABLE_SUPPORTING,
+    label: REVIEW_SESSION_UNREACHABLE_HEADLINE,
   },
   "writes-stalled": {
     cause: "The review session has stopped accepting changes.",

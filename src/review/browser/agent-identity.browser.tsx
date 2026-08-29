@@ -174,7 +174,7 @@ export const AgentIdentityLine = ({
   if (segments.length === 0) return null;
   return (
     <span
-      className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
+      className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-edge bg-surface px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
       {...(model === undefined ? {} : { "data-review-agent-model": model })}
       {...(effort === undefined ? {} : { "data-review-agent-effort": effort })}
       {...(client === undefined ? {} : { "data-review-agent-client": client })}
