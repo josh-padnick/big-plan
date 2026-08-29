@@ -109,6 +109,19 @@ export const reviewWriteBlock = (
   availability.state === "unavailable" ? availability : undefined;
 
 /**
+ * One block's standing reading, for a control that explains itself before it
+ * is pressed rather than after.
+ *
+ * A control that cannot work is better shown inert with its reason than live
+ * with a refusal waiting behind it, and the reason has to be the same sentence
+ * the refusal would have given - which means reading it from here rather than
+ * writing it out again at the control (BIG-273).
+ */
+export const reviewWriteBlockReading = (
+  block: ReviewWriteBlock,
+): ReviewWriteBlocked => blocked(block);
+
+/**
  * The message a blocked path shows instead of submitting. The path supplies
  * what became of the reviewer's input, because only it knows; the block
  * supplies why and what clears it, so no path has to guess either.

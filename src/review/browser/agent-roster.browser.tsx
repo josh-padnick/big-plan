@@ -28,11 +28,32 @@ import {
   AgentIdentityLine,
   AgentSessionFact,
 } from "./agent-identity.browser.js";
+import {
+  reviewWriteBlockReading,
+  reviewWriteBlockedStatus,
+  reviewWritePathOutcome,
+} from "./review-write-availability.js";
 import { Icon } from "./icon.browser.js";
 import { AlertDialog, Badge, Button, Tooltip } from "./ui.browser.js";
 
 /** What the reviewer can answer about one agent. */
 export type PrimacyAnswer = "primary" | "observer" | "disconnect";
+
+/*
+Why a read-only tab cannot disconnect anybody, in the words the refusal would
+have used.
+
+A read-only tab is a tab a newer runtime replaced, which is the one permanent
+write block there is: the control cannot be made to work by waiting, and
+leaving it live so the reviewer discovers that by pressing it spends a click to
+deliver a sentence that could have been there all along. It is shown inert with
+this sentence instead, and the sentence is read from the block rather than
+written out here so it cannot drift from the refusal it stands in for.
+*/
+const DISCONNECT_UNAVAILABLE_REASON = reviewWriteBlockedStatus({
+  block: reviewWriteBlockReading("session-replaced"),
+  outcome: reviewWritePathOutcome("disconnect-agent"),
+});
 
 export type AgentRosterProps = {
   readonly agents: ReadonlyArray<RosterAgent>;
@@ -409,15 +430,41 @@ const AgentCard = ({
           a borderless one read as a line of text the reviewer could not tell
           was clickable. Its rank comes from the ground it does not have, not
           from the edge it does. */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() =>
-          onAnswer({ writerId: agent.writerId, answer: "disconnect" })
-        }
-      >
-        Disconnect
-      </Button>
+      {canAppoint ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onAnswer({ writerId: agent.writerId, answer: "disconnect" })
+          }
+        >
+          Disconnect
+        </Button>
+      ) : (
+        /*
+        `aria-disabled` rather than `disabled`, which is the whole point of
+        showing the reason here. A disabled button takes no pointer events and
+        no focus, so the tooltip explaining why it is off would be reachable
+        only by a reader using a mouse - and the reader who most needs the
+        sentence is the one who cannot see the greyed-out ground. This stays
+        focusable, is announced as unavailable, and carries no handler, so it
+        is inert in the only sense that matters.
+        */
+        <Tooltip
+          label={DISCONNECT_UNAVAILABLE_REASON}
+          placement="above"
+          asChild
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            aria-disabled="true"
+            className="cursor-not-allowed border-edge bg-surface text-subtle shadow-none hover:brightness-100"
+          >
+            Disconnect
+          </Button>
+        </Tooltip>
+      )}
     </div>
   </article>
 );
