@@ -759,6 +759,9 @@ describe("the stable review proxy", () => {
     expect(Number.isFinite(resolutionMedianMs)).toBe(true);
     expect(Number.isFinite(redirectMedianMs)).toBe(true);
     expect(Number.isFinite(healthMedianMs)).toBe(true);
+    expect(resolutionMedianMs).toBeLessThanOrEqual(
+      STATED_RESOLUTION_MS + overheadMedianToleranceMs,
+    );
     expect(redirectMedianMs - healthMedianMs).toBeLessThanOrEqual(
       STATED_SERVICE_REDIRECT_MS -
         STATED_SERVICE_HEALTH_MS +
