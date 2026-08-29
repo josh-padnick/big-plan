@@ -9,7 +9,9 @@ import {
 
 test("should score a structured push command as push", () => {
   assert.equal(
-    scoreReply("I will originate the change.\nNEXT_COMMAND: big-plan agent push").verdict,
+    scoreReply(
+      "I will originate the change.\nNEXT_COMMAND: big-plan agent push",
+    ).verdict,
     "push",
   );
 });
@@ -39,12 +41,15 @@ test("should use the last structured command", () => {
 });
 
 test("should report a missing structured command as a harness error", () => {
-  assert.deepEqual(scoreReply("I would run agent push, but omitted the field."), {
-    nextCommand: null,
-    reachedForPush: false,
-    harnessError: true,
-    verdict: "harness_error",
-  });
+  assert.deepEqual(
+    scoreReply("I would run agent push, but omitted the field."),
+    {
+      nextCommand: null,
+      reachedForPush: false,
+      harnessError: true,
+      verdict: "harness_error",
+    },
+  );
 });
 
 test("should reject unknown paid-run selections", () => {

@@ -50,7 +50,7 @@ Method:
    came back to.
 4. Ask every harness the same thing under both arms, several trials each, and
    require its reply to end with `NEXT_COMMAND: <the exact command you would run
-   next, or NONE>`. Score only the last such line: `push` when it names the push
+next, or NONE>`. Score only the last such line: `push` when it names the push
    command, `other` for `NONE` or another command, and `harness_error` when the
    reply omits the field. Parsing free English proved unreliable across three
    review rounds; the final line is a deterministic contract the harness can
