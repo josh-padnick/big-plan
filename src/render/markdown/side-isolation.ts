@@ -28,6 +28,9 @@ export const DIFF_SIDE_ATTRIBUTE = "data-diff-side";
 export const DIFF_BASELINE_SIDE = "baseline";
 export const BASELINE_BLOCK_ID_ATTRIBUTE = "data-baseline-block-id";
 export const BASELINE_SNAPSHOT_ATTRIBUTE = "data-baseline-snapshot";
+export const BASELINE_BLOCK_KIND_ATTRIBUTE = "data-baseline-block-kind";
+export const BASELINE_BLOCK_LABEL_ATTRIBUTE = "data-baseline-block-label";
+export const BASELINE_BLOCK_SECTION_ATTRIBUTE = "data-baseline-block-section";
 
 const COPY_SOURCE_ATTRIBUTE = "data-copy-source";
 const COPY_CODE_ATTRIBUTE = "data-copy-code";
@@ -48,9 +51,9 @@ const REVIEW_IDENTITY_ATTRIBUTES = [
   COMPONENT_INSTANCE_ATTRIBUTE,
   BASELINE_BLOCK_ID_ATTRIBUTE,
   BASELINE_SNAPSHOT_ATTRIBUTE,
-  "data-baseline-block-kind",
-  "data-baseline-block-label",
-  "data-baseline-block-section",
+  BASELINE_BLOCK_KIND_ATTRIBUTE,
+  BASELINE_BLOCK_LABEL_ATTRIBUTE,
+  BASELINE_BLOCK_SECTION_ATTRIBUTE,
 ] as const;
 
 const ROOT_AFFORDANCE_ATTRIBUTES = [
@@ -386,14 +389,14 @@ const stampBaselineIdentity = ({
     visit: (node) => {
       const address = addressFor(node);
       if (address === undefined) return;
-      node.properties["data-baseline-block-id"] = address.blockId;
-      node.properties["data-baseline-snapshot"] = snapshot;
-      node.properties["data-baseline-block-kind"] = address.kind;
-      node.properties["data-baseline-block-label"] = address.label;
+      node.properties[BASELINE_BLOCK_ID_ATTRIBUTE] = address.blockId;
+      node.properties[BASELINE_SNAPSHOT_ATTRIBUTE] = snapshot;
+      node.properties[BASELINE_BLOCK_KIND_ATTRIBUTE] = address.kind;
+      node.properties[BASELINE_BLOCK_LABEL_ATTRIBUTE] = address.label;
       if (address.section === undefined) {
-        delete node.properties["data-baseline-block-section"];
+        delete node.properties[BASELINE_BLOCK_SECTION_ATTRIBUTE];
       } else {
-        node.properties["data-baseline-block-section"] = address.section;
+        node.properties[BASELINE_BLOCK_SECTION_ATTRIBUTE] = address.section;
       }
     },
   });

@@ -265,13 +265,15 @@ describe("side isolation", () => {
           ? {
               blockId: "section/contract/http-endpoint-1",
               kind: "http-endpoint",
-              label: "Endpoint",
+              label: "Queue",
+              section: "contract",
             }
           : node === subtarget
             ? {
                 blockId: "section/contract/http-endpoint-field-1",
-                kind: "field",
-                label: "Field",
+                kind: "http-endpoint-field",
+                label: "Description",
+                section: "contract",
               }
             : undefined,
     });

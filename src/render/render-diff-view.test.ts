@@ -481,7 +481,6 @@ describe("renderIsolatedBlockView", () => {
       document,
       blockId: picture?.id,
       key: "was-0123456789abcdef",
-      baselineSnapshot: "0123456789abcdef",
     });
     const nodes = elements(fromHtml(view ?? "", { fragment: true }));
     expect(view).toContain("./assets/before.png");
@@ -493,10 +492,8 @@ describe("renderIsolatedBlockView", () => {
     ).toEqual([]);
     expect(nodes.at(0)?.properties.inert).toBe(true);
     expect(nodes.at(0)?.properties.dataDiffSide).toBe("baseline");
-    expect(nodes.at(0)?.properties.dataBaselineBlockId).toBe(picture?.id);
-    expect(nodes.at(0)?.properties.dataBaselineSnapshot).toBe(
-      "0123456789abcdef",
-    );
+    expect(nodes.at(0)?.properties.dataBaselineBlockId).toBeUndefined();
+    expect(nodes.at(0)?.properties.dataBaselineSnapshot).toBeUndefined();
   });
 
   it("should answer with nothing when the side has no such block", () => {

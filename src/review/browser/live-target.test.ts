@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  baselineMissReason,
   candidateMatchesLivePicture,
   liveBaselineBlock,
   lensMissReason,
@@ -58,6 +59,35 @@ describe("pickLiveCandidate", () => {
     expect(
       pickLiveCandidate([candidate("first"), candidate("second")]),
     ).toEqual({ found: "first" });
+  });
+});
+
+describe("baselineMissReason", () => {
+  it("should report an unknown id in a retained snapshot", () => {
+    expect(
+      baselineMissReason({
+        result: { missing: "unknown-id" },
+        snapshotPresent: true,
+      }),
+    ).toEqual({ missing: "unknown-id" });
+  });
+
+  it("should report a missing snapshot when no live element carries it", () => {
+    expect(
+      baselineMissReason({
+        result: { missing: "unknown-id" },
+        snapshotPresent: false,
+      }),
+    ).toEqual({ missing: "snapshot-not-retained" });
+  });
+
+  it("should preserve clone-only misses in an available snapshot", () => {
+    expect(
+      baselineMissReason({
+        result: { missing: "clone-only" },
+        snapshotPresent: false,
+      }),
+    ).toEqual({ missing: "clone-only" });
   });
 });
 
@@ -141,6 +171,8 @@ describe("liveBlock and liveBaselineBlock", () => {
     } as unknown as HTMLElement;
     const selectors: string[] = [];
     const article = {
+      matches: () => false,
+      querySelector: () => null,
       querySelectorAll: (selector: string) => {
         selectors.push(selector);
         return [element];
@@ -163,6 +195,8 @@ describe("liveBlock and liveBaselineBlock", () => {
 
   it("reports a missing snapshot without falling back to a proposed match", () => {
     const article = {
+      matches: () => false,
+      querySelector: () => null,
       querySelectorAll: () => [],
     };
     globals.CSS = { escape: (value) => value };
