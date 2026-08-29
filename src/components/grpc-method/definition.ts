@@ -3,7 +3,9 @@
 
 import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileGrpcMethodComponent } from "./compile.js";
+import { compileGrpcMethodDiff } from "./compile-diff.js";
 import { GrpcMethod } from "./view.js";
+import { GrpcMethodDiffView } from "./view-diff.js";
 import { defineComponent } from "../_registration/define-component.js";
 import { grpcMethodMarkdown } from "./markdown.js";
 
@@ -27,6 +29,8 @@ export const GRPC_METHOD_COMPONENT_DEFINITION = defineComponent({
   compile: compileGrpcMethodComponent,
   view: GrpcMethod,
   markdown: grpcMethodMarkdown,
+  diff: compileGrpcMethodDiff,
+  diffView: GrpcMethodDiffView,
   scopedChildren: {
     Field: scopedChild("Field"),
     Error: scopedChild("Error"),

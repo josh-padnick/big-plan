@@ -610,15 +610,12 @@ describe("block identity boundaries", () => {
     expect(schema?.text).toContain("code");
   });
 
-  it("should record a callout's authored type and a list's ordering as presentation facts", () => {
+  it("should record only a list's ordering as its presentation fact", () => {
     const { blocks } = compile(
       '## Risks\n\n<Callout type="danger" title="Rollback risk">\n\nData loss until verified.\n\n</Callout>\n\n1. Freeze writes.\n2. Backfill twice.\n\n- Alpha\n- Beta\n\nPlain paragraph.\n',
     );
     const callout = blocks.find((block) => block.kind === "callout");
-    expect(callout?.presentation).toEqual({
-      aspect: "callout",
-      calloutType: "danger",
-    });
+    expect(callout?.presentation).toBeUndefined();
     const lists = blocks.filter((block) => block.kind === "list");
     expect(lists.map((block) => block.presentation)).toEqual([
       { aspect: "list", isOrdered: true },
@@ -643,19 +640,12 @@ describe("block identity boundaries", () => {
     });
   });
 
-  // Presentation used to be sniffed back out of the markup the component had
-  // just produced, which is why teaching the walk a new component meant
-  // editing this file. It reads the model now, so this case asserts the fact
-  // arrives from the model rather than from a rendered attribute.
-  it("should read a wireframe's presented screen from its compiled model", () => {
+  it("should leave a wireframe's presentation to its component diff", () => {
     const { blocks } = compile(
       '## Screens\n\n<Wireframe id="checkout" initialScreen="review">\n\n<Screen id="cart" name="Cart" device="desktop">\n\n<Text text="Cart" />\n\n</Screen>\n\n<Screen id="review" name="Review" device="desktop">\n\n<Text text="Review" />\n\n</Screen>\n\n</Wireframe>\n',
     );
     const wireframe = blocks.find((block) => block.kind === "wireframe");
-    expect(wireframe?.presentation).toEqual({
-      aspect: "wireframe",
-      currentScreenId: "review",
-    });
+    expect(wireframe?.presentation).toBeUndefined();
   });
 
   it("should keep block boundaries apart when component text is flattened", () => {

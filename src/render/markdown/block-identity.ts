@@ -23,10 +23,6 @@
 // skips the subtree without touching any counter the proposed side reads.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
-import {
-  CALLOUT_TYPES,
-  type CalloutType,
-} from "../../components/callout/compile.js";
 import { componentInstanceKeyOf } from "./component-pipeline/component-instance.js";
 import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js";
@@ -34,19 +30,17 @@ import { isBaselineDiffSide } from "./side-isolation.js";
 
 // The meaning-bearing presentation facts a snapshot must record so a diff can
 // replay a block without consulting the live document. Only a fact that
-// changes what the plan asserts belongs here: a callout's type, because danger
-// replayed as note misstates risk, a list's ordering, because numbers replayed
-// as bullets misstate whether sequence matters, and a picture's source and
-// alternative words, because a picture carries no extracted text at all and a
-// swapped one would otherwise read as no change. Styling and layout stay out -
+// changes what the plan asserts belongs here: a list's ordering, because
+// numbers replayed as bullets misstate whether sequence matters, and a
+// picture's source and alternative words, because a picture carries no
+// extracted text at all and a swapped one would otherwise read as no change.
+// Styling and layout stay out -
 // they are reproducible presentation, and carrying them would grow this into a
 // second rendering contract.
 // Mirrored by hand across the reviewShared tier boundary; reviewShared may
 // import nothing - keep this in sync with src/review/shared/review-wire.ts.
 export type BlockPresentation =
-  | { readonly aspect: "callout"; readonly calloutType: CalloutType }
   | { readonly aspect: "list"; readonly isOrdered: boolean }
-  | { readonly aspect: "wireframe"; readonly currentScreenId: string }
   | { readonly aspect: "image"; readonly source: string; readonly alt: string };
 
 /**
@@ -506,53 +500,18 @@ const stampCodeLines = (node: Element): void => {
   });
 };
 
-// Reads one string field off a component model without trusting its shape.
-// The model is `unknown` here on purpose: this walk joins to whatever the
-// component compiled, and a field it cannot read must replay neutrally rather
-// than crash the whole document.
-const modelString = ({
-  model,
-  field,
-}: {
-  readonly model: unknown;
-  readonly field: string;
-}): string | undefined => {
-  if (typeof model !== "object" || model === null) {
-    return undefined;
-  }
-  const value: unknown = (model as Record<string, unknown>)[field];
-  return typeof value === "string" && value !== "" ? value : undefined;
-};
-
 // Reads the meaning-bearing presentation facts of a stamped block. A component
-// answers from the model it compiled, because that model is what the component
-// asserted; only Markdown's own blocks - a list's ordering, a picture's source
-// - are read off the element, because Markdown has no model behind it.
-// Unknown facts replay neutrally instead of being guessed.
+// no longer needs an engine-owned aspect: only Markdown's own blocks - a
+// list's ordering and a picture's source - publish presentation here.
 const presentationOf = ({
   node,
   kind,
-  model,
 }: {
   readonly node: Element;
   readonly kind: string;
-  readonly model?: unknown;
 }): BlockPresentation | undefined => {
-  if (kind === "callout") {
-    const type = modelString({ model, field: "type" });
-    const calloutType = CALLOUT_TYPES.find((candidate) => candidate === type);
-    return calloutType === undefined
-      ? undefined
-      : { aspect: "callout", calloutType };
-  }
   if (kind === "list" && (node.tagName === "ol" || node.tagName === "ul")) {
     return { aspect: "list", isOrdered: node.tagName === "ol" };
-  }
-  if (kind === "wireframe") {
-    const currentScreenId = modelString({ model, field: "initialScreenId" });
-    if (currentScreenId !== undefined) {
-      return { aspect: "wireframe", currentScreenId };
-    }
   }
   if (kind === "image") {
     const source = node.properties.src;
@@ -618,7 +577,7 @@ const stampBlock = ({
   node.properties["data-block-kind"] = kind;
   node.properties["data-block-label"] = label;
   node.properties["data-block-section"] = section;
-  const presentation = presentationOf({ node, kind, model: instance?.model });
+  const presentation = presentationOf({ node, kind });
   blocks.push({
     id,
     kind,

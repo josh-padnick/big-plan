@@ -3,7 +3,9 @@
 
 import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileGraphqlOperationComponent } from "./compile.js";
+import { compileGraphqlOperationDiff } from "./compile-diff.js";
 import { GraphqlOperation } from "./view.js";
+import { GraphqlOperationDiffView } from "./view-diff.js";
 import { defineComponent } from "../_registration/define-component.js";
 import { graphqlOperationMarkdown } from "./markdown.js";
 
@@ -28,6 +30,8 @@ export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = defineComponent({
   compile: compileGraphqlOperationComponent,
   view: GraphqlOperation,
   markdown: graphqlOperationMarkdown,
+  diff: compileGraphqlOperationDiff,
+  diffView: GraphqlOperationDiffView,
   scopedChildren: {
     Argument: scopedChild("Argument"),
     Field: scopedChild("Field"),

@@ -3,7 +3,9 @@
 
 import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileHttpEndpointComponent } from "./compile.js";
+import { compileHttpEndpointDiff } from "./compile-diff.js";
 import { HttpEndpoint } from "./view.js";
+import { HttpEndpointDiffView } from "./view-diff.js";
 import { defineComponent } from "../_registration/define-component.js";
 import { httpEndpointMarkdown } from "./markdown.js";
 
@@ -27,6 +29,8 @@ export const HTTP_ENDPOINT_COMPONENT_DEFINITION = defineComponent({
   compile: compileHttpEndpointComponent,
   view: HttpEndpoint,
   markdown: httpEndpointMarkdown,
+  diff: compileHttpEndpointDiff,
+  diffView: HttpEndpointDiffView,
   scopedChildren: {
     Param: scopedChild("Param"),
     Request: scopedChild("Request"),

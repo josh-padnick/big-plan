@@ -5970,7 +5970,7 @@ test("should keep component replacements inside their slide and preserve Callout
       10,
     );
     for (let index = 1; index < total; index += 1) {
-      if ((await lens.textContent())?.includes("Review note")) break;
+      if ((await lens.locator(".callout").count()) > 0) break;
       await page.getByRole("button", { name: "Next change" }).click();
     }
     await expect(lens).toContainText("Review note");
@@ -5979,7 +5979,9 @@ test("should keep component replacements inside their slide and preserve Callout
         (element) => element.closest("[data-slide]") !== null,
       ),
     ).toBe(true);
-    const callout = lens.locator("[data-review-diff-callout]");
+    const callout = lens.locator(
+      '[data-component-diff-side="proposed"] .callout',
+    );
     await expect(callout).toHaveCount(1);
     await expect(callout.locator(".callout-title")).toHaveText("Review note");
     await expect(callout.locator(".callout-body")).toHaveText(
@@ -6117,11 +6119,11 @@ The runbook stays inline for the first rollout.
     };
 
     await test.step("the changed danger callout is danger on both sides", async () => {
-      await stepTo("Rollback risk");
-      const callouts = lens.locator("[data-review-diff-callout]");
+      await stepTo("Body");
+      const callouts = lens.locator("[data-callout]");
       await expect(callouts).toHaveCount(2);
-      // The Was side must replay the recorded danger kind even though its
-      // block no longer exists in the live document; a "note" misstates risk.
+      // The component's own diff must replay the recorded danger kind from
+      // both compiled models; a neutral fallback would misstate the risk.
       await expect(callouts.nth(0)).toHaveAttribute("data-callout", "danger");
       await expect(callouts.nth(1)).toHaveAttribute("data-callout", "danger");
     });
@@ -6693,15 +6695,20 @@ test("should diff an HTTP endpoint at field level inside one rendering", async (
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       "1 of 1",
     );
-    const field = lens.locator("[data-review-diff-field]");
-    await expect(field).toHaveCount(2);
-    await expect(field.first()).toContainText("Description");
+    const sides = lens.locator("[data-component-diff-side]");
+    await expect(sides).toHaveCount(2);
+    const field = lens.locator('[data-commentable-label="Description"]');
+    await expect(sides.first()).toContainText("Description");
     await expect(field.first()).toContainText(
       "Queues a refresh job per cache key and returns immediately.",
     );
-    await expect(field.last()).toContainText("Description");
+    await expect(sides.last()).toContainText("Description");
     await expect(field.last()).toContainText(
       "Queues a deduplicated refresh job per cache key and returns immediately; the worker pool performs the refreshes asynchronously.",
+    );
+    await expect(field.last()).toHaveAttribute(
+      "data-block-id",
+      /http-endpoint-field/u,
     );
     await expect(lens.locator("[data-review-component-diff]")).toHaveCount(0);
     // The untouched fields stay out of the lens instead of returning as the
@@ -6711,6 +6718,54 @@ test("should diff an HTTP endpoint at field level inside one rendering", async (
     await page.screenshot({
       path: testInfo.outputPath("http-endpoint-field-diff.png"),
     });
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should present an added HTTP endpoint as one whole card", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-added-endpoint-"));
+  const planPath = join(directory, "api.mdx");
+  const before = `# API\n\n## Endpoints\n`;
+  const after = `${before}\n<HttpEndpoint method="GET" path="/jobs">\n\nLists jobs.\n\n<Param name="status" in="query" type="string">\n\nFilters jobs.\n\n</Param>\n\n<Response status="200" label="Jobs">\n\nReturns matching jobs.\n\n</Response>\n\n</HttpEndpoint>\n`;
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const componentDiff = page.locator(
+      "[data-review-diff-lens][data-component-diff]",
+    );
+    await expect(componentDiff).toHaveCount(1);
+    await expect(
+      componentDiff.locator('[data-component-diff-side="baseline"]'),
+    ).toHaveCount(0);
+    const proposed = componentDiff.locator(
+      '[data-component-diff-side="proposed"]',
+    );
+    await expect(proposed.locator("[data-http-endpoint]")).toHaveCount(1);
+    await expect(proposed).toContainText("Lists jobs.");
+    await expect(proposed).toContainText("Filters jobs.");
+    await expect(proposed).toContainText("Returns matching jobs.");
+    await expect(lens.locator("[data-review-diff-field-label]")).toHaveCount(0);
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
@@ -6754,12 +6809,12 @@ test("should diff a database schema at column level inside one rendering", async
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       "1 of 1",
     );
-    const field = lens.locator("[data-review-diff-field]");
-    await expect(field).toHaveCount(2);
-    await expect(field.first()).toContainText("Column: seats");
-    await expect(field.first()).toContainText("smallint");
-    await expect(field.last()).toContainText("Column: seats");
-    await expect(field.last()).toContainText("integer");
+    const sides = lens.locator("[data-component-diff-side]");
+    await expect(sides).toHaveCount(2);
+    await expect(sides.first()).toContainText("Column: seats");
+    await expect(sides.first()).toContainText("smallint");
+    await expect(sides.last()).toContainText("Column: seats");
+    await expect(sides.last()).toContainText("integer");
     await expect(lens.locator("[data-review-component-diff]")).toHaveCount(0);
     // The other columns did not change, so the schema root never claims the
     // change and their text stays out of the lens.
@@ -6773,7 +6828,7 @@ test("should diff a database schema at column level inside one rendering", async
   }
 });
 
-test("should diff a quick summary at facet level with word runs", async ({
+test("should diff a quick summary at facet level", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -6806,21 +6861,86 @@ test("should diff a quick summary at facet level with word runs", async ({
     const lens = page.locator("[data-review-diff-lens]");
     // The component root and its changed facet are one review stop, and the
     // lens shows only the facet that changed: its term as a header and the
-    // exact removed and inserted words in the body.
+    // exact Was and Now facet bodies.
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       "1 of 1",
     );
-    const facet = lens.locator("[data-review-diff-field]");
-    await expect(facet).toHaveCount(1);
-    await expect(facet).toContainText("How");
-    await expect(facet.locator("del")).toContainText("attempts");
-    await expect(facet.locator("ins")).toContainText(["every", "attempt"]);
+    const facet = lens.locator('[data-commentable-label="How"]');
+    await expect(facet).toHaveCount(2);
+    await expect(facet.first()).toContainText(
+      "Record attempts in the audit trail.",
+    );
+    await expect(facet.last()).toContainText(
+      "Record every attempt in the audit trail.",
+    );
     // The other facets did not change, so their text stays out of the lens
     // instead of returning as the old flattened component wall.
     await expect(lens).not.toContainText("checkout to stay fast");
     await page.screenshot({
       path: testInfo.outputPath("quick-summary-facet-diff.png"),
     });
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should diff DataTable rows with the table's own column controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-data-table-diff-"));
+  const planPath = join(directory, "table.mdx");
+  const after = `# Table diff
+
+## Outcomes
+
+<DataTable title="Retry outcomes">
+
+\`\`\`table
+| Failure | Attempts | Outcome |
+| --- | ---: | --- |
+| Card declined | 3 | Give up and notify |
+| Processor timeout | 5 | Retry with backoff |
+| Network reset | 5 | Retry immediately |
+\`\`\`
+
+</DataTable>
+`;
+  const before = after.replace(
+    "| Processor timeout | 5 | Retry with backoff |",
+    "| Processor timeout | 5 | Retry after a fixed delay |",
+  );
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const sides = lens.locator("[data-component-diff-side]");
+    await expect(sides).toHaveCount(2);
+    await expect(sides.first()).toContainText("Retry after a fixed delay");
+    await expect(sides.last()).toContainText("Retry with backoff");
+    await expect(lens).not.toContainText("Card declined");
+    await expect(
+      lens
+        .locator('[data-component-diff-side="proposed"]')
+        .getByRole("button", { name: "Choose columns" }),
+    ).toBeVisible();
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });

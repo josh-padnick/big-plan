@@ -2,7 +2,9 @@
 // that presents its model, Column refinements, and the optional SummaryRow.
 
 import { compileDataTable } from "./compile.js";
+import { compileDataTableDiff } from "./compile-diff.js";
 import { DataTable } from "./view.js";
+import { DataTableDiffView } from "./view-diff.js";
 import { defineComponent } from "../_registration/define-component.js";
 import { dataTableMarkdown } from "./markdown.js";
 
@@ -11,6 +13,8 @@ export const DATA_TABLE_COMPONENT_DEFINITION = defineComponent({
   compile: compileDataTable,
   view: DataTable,
   markdown: dataTableMarkdown,
+  diff: compileDataTableDiff,
+  diffView: DataTableDiffView,
   scopedChildren: {
     Column: { kind: "scoped-child" },
     SummaryRow: {

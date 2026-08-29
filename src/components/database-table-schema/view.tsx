@@ -2,17 +2,13 @@
 // and hidden source consumed by the live review application.
 
 import type { CompiledDatabaseTableSchema } from "./compile.js";
+import { qualifiedTableName } from "./qualified-table-name.js";
 import { TableSchemaHeader } from "./view-header.js";
 import { TableSchemaGrid, TableSchemaSections } from "./view-layouts.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
 } from "../_model/figure-controls/figure-controls.js";
-
-const qualifiedTableName = (
-  schemaName: string | undefined,
-  tableName: string,
-) => (schemaName === undefined ? tableName : `${schemaName}${tableName}`);
 
 export const DatabaseTableSchema = ({
   model,

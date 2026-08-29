@@ -41,6 +41,17 @@ const elements = (node: Root | Element): ReadonlyArray<Element> =>
     child.type === "element" ? [child, ...elements(child)] : [],
   );
 
+const visibleText = (node: Root | Element): string =>
+  node.children
+    .map((child) =>
+      child.type === "text"
+        ? child.value
+        : child.type === "element"
+          ? visibleText(child)
+          : "",
+    )
+    .join("");
+
 const decisionBlockId = (markdown: string): string => {
   const block = compileMarkdown({ markdown }).blocks.find(
     (candidate) => candidate.kind === "decision",
@@ -95,6 +106,217 @@ describe("render diff view", () => {
       ),
     ).toHaveLength(4);
   });
+
+  it("should keep a proposed field's declared target id inside its diff", () => {
+    const endpoint = (description: string): string => `# Plan
+
+## API
+
+<HttpEndpoint method="POST" path="/queue" summary="Queue a refresh">
+
+${description}
+
+</HttpEndpoint>`;
+    const baselineDocument = compileMarkdown({
+      markdown: endpoint("Queues a refresh."),
+    });
+    const proposedDocument = compileMarkdown({
+      markdown: endpoint("Queues one refresh."),
+    });
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "http-endpoint",
+    );
+    const declaredField = proposedDocument.blocks.find(
+      (block) =>
+        block.ownerId === proposedRoot?.id && block.label === "Description",
+    );
+    expect(declaredField).toBeDefined();
+
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineDocument.blocks.find(
+        (block) => block.kind === "http-endpoint",
+      )?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+    });
+    const nodes = elements(fromHtml(rendered?.view ?? "", { fragment: true }));
+    expect(
+      nodes.filter((node) => node.properties.dataBlockId === declaredField?.id),
+    ).toHaveLength(1);
+  });
+
+  it("should omit unchanged Callout content from a one-field diff", () => {
+    const compile = (type: "note" | "warning") =>
+      compileMarkdown({
+        markdown: `# Plan\n\n## Notice\n\n<Callout type="${type}" title="Keep me">\n\nUnchanged body.\n\n</Callout>`,
+      });
+    const baselineDocument = compile("note");
+    const proposedDocument = compile("warning");
+    const baselineRoot = baselineDocument.blocks.find(
+      (block) => block.kind === "callout",
+    );
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "callout",
+    );
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineRoot?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+    });
+
+    const text = visibleText(
+      fromHtml(rendered?.view ?? "", { fragment: true }),
+    );
+    expect(text).not.toContain("Keep me");
+    expect(text).not.toContain("Unchanged body.");
+    expect(text).toContain("Type");
+  });
+
+  it("should preserve the later duplicate-label DataTable row identity", () => {
+    const compile = (state: string) =>
+      compileMarkdown({
+        markdown: `# Plan\n\n## Jobs\n\n<DataTable>\n\n\`\`\`table\n| Job | State |\n| --- | --- |\n| Same | First |\n| Same | ${state} |\n\`\`\`\n\n</DataTable>`,
+      });
+    const baselineDocument = compile("Old");
+    const proposedDocument = compile("New");
+    const baselineRoot = baselineDocument.blocks.find(
+      (block) => block.kind === "data-table",
+    );
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "data-table",
+    );
+    const proposedRows = proposedDocument.blocks.filter(
+      (block) => block.ownerId === proposedRoot?.id && block.label === "Same",
+    );
+    expect(proposedRows).toHaveLength(2);
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineRoot?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+    });
+    const nodes = elements(fromHtml(rendered?.view ?? "", { fragment: true }));
+
+    expect(
+      nodes.filter(
+        (node) => node.properties.dataBlockId === proposedRows[1]?.id,
+      ),
+    ).toHaveLength(1);
+    expect(
+      nodes.find((node) => node.properties.dataBlockId === proposedRows[1]?.id)
+        ?.properties.dataTableRow,
+    ).toBe("1");
+    expect(
+      nodes.filter(
+        (node) => node.properties.dataBlockId === proposedRows[0]?.id,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("should keep table rows as evidence for a configuration-only change", () => {
+    const compile = (filter: boolean) =>
+      compileMarkdown({
+        markdown: `# Plan\n\n## Jobs\n\n<DataTable${filter ? " filter" : ""}>\n\n\`\`\`table\n| Job | State |\n| --- | --- |\n| Refresh | Queued |\n\`\`\`\n\n</DataTable>`,
+      });
+    const baselineDocument = compile(false);
+    const proposedDocument = compile(true);
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineDocument.blocks.find(
+        (block) => block.kind === "data-table",
+      )?.id,
+      proposedBlockId: proposedDocument.blocks.find(
+        (block) => block.kind === "data-table",
+      )?.id,
+      status: "changed",
+      runs: [],
+    });
+    const root = fromHtml(rendered?.view ?? "", { fragment: true });
+
+    expect(visibleText(root)).toContain("Filtering");
+    expect(visibleText(root).match(/Refresh/g)).toHaveLength(2);
+    expect(
+      elements(root).filter(
+        (node) => node.properties.dataTableMenuButton !== undefined,
+      ),
+    ).toHaveLength(2);
+  });
+
+  it.each([
+    {
+      kind: "http-endpoint",
+      label: "Query parameter: legacy",
+      baseline: `<HttpEndpoint method="GET" path="/jobs">\n\n<Param name="legacy" in="query">\n\nOld.\n\n</Param>\n\n</HttpEndpoint>`,
+      proposed: `<HttpEndpoint method="GET" path="/jobs">\n\n<Param name="legacy" in="query">\n\nNew.\n\n</Param>\n\n</HttpEndpoint>`,
+    },
+    {
+      kind: "graphql-operation",
+      label: "Input field: jobId",
+      baseline: `<GraphqlOperation kind="query" name="job">\n\n<Field in="input" name="jobId" type="ID!">\n\nOld.\n\n</Field>\n\n</GraphqlOperation>`,
+      proposed: `<GraphqlOperation kind="query" name="job">\n\n<Field in="input" name="jobId" type="ID!">\n\nNew.\n\n</Field>\n\n</GraphqlOperation>`,
+    },
+    {
+      kind: "grpc-method",
+      label: "Request field: job_id",
+      baseline: `<GrpcMethod service="Jobs" name="Get" request="GetRequest" response="GetResponse">\n\n<Field in="request" name="job_id" type="string">\n\nOld.\n\n</Field>\n\n</GrpcMethod>`,
+      proposed: `<GrpcMethod service="Jobs" name="Get" request="GetRequest" response="GetResponse">\n\n<Field in="request" name="job_id" type="string">\n\nNew.\n\n</Field>\n\n</GrpcMethod>`,
+    },
+    {
+      kind: "data-table",
+      label: "A",
+      baseline: `<DataTable>\n\n\`\`\`table\n| Job | State |\n| --- | --- |\n| A | Old |\n\`\`\`\n\n</DataTable>`,
+      proposed: `<DataTable>\n\n\`\`\`table\n| Job | State |\n| --- | --- |\n| A | New |\n\`\`\`\n\n</DataTable>`,
+    },
+    {
+      kind: "database-table-schema",
+      label: "Index: status",
+      baseline: `<DatabaseTableSchema name="jobs">\n\n\`\`\`dbml\nstatus text\nindexes {\n  status\n}\n\`\`\`\n\n</DatabaseTableSchema>`,
+      proposed: `<DatabaseTableSchema name="jobs">\n\n\`\`\`dbml\nstatus text\nindexes {\n  status [unique]\n}\n\`\`\`\n\n</DatabaseTableSchema>`,
+    },
+  ])(
+    "should preserve the declared $label target",
+    ({ kind, label, baseline, proposed }) => {
+      const compile = (component: string) =>
+        compileMarkdown({ markdown: `# Plan\n\n## Contract\n\n${component}` });
+      const baselineDocument = compile(baseline);
+      const proposedDocument = compile(proposed);
+      const baselineRoot = baselineDocument.blocks.find(
+        (block) => block.kind === kind,
+      );
+      const proposedRoot = proposedDocument.blocks.find(
+        (block) => block.kind === kind,
+      );
+      const declaredField = proposedDocument.blocks.find(
+        (block) => block.ownerId === proposedRoot?.id && block.label === label,
+      );
+      expect(declaredField).toBeDefined();
+      const rendered = renderDiffView({
+        baselineDocument,
+        proposedDocument,
+        baselineBlockId: baselineRoot?.id,
+        proposedBlockId: proposedRoot?.id,
+        status: "changed",
+        runs: [],
+      });
+      const nodes = elements(
+        fromHtml(rendered?.view ?? "", { fragment: true }),
+      );
+      expect(
+        nodes.filter(
+          (node) => node.properties.dataBlockId === declaredField?.id,
+        ),
+      ).toHaveLength(1);
+    },
+  );
 });
 
 describe("renderIsolatedBlockView", () => {

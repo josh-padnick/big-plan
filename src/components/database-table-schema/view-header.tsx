@@ -12,6 +12,7 @@ import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 import { MutedText } from "./view-elements.js";
 import { FIELD_KIND } from "./view-layouts.js";
+import { qualifiedTableName } from "./qualified-table-name.js";
 
 // /* off-scale */ Phase A preserves the legacy inset header radius, compact
 // caption/menu geometry, and menu shadow exactly. Phase B may regularize them
@@ -29,11 +30,6 @@ const MENU_LIST_CLASSES =
   "table-schema-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-md bg-[var(--diff-header-bg)] p-1 shadow-floating";
 const MENU_ITEM_CLASSES =
   "table-schema-menu-item flex w-full cursor-pointer items-center gap-2 whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-1 text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
-
-const qualifiedTableName = (
-  schemaName: string | undefined,
-  tableName: string,
-) => (schemaName === undefined ? tableName : `${schemaName}${tableName}`);
 
 // The explicit label keeps the accessible name the full qualified table name,
 // independent of the styled schema/table split below.

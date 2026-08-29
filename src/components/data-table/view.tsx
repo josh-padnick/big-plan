@@ -378,7 +378,7 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
                   ? "Table row"
                   : row.cells[0].text
               }
-              data-table-row={rowIndex}
+              data-table-row={row.diffSourceIndex ?? rowIndex}
             >
               <RowCells row={row} columns={model.columns} kind="data" />
             </tr>

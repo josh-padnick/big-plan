@@ -1,7 +1,7 @@
 // The route that answers what changed between two snapshots. Every component
-// root that has completed the diff-contract migration is answered by the
-// component's own compiled diff view; a picture, which carries no words, is
-// answered by the engine replaying its compiled markup as inert evidence.
+// root is answered by the component's own compiled diff view; a picture,
+// which carries no words, is answered by the engine replaying its compiled
+// markup as inert evidence.
 
 import {
   compileDiffDocuments,
@@ -15,28 +15,10 @@ import type {
   ReviewRouteRequest,
   ReviewRouteResponse,
 } from "./review-route-context.js";
-import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
+import { buildSnapshotDiff } from "./snapshot-diff.js";
 import { readSnapshot } from "./store.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import { encodeSnapshotDiff, type SnapshotDiff } from "./shared/review-wire.js";
-
-// Honest rollout scaffolding. Every definition has compileDiff once the
-// contract exists, so presence cannot say which kinds have completed the
-// browser migration. This set now names every component root that is not
-// answered by a text-level treatment, so the two together cover the registry
-// and no component root reaches the engine's rendered path. The set leaves
-// with the last migration wave.
-const MIGRATED_DIFF_KINDS: ReadonlySet<string> = new Set([
-  "decision",
-  "decision-analysis",
-  "file-tree",
-  "file-tree-diff",
-  "flow-diagram",
-  "mermaid-diagram",
-  "part",
-  "quick-decision",
-  "wireframe",
-]);
 
 class SnapshotDiffSourceUnavailable extends Error {}
 
@@ -72,7 +54,7 @@ export const compileSnapshotDiffPayload = ({
   return encodeSnapshotDiff({
     ...snapshotDiff,
     locations: snapshotDiff.locations.map((location) => {
-      if (location.isComponentRoot && MIGRATED_DIFF_KINDS.has(location.kind)) {
+      if (location.isComponentRoot) {
         const rendered = renderDiffView({
           baselineDocument: compiled.baseline,
           proposedDocument: compiled.proposed,
@@ -91,7 +73,7 @@ export const compileSnapshotDiffPayload = ({
           ? location
           : { ...location, view: rendered.view };
       }
-      if (!usesRenderedSnapshot(location)) return location;
+      if (location.kind !== "image") return location;
       const oldView = renderIsolatedBlockView({
         document: compiled.baseline,
         blockId: location.oldBlockId,
