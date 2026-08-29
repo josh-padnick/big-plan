@@ -540,6 +540,7 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       .filter({ hasText: "Clarified the follow-up publication flow." });
     await latestChange.getByRole("button", { name: "Review change" }).click();
     await stepper.getByRole("button", { name: "Accept this change" }).click();
+    await expect(stepper).toContainText("All changes accepted (1 of 1)");
     await page.keyboard.press("Escape");
 
     await thread
