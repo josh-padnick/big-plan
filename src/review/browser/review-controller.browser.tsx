@@ -75,6 +75,7 @@ import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
 import { isRendered, measureThreadAnchor } from "./thread-anchor.browser.js";
+import { canMountReviewBlockHost } from "./review-controller-hosts.browser.js";
 import {
   clearThreadOpenOverlay,
   isThreadOpen,
@@ -1634,6 +1635,7 @@ const useBlockHosts = () => {
           !PROSE_KINDS.has(blockKind(block)) &&
           !TABLE_PRECISION_KINDS.has(blockKind(block)) &&
           !DERIVED_KINDS.has(blockKind(block)) &&
+          canMountReviewBlockHost(block) &&
           block.closest("[data-quick-summary]") === null &&
           // A figure that already offers its own whole-figure comment owns
           // that affordance, and its notes join the batch the reader submits
@@ -1822,7 +1824,9 @@ const useImageHosts = () => {
     });
     const mount = () => {
       const next = livePictures().filter(
-        (candidate) => candidate.dataset.reviewImageMounted === undefined,
+        (candidate) =>
+          candidate.dataset.reviewImageMounted === undefined &&
+          canMountReviewBlockHost(candidate),
       );
       for (const block of next) {
         const parent = block.parentElement;
