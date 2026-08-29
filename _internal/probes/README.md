@@ -68,6 +68,8 @@ node _internal/probes/push-mode-probe.mjs --trials 5 --harness claude --arm afte
 node _internal/probes/push-mode-probe.mjs --arm control --question doubted
 ```
 
+One recorded run of this probe, for the connector prompt change that introduced it, is kept in [big-258-push-mode-evidence.md](big-258-push-mode-evidence.md).
+
 The summary is a count per arm, question, and harness, not a pass or fail. Read
 it as a distribution: the change is good when `other` and `harness_error` go to
 zero on the `after` arm across every harness and both wordings, and stay there -
