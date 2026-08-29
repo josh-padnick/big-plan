@@ -4,7 +4,7 @@
 import { expect, test } from "./fixtures";
 
 const AGENT_SETUP_PROMPT =
-  "Set up Big Plan for me: read https://big-plan.ai/setup.md and follow it.";
+  "Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.";
 
 test("should deliver the install prompt when opened from the built homepage", async ({
   page,

@@ -6,7 +6,7 @@ import mermaid from "astro-mermaid";
 import { SIDEBAR } from "./src/sidebar";
 
 export default defineConfig({
-  site: "https://big-plan.ai",
+  site: "https://bigplan.dev",
   integrations: [
     mermaid(),
     starlight({

@@ -23,7 +23,7 @@ test("should navigate the rendered sample plan through the TOC without errors", 
     await expect(banner.getByRole("img", { name: "Big Plan" })).toBeVisible();
     await expect(
       banner.getByRole("link", { name: "Big Plan" }),
-    ).toHaveAttribute("href", "https://big-plan.ai");
+    ).toHaveAttribute("href", "https://bigplan.dev");
     await expect(
       page.getByRole("heading", {
         level: 1,
