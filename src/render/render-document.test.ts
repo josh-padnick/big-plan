@@ -215,7 +215,7 @@ The lede.
 
   it("should render a theme-swapped branding banner when rendering", () => {
     expect(html).toMatch(
-      /<a [^>]*href="https:\/\/big-plan\.ai" target="_blank" rel="noreferrer">/,
+      /<a [^>]*href="https:\/\/bigplan\.dev" target="_blank" rel="noreferrer">/,
     );
     expect(html).toMatch(
       /<img class="h-auto w-27" data-logo-light src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
