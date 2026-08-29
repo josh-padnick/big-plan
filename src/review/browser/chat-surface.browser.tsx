@@ -10,7 +10,7 @@ import {
   reviewWriteBlock,
   type ReviewWriteAvailability,
 } from "./review-write-availability.js";
-import { Button, Card } from "./ui.browser.js";
+import { Badge, Button, Card } from "./ui.browser.js";
 
 export type ChatSurfaceModel = {
   readonly hasRuntime: boolean;
@@ -26,8 +26,13 @@ export type ChatSurfaceModel = {
   readonly hasExchanges: boolean;
   /** The arrival entry for a push that landed while the reader was reading. */
   readonly arrivalEntry: ReactNode;
+  readonly mode: "review" | "auto-accept";
+  readonly modeSince?: string;
+  readonly onSwitchToReview: () => void;
   readonly pushedThreads: ReactNode;
   readonly pushedThreadCount: number;
+  readonly appliedThreads: ReactNode;
+  readonly appliedThreadCount: number;
   readonly resolvedPushedThreads: ReactNode;
   readonly resolvedPushedThreadCount: number;
   /**
@@ -121,13 +126,50 @@ export const ChatSurface = ({
             </div>
           </div>
           {model.arrivalEntry}
+          {model.mode === "auto-accept" ? (
+            <>
+              <section
+                className="flex items-center gap-2 rounded-lg bg-surface p-3"
+                aria-label="Review mode"
+              >
+                <Badge tone="statusAccent" size="status">
+                  Auto-accept · on since {model.modeSince ?? "just now"}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="micro"
+                  className="ml-auto"
+                  disabled={block !== undefined}
+                  data-tooltip={block?.cause}
+                  onClick={model.onSwitchToReview}
+                >
+                  Switch back to review
+                </Button>
+              </section>
+              {block === undefined ? null : (
+                <p className="m-0 text-2xs font-semibold text-danger">
+                  {block.label}
+                </p>
+              )}
+            </>
+          ) : null}
           {model.pushedThreadCount === 0 ? null : (
             <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
               <h3 className="m-0 text-xs font-bold uppercase tracking-caps text-muted">
-                Threads ({model.pushedThreadCount})
+                Needs you ({model.pushedThreadCount})
               </h3>
               <ol className="m-0 grid min-w-0 grid-cols-[minmax(0,1fr)] list-none gap-2 p-0">
                 {model.pushedThreads}
+              </ol>
+            </section>
+          )}
+          {model.appliedThreadCount === 0 ? null : (
+            <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
+              <h3 className="m-0 text-xs font-bold uppercase tracking-caps text-muted">
+                Applied ({model.appliedThreadCount})
+              </h3>
+              <ol className="m-0 grid min-w-0 grid-cols-[minmax(0,1fr)] list-none gap-2 p-0">
+                {model.appliedThreads}
               </ol>
             </section>
           )}
@@ -142,7 +184,9 @@ export const ChatSurface = ({
                 {model.exchanges}
               </ol>
             </>
-          ) : model.pushedThreadCount + model.resolvedPushedThreadCount ===
+          ) : model.pushedThreadCount +
+              model.appliedThreadCount +
+              model.resolvedPushedThreadCount ===
             0 ? (
             <p className="m-0 text-xs text-subtle">
               {model.archivedCount === 0

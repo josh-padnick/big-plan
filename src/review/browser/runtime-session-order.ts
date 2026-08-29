@@ -11,6 +11,7 @@ export type RuntimeSessionOrderDecision =
 
 export type RuntimeSessionOrder = {
   readonly issueRequest: () => number;
+  readonly invalidatePendingRequests: () => void;
   readonly decide: (input: {
     readonly sequence: number;
     readonly session: RuntimeSession;
@@ -23,6 +24,9 @@ export const createRuntimeSessionOrder = (): RuntimeSessionOrder => {
   let highestAcceptedSequence = 0;
   return {
     issueRequest: () => ++nextSequence,
+    invalidatePendingRequests: () => {
+      highestAcceptedSequence = ++nextSequence;
+    },
     decide: ({ sequence, session }) => {
       if (sequence <= highestAcceptedSequence) return { kind: "drop" };
       highestAcceptedSequence = sequence;
