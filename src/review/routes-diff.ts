@@ -29,12 +29,17 @@ export const compileSnapshotDiffPayload = ({
   beforeSource,
   afterSource,
   compileDocument,
+  onCompiled,
 }: {
   readonly from: string;
   readonly to: string;
   readonly beforeSource: string;
   readonly afterSource: string;
   readonly compileDocument?: DiffDocumentCompiler;
+  readonly onCompiled?: (documents: {
+    readonly baseline: ReturnType<typeof compileDiffDocuments>["baseline"];
+    readonly proposed: ReturnType<typeof compileDiffDocuments>["proposed"];
+  }) => void;
 }): SnapshotDiff => {
   // One compilation per snapshot answers every question this route asks: the
   // block descriptors the alignment reads, the models a component diff pairs,
@@ -45,6 +50,7 @@ export const compileSnapshotDiffPayload = ({
     proposedMarkdown: afterSource,
     ...(compileDocument === undefined ? {} : { compileDocument }),
   });
+  onCompiled?.(compiled);
   const snapshotDiff = buildSnapshotDiff({
     from,
     to,
@@ -58,11 +64,11 @@ export const compileSnapshotDiffPayload = ({
         const rendered = renderDiffView({
           baselineDocument: compiled.baseline,
           proposedDocument: compiled.proposed,
+          baselineSnapshot: from,
           baselineBlockId: location.oldBlockId,
           proposedBlockId: location.newBlockId,
           status: location.status,
           runs: location.runs,
-          baselineSnapshot: from,
         });
         // Only the rendered view crosses the wire. The compiled diff model
         // describes exactly what that view already shows, and for a diagram
@@ -129,6 +135,13 @@ export const readSnapshotDiff = async (
           to,
           beforeSource,
           afterSource,
+          onCompiled: ({ baseline, proposed }) =>
+            snapshotDiffs.retainPairBlocks({
+              from,
+              to,
+              fromBlocks: baseline.blocks,
+              toBlocks: proposed.blocks,
+            }),
         });
       },
     });

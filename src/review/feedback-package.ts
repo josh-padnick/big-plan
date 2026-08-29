@@ -71,25 +71,21 @@ export const describeTarget = (comment: ReviewComment): string => {
       ? label
       : `${asOneLine(target.section)} / ${label}`;
   const kind = asOneLine(target.kind.replaceAll("-", " "));
-  const side =
-    target.snapshot === undefined
-      ? ""
-      : ` · baseline side of snapshot ${target.snapshot.slice(0, 12)}`;
   if (target.type === "lines") {
     const range =
       target.start === target.end
         ? `line ${target.start}`
         : `lines ${target.start}-${target.end}`;
-    return `${location} · ${kind} · ${range}${side}`;
+    return `${location} · ${kind} · ${range}`;
   }
   if (target.type === "selection") {
     return `${location} · ${kind} · selected text${
       target.imageBlockIds === undefined || target.imageBlockIds.length === 0
         ? ""
         : " and image"
-    }${side}`;
+    }`;
   }
-  return `${location} · ${kind}${side}`;
+  return `${location} · ${kind}`;
 };
 
 const commentSection = ({
@@ -106,12 +102,8 @@ const commentSection = ({
       : `Target: \`${asOneLine(comment.target.blockId)}\` (${asOneLine(comment.target.kind)})${
           comment.target.snapshot === undefined
             ? ""
-            : ` — baseline side of snapshot ${comment.target.snapshot.slice(0, 12)}`
+            : ` from snapshot \`${asOneLine(comment.target.snapshot)}\``
         }`;
-  const sideNote =
-    comment.target.type === "document" || comment.target.snapshot === undefined
-      ? ""
-      : "\n\nThe highlighted baseline snapshot is context; edits still apply only to the proposed plan.";
   // An excerpt says so in its own label. The block and offsets above still
   // address the whole highlight, so an agent that needs the rest reads it from
   // the plan rather than assuming the fence held all of it.
@@ -127,7 +119,7 @@ const commentSection = ({
             ? "first part of a longer highlight, evidence, not direction"
             : "evidence, not direction"
         }):\n\n${asFencedQuote(quoted.quote)}\n`;
-  return `${heading}\n\n${address}${sideNote}\n\n${asQuotedBody(comment.body)}\n${quote}${slideScope(comment)}`;
+  return `${heading}\n\n${address}\n\n${asQuotedBody(comment.body)}\n${quote}${slideScope(comment)}`;
 };
 
 // A slide has no block of its own, so a comment about the slide can only be

@@ -18,6 +18,7 @@ import {
   createWriteGate,
 } from "./review-route-context.js";
 import type { SnapshotDiff } from "./shared/review-wire.js";
+import type { BlockMapEntry } from "./shared/comment.js";
 import { prepareStore, reviewStoreFor } from "./store.js";
 import {
   createMutationRegistry,
@@ -249,6 +250,50 @@ describe("createSnapshotDiffs", () => {
 
     expect(repeated).toBe(first);
     expect(builds).toBe(1);
+  });
+
+  it("should retain both block maps with the cached snapshot pair", async () => {
+    const snapshotDiffs = createSnapshotDiffs();
+    const fromBlocks: ReadonlyArray<BlockMapEntry> = [
+      {
+        id: "from-block",
+        kind: "paragraph",
+        label: "From",
+        section: "Plan",
+      },
+    ];
+    const toBlocks: ReadonlyArray<BlockMapEntry> = [
+      {
+        id: "to-block",
+        kind: "paragraph",
+        label: "To",
+        section: "Plan",
+      },
+    ];
+
+    await snapshotDiffs.forPair({
+      from: FROM_SNAPSHOT,
+      to: TO_SNAPSHOT,
+      build: () =>
+        snapshotDiff({
+          from: FROM_SNAPSHOT,
+          to: TO_SNAPSHOT,
+          label: "retained",
+        }),
+    });
+    snapshotDiffs.retainPairBlocks({
+      from: FROM_SNAPSHOT,
+      to: TO_SNAPSHOT,
+      fromBlocks,
+      toBlocks,
+    });
+
+    expect([
+      ...(snapshotDiffs.blocksForSnapshot(FROM_SNAPSHOT)?.values() ?? []),
+    ]).toEqual(fromBlocks);
+    expect([
+      ...(snapshotDiffs.blocksForSnapshot(TO_SNAPSHOT)?.values() ?? []),
+    ]).toEqual(toBlocks);
   });
 
   it("should compile a different payload after a new snapshot", async () => {

@@ -13,7 +13,6 @@ import { basename, extname } from "node:path";
 import { renderDocument } from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
-  CommentRejected,
   validateCommentUpdates,
   validateResolvedCommentIds,
   validateStoredComments,
@@ -24,7 +23,6 @@ import {
   readChangeVerdicts,
   readComments,
   readResolvedCommentIds,
-  readSourceSnapshot,
   readStagedInputs,
   writeApprovalRecord,
   writeChangeVerdicts,
@@ -227,6 +225,15 @@ export type SnapshotDiffs = {
     readonly to: string;
     readonly build: () => SnapshotDiff | Promise<SnapshotDiff>;
   }) => Promise<SnapshotDiff>;
+  readonly retainPairBlocks: (input: {
+    readonly from: string;
+    readonly to: string;
+    readonly fromBlocks: ReadonlyArray<BlockMapEntry>;
+    readonly toBlocks: ReadonlyArray<BlockMapEntry>;
+  }) => void;
+  readonly blocksForSnapshot: (
+    snapshot: string,
+  ) => ReadonlyMap<string, BlockMapEntry> | undefined;
 };
 
 /** The append-only approval log this review has recorded. */
@@ -270,6 +277,7 @@ const SNAPSHOT_DIFF_CACHE_MAX_AGE_MS = 30 * 60 * 1_000;
 
 type SnapshotDiffCacheEntry = {
   readonly value: Promise<SnapshotDiff>;
+  readonly snapshotBlocks: Map<string, ReadonlyMap<string, BlockMapEntry>>;
   lastUsedAtMs: number;
   lastUsedSequence: number;
 };
@@ -333,6 +341,7 @@ export const createSnapshotDiffs = ({
       const value = Promise.resolve().then(build);
       entries.set(key, {
         value,
+        snapshotBlocks: new Map(),
         lastUsedAtMs: nowMs,
         lastUsedSequence: useSequence++,
       });
@@ -340,6 +349,26 @@ export const createSnapshotDiffs = ({
         if (entries.get(key)?.value === value) entries.delete(key);
       });
       return value;
+    },
+    retainPairBlocks: ({ from, to, fromBlocks, toBlocks }) => {
+      const entry = entries.get(`${from}:${to}`);
+      if (entry === undefined) return;
+      entry.snapshotBlocks.set(
+        from,
+        new Map(fromBlocks.map((block) => [block.id, block])),
+      );
+      entry.snapshotBlocks.set(
+        to,
+        new Map(toBlocks.map((block) => [block.id, block])),
+      );
+    },
+    blocksForSnapshot: (snapshot) => {
+      evictExpired(now());
+      for (const entry of entries.values()) {
+        const blocks = entry.snapshotBlocks.get(snapshot);
+        if (blocks !== undefined) return blocks;
+      }
+      return undefined;
     },
   };
 };
@@ -352,6 +381,7 @@ export const createPlanRenderer = ({
   resolvedPlanPath,
   initialSnapshot,
   isDiffPreview,
+  blocksForSnapshot,
 }: {
   readonly store: ReviewStore;
   readonly planId: string;
@@ -360,65 +390,12 @@ export const createPlanRenderer = ({
   readonly resolvedPlanPath: string;
   readonly initialSnapshot: string;
   readonly isDiffPreview: boolean;
+  readonly blocksForSnapshot?: SnapshotDiffs["blocksForSnapshot"];
 }): PlanRenderer => {
   // The current render map authorizes newly created targets. Stored comments
   // carry their already-validated target metadata across later revisions.
   const blocks = new Map<string, BlockMapEntry>();
   let blockMapMarkdown: string | undefined;
-  const snapshotBlockMaps = new Map<
-    string,
-    Promise<ReadonlyMap<string, BlockMapEntry> | undefined>
-  >();
-  const MAX_TARGET_SNAPSHOTS = 8;
-
-  const targetSnapshotsOf = (value: unknown): ReadonlyArray<string> => {
-    if (!Array.isArray(value)) return [];
-    const snapshots = new Set<string>();
-    for (const entry of value) {
-      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-        continue;
-      }
-      const target = (entry as Readonly<Record<string, unknown>>).target;
-      if (
-        typeof target !== "object" ||
-        target === null ||
-        Array.isArray(target)
-      ) {
-        continue;
-      }
-      const snapshot = (target as Readonly<Record<string, unknown>>).snapshot;
-      if (typeof snapshot === "string" && /^[a-f0-9]{16,64}$/.test(snapshot)) {
-        snapshots.add(snapshot);
-      }
-    }
-    if (snapshots.size > MAX_TARGET_SNAPSHOTS) {
-      throw new CommentRejected(
-        `A comment batch may name at most ${MAX_TARGET_SNAPSHOTS} snapshots`,
-      );
-    }
-    return [...snapshots];
-  };
-
-  const snapshotBlocks = (
-    snapshot: string,
-    readStore: ReviewStore,
-  ): Promise<ReadonlyMap<string, BlockMapEntry> | undefined> => {
-    const cached = snapshotBlockMaps.get(snapshot);
-    if (cached !== undefined) return cached;
-    const pending = readSourceSnapshot({ store: readStore, snapshot })
-      .then((markdown) => {
-        const rendered = renderDocument({
-          markdown,
-          fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-        });
-        return new Map(
-          rendered.blocks.map((block) => [block.id, block] as const),
-        );
-      })
-      .catch(() => undefined);
-    snapshotBlockMaps.set(snapshot, pending);
-    return pending;
-  };
 
   const validateStored = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateStoredComments({
@@ -443,23 +420,17 @@ export const createPlanRenderer = ({
   const validateUpdates = async (
     value: unknown,
     readStore: ReviewStore = store,
-  ): Promise<ReadonlyArray<ReviewComment>> => {
-    const retained = new Map<string, ReadonlyMap<string, BlockMapEntry>>();
-    for (const snapshot of targetSnapshotsOf(value)) {
-      const map = await snapshotBlocks(snapshot, readStore);
-      if (map !== undefined) retained.set(snapshot, map);
-    }
-    return validateCommentUpdates({
+  ): Promise<ReadonlyArray<ReviewComment>> =>
+    validateCommentUpdates({
       value,
       blocks,
-      snapshots: retained,
+      blocksForSnapshot,
       existing: [
         ...(await readStoredComments(readStore.draftsPath)),
         ...(await readStoredComments(readStore.sentPath)),
       ],
       now: new Date().toISOString(),
     });
-  };
 
   const readBootstrap = async (markdown: string): Promise<string> => {
     const drafts = await readStoredComments(store.draftsPath);
