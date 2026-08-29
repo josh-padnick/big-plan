@@ -181,7 +181,7 @@ A one-line lede that says what this plan does.
   it("should preserve spaced state attribute syntax outside its value", () => {
     const markdown = ROWS.replace(
       '<Decision question="Which path?">',
-      '<Decision question="Which path?" state = \'proposed\'>',
+      "<Decision question=\"Which path?\" state = 'proposed'>",
     );
     const decisionId = onlyDecisionId(markdown);
 
