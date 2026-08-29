@@ -178,6 +178,30 @@ A one-line lede that says what this plan does.
     expect(stamped).toContain("state='decided'");
   });
 
+  it("should preserve spaced state attribute syntax outside its value", () => {
+    const markdown = ROWS.replace(
+      '<Decision question="Which path?">',
+      '<Decision question="Which path?" state = \'proposed\'>',
+    );
+    const decisionId = onlyDecisionId(markdown);
+
+    const { stamped } = stampDecisions({
+      markdown,
+      answers: [{ decisionId, optionTitle: "Global" }],
+    });
+
+    expect(stamped).toContain("state = 'decided'");
+    const withoutChosen = stamped.replace(" chosen", "");
+    const originalValueStart = markdown.indexOf("proposed");
+    const stampedValueStart = withoutChosen.indexOf("decided");
+    expect(withoutChosen.slice(0, stampedValueStart)).toBe(
+      markdown.slice(0, originalValueStart),
+    );
+    expect(withoutChosen.slice(stampedValueStart + "decided".length)).toBe(
+      markdown.slice(originalValueStart + "proposed".length),
+    );
+  });
+
   it("should stamp a self-closing QuickDecision option", () => {
     const markdown = `# Plan
 

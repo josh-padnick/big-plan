@@ -193,8 +193,8 @@ const attributeInsertion = ({
 /**
  * Replaces an existing attribute's value in place, so a source that already
  * says state="proposed" keeps its own quote style and spacing and changes only
- * the word that was wrong. An attribute with no value span at all - which the
- * enum schema rejects, so compilation never reaches here - is replaced whole.
+ * the word that was wrong. Refuses an attribute whose quoted value span cannot
+ * be located rather than rewriting any surrounding authored bytes.
  */
 const attributeValueReplacement = ({
   markdown,
@@ -217,11 +217,19 @@ const attributeValueReplacement = ({
   }
   const raw = markdown.slice(start, end);
   const equals = raw.indexOf("=");
-  const quote = equals === -1 ? "" : raw[equals + 1];
-  if (equals === -1 || (quote !== '"' && quote !== "'")) {
-    return { start, end, text: `${name}="${value}"` };
+  let quoteStart = equals + 1;
+  while (quoteStart < raw.length && /\s/u.test(raw[quoteStart] ?? "")) {
+    quoteStart += 1;
   }
-  return { start: start + equals + 2, end: end - 1, text: value };
+  const quote = equals === -1 ? "" : raw[quoteStart];
+  const quoteEnd =
+    quote === '"' || quote === "'" ? raw.indexOf(quote, quoteStart + 1) : -1;
+  if (equals === -1 || quoteEnd === -1) {
+    throw new DecisionStampRejected(
+      `The plan source cannot be stamped: the "${name}" attribute has no quoted value span`,
+    );
+  }
+  return { start: start + quoteStart + 1, end: start + quoteEnd, text: value };
 };
 
 const applySplices = ({
