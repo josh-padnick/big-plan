@@ -112,4 +112,21 @@ describe("prepareUpdateNotice", () => {
       }),
     ).resolves.toEqual({});
   });
+
+  it("should show nothing when platform state makes install detection fail", async () => {
+    const unavailableEnvironment = new Proxy(process.env, {
+      get: () => {
+        throw new Error("unavailable");
+      },
+    });
+
+    await expect(
+      prepareUpdateNotice({
+        currentVersion: "1.1.0",
+        invokedAs: GLOBAL_ENTRY,
+        env: unavailableEnvironment,
+        resolveEntry: async (path) => path,
+      }),
+    ).resolves.toEqual({});
+  });
 });

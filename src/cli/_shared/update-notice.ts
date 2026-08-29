@@ -119,26 +119,27 @@ export const prepareUpdateNotice = async ({
   readonly resolveEntry?: (path: string) => Promise<string>;
   readonly launchRefresh?: () => void;
 }): Promise<PreparedUpdateNotice> => {
-  let entry: string;
   try {
-    entry = await resolveEntry(invokedAs);
-  } catch {
-    return {};
-  }
-  if (detectInstallMethod({ entry, env }).kind === "npx") {
-    return {};
-  }
+    const entry = await resolveEntry(invokedAs);
+    if (detectInstallMethod({ entry, env }).kind === "npx") {
+      return {};
+    }
 
-  const marker = await readMarker();
-  const isFresh =
-    marker !== undefined &&
-    now - marker.checkedAtMs >= 0 &&
-    now - marker.checkedAtMs < CACHE_TTL_MS;
-  const line = updateLine(currentVersion, marker, now);
-  return {
-    ...(line === undefined ? {} : { line }),
-    ...(isFresh ? {} : { refreshAfterOutput: launchRefresh }),
-  };
+    const marker = await readMarker();
+    const isFresh =
+      marker !== undefined &&
+      now - marker.checkedAtMs >= 0 &&
+      now - marker.checkedAtMs < CACHE_TTL_MS;
+    const line = updateLine(currentVersion, marker, now);
+    return {
+      ...(line === undefined ? {} : { line }),
+      ...(isFresh ? {} : { refreshAfterOutput: launchRefresh }),
+    };
+  } catch {
+    // Every part of this optional path is fail-open, including install
+    // detection and local cache discovery supplied by platform state.
+    return {};
+  }
 };
 
 /** Refreshes the shared marker. Called only by the detached worker. */
