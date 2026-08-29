@@ -24,7 +24,10 @@ import {
   type RosterAgent,
 } from "../shared/agent-primacy.js";
 import { compactDurationLabel } from "../shared/time-label.js";
-import { AgentIdentityLine } from "./agent-identity.browser.js";
+import {
+  AgentIdentityLine,
+  AgentSessionFact,
+} from "./agent-identity.browser.js";
 import { Icon } from "./icon.browser.js";
 import { AlertDialog, Badge, Button, Tooltip } from "./ui.browser.js";
 
@@ -35,6 +38,14 @@ export type AgentRosterProps = {
   readonly agents: ReadonlyArray<RosterAgent>;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
+  /**
+   * Whether primacy means anything in this session.
+   *
+   * False on a read-only tab, where nothing can be appointed: every agent is
+   * presented as an observer, no badge claims otherwise, and the only answer
+   * left is to disconnect one.
+   */
+  readonly rolesApply?: boolean;
   /**
    * The agent the activity card above is already drawing, when it is drawing
    * one. This section leaves that agent out rather than repeating it.
@@ -58,10 +69,14 @@ export type AgentRosterProps = {
  * role. A badge reads as a property of the thing it sits on, and the tint
  * separates the two roles for a reader who is scanning rather than reading.
  *
- * "Current primary" and "Observer" are deliberately not parallel. "Current"
- * earns its place on the primary, where it says the role can move and this is
- * who holds it now; on the observer it said only that an observer is currently
- * an observer, which is a word spent on nothing.
+ * Two words, one each. "Current primary" spent a word on a distinction the
+ * badge already makes - a badge reports what is true now by being on the card -
+ * and it read as a longer, more important label than the role beside it
+ * (BIG-273).
+ *
+ * The badge is drawn only where a role is worth naming: more than one agent in
+ * play, in a session that can appoint one. A lone agent is implicitly the
+ * primary, and its caller withholds the badge rather than this deciding.
  */
 export const AgentRoleBadge = ({
   isPrimary,
@@ -73,7 +88,7 @@ export const AgentRoleBadge = ({
     tone={isPrimary ? "statusAccent" : "statusNeutral"}
     data-review-agent-role={isPrimary ? "primary" : "observer"}
   >
-    {isPrimary ? "Current primary" : "Observer"}
+    {isPrimary ? "Primary" : "Observer"}
   </Badge>
 );
 
@@ -169,10 +184,6 @@ const AgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => (
     {...(agent.model?.client === undefined
       ? {}
       : { client: agent.model.client })}
-    {...(agent.model?.sessionId === undefined
-      ? {}
-      : { sessionId: agent.model.sessionId })}
-    writerId={agent.writerId}
   />
 );
 
@@ -214,6 +225,44 @@ const AttachedSince = ({
 };
 
 /**
+ * The standing facts under a roster card's identity line: which session, and
+ * how long it has been here.
+ *
+ * The same shape and the same suffix form the status card states them in, so a
+ * reviewer telling two agents apart compares two rows written identically
+ * rather than one card's tail against another card's full handle (BIG-273). An
+ * agent that declared no session is named by its roster id, which is the only
+ * name it has and is not a handle anything outside Big Plan would recognize.
+ */
+const AgentSessionFacts = ({
+  agent,
+  nowMs,
+}: {
+  readonly agent: RosterAgent;
+  readonly nowMs: number;
+}) => {
+  const declared = agent.model?.sessionId;
+  return (
+    <dl className="m-0 grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 text-2xs text-muted">
+      <AgentSessionFact
+        handle={declared ?? agent.writerId}
+        isCopyable={declared !== undefined}
+      />
+      <div className="min-w-0">
+        <dt className="font-semibold">Attached</dt>
+        <dd className="m-0 text-ink">
+          {compactDurationLabel({
+            start: agent.attachedAtMs,
+            end: Math.max(nowMs, agent.attachedAtMs),
+          }) ?? "just now"}{" "}
+          ago
+        </dd>
+      </div>
+    </dl>
+  );
+};
+
+/**
  * The card for an agent that has just arrived and is asking to take over.
  *
  * It is the only card with a heading that states an event rather than a state,
@@ -234,6 +283,7 @@ const PrimacyRequestCard = ({
   <article
     className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] p-3"
     data-review-agent-card="request"
+    data-review-agent-writer={agent.writerId}
   >
     <h3 className="m-0 flex min-w-0 items-center gap-1.5 text-sm text-ink [&>span>svg]:size-3.5">
       <span
@@ -305,62 +355,70 @@ const PrimacyRequestCard = ({
 const AgentCard = ({
   agent,
   isPrimary,
+  showsRole,
+  canAppoint,
   nowMs,
-  isReadOnly,
   onAnswer,
 }: {
   readonly agent: RosterAgent;
   readonly isPrimary: boolean;
+  /** Whether a role is worth naming here at all. */
+  readonly showsRole: boolean;
+  /** Whether this session can move primacy, which a read-only tab cannot. */
+  readonly canAppoint: boolean;
   readonly nowMs: number;
-  readonly isReadOnly: boolean;
   readonly onAnswer: AgentRosterProps["onAnswer"];
 }) => (
   <article
     className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg border border-edge bg-raised p-3"
     data-review-agent-card={isPrimary ? "primary" : "observer"}
+    data-review-agent-writer={agent.writerId}
   >
     <AgentCardHeader
       agent={agent}
-      badge={<AgentRoleBadge isPrimary={isPrimary} />}
+      badge={showsRole ? <AgentRoleBadge isPrimary={isPrimary} /> : null}
     />
-    {isPrimary ? (
-      <AttachedSince agent={agent} nowMs={nowMs} />
-    ) : (
+    <AgentSessionFacts agent={agent} nowMs={nowMs} />
+    {isPrimary ? null : canAppoint ? (
       /* The same fact the "Leave as observer" mark states, and for the same
          reason: an observer is handed the plan and nothing else. */
       <p className="m-0 text-2xs text-muted">
         Reads the plan. It cannot read your comments or answer them until you
         make it the primary.
       </p>
+    ) : (
+      /* On a read-only tab the second sentence would name a way out that does
+         not exist here: this tab cannot appoint anybody. */
+      <p className="m-0 text-2xs text-muted">
+        Reads the plan. It cannot read your comments or answer them.
+      </p>
     )}
-    {isReadOnly ? null : (
-      <div className="flex flex-wrap gap-2 pt-0.5">
-        {isPrimary ? null : (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              onAnswer({ writerId: agent.writerId, answer: "primary" })
-            }
-          >
-            Make it primary
-          </Button>
-        )}
-        {/* Bordered, because on its own it is the only control on the card and
-            a borderless one read as a line of text the reviewer could not tell
-            was clickable. Its rank comes from the ground it does not have, not
-            from the edge it does. */}
+    <div className="flex flex-wrap gap-2 pt-0.5">
+      {isPrimary || !canAppoint ? null : (
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={() =>
-            onAnswer({ writerId: agent.writerId, answer: "disconnect" })
+            onAnswer({ writerId: agent.writerId, answer: "primary" })
           }
         >
-          Disconnect
+          Make it primary
         </Button>
-      </div>
-    )}
+      )}
+      {/* Bordered, because on its own it is the only control on the card and
+          a borderless one read as a line of text the reviewer could not tell
+          was clickable. Its rank comes from the ground it does not have, not
+          from the edge it does. */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          onAnswer({ writerId: agent.writerId, answer: "disconnect" })
+        }
+      >
+        Disconnect
+      </Button>
+    </div>
   </article>
 );
 
@@ -456,10 +514,11 @@ export const AgentRoster = ({
   agents,
   nowMs,
   isReadOnly,
+  rolesApply = true,
   carriedByActivity,
   onAnswer,
 }: AgentRosterProps) => {
-  const { cards, primary, requesting, isShown } = readAgentRosterFor({
+  const { attached, cards, primary, requesting, isShown } = readAgentRosterFor({
     agents,
     nowMs,
     ...(carriedByActivity === undefined ? {} : { carriedByActivity }),
@@ -485,9 +544,10 @@ export const AgentRoster = ({
         <AgentCard
           key={agent.writerId}
           agent={agent}
-          isPrimary={agent.writerId === primary?.writerId}
+          isPrimary={rolesApply && agent.writerId === primary?.writerId}
+          showsRole={rolesApply && attached.length > 1}
+          canAppoint={rolesApply}
           nowMs={nowMs}
-          isReadOnly={isReadOnly}
           onAnswer={onAnswer}
         />
       ))}

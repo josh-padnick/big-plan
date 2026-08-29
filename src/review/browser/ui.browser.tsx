@@ -627,6 +627,49 @@ type AlertDialogProps = {
   readonly anchorRef?: RefObject<HTMLElement | null>;
 };
 
+/*
+Copying one string, with the outcome shown on the control that did it.
+
+Three surfaces need this now - the recovery payload, a session identifier that
+cannot be linked, and the session id in the details - and each needs the same
+three states and the same failure wording. The behaviour lives here; the shape
+of the control is the caller's.
+*/
+export const useCopyToClipboard = (value: string) => {
+  const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const copy = async () => {
+    setCopied(false);
+    setFailed(false);
+    try {
+      if (navigator.clipboard === undefined) throw new Error("Unavailable");
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      setFailed(true);
+      return;
+    }
+    window.setTimeout(() => setCopied(false), 1_500);
+  };
+  return { copied, failed, copy };
+};
+
+/** Names a copy control by what it does and what just happened. */
+export const copyControlLabel = ({
+  label,
+  copied,
+  failed,
+}: {
+  readonly label: string;
+  readonly copied: boolean;
+  readonly failed: boolean;
+}): string =>
+  failed
+    ? "Copy failed — select and copy manually"
+    : copied
+      ? `${label} copied`
+      : `Copy ${label}`;
+
 const FOCUSABLE_SELECTOR =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 

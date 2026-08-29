@@ -28,7 +28,10 @@ import {
   relativeSignalLabel,
 } from "../shared/time-label.js";
 import { Icon } from "./icon.browser.js";
-import { AgentIdentityLine } from "./agent-identity.browser.js";
+import {
+  AgentIdentityLine,
+  AgentSessionFact,
+} from "./agent-identity.browser.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { AgentRoleBadge } from "./agent-roster.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
@@ -38,6 +41,8 @@ import {
   Button,
   Tooltip,
   WorkingMark,
+  copyControlLabel,
+  useCopyToClipboard,
 } from "./ui.browser.js";
 
 // The comment glyph that heads the subject block; it names what the block is
@@ -103,69 +108,6 @@ const ReadOnlySessionCard = ({
     </div>
   </article>
 );
-
-/*
-Copying one string, with the outcome shown on the control that did it.
-
-Three surfaces need this now - the recovery payload, a session identifier that
-cannot be linked, and the session id in the details - and each needs the same
-three states and the same failure wording. The behaviour lives here; the shape
-of the control is the caller's.
-*/
-const useCopyToClipboard = (value: string) => {
-  const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const copy = async () => {
-    setCopied(false);
-    setFailed(false);
-    try {
-      if (navigator.clipboard === undefined) throw new Error("Unavailable");
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-    } catch {
-      setFailed(true);
-      return;
-    }
-    window.setTimeout(() => setCopied(false), 1_500);
-  };
-  return { copied, failed, copy };
-};
-
-/** Names a copy control by what it does and what just happened. */
-const copyControlLabel = ({
-  label,
-  copied,
-  failed,
-}: {
-  readonly label: string;
-  readonly copied: boolean;
-  readonly failed: boolean;
-}): string =>
-  failed
-    ? "Copy failed — select and copy manually"
-    : copied
-      ? `${label} copied`
-      : `Copy ${label}`;
-
-/** A bare copy control, for a value already shown beside it. */
-const CopyIdentifierControl = ({ value }: { readonly value: string }) => {
-  const { copied, failed, copy } = useCopyToClipboard(value);
-  return (
-    <button
-      type="button"
-      className="inline-flex shrink-0 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
-      aria-label={copyControlLabel({
-        label: "agent session identifier",
-        copied,
-        failed,
-      })}
-      data-review-agent-session-copy={value}
-      onClick={() => void copy()}
-    >
-      <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
-    </button>
-  );
-};
 
 const CopyBlock = ({
   value,
@@ -419,6 +361,7 @@ const CurrentActivityCard = ({
   sessionUrl,
   sessionId,
   writerId,
+  carriesRosterAgent,
   connection,
   nowMs,
   isPrimary,
@@ -439,6 +382,11 @@ const CurrentActivityCard = ({
    * when the connector declared no handle of its own.
    */
   readonly writerId?: string;
+  /**
+   * Whether this card has absorbed the roster's own card for the same agent,
+   * which is what makes this the one place its role and its disconnect live.
+   */
+  readonly carriesRosterAgent: boolean;
   readonly connection: ReturnType<typeof summarizeAgentConnection>;
   readonly nowMs: number;
   /**
@@ -516,6 +464,13 @@ const CurrentActivityCard = ({
     ...(sessionUrl === undefined ? {} : { sessionUrl }),
     ...(sessionId === undefined ? {} : { sessionId }),
   });
+  /* The handle the fact row states. A declared session is the answer; an agent
+     that declared none is named by its roster id, the only name it has. A
+     declared URL is not repeated here, because it is already a link above. */
+  const sessionHandle =
+    sessionAffordance.kind === "identifier"
+      ? sessionAffordance.value
+      : writerId;
   // Since and Events describe a connection at rest; the session identifies the
   // agent whatever it is doing. The working card carries the second without the
   // first, and every other state carries both.
@@ -524,13 +479,20 @@ const CurrentActivityCard = ({
     connection.sinceAtMs !== undefined &&
     connection.everConnected;
   const showsConnectionFacts =
-    showsSinceAndEvents || sessionAffordance.kind === "identifier";
+    showsSinceAndEvents || sessionHandle !== undefined;
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
-  // Offered wherever there is an agent to disconnect, and nowhere else. A
-  // control on a card that already says nobody is attached would invite the
-  // reviewer to act on a session that has no other end to it.
-  const canDisconnect = agentActivityIsAttached(activity);
+  /*
+  Offered wherever there is an agent to disconnect, and nowhere else.
+
+  "Nobody attached" is two questions, not one. The activity answers whether the
+  agent is answering; the roster answers whether a record - and the claim it
+  holds - is still there to release. A disconnected agent whose roster record is
+  still standing is exactly the case where the reviewer needs the control, and
+  it is the case that used to draw a SECOND card for the same agent underneath
+  this one just to carry it (BIG-273).
+  */
+  const canDisconnect = agentActivityIsAttached(activity) || carriesRosterAgent;
   const footerLabel =
     "updatedAtMs" in activity
       ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
@@ -567,8 +529,6 @@ const CurrentActivityCard = ({
         {...(modelName === undefined ? {} : { model: modelName })}
         {...(modelEffort === undefined ? {} : { effort: modelEffort })}
         {...(modelClient === undefined ? {} : { client: modelClient })}
-        {...(sessionId === undefined ? {} : { sessionId })}
-        {...(writerId === undefined ? {} : { writerId })}
       />
       {/*
       A link only where one can actually be followed. Big Plan decides that from
@@ -645,26 +605,16 @@ const CurrentActivityCard = ({
               </dd>
             </div>
           ) : null}
-          {sessionAffordance.kind === "identifier" ? (
+          {sessionHandle === undefined ? null : (
             /* The one place a session identifier is offered. It cannot be
                followed, so it belongs with the facts a reader consults rather
                than beside the state they are reading - and having it here is
-               what lets the card above it carry no copy control at all. */
-            <div className="min-w-0">
-              <dt className="font-semibold">Agent session</dt>
-              <dd className="m-0 flex min-w-0 items-center gap-1 text-ink">
-                <span
-                  className="min-w-0 truncate"
-                  data-review-agent-session-id={sessionAffordance.value}
-                >
-                  {sessionAffordance.value}
-                </span>
-                {/* The row truncates because the identifier is long and not for
-                    reading; the control hands over the whole of it. */}
-                <CopyIdentifierControl value={sessionAffordance.value} />
-              </dd>
-            </div>
-          ) : null}
+               what lets the identity line above it carry no session at all. */
+            <AgentSessionFact
+              handle={sessionHandle}
+              isCopyable={sessionAffordance.kind === "identifier"}
+            />
+          )}
           {showsSinceAndEvents ? (
             <div className="min-w-0">
               <dt className="font-semibold">Events</dt>
@@ -1033,6 +983,7 @@ export const AgentConnectionPanel = ({
   sessionUrl,
   sessionId,
   writerId,
+  carriesRosterAgent,
   connectionLog,
   recoveryPrompt,
   isReadOnly,
@@ -1055,6 +1006,8 @@ export const AgentConnectionPanel = ({
   readonly sessionId?: string;
   /** The roster id of the agent the status card is drawing, when there is one. */
   readonly writerId?: string;
+  /** Whether the roster's card for that agent has been merged into this one. */
+  readonly carriesRosterAgent: boolean;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
   readonly isReadOnly: boolean;
@@ -1135,6 +1088,7 @@ export const AgentConnectionPanel = ({
             sessionUrl={sessionUrl}
             sessionId={sessionId}
             writerId={writerId}
+            carriesRosterAgent={carriesRosterAgent}
             connection={connection}
             nowMs={currentNowMs}
             isPrimary={isActivityPrimary}

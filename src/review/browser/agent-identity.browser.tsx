@@ -21,7 +21,10 @@ import {
   agentModelVendor,
   type AgentModelVendor,
 } from "../shared/agent-identity-catalog.js";
-import { BrandIconView } from "./icon.browser.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { COPY_ICON } from "../../icons/lucide/copy.js";
+import { BrandIconView, Icon } from "./icon.browser.js";
+import { copyControlLabel, useCopyToClipboard } from "./ui.browser.js";
 
 /** The quiet identity chip shared by agent-facing review entries. */
 export const AgentIdentityChip = ({
@@ -105,24 +108,22 @@ export type AgentIdentityFacts = {
   readonly effort?: string;
   /** The tool the agent is connected through, as declared. */
   readonly client?: string;
-  /** The conversation handle the connector declared, when it declared one. */
-  readonly sessionId?: string;
-  /**
-   * This agent's id on the roster, which names the session when the connector
-   * declared no handle of its own. It is the only name such an agent has, and
-   * it is stable across the short-lived processes one agent answers through.
-   */
-  readonly writerId?: string;
 };
 
 type AgentIdentitySegment = {
-  readonly key: "model" | "effort" | "client" | "session";
+  readonly key: "model" | "effort" | "client";
   readonly text: string;
 };
 
 /**
- * The one identity line, in the order a reviewer asks it: who is this, which
- * tool is it in, and which of its conversations am I looking at.
+ * The one identity line, in the order a reviewer asks it: who is this, how
+ * hard was it told to think, and which tool is it in.
+ *
+ * The session is deliberately not here. It was, and every card then carried the
+ * tail twice - once at the end of this line and once in the session fact below
+ * it - which reads as two different handles until you compare them character by
+ * character. The session is a fact about the conversation rather than a part of
+ * the agent's name, so it lives in the fact row and only there (BIG-273).
  *
  * Each segment is independent, because each is declared independently, and a
  * segment nobody declared is left out rather than filled in. The catalog
@@ -133,11 +134,8 @@ export const agentIdentitySegments = ({
   model,
   effort,
   client,
-  sessionId,
-  writerId,
-}: AgentIdentityFacts): ReadonlyArray<AgentIdentitySegment> => {
-  const handle = sessionId ?? writerId;
-  return [
+}: AgentIdentityFacts): ReadonlyArray<AgentIdentitySegment> =>
+  [
     model === undefined
       ? undefined
       : ({ key: "model", text: agentModelDisplayName(model) } as const),
@@ -147,11 +145,7 @@ export const agentIdentitySegments = ({
     client === undefined
       ? undefined
       : ({ key: "client", text: agentClientDisplayName(client) } as const),
-    handle === undefined
-      ? undefined
-      : ({ key: "session", text: agentSessionTail(handle) } as const),
   ].filter((segment) => segment !== undefined);
-};
 
 /**
  * The identity line every agent card wears, in every state it can be in.
@@ -171,15 +165,11 @@ export const AgentIdentityLine = ({
   model,
   effort,
   client,
-  sessionId,
-  writerId,
 }: AgentIdentityFacts) => {
   const segments = agentIdentitySegments({
     ...(model === undefined ? {} : { model }),
     ...(effort === undefined ? {} : { effort }),
     ...(client === undefined ? {} : { client }),
-    ...(sessionId === undefined ? {} : { sessionId }),
-    ...(writerId === undefined ? {} : { writerId }),
   });
   if (segments.length === 0) return null;
   return (
@@ -188,9 +178,6 @@ export const AgentIdentityLine = ({
       {...(model === undefined ? {} : { "data-review-agent-model": model })}
       {...(effort === undefined ? {} : { "data-review-agent-effort": effort })}
       {...(client === undefined ? {} : { "data-review-agent-client": client })}
-      {...(writerId === undefined
-        ? {}
-        : { "data-review-agent-writer": writerId })}
     >
       {model === undefined ? null : <ModelIcon modelName={model} />}
       {segments.map((segment, index) => (
@@ -204,10 +191,9 @@ export const AgentIdentityLine = ({
           )}
           <span
             className={
-              /* The session tail is fixed-width and the whole point of its
-                 being there, so the names give way before it does. The effort
-                 is a qualifier rather than a name, and reads as one. */
-              segment.key === "session" || segment.key === "effort"
+              /* The effort is a qualifier rather than a name, and reads as
+                 one; the names are what give way when the line runs out. */
+              segment.key === "effort"
                 ? "shrink-0 font-normal text-muted"
                 : "min-w-0 truncate"
             }
@@ -219,3 +205,61 @@ export const AgentIdentityLine = ({
     </span>
   );
 };
+
+/** A bare copy control, for a value already shown beside it. */
+export const CopyIdentifierControl = ({
+  value,
+}: {
+  readonly value: string;
+}) => {
+  const { copied, failed, copy } = useCopyToClipboard(value);
+  return (
+    <button
+      type="button"
+      className="inline-flex shrink-0 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
+      aria-label={copyControlLabel({
+        label: "agent session identifier",
+        copied,
+        failed,
+      })}
+      data-review-agent-session-copy={value}
+      onClick={() => void copy()}
+    >
+      <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
+    </button>
+  );
+};
+
+/**
+ * The session an agent is answering from, as every card states it.
+ *
+ * The suffix form and only the suffix form. The full handle used to be printed
+ * here while the identity line above ended in the same four characters, so one
+ * card showed the same session twice in two shapes and a reviewer had to
+ * compare them to be sure they matched (BIG-273). Four characters is what a
+ * reviewer checks against the handle their own tool printed; the control hands
+ * over the whole of it for anything that needs the rest.
+ */
+export const AgentSessionFact = ({
+  handle,
+  isCopyable = true,
+}: {
+  /** The declared session handle, or the roster id standing in for it. */
+  readonly handle: string;
+  /**
+   * Whether the whole handle is worth offering. A roster id standing in for a
+   * session names an agent inside Big Plan and nothing outside it, so there is
+   * nowhere for a reviewer to paste it.
+   */
+  readonly isCopyable?: boolean;
+}) => (
+  <div className="min-w-0">
+    <dt className="font-semibold">Agent session</dt>
+    <dd className="m-0 flex min-w-0 items-center gap-1 text-ink">
+      <span className="min-w-0 truncate" data-review-agent-session-id={handle}>
+        {agentSessionTail(handle)}
+      </span>
+      {isCopyable ? <CopyIdentifierControl value={handle} /> : null}
+    </dd>
+  </div>
+);
