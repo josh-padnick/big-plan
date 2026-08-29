@@ -27,6 +27,7 @@ import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import {
   readApprovalRecord,
   readStoreJson,
+  writeApprovalBrief,
   writeApprovalRecord,
   writeStoreJson,
   type ReviewStore,
@@ -43,6 +44,7 @@ type ApprovalFinalization = {
   readonly approval: ApprovalRecord;
   readonly verdicts: StoredChangeVerdicts;
   readonly handoff: AgentApprovalRequest;
+  readonly brief: string;
 };
 
 type ApprovalFinalizationResult = {
@@ -71,7 +73,9 @@ const validateFinalization = (value: unknown): ApprovalFinalization => {
     ) ||
     !("approval" in value) ||
     !("verdicts" in value) ||
-    !("handoff" in value)
+    !("handoff" in value) ||
+    !("brief" in value) ||
+    typeof value.brief !== "string"
   ) {
     throw new Error("The interrupted approval finalization is invalid");
   }
@@ -87,6 +91,7 @@ const validateFinalization = (value: unknown): ApprovalFinalization => {
     approval: validateApprovalRecord(value.approval),
     verdicts: validateChangeVerdicts(value.verdicts),
     handoff,
+    brief: value.brief,
   };
 };
 
@@ -178,6 +183,12 @@ const settleLocked = async ({
   if (!hasJournaledApproval) {
     await writeApprovalRecord({ store, record: currentApproval });
   }
+  await writeApprovalBrief({
+    store,
+    approvalId: journaledEntry.approvalId,
+    createdAt: journaledEntry.at,
+    brief: finalization.brief,
+  });
   if (
     inForceApproval(currentApproval)?.approvalId !== journaledEntry.approvalId
   ) {

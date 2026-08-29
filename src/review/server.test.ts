@@ -7014,6 +7014,49 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("surfaces approval brief failure and recovers its publication", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await rm(target.store.feedbackDirectory, {
+          recursive: true,
+          force: true,
+        });
+        await writeFile(target.store.feedbackDirectory, "not a directory");
+
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+          message: "Start after the durable brief exists.",
+        });
+        expect(approved.status).toBe(500);
+        await expect(
+          readFile(target.store.approvalFinalizationPath, "utf8"),
+        ).resolves.toBeDefined();
+
+        await rm(target.store.feedbackDirectory, { force: true });
+        await mkdir(target.store.feedbackDirectory, { recursive: true });
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+
+        const written = (await readdir(target.store.feedbackDirectory)).filter(
+          (name) => name.includes("-approval-") && name.endsWith(".md"),
+        );
+        expect(written).toHaveLength(1);
+        await expect(
+          readFile(
+            join(target.store.feedbackDirectory, written[0] ?? ""),
+            "utf8",
+          ),
+        ).resolves.toContain("Start after the durable brief exists.");
+        await expect(
+          readFile(target.store.approvalFinalizationPath, "utf8"),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+      },
+    );
+  });
+
   it("refuses a second approve of the same snapshot", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,

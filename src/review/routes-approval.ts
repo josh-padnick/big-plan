@@ -32,7 +32,6 @@ import {
   randomId,
   readAgentPresence,
   readSnapshot,
-  writeApprovalBrief,
   writeSnapshot,
 } from "./store.js";
 import { currentAnswers } from "./plan-inputs-store.js";
@@ -498,6 +497,10 @@ export const approvePlan = async (
     approval: next,
     verdicts,
     handoff,
+    brief: buildApprovalBrief({
+      planPath: context.resolvedPlanPath,
+      entry,
+    }),
   };
   let finalizationResult: Awaited<
     ReturnType<typeof commitApprovalFinalization>
@@ -529,22 +532,6 @@ export const approvePlan = async (
       stepCode: "request-canceled",
       step: "Request canceled by approval",
       requestId,
-    });
-  }
-  try {
-    await writeApprovalBrief({
-      store: context.store,
-      approvalId: entry.approvalId,
-      createdAt: entry.at,
-      brief: buildApprovalBrief({
-        planPath: context.resolvedPlanPath,
-        entry,
-      }),
-    });
-  } catch (error: unknown) {
-    context.reportDiagnostic({
-      message: "The approval brief could not be written",
-      error,
     });
   }
   const summary = await loadSummary(context, settledSource.digest);

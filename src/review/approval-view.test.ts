@@ -88,27 +88,11 @@ describe("the approval a reviewer is shown", () => {
     ).resolves.toMatchObject({ delivered: true });
   });
 
-  // Telling the reviewer the agent never got the approval sends them to revoke
-  // it. A store Big Plan could not look in is no evidence for that.
-  it("should not call a mailbox it cannot read an undelivered approval", async () => {
-    const { planPath, store } = await preparedStore();
-    await writeAgentRequest({
-      store,
-      request: approvalAgentRequest({
-        approvalId: APPROVAL_ID,
-        sessionId: SESSION_ID,
-        planId: PLAN_ID,
-        planPath,
-        pinnedSnapshot: SNAPSHOT,
-        createdAt: entry.at,
-        recordedAnswers: [],
-        unansweredDecisions: [],
-        message: entry.message,
-      }),
-    });
+  it("should not infer delivery when the mailbox cannot be read", async () => {
+    const { store } = await preparedStore();
     await chmod(store.agentRequestDirectory, 0o000);
     await expect(
       readApprovalSummary({ store, record, currentSnapshot: SNAPSHOT }),
-    ).resolves.toMatchObject({ delivered: true });
+    ).resolves.toMatchObject({ delivered: false });
   });
 });

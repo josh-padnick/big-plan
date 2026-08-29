@@ -16,10 +16,7 @@ import type { ReviewStore } from "./store.js";
 /**
  * Whether the handoff for this approval is in the mailbox.
  *
- * A mailbox that cannot be read answers "delivered": the question here is
- * whether Big Plan can prove the agent was never handed the approval, and an
- * unreadable store proves nothing. Claiming an undelivered handoff on that
- * evidence would send the reviewer to revoke an approval the agent may hold.
+ * A mailbox that cannot be read cannot prove delivery.
  */
 const approvalWasDelivered = async ({
   store,
@@ -28,7 +25,7 @@ const approvalWasDelivered = async ({
   readonly store: ReviewStore;
   readonly approvalId: string;
 }): Promise<boolean> =>
-  hasAgentRequest({ store, requestId: approvalId }).catch(() => true);
+  hasAgentRequest({ store, requestId: approvalId }).catch(() => false);
 
 /** The browser-facing summary of the approval in force, delivery included. */
 export const readApprovalSummary = async ({
