@@ -56,9 +56,13 @@ type PendingVerdict = {
 export type ChangeVerdictsValue = {
   /** The accepted change keys, including gestures still being written. */
   readonly accepted: ReadonlySet<string>;
+  /** Stored acceptances made by the session's auto-accept mode. */
+  readonly autoAccepted: ReadonlySet<string>;
   /** False while the runtime has told this page it may not record anything. */
   readonly canRecord: boolean;
   readonly recordChangeVerdicts: (input: PendingVerdict) => void;
+  /** Re-read after a server-side operation records verdicts outside this hook. */
+  readonly refresh: () => void;
 };
 
 const overlay = ({
@@ -107,6 +111,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
   const [canRecord, setCanRecord] = useState(
     () => identity !== null && !isReadOnlyReview(),
   );
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const queue = useRef<Array<PendingVerdict>>([]);
   const isFlushing = useRef(false);
   const appliedRevision = useRef(-1);
@@ -268,14 +273,33 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
     return () => {
       reading = false;
     };
-  }, [applyResponse, articleVersion, identity]);
+  }, [applyResponse, articleVersion, identity, refreshVersion]);
 
   const accepted = useMemo(
     () => overlay({ stored, pending }),
     [pending, stored],
   );
+  const autoAccepted = useMemo(
+    () =>
+      new Set(
+        stored.accepted
+          .filter((entry) => entry.actor === "auto-accept")
+          .map((entry) => changeVerdictKey(entry)),
+      ),
+    [stored],
+  );
+  const refresh = useCallback(
+    () => setRefreshVersion((value) => value + 1),
+    [],
+  );
   return useMemo(
-    () => ({ accepted, canRecord, recordChangeVerdicts }),
-    [accepted, canRecord, recordChangeVerdicts],
+    () => ({
+      accepted,
+      autoAccepted,
+      canRecord,
+      recordChangeVerdicts,
+      refresh,
+    }),
+    [accepted, autoAccepted, canRecord, recordChangeVerdicts, refresh],
   );
 };

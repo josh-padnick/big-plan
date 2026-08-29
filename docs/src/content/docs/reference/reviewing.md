@@ -89,7 +89,7 @@ The page then shows a **This review session has stopped accepting changes** aler
 The runtime keeps renewing its heartbeat, so the coding agent still sees the session as live, but it cannot save changes through that runtime.
 Already persisted review data remains available, and a newly staged comment stays in the page and its local recovery snapshot, so keep the tab open, stop the runtime, and start it again on the same plan.
 
-Every action that changes the review asks the same question before it sends: submitting comments, replying in a thread, asking a plan-wide question, deleting a sent comment, reverting the agent's changes, cancelling a queued request, and attaching an image.
+Every action that changes the review asks the same question before it sends: submitting comments, replying in a thread, asking a plan-wide question, deleting a sent comment, reverting the agent's changes, cancelling a queued request, changing auto-accept mode, and attaching an image.
 When the answer is no, the action is refused up front and says why, what became of what you typed, and what clears the block, rather than appearing to start and failing seconds later.
 Reading is never affected, and nothing you typed is discarded: text stays in its box, an unattached image leaves the message unchanged, and a request you could not cancel is still reported as being with the agent.
 The same refusal covers a runtime the page has lost contact with and a session a newer review runtime has replaced, so the reason you are given always matches the condition the page actually observed.
@@ -133,19 +133,25 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 
-The **Chat** tab groups unresolved pushed conversations under **Threads** and files resolved ones under **Resolved**.
+The **Chat** tab keeps pushed conversations that still need a verdict under **Needs you**, ranks them above changes already accepted by auto-accept under **Applied**, and files reviewer-resolved conversations under **Resolved**.
 Every pushed card uses the bot icon and **Added by agent** heading.
 A push that relays reviewer wording needs no extra origin marker, while an agent-authored opener carries the narrower **Agent-opened · About** context.
 Open the card to reply, review and accept its changes, revert a response, or resolve the thread after its pending work finishes.
 When the agent continues a pushed thread, Big Plan adds another exchange to the same card.
 The card keeps the opener's presentation.
+An unresolved pushed card offers **Auto-accept all changes**.
+Its confirmation separates the immediate consequence - accepting the open changes in that thread - from the session-wide consequence that every later push arrives accepted, including pushes in other threads.
+While armed, the Chat tab shows when auto-accept was turned on and offers **Switch back to review**.
+Applied cards remain conversations: you can reply, receive a follow-up push, inspect each pushed revision's summary, or revert it.
+Switching back changes only later arrivals: it leaves the card and its conversation available, while the next pushed change arrives open for review.
+Starting a fresh review session always starts in review mode.
 
 A push that lands while you are reading announces itself.
 The **Chat** tab leads with a **Pushed just now** entry naming the agent's model and client, plus how many blocks changed when the push revised the plan.
 **Open thread** takes you to the conversation, and **Dismiss** clears the entry; either way the entry names the newest arrival, and a newer push replaces it.
 On a wide screen, where the sidebar sits beside the plan rather than over it, an arrival opens the sidebar on **Chat** for you, unless you are part-way through writing a comment or reply or a pointer press is in flight: reserving the sidebar's gutter would move or recreate the control you are using, so the arrival waits until that interaction finishes.
 On a narrower screen it waits as well, because the sidebar would cover the sentence you are reading.
-The entry waits on **Chat** without adding a closed-sidebar toolbar indicator; once the sidebar is open on another tab, **Chat** carries a mark until you view the entry.
+Instead, the closed **Feedback** control carries the arrival count; once the sidebar is open on another tab, **Chat** carries a mark until you view the entry.
 Your reading position is kept either way.
 
 The blocks the revision changed settle briefly in place, so you can see what moved without hunting for it.
