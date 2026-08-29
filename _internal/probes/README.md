@@ -63,6 +63,7 @@ Method:
 
 ```sh
 node _internal/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
+node _internal/probes/push-mode-probe.mjs --arm control,before,after --baseline-rev <pre-change-rev> --trials 3 --transcripts <dir>
 node _internal/probes/push-mode-probe.mjs --trials 5 --harness claude --arm after
 node _internal/probes/push-mode-probe.mjs --arm control --question doubted
 ```
@@ -71,6 +72,14 @@ The summary is a count per arm, question, and harness, not a pass or fail. Read
 it as a distribution: the change is good when `other` and `harness_error` go to
 zero on the `after` arm across every harness and both wordings, and stay there -
 and it is only evidence at all when the `control` arm stays non-push.
+
+Record the command, revision, per-arm totals, harnesses, wordings, and trial
+count in the pull request. End that evidence with one plain status line so the
+result remains scannable, for example:
+
+```text
+Push-mode probe: after 18/18 push; before 18/18 push; control 0/18 push (Claude, Codex, Grok; direct + doubted; 3 trials each).
+```
 
 For ad-hoc baseline work, `capture-connector-prompt.mjs --baseline
 --baseline-rev <rev>` reconstructs an earlier prompt. It refuses revisions that
