@@ -192,7 +192,7 @@ describe("validateComments acceptance", () => {
         },
       ],
       blocks: BLOCKS,
-      blocksForSnapshot: () => SNAPSHOT_BLOCKS,
+      snapshots: new Map([[SNAPSHOT, SNAPSHOT_BLOCKS]]),
       existing: [],
       now: NOW,
     });
@@ -223,7 +223,7 @@ describe("validateComments acceptance", () => {
           },
         ],
         blocks: BLOCKS,
-        blocksForSnapshot: () => undefined,
+        snapshots: new Map(),
         existing: [],
         now: NOW,
       }),
@@ -239,7 +239,7 @@ describe("validateComments acceptance", () => {
           snapshot: "not-a-digest",
         }),
         blocks: BLOCKS,
-        blocksForSnapshot: () => undefined,
+        snapshots: new Map(),
         existing: [],
         now: NOW,
       }),
@@ -290,7 +290,7 @@ describe("validateComments target resolution", () => {
         },
       ],
       blocks: BLOCKS,
-      blocksForSnapshot: () => BLOCKS,
+      snapshots: new Map([[snapshot, BLOCKS]]),
       now: NOW,
     });
     expect(comment?.target).toEqual({
@@ -319,7 +319,7 @@ describe("validateComments target resolution", () => {
           },
         ],
         blocks: BLOCKS,
-        blocksForSnapshot: () => undefined,
+        snapshots: new Map(),
         now: NOW,
       }),
     ).toThrow("no longer retains");

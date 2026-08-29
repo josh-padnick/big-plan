@@ -21,7 +21,7 @@ import {
 import { renderDocument } from "../render/render-document.js";
 import type { SnapshotDiff } from "./shared/review-wire.js";
 import type { BlockMapEntry } from "./shared/comment.js";
-import { prepareStore, reviewStoreFor } from "./store.js";
+import { prepareStore, reviewStoreFor, writeSnapshot } from "./store.js";
 import {
   createMutationRegistry,
   ReviewWriteStalled,
@@ -470,7 +470,8 @@ describe("createPlanRenderer snapshot target maps", () => {
       markdown,
       fallbackTitle: "plan",
     }).blocks.find((candidate) => candidate.kind === "paragraph");
-    if (block === undefined) throw new Error("Paragraph fixture did not compile");
+    if (block === undefined)
+      throw new Error("Paragraph fixture did not compile");
     const renderer = createPlanRenderer({
       store,
       planId: "0123456789abcdef",
@@ -506,6 +507,100 @@ describe("createPlanRenderer snapshot target maps", () => {
       snapshot,
       label: block.label,
     });
+  });
+
+  it("loads a retained snapshot from disk after the diff cache misses", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
+    created.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    const markdown = "# Plan\n\nA retained paragraph.\n";
+    await writeFile(planPath, markdown);
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const snapshot = "2222222222222222";
+    await writeSnapshot({ store, snapshot, source: markdown });
+    const block = renderDocument({
+      markdown,
+      fallbackTitle: "plan",
+    }).blocks.find((candidate) => candidate.kind === "paragraph");
+    if (block === undefined)
+      throw new Error("Paragraph fixture did not compile");
+    const renderer = createPlanRenderer({
+      store,
+      planId: "0123456789abcdef",
+      sessionId: "fedcba9876543210",
+      token: "token",
+      resolvedPlanPath: planPath,
+      initialSnapshot: snapshot,
+      isDiffPreview: false,
+    });
+
+    await renderer.renderPlan();
+    const [comment] = await renderer.validateUpdates([
+      {
+        id: "bbccddee",
+        body: "A retained note.",
+        createdAt: "2026-08-29T00:00:00.000Z",
+        premiseSnapshot: snapshot,
+        target: {
+          type: "block",
+          blockId: block.id,
+          snapshot,
+        },
+      },
+    ]);
+
+    expect(comment?.target).toMatchObject({
+      type: "block",
+      blockId: block.id,
+      snapshot,
+      label: block.label,
+    });
+  });
+
+  it("refuses a qualified target when its snapshot has been pruned", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
+    created.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    const markdown = "# Plan\n\nA current paragraph.\n";
+    await writeFile(planPath, markdown);
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const snapshot = "3333333333333333";
+    const block = renderDocument({
+      markdown,
+      fallbackTitle: "plan",
+    }).blocks.find((candidate) => candidate.kind === "paragraph");
+    if (block === undefined)
+      throw new Error("Paragraph fixture did not compile");
+    const renderer = createPlanRenderer({
+      store,
+      planId: "0123456789abcdef",
+      sessionId: "fedcba9876543210",
+      token: "token",
+      resolvedPlanPath: planPath,
+      initialSnapshot: snapshot,
+      isDiffPreview: false,
+    });
+
+    await renderer.renderPlan();
+    await expect(
+      renderer.validateUpdates([
+        {
+          id: "ccddeeaa",
+          body: "A stale note.",
+          createdAt: "2026-08-29T00:00:00.000Z",
+          premiseSnapshot: snapshot,
+          target: {
+            type: "block",
+            blockId: block.id,
+            snapshot,
+          },
+        },
+      ]),
+    ).rejects.toThrow(
+      "A comment points at a snapshot this review no longer retains",
+    );
   });
 });
 

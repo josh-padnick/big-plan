@@ -307,13 +307,11 @@ const resolveBlock = ({
 const validateTarget = ({
   value,
   blocks,
-  blocksForSnapshot,
+  snapshots,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
-  readonly blocksForSnapshot?: (
-    snapshot: string,
-  ) => ReadonlyMap<string, BlockMapEntry> | undefined;
+  readonly snapshots?: ReadonlyMap<string, ReadonlyMap<string, BlockMapEntry>>;
 }): CommentTarget => {
   const target = asRecord({ value, field: "target" });
   const type = target.type;
@@ -325,7 +323,7 @@ const validateTarget = ({
       ? undefined
       : asSnapshotDigest(target.snapshot, "target.snapshot");
   const targetBlocks =
-    snapshot === undefined ? blocks : blocksForSnapshot?.(snapshot);
+    snapshot === undefined ? blocks : snapshots?.get(snapshot);
   if (targetBlocks === undefined) {
     throw new CommentRejected(
       "A comment points at a snapshot this review no longer retains",
@@ -621,14 +619,12 @@ const validateCommentList = ({
 export const validateComments = ({
   value,
   blocks,
-  blocksForSnapshot,
+  snapshots,
   now,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
-  readonly blocksForSnapshot?: (
-    snapshot: string,
-  ) => ReadonlyMap<string, BlockMapEntry> | undefined;
+  readonly snapshots?: ReadonlyMap<string, ReadonlyMap<string, BlockMapEntry>>;
   readonly now: string;
 }): ReadonlyArray<ReviewComment> =>
   validateCommentList({
@@ -639,7 +635,7 @@ export const validateComments = ({
       validateTarget({
         value: comment.target,
         blocks,
-        blocksForSnapshot,
+        snapshots,
       }),
   });
 
@@ -669,15 +665,13 @@ export const validateStoredComments = ({
 export const validateCommentUpdates = ({
   value,
   blocks,
-  blocksForSnapshot,
+  snapshots,
   existing,
   now,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
-  readonly blocksForSnapshot?: (
-    snapshot: string,
-  ) => ReadonlyMap<string, BlockMapEntry> | undefined;
+  readonly snapshots?: ReadonlyMap<string, ReadonlyMap<string, BlockMapEntry>>;
   readonly existing: ReadonlyArray<ReviewComment>;
   readonly now: string;
 }): ReadonlyArray<ReviewComment> => {
@@ -693,7 +687,7 @@ export const validateCommentUpdates = ({
       validateTarget({
         value: comment.target,
         blocks,
-        blocksForSnapshot,
+        snapshots,
       }),
     createdAtFor: (comment, id) =>
       existingById.get(id)?.createdAt ?? asTimestamp(comment.createdAt, now),
