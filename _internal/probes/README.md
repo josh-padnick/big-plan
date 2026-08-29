@@ -49,12 +49,17 @@ Method:
    the change has to come from the UI - the wording the original wrong answer
    came back to.
 4. Ask every harness the same thing under both arms, several trials each, and
-   require its reply to end with `NEXT_COMMAND: <the exact command you would run
-next, or NONE>`. Score only the last such line: `push` when it names the push
-   command, `other` for `NONE` or another command, and `harness_error` when the
-   reply omits the field. Parsing free English proved unreliable across three
-   review rounds; the final line is a deterministic contract the harness can
-   be asked to honor.
+   require its reply to end with this exact shape:
+
+   ```text
+   NEXT_COMMAND: <the exact command you would run next, or NONE>
+   ```
+
+   Score only the last such line: `push` when it names the push command,
+   `other` for `NONE` or another command, and `harness_error` when the reply
+   omits the field. Parsing free English proved unreliable across three review
+   rounds; the final line is a deterministic contract the harness can be asked
+   to honor.
 
 ```sh
 node _internal/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
