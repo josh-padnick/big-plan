@@ -9,6 +9,7 @@ import { createDiagnosticCollector } from "../_authoring/diagnostics.js";
 import type { CompiledComponent } from "../_registration/define-component.js";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
 import { WIREFRAME_COMPONENT_DEFINITION } from "./definition.js";
+import { WIREFRAME_ICON_NAMES } from "./model.js";
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 20 },
@@ -116,6 +117,31 @@ const elementWithClass = ({
   for (const child of node.children) {
     if (child.type === "element") {
       const found = elementWithClass({ node: child, className });
+      if (found !== undefined) {
+        return found;
+      }
+    }
+  }
+  return undefined;
+};
+
+// The same search keyed by an attribute, for the elements a test identifies by
+// what they assert rather than by the class they wear.
+const elementWithProperty = ({
+  node,
+  property,
+  value,
+}: {
+  readonly node: Element;
+  readonly property: string;
+  readonly value: string;
+}): Element | undefined => {
+  if (node.properties[property] === value) {
+    return node;
+  }
+  for (const child of node.children) {
+    if (child.type === "element") {
+      const found = elementWithProperty({ node: child, property, value });
       if (found !== undefined) {
         return found;
       }
@@ -2856,6 +2882,104 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     // A drawn mark still reaches a screen reader as nothing at all.
     expect(rendered).toContain('"ariaHidden":"true"');
     expect(rendered).not.toContain("data-wireframe-icon-unnamed");
+  });
+
+  it("should draw a real mark for every meaning the vocabulary names", () => {
+    // The vocabulary and the marks live in two files, joined only by an
+    // exhaustive key. A name that reaches the delivered document as a crossed
+    // placeholder is the one failure that compiles cleanly, so the guard is
+    // that every name draws ink instead.
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: WIREFRAME_ICON_NAMES.map((name) =>
+            element({
+              name: "Icon",
+              attributes: { name, label: name },
+            }),
+          ),
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).not.toContain("data-wireframe-icon-unnamed");
+    for (const name of WIREFRAME_ICON_NAMES) {
+      expect(rendered).toContain(`"data-wireframe-icon":"${name}"`);
+    }
+  });
+
+  it("should mark a glyph that stands with words and leave a standalone one alone", () => {
+    // Containment is asserted by the owner that draws the pair, so what the
+    // component slice owns is which marks make that assertion; the geometry it
+    // buys is fenced in the browser.
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Icon",
+              attributes: { name: "tip", label: "Tip", labelled: true },
+            }),
+            element({
+              name: "Icon",
+              attributes: { name: "lock", label: "Locked" },
+            }),
+            element({
+              name: "Button",
+              attributes: { label: "Copy command", icon: "copy" },
+            }),
+            element({
+              name: "Button",
+              attributes: {
+                label: "Close panel",
+                icon: "close",
+                iconOnly: true,
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const root = render(compiled);
+    const withText = (name: string): boolean => {
+      const glyph = elementWithProperty({
+        node: root,
+        property: "data-wireframe-icon",
+        value: name,
+      });
+      return glyph?.properties["data-wireframe-glyph-with-text"] === "";
+    };
+    expect(withText("tip")).toBe(true);
+    expect(withText("copy")).toBe(true);
+    expect(withText("lock")).toBe(false);
+    expect(withText("close")).toBe(false);
+  });
+
+  it("should refuse a size on a labelled icon, whose mark is sized by its words", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Icon",
+              attributes: {
+                name: "tip",
+                label: "Tip",
+                labelled: true,
+                size: "lg",
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.message).toContain("remove size");
   });
 
   it("should draw the placeholder carrying the name when the set has no such glyph", () => {

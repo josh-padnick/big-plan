@@ -187,7 +187,7 @@ Details.
   <Screen id="main" name="Main" device="desktop">
     <Group gap="lg" align="end">
       <Reference icon="terminal" text="big-plan render plan.mdx" copyLabel="Copy command" />
-      <Icon name="tip" label="Tip" labelled size="sm" />
+      <Icon name="tip" label="Tip" labelled />
     </Group>
     <Overlay title="Confirm export" kind="alert" backdrop="dim">
       <Button label="Close" />
@@ -217,7 +217,7 @@ Details.
     for (const meaning of [
       "Compact horizontal cluster; its controls stay together as one unit, with generous spacing and their lower edges aligned.",
       "Bordered copyable reference: `big-plan render plan.mdx` (leading terminal symbol; copy button labelled Copy command)",
-      "Small standalone symbol meaning Tip (visible text label)",
+      "Symbol meaning Tip, drawn beside those words",
       "Centered blocking alert dialog titled Confirm export; the page behind it is dimmed and unavailable until the alert is answered.",
       "Large selectable card: Export — Save the plan (art: 📦; visibly selected with the strongest outline and selection mark)",
     ]) {

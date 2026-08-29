@@ -596,6 +596,14 @@ const nodeLines = (
           )}`,
         ];
       case "Icon": {
+        // A labelled icon carries no step: its mark is drawn at the size of
+        // the words beside it, so naming one here would report a decision
+        // nobody made.
+        if (node.size === undefined) {
+          return [
+            `${prefix}Symbol meaning ${safeText(node.label)}, drawn beside those words`,
+          ];
+        }
         const size =
           node.size === "sm"
             ? "Small"
@@ -603,7 +611,7 @@ const nodeLines = (
               ? "Medium"
               : "Large";
         return [
-          `${prefix}${size} standalone symbol meaning ${safeText(node.label)} (${node.labelled ? "visible text label" : "meaning available to assistive technology only"})`,
+          `${prefix}${size} standalone symbol meaning ${safeText(node.label)} (meaning available to assistive technology only)`,
         ];
       }
       case "Divider":
