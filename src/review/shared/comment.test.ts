@@ -290,7 +290,7 @@ describe("validateComments target resolution", () => {
         },
       ],
       blocks: BLOCKS,
-      snapshots: new Map([[snapshot, BLOCKS]]),
+      blocksForSnapshot: () => BLOCKS,
       now: NOW,
     });
     expect(comment?.target).toEqual({
@@ -319,7 +319,7 @@ describe("validateComments target resolution", () => {
           },
         ],
         blocks: BLOCKS,
-        snapshots: new Map(),
+        blocksForSnapshot: () => undefined,
         now: NOW,
       }),
     ).toThrow("no longer retains");

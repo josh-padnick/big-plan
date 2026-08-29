@@ -21,7 +21,7 @@ import {
 import { renderDocument } from "../render/render-document.js";
 import type { SnapshotDiff } from "./shared/review-wire.js";
 import type { BlockMapEntry } from "./shared/comment.js";
-import { prepareStore, reviewStoreFor, writeSnapshot } from "./store.js";
+import { prepareStore, reviewStoreFor } from "./store.js";
 import {
   createMutationRegistry,
   ReviewWriteStalled,
@@ -457,7 +457,7 @@ describe("createSnapshotDiffs", () => {
 });
 
 describe("createPlanRenderer snapshot target maps", () => {
-  it("loads a retained snapshot from disk after the diff cache misses", async () => {
+  it("uses the retained snapshot map supplied by the diff cache", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
     created.push(directory);
     const planPath = join(directory, "plan.mdx");
@@ -466,7 +466,6 @@ describe("createPlanRenderer snapshot target maps", () => {
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
     const snapshot = "1111111111111111";
-    await writeSnapshot({ store, snapshot, source: markdown });
     const block = renderDocument({
       markdown,
       fallbackTitle: "plan",
@@ -480,6 +479,10 @@ describe("createPlanRenderer snapshot target maps", () => {
       resolvedPlanPath: planPath,
       initialSnapshot: snapshot,
       isDiffPreview: false,
+      blocksForSnapshot: (requestedSnapshot) =>
+        requestedSnapshot === snapshot
+          ? new Map([[block.id, block]])
+          : undefined,
     });
 
     await renderer.renderPlan();
