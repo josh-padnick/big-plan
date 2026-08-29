@@ -844,7 +844,7 @@ export const commitStagedPlanMutation = async ({
           request,
           commentsById: new Map(),
           changedBlocks: new Set(),
-          currentSnapshot: deriveSnapshotDigest(approvalSource),
+          currentSnapshot: response.resultSnapshot,
           now: response.createdAt,
         });
       }

@@ -1127,7 +1127,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should refuse an approval acknowledgment after canonical source moves", async () => {
+  it("should preserve a later canonical edit while acknowledging the pinned candidate", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "big-plan-agent-approve-source-moved-"),
     );
@@ -1176,9 +1176,7 @@ describe("agent work loop lifecycle", () => {
           executablePath,
           agentToken: pickup.agent_token,
         }),
-      ).rejects.toThrow(
-        'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
-      );
+      ).resolves.toMatchObject({ responded: request.requestId });
       await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
       await expect(
         readAgentExchange({
@@ -1186,7 +1184,9 @@ describe("agent work loop lifecycle", () => {
           sessionId: review.sessionId,
           planId: review.planId,
         }),
-      ).resolves.toMatchObject({ responses: [] });
+      ).resolves.toMatchObject({
+        responses: [{ kind: "approval", resultSnapshot: pinned }],
+      });
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
