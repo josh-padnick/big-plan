@@ -36,16 +36,14 @@ const OVERHEAD_SAMPLE_COUNT = 10;
 // `test:proxy-overhead` runs this spec alone and owns the approved medians.
 // The ordinary parallel suite keeps a broad regression ceiling because its
 // worker contention is not a measurement of proxy cost.
-// Absolute route timings include filesystem and scheduler contention on the
-// self-hosted runner. Proxy-added-cost ceilings below remain independently
-// strict, while these host-latency checks retain a finite regression bound.
+// The dedicated worker removes Vitest contention, but the self-hosted runner
+// can still delay filesystem-backed resolution while another job uses the host.
 const DEDICATED_BENCHMARK_BATCH_COUNT = 3;
 const STRICT_OVERHEAD_MEDIAN_TOLERANCE_MS = 4;
 // Filesystem-backed plan resolution has a wider cross-runtime variance than
 // the in-process direct/proxy comparison while retaining its 2.2 ms baseline.
 const STRICT_RESOLUTION_MEDIAN_TOLERANCE_MS = 4;
 const PARALLEL_OVERHEAD_SANITY_TOLERANCE_MS = 25;
-const TIMER_MEASUREMENT_EPSILON_MS = 0.1;
 const isDedicatedOverheadBenchmark =
   process.env["BIG_PLAN_PROXY_BENCHMARK"] === "1";
 const overheadMedianToleranceMs = isDedicatedOverheadBenchmark
@@ -54,9 +52,9 @@ const overheadMedianToleranceMs = isDedicatedOverheadBenchmark
 // Reference medians: document 8.2 ms direct and 9.8 ms proxied; poll 1.38 ms
 // direct and 1.77 ms proxied.
 const STATED_DOCUMENT_ADDED_MS = 1.6;
-const DOCUMENT_ADDED_CEILING_MS = 10;
+const DOCUMENT_ADDED_CEILING_MS = 5;
 const STATED_POLL_ADDED_MS = 0.39;
-const POLL_ADDED_CEILING_MS = 5;
+const POLL_ADDED_CEILING_MS = 2;
 const STATED_RESOLUTION_MS = 2.2;
 const STATED_SERVICE_REDIRECT_MS = 3;
 const STATED_SERVICE_HEALTH_MS = 0.7;
@@ -770,9 +768,7 @@ describe("the stable review proxy", () => {
       expect(Number.isFinite(row.directMedianMs)).toBe(true);
       expect(Number.isFinite(row.proxiedMedianMs)).toBe(true);
       expect(Number.isFinite(row.overheadMs)).toBe(true);
-      expect(row.overheadMs).toBeLessThanOrEqual(
-        row.addedCeilingMs + TIMER_MEASUREMENT_EPSILON_MS,
-      );
+      expect(row.overheadMs).toBeLessThanOrEqual(row.addedCeilingMs);
     }
 
     const resolutionSamples: Array<number> = [];

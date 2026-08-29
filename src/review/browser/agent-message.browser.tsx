@@ -339,7 +339,7 @@ export const RequestStatusStrip = ({
         <ol className="m-0 grid max-h-36 min-w-0 grid-cols-[minmax(0,1fr)] list-none overflow-y-auto pl-1 text-ink">
           {earlier.map((event) => (
             <li
-              key={event.seq}
+              key={`${event.stepCode}:${event.atMs ?? event.seq}`}
               className="flex min-w-0 items-baseline justify-between gap-2 border-t border-current/15 py-1 first:border-t-0"
             >
               <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
