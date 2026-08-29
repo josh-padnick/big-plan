@@ -69,7 +69,6 @@ export const compileSnapshotDiffPayload = ({
           proposedBlockId: location.newBlockId,
           status: location.status,
           runs: location.runs,
-          baselineSnapshot: from,
         });
         // Only the rendered view crosses the wire. The compiled diff model
         // describes exactly what that view already shows, and for a diagram

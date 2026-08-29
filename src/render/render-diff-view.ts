@@ -300,7 +300,12 @@ const addressForRenderedNode = ({
   const label = node.properties["data-commentable-label"];
   if (typeof kind !== "string" || typeof label !== "string") return undefined;
   if (!commentableOn({ anchors, kind, side })) return undefined;
-  const normalizedLabel = label.replaceAll("`", "");
+  const normalizedLabel = (
+    kind === "wireframe-screen" &&
+    typeof node.properties["data-wireframe-screen"] === "string"
+      ? node.properties["data-wireframe-screen"]
+      : label
+  ).replaceAll("`", "");
   const sourceRowIndex = node.properties["data-table-row"];
   const source = sourceElements.find(
     (element) =>

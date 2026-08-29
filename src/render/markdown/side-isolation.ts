@@ -281,29 +281,6 @@ const stripReviewIdentity = (subtree: Element): void => {
   });
 };
 
-const stampBaselineIdentity = ({
-  subtree,
-  baselineBlockId,
-  baselineSnapshot,
-  baselineSubtargetIds,
-}: {
-  readonly subtree: Element;
-  readonly baselineBlockId: string | undefined;
-  readonly baselineSnapshot: string | undefined;
-  readonly baselineSubtargetIds: ReadonlyMap<Element, string> | undefined;
-}): void => {
-  const stamp = (node: Element, blockId: string): void => {
-    node.properties[BASELINE_BLOCK_ID_ATTRIBUTE] = blockId;
-    if (baselineSnapshot !== undefined) {
-      node.properties[BASELINE_SNAPSHOT_ATTRIBUTE] = baselineSnapshot;
-    }
-  };
-  if (baselineBlockId !== undefined) {
-    stamp(subtree, baselineBlockId);
-  }
-  baselineSubtargetIds?.forEach((blockId, node) => stamp(node, blockId));
-};
-
 // Every element on a path from the isolated root down to a subtree the
 // component's diff view marked live. `inert` is inherited and a descendant
 // cannot opt back out of an inert ancestor, so a marked subtree can only
@@ -444,16 +421,48 @@ export const isolateBaselineSide = ({
   key,
   snapshot,
   addressFor,
+  baselineBlockId,
+  baselineSnapshot,
+  baselineSubtargetIds,
 }: {
   readonly subtree: Element;
   readonly key: string;
   readonly snapshot?: string;
   readonly addressFor?: (node: Element) => BaselineBlockAddress | undefined;
+  readonly baselineBlockId?: string;
+  readonly baselineSnapshot?: string;
+  readonly baselineSubtargetIds?: ReadonlyMap<Element, string>;
 }): void => {
   subtree.properties[DIFF_SIDE_ATTRIBUTE] = DIFF_BASELINE_SIDE;
   stripReviewIdentity(subtree);
-  if (snapshot !== undefined && addressFor !== undefined) {
-    stampBaselineIdentity({ subtree, snapshot, addressFor });
+  const resolvedSnapshot = snapshot ?? baselineSnapshot;
+  const resolvedAddressFor =
+    addressFor ??
+    ((node: Element): BaselineBlockAddress | undefined => {
+      const blockId =
+        node === subtree
+          ? baselineBlockId
+          : baselineSubtargetIds?.get(node);
+      return blockId === undefined
+        ? undefined
+        : {
+            blockId,
+            kind:
+              typeof node.properties["data-block-kind"] === "string"
+                ? node.properties["data-block-kind"]
+                : "",
+            label:
+              typeof node.properties["data-block-label"] === "string"
+                ? node.properties["data-block-label"]
+                : "",
+          };
+    });
+  if (resolvedSnapshot !== undefined && resolvedAddressFor !== undefined) {
+    stampBaselineIdentity({
+      subtree,
+      snapshot: resolvedSnapshot,
+      addressFor: resolvedAddressFor,
+    });
   }
   namespaceOrdinaryIdentity(subtree, key);
   holdRootAffordancesInert(subtree);
