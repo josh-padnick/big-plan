@@ -514,18 +514,19 @@ export const readAgentRosterFor = ({
     agentIsAttached({ agent, nowMs }),
   );
   /*
-  The activity card carries the primary, and only ever the primary.
+  The activity card carries whichever attached agent the presence record names.
 
   It is checked rather than assumed, because the two surfaces answer from
   different records: the card draws the review's presence heartbeat and this
-  section draws the roster. When they name the same agent, one card is enough
-  and drawing it twice is the duplication the reviewer objected to. When they
-  do not - for the moment after a hand-off, before the incoming primary's first
-  heartbeat lands - this section draws everybody, which is a card too many for
-  one poll rather than a card that lies for as long as it is on screen.
+  section draws the roster. When presence trails a hand-off, the activity card
+  can still name the outgoing observer while the roster already names the
+  incoming primary. The roster leaves that outgoing agent out because the
+  activity card already represents it; role badges remain derived from the
+  roster rather than from this carry.
   */
   const carried =
-    carriedByActivity !== undefined && primary?.writerId === carriedByActivity
+    carriedByActivity !== undefined &&
+    attached.some((agent) => agent.writerId === carriedByActivity)
       ? carriedByActivity
       : undefined;
   const cards = attached.filter(

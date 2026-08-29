@@ -118,7 +118,9 @@ export const AgentSurface = ({
            apart from. A lone agent is implicitly the primary, and a badge
            saying so is a word the reader has to read and cannot use. */
         isActivityPrimary={
-          roster.carried !== undefined && roster.attached.length > 1
+          roster.carried !== undefined &&
+          roster.carried === roster.primary?.writerId &&
+          roster.attached.length > 1
         }
         carriesRosterAgent={roster.carried !== undefined}
         hasAttachedAgent={roster.attached.length > 0}
