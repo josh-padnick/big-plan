@@ -29,7 +29,10 @@ import {
   writeStoreJson,
   type ReviewStore,
 } from "./store.js";
-import { withPlanMutationLock } from "./staged-plan-mutation.js";
+import {
+  replacePlanSourceUnderPlanMutationLock,
+  withPlanMutationLock,
+} from "./staged-plan-mutation.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/u;
 
@@ -47,6 +50,19 @@ type ApprovalFinalization = {
 type ApprovalFinalizationResult = {
   readonly canceledRequestIds: ReadonlyArray<string>;
   readonly delivered: boolean;
+};
+
+/**
+ * The reviewer's answers, already written into the source and already proved
+ * to render, lint, and recompile as decided. It is passed rather than journaled
+ * because it is only ever applied once, at the head of the commit: by the time
+ * the journal exists the file already carries it, so recovery finds exactly the
+ * revision the record pins and has nothing of its own to redo.
+ */
+type ApprovalStamp = {
+  /** The digest the stamp was computed against, re-proved under the lock. */
+  readonly baseSnapshot: string;
+  readonly source: string;
 };
 
 const validateFinalization = (value: unknown): ApprovalFinalization => {
@@ -219,17 +235,36 @@ export const commitApprovalFinalization = async ({
   store,
   planPath,
   finalization,
+  stamp,
 }: {
   readonly store: ReviewStore;
   readonly planPath: string;
   readonly finalization: ApprovalFinalization;
+  readonly stamp?: ApprovalStamp;
 }): Promise<ApprovalFinalizationResult> =>
   withPlanMutationLock({
     store,
     change: async (lockedStore) => {
-      const currentSnapshot = deriveSnapshotDigest(
+      let currentSnapshot = deriveSnapshotDigest(
         await readFile(planPath, "utf8"),
       );
+      if (stamp !== undefined) {
+        if (currentSnapshot !== stamp.baseSnapshot) {
+          throw new Error(
+            "The plan changed before approval could be finalized",
+          );
+        }
+        if (
+          deriveSnapshotDigest(stamp.source) !== finalization.expectedSnapshot
+        ) {
+          throw new Error("The approval pinned a revision it did not stamp");
+        }
+        await replacePlanSourceUnderPlanMutationLock({
+          planPath,
+          source: stamp.source,
+        });
+        currentSnapshot = finalization.expectedSnapshot;
+      }
       if (currentSnapshot !== finalization.expectedSnapshot) {
         throw new Error("The plan changed before approval could be finalized");
       }

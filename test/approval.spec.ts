@@ -690,6 +690,19 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
   const runtime = await startCompiledReviewRuntime(planPath);
   try {
     await openWritableReview(page, runtime.url);
+    await answerGradualRollout(page);
+    await expect(
+      releaseDecision(page).locator("[data-decision-answer-caption]"),
+    ).toHaveText(SAVED_CAPTION);
+    // Answering scrolled the decision into view; the stamp geometry below is
+    // about where the mark sits on an unscrolled page, and the reading surface
+    // scrolls smoothly, so the reset is waited out rather than assumed.
+    await page.evaluate(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    });
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeLessThan(1);
     await writeAgentRequest({
       store: runtime.store,
       request: messageAgentRequest({
@@ -765,6 +778,32 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     }
     await dialog.getByRole("button", { name: "Approve plan" }).click();
     expect((await approved).ok()).toBe(true);
+
+    // Approving records the answer in the plan source itself, and the page
+    // rereads that revision on its own - no reload, no second gesture - so the
+    // reviewer watches the question they just settled become the record of it.
+    const stampedSource = await readFile(planPath, "utf8");
+    expect(stampedSource).toContain(
+      '<Decision state="decided" question="Which release path should we use?">',
+    );
+    expect(stampedSource).toContain(
+      '<Option chosen title="Gradual rollout" recommended summary="Start with one group.">',
+    );
+    expect(stampedSource).toContain(
+      '<Decision question="Who owns the rollback?">',
+    );
+    await expect(releaseDecision(page)).toHaveAttribute(
+      "data-decision-status",
+      "decided",
+    );
+    await expect(releaseDecision(page)).toContainText("Decided");
+    await expect(
+      releaseDecision(page).getByRole("button", { name: "Confirm choice" }),
+    ).toHaveCount(0);
+    await expect(rollbackDecision(page)).toHaveAttribute(
+      "data-decision-status",
+      "open",
+    );
 
     await expect(
       page.getByRole("button", { name: "Approve plan" }),
@@ -858,7 +897,10 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     expect(stored).toMatchObject({
       version: 1,
       entries: [
-        { kind: "approval", pinnedSnapshot: deriveSnapshotDigest(source) },
+        {
+          kind: "approval",
+          pinnedSnapshot: deriveSnapshotDigest(stampedSource),
+        },
       ],
     });
 
@@ -875,7 +917,7 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     ).toHaveCount(0);
 
     await test.step("approval clears the mailbox and the agent acknowledges through the CLI", async () => {
-      const pinned = deriveSnapshotDigest(source);
+      const pinned = deriveSnapshotDigest(stampedSource);
       const claim = await runAgentCli(["next", planPath]);
       expect(claim.stdout).toContain("pending: true");
       expect(claim.stdout).toContain("kind: approval");

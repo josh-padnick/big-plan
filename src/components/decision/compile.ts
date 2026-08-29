@@ -2,6 +2,7 @@
 
 import type { ElementContent } from "hast";
 import { meaningfulChildren } from "../_authoring/authored-body.js";
+import { validateChosenSelection } from "../_authoring/decision-selection.js";
 import {
   createComponentIdAllocator,
   validateComponentAttributes,
@@ -19,6 +20,15 @@ import type {
   DecisionCardTone,
 } from "../_model/decision-card.js";
 
+/**
+ * A Decision is proposed until it is settled. Absent means proposed, so an
+ * author writes nothing to ask a question; Big Plan writes "decided" itself
+ * when the reviewer answers it at approval.
+ */
+export type DecisionState = "proposed" | "decided";
+
+const DECISION_STATES: ReadonlyArray<DecisionState> = ["proposed", "decided"];
+
 const TONES: ReadonlyArray<DecisionCardTone> = [
   "good",
   "bad",
@@ -27,11 +37,13 @@ const TONES: ReadonlyArray<DecisionCardTone> = [
 ];
 const DECISION_SCHEMA = {
   question: { kind: "string", required: true, nonEmpty: true },
+  state: { kind: "enum", values: DECISION_STATES },
   critical: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 const OPTION_SCHEMA = {
   title: { kind: "string", required: true, nonEmpty: true },
   recommended: { kind: "booleanShorthand" },
+  chosen: { kind: "booleanShorthand" },
   summary: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 const CONSIDERATION_SCHEMA = {
@@ -140,7 +152,7 @@ const compileOption = ({
     titleId: `${id}-title`,
     title,
     recommended: validated.recommended === true,
-    chosen: false,
+    chosen: validated.chosen === true,
     ...(validated.summary === undefined ? {} : { summary: validated.summary }),
     considerations: criteria.map((criterion) => byLabel.get(criterion.title)),
     detail: [],
@@ -164,6 +176,7 @@ export const compileDecisionComponent = ({
     schema: DECISION_SCHEMA,
   });
   const question = validated.question ?? "";
+  const state = validated.state ?? "proposed";
   const id = ids.allocate({
     prefix: "decision",
     label: question,
@@ -211,11 +224,24 @@ export const compileDecisionComponent = ({
   const options = optionChildren.map((child) =>
     compileOption({ child, criteria, diagnostics, ids, idPrefix: id }),
   );
+  const status = state === "proposed" ? "open" : state;
+  validateChosenSelection({
+    component: "Decision",
+    options,
+    status,
+    position,
+    diagnostics,
+  });
+  const chosenOption = options.find((option) => option.chosen);
+  // A settled Decision keeps interaction: "choose". It stops being answerable
+  // because its status moved, which is the one fact the card and the review
+  // runtime both read, so nothing has to be told separately that a stamped
+  // decision is no longer asking.
   return {
     id,
     questionId: `${id}-question`,
     question,
-    status: "open",
+    status,
     layout: "rows",
     scoring: "qualitative",
     interaction: "choose",
@@ -224,6 +250,7 @@ export const compileDecisionComponent = ({
     detail: [],
     criteria,
     options,
+    ...(chosenOption === undefined ? {} : { chosenOption }),
     discriminating: criteria.map((_, index) => index),
   };
 };

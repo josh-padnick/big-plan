@@ -37,6 +37,33 @@ describe("QuickDecision", () => {
     expect(html).not.toContain("data-decision-critical");
   });
 
+  it("should render a settled QuickDecision as the record it now is", () => {
+    const html = render(
+      '<QuickDecision question="Ship behind a flag?" state="decided">\n\n<Option title="Yes" recommended chosen />\n\n<Option title="No" />\n\n</QuickDecision>',
+    );
+
+    expect(html).toContain('data-decision-status="decided"');
+    expect(html).toContain("Decided");
+    expect(html).toContain("data-option-chosen");
+    expect(html).not.toContain("data-decision-selector");
+  });
+
+  it("should reject a chosen Option on a question still being asked", () => {
+    expect(() =>
+      render(
+        '<QuickDecision question="Ship behind a flag?">\n\n<Option title="Yes" chosen />\n\n<Option title="No" />\n\n</QuickDecision>',
+      ),
+    ).toThrow(MarkdownDiagnosticsError);
+  });
+
+  it("should reject a settled QuickDecision that names no chosen Option", () => {
+    expect(() =>
+      render(
+        '<QuickDecision question="Ship behind a flag?" state="decided">\n\n<Option title="Yes" />\n\n<Option title="No" />\n\n</QuickDecision>',
+      ),
+    ).toThrow(MarkdownDiagnosticsError);
+  });
+
   it("should reject an option body instead of dropping it", () => {
     expect(() =>
       render(
