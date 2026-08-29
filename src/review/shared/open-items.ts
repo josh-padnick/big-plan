@@ -104,6 +104,27 @@ const changeSetIdFor = ({
     ...(request.threadId === undefined ? [] : [request.threadId]),
   ].find((id) => changeSetIds.has(id)) ?? request.requestId;
 
+/** Every committed change set a request's revision advances. */
+const changeSetIdsFor = ({
+  request,
+  changeSetIds,
+}: {
+  readonly request: ChangeSetRequest;
+  readonly changeSetIds: ReadonlySet<string>;
+}): ReadonlyArray<string> => {
+  const matched = new Set(
+    [
+      ...(request.commentIds ?? []),
+      ...(request.comments ?? []).map((comment) => comment.id),
+      ...(request.commentId === undefined ? [] : [request.commentId]),
+      ...(request.threadId === undefined ? [] : [request.threadId]),
+    ].filter((id) => changeSetIds.has(id)),
+  );
+  return matched.size === 0
+    ? [changeSetIdFor({ request, changeSetIds })]
+    : [...matched];
+};
+
 /**
  * Change sets as the approve dialog counts them: one per set that actually
  * moved the plan, spanning every revision committed into it.
@@ -144,22 +165,24 @@ export const changeSetsFromExchange = ({
     if (request === undefined) continue;
     const from = request.baselineSnapshot ?? request.premiseSnapshot;
     if (from === response.resultSnapshot) continue;
-    const id = changeSetIdFor({
+    const ids = changeSetIdsFor({
       request,
       changeSetIds: committedChangeSetIds,
     });
-    const started = folded.get(id);
-    if (started === undefined) {
-      folded.set(id, {
-        from,
-        to: response.resultSnapshot,
-        label:
-          request.targetLabel ??
-          `Version ${response.resultSnapshot.slice(0, 7)}`,
-      });
-      continue;
+    for (const id of ids) {
+      const started = folded.get(id);
+      if (started === undefined) {
+        folded.set(id, {
+          from,
+          to: response.resultSnapshot,
+          label:
+            request.targetLabel ??
+            `Version ${response.resultSnapshot.slice(0, 7)}`,
+        });
+        continue;
+      }
+      started.to = response.resultSnapshot;
     }
-    started.to = response.resultSnapshot;
   }
   const sets: OpenChangeSet[] = [];
   for (const [id, { from, to, label }] of folded) {

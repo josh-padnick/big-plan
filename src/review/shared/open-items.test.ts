@@ -185,6 +185,7 @@ describe("changeSetsFromExchange", () => {
   const S1 = "1".repeat(16);
   const S2 = "2".repeat(16);
   const S3 = "3".repeat(16);
+  const S4 = "4".repeat(16);
 
   it("counts a multi-round thread once, spanning its whole span", () => {
     expect(
@@ -271,6 +272,56 @@ describe("changeSetsFromExchange", () => {
         committedChangeSetIds: new Set(["c0de", "d1ce"]),
       }).map((changeSet) => changeSet.id),
     ).toEqual(["c0de", "d1ce"]);
+  });
+
+  it("folds one feedback response into every committed comment change set", () => {
+    expect(
+      changeSetsFromExchange({
+        requests: [
+          {
+            requestId: "req1req1req1req1",
+            premiseSnapshot: S1,
+            commentIds: ["c0de", "d1ce"],
+            comments: [{ id: "c0de" }, { id: "d1ce" }],
+          },
+          {
+            requestId: "req2req2req2req2",
+            premiseSnapshot: S2,
+            baselineSnapshot: S2,
+            commentId: "c0de",
+          },
+          {
+            requestId: "req3req3req3req3",
+            premiseSnapshot: S3,
+            baselineSnapshot: S3,
+            commentId: "d1ce",
+          },
+        ],
+        responses: [
+          { requestId: "req1req1req1req1", resultSnapshot: S2 },
+          { requestId: "req2req2req2req2", resultSnapshot: S3 },
+          { requestId: "req3req3req3req3", resultSnapshot: S4 },
+        ],
+        placeIdsByRevision: new Map([
+          [`${S1}:${S3}`, ["c-place-1", "c-place-2"]],
+          [`${S1}:${S4}`, ["d-place"]],
+        ]),
+        committedChangeSetIds: new Set(["c0de", "d1ce"]),
+      }),
+    ).toMatchObject([
+      {
+        id: "c0de",
+        from: S1,
+        to: S3,
+        placeIds: ["c-place-1", "c-place-2"],
+      },
+      {
+        id: "d1ce",
+        from: S1,
+        to: S4,
+        placeIds: ["d-place"],
+      },
+    ]);
   });
 
   it("falls back to the request when the fold has not named the thread yet", () => {
