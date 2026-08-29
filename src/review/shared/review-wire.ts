@@ -24,7 +24,7 @@ import {
   type ReviewInputContract,
   type ReviewInputState,
 } from "./input-contract.js";
-import type { ApprovalSummary } from "./approval.js";
+import type { ApprovalHistoryItem, ApprovalSummary } from "./approval.js";
 import { APPROVAL_ID } from "./approval.js";
 
 export type ReviewSnapshot = {
@@ -671,6 +671,43 @@ export const encodeApprovalSummary = (
   value: ApprovalSummary,
 ): ApprovalSummary => value;
 
+/**
+ * Decodes the approval log the popover lists. A malformed item is dropped
+ * rather than shown, and an absent array reads as no history: a history the
+ * page cannot parse must not take the approved state down with it.
+ */
+const decodeApprovalHistory = (
+  value: unknown,
+): ReadonlyArray<ApprovalHistoryItem> => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): ReadonlyArray<ApprovalHistoryItem> => {
+    if (
+      !isReviewWireRecord(item) ||
+      typeof item.approvalId !== "string" ||
+      !APPROVAL_ID.test(item.approvalId) ||
+      typeof item.at !== "string" ||
+      Number.isNaN(Date.parse(item.at)) ||
+      typeof item.pinnedSnapshot !== "string" ||
+      !SNAPSHOT_DIGEST.test(item.pinnedSnapshot) ||
+      (item.revokedAt !== undefined && typeof item.revokedAt !== "string")
+    ) {
+      return [];
+    }
+    const revokedAt = item.revokedAt;
+    return [
+      {
+        approvalId: item.approvalId,
+        at: item.at,
+        pinnedSnapshot: item.pinnedSnapshot,
+        ...(typeof revokedAt === "string" &&
+        !Number.isNaN(Date.parse(revokedAt))
+          ? { revokedAt }
+          : {}),
+      },
+    ];
+  });
+};
+
 /** Decodes an approval summary, dropping a malformed body rather than guessing. */
 export const decodeApprovalSummary = (
   value: unknown,
@@ -707,6 +744,7 @@ export const decodeApprovalSummary = (
     status: value.status,
     message: value.message,
     delivered: value.delivered,
+    history: decodeApprovalHistory(value.history),
     openItemCounts: {
       changeSetsAccepted: counts.changeSetsAccepted,
       changeSetsTotal: counts.changeSetsTotal,

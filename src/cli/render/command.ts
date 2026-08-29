@@ -2,11 +2,13 @@
 // around the pure renderer, supplying only HTML-specific derivation,
 // serialization, and result facts to the shared safe output workflow.
 
+import { readFile } from "node:fs/promises";
 import { renderDocument } from "../../render/render-document.js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { runDerivedOutputCommand } from "../_shared/derived-output-command.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 import { parseInputCommandArguments } from "../_shared/input-command.js";
+import { approvalDecorationFor } from "./approval-decoration.js";
 
 const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 
@@ -17,8 +19,19 @@ export const renderCommand = async (
   // A malformed invocation is diagnosed before the guidance prerequisite, so
   // usage errors never hide behind GUIDANCE_REQUIRED. The parser is pure, so
   // the shared workflow below re-parsing the same arguments cannot disagree.
-  parseInputCommandArguments({ args, usage: USAGE, maximumArguments: 2 });
+  const { inputPath: planPath } = parseInputCommandArguments({
+    args,
+    usage: USAGE,
+    maximumArguments: 2,
+  });
   const { warnings } = await requireGuidanceAcknowledgment();
+  // The decoration is decided here rather than inside derive, because it needs
+  // the filesystem and derive is pure. A plan this command cannot read is left
+  // to the shared workflow below to diagnose in its own words.
+  const approval = await readFile(planPath, "utf8").then(
+    (markdown) => approvalDecorationFor({ planPath, markdown }),
+    () => undefined,
+  );
   return runDerivedOutputCommand({
     args,
     usage: USAGE,
@@ -29,6 +42,7 @@ export const renderCommand = async (
         markdown,
         fallbackTitle,
         planPath: inputPath,
+        ...(approval === undefined ? {} : { approval }),
       }),
     // A document a human is asked to review must also pass authoring lint, so
     // a lint finding can never reach the reviewer through render.

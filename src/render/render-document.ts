@@ -16,7 +16,8 @@ export type { BlockDescriptor } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
 import { derivePlanId } from "./plan-id.js";
 import { serializeHtml } from "./serialize-html.js";
-import { renderShell } from "./shell/shell.js";
+import { renderShell, type ApprovalDecoration } from "./shell/shell.js";
+export type { ApprovalDecoration } from "./shell/shell.js";
 
 export type RenderedDocument = {
   readonly html: string;
@@ -60,10 +61,12 @@ const renderCompiledDocument = ({
   compiled,
   fallbackTitle,
   identity,
+  approval,
 }: {
   readonly compiled: CompiledMarkdown;
   readonly fallbackTitle: string;
   readonly identity: DocumentIdentity;
+  readonly approval?: ApprovalDecoration;
 }): RenderedDocument => {
   const { root, sections, elementIds, title, partIds, blocks } = compiled;
   const resolvedTitle = title ?? fallbackTitle;
@@ -88,6 +91,7 @@ const renderCompiledDocument = ({
     title: resolvedTitle,
     contentIds: elementIds,
     contentHtml: serializeHtml({ root }),
+    ...(approval === undefined ? {} : { approval }),
   });
   const html = renderPage({
     title: resolvedTitle,
@@ -110,6 +114,7 @@ export const renderDocument = ({
   fallbackTitle,
   planPath,
   identity,
+  approval,
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
@@ -119,6 +124,10 @@ export const renderDocument = ({
   // A served review supplies runtime identity explicitly. Static rendering
   // derives only the ordinary content-sensitive viewer namespace above.
   readonly identity?: DocumentIdentity;
+  // A static export supplies the approval in force when the plan on disk still
+  // matches what that approval pinned, and nothing otherwise. A served review
+  // leaves it out: its island owns the stamp.
+  readonly approval?: ApprovalDecoration;
 }): RenderedDocument => {
   const compiled = compileMarkdown({ markdown });
   const resolvedIdentity =
@@ -132,6 +141,7 @@ export const renderDocument = ({
     compiled,
     fallbackTitle,
     identity: resolvedIdentity,
+    ...(approval === undefined ? {} : { approval }),
   });
 };
 

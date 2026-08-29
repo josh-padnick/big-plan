@@ -10,6 +10,7 @@ import {
   validateApprovalRecord,
 } from "./approval-record.js";
 import {
+  approvalHistory,
   approvalSummary,
   deriveApprovalStatus,
   emptyApprovalRecord,
@@ -94,6 +95,57 @@ describe("approval record", () => {
     });
     expect(inForceApproval(revoked)).toBeUndefined();
     expect(revoked.entries).toHaveLength(3);
+  });
+
+  it("lists every approval newest first, marking the revoked ones", () => {
+    const first = approval();
+    const second = approval({
+      approvalId: "b2c3d4e5f6071819",
+      at: LATER,
+      pinnedSnapshot: NEXT_SNAPSHOT,
+    });
+    const revokedFirst = appendRevocation({
+      record: appendApproval({ record: emptyApprovalRecord(), entry: first }),
+      approvalId: first.approvalId,
+      at: "2026-08-19T17:50:00.000Z",
+    });
+    const record = appendApproval({ record: revokedFirst, entry: second });
+    expect(approvalHistory(record)).toEqual([
+      {
+        approvalId: second.approvalId,
+        at: LATER,
+        pinnedSnapshot: NEXT_SNAPSHOT,
+      },
+      {
+        approvalId: first.approvalId,
+        at: NOW,
+        pinnedSnapshot: SNAPSHOT,
+        revokedAt: "2026-08-19T17:50:00.000Z",
+      },
+    ]);
+  });
+
+  it("carries the whole history on the summary of the approval in force", () => {
+    const first = approval();
+    const record = appendApproval({
+      record: appendRevocation({
+        record: appendApproval({ record: emptyApprovalRecord(), entry: first }),
+        approvalId: first.approvalId,
+        at: "2026-08-19T17:50:00.000Z",
+      }),
+      entry: approval({
+        approvalId: "b2c3d4e5f6071819",
+        at: LATER,
+        pinnedSnapshot: NEXT_SNAPSHOT,
+      }),
+    });
+    expect(
+      approvalSummary({
+        record,
+        currentSnapshot: NEXT_SNAPSHOT,
+        delivered: true,
+      })?.history,
+    ).toHaveLength(2);
   });
 
   it("refuses to revoke an approval that is not in force", () => {

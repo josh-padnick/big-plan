@@ -56,6 +56,19 @@ export type RevocationEntry = {
 
 export type ApprovalLogEntry = ApprovalEntry | RevocationEntry;
 
+/**
+ * One approval as the details popover lists it: when it was signed, what it
+ * pinned, and whether a later revocation cancelled it. Derived, never stored,
+ * for the same reason status is - the log holds entries, not conclusions.
+ */
+export type ApprovalHistoryItem = {
+  readonly approvalId: string;
+  readonly at: string;
+  readonly pinnedSnapshot: string;
+  /** When a revocation cancelled this approval; absent while it still stands. */
+  readonly revokedAt?: string;
+};
+
 /** The append-only log a review keeps of its approvals. */
 export type ApprovalRecord = {
   readonly version: 1;
@@ -80,6 +93,12 @@ export type ApprovalSummary = {
    */
   readonly delivered: boolean;
   readonly openItemCounts: ApprovalOpenItemCounts;
+  /**
+   * Every approval this review has ever recorded, newest first, so the details
+   * popover can show that the plan was approved before rather than implying
+   * the entry in force is the only one that ever existed.
+   */
+  readonly history: ReadonlyArray<ApprovalHistoryItem>;
 };
 
 export const APPROVAL_ID = /^[a-f0-9]{16}$/u;
@@ -116,6 +135,36 @@ export const inForceApproval = (
   return revoked ? undefined : latest;
 };
 
+/**
+ * Every approval in the log, newest first, each carrying the revocation that
+ * cancelled it. A revocation naming no approval before it is log corruption
+ * the reader cannot place, so it is dropped rather than shown against the
+ * wrong entry.
+ */
+export const approvalHistory = (
+  record: ApprovalRecord,
+): ReadonlyArray<ApprovalHistoryItem> => {
+  const revokedAtById = new Map<string, string>();
+  for (const entry of record.entries) {
+    if (entry.kind !== "revocation") continue;
+    if (!revokedAtById.has(entry.approvalId)) {
+      revokedAtById.set(entry.approvalId, entry.at);
+    }
+  }
+  const items: ApprovalHistoryItem[] = [];
+  for (const entry of record.entries) {
+    if (entry.kind !== "approval") continue;
+    const revokedAt = revokedAtById.get(entry.approvalId);
+    items.push({
+      approvalId: entry.approvalId,
+      at: entry.at,
+      pinnedSnapshot: entry.pinnedSnapshot,
+      ...(revokedAt === undefined ? {} : { revokedAt }),
+    });
+  }
+  return items.reverse();
+};
+
 /** Pins an in-force approval to the source digest the runtime just read. */
 export const deriveApprovalStatus = ({
   entry,
@@ -150,6 +199,7 @@ export const approvalSummary = ({
     message: entry.message,
     delivered,
     openItemCounts: entry.openItemCounts,
+    history: approvalHistory(record),
   };
 };
 

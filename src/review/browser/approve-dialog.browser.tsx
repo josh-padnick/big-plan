@@ -26,11 +26,16 @@ import {
   APPROVAL_MESSAGE_STORAGE_KEY,
 } from "../shared/approval-message.js";
 import {
+  approvalHistoryTimeLabel,
   approvedAtExactLabel,
   approvedOnLabel,
+  pinnedVersionLabel,
   unansweredNonCriticalCopy,
 } from "../shared/approval-copy.js";
-import type { ApprovalSummary } from "../shared/approval.js";
+import type {
+  ApprovalHistoryItem,
+  ApprovalSummary,
+} from "../shared/approval.js";
 import {
   approveChangeSetCaveat,
   approveDecisionCaveat,
@@ -762,6 +767,60 @@ export const ApproveDialog = ({
   );
 };
 
+/**
+ * The approval log, newest first. It is shown even for a single approval,
+ * because the row above says when the plan was approved and this one says
+ * which version that approval pinned - the fact a reviewer needs to tell a
+ * re-approval apart from the one it replaced.
+ */
+const ApprovalHistoryList = ({
+  history,
+}: {
+  readonly history: ReadonlyArray<ApprovalHistoryItem>;
+}) => {
+  if (history.length === 0) return null;
+  return (
+    <div className="border-t border-edge pt-3">
+      <h3 className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
+        History
+      </h3>
+      <ol
+        className="m-0 mt-2 grid list-none grid-cols-[minmax(0,1fr)] gap-2.5 p-0"
+        data-review-approval-history=""
+      >
+        {history.map((item) => (
+          <li
+            key={item.approvalId}
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-2"
+            data-review-approval-history-entry={item.approvalId}
+            {...(item.revokedAt === undefined
+              ? {}
+              : { "data-review-approval-history-revoked": "" })}
+          >
+            <span
+              className={
+                item.revokedAt === undefined
+                  ? "min-w-0 truncate text-xs text-ink"
+                  : "min-w-0 truncate text-xs text-muted line-through"
+              }
+            >
+              {approvalHistoryTimeLabel(item.at)}
+            </span>
+            {item.revokedAt === undefined ? null : (
+              <span className="shrink-0 text-2xs font-medium text-muted uppercase">
+                Revoked
+              </span>
+            )}
+            <span className="col-span-2 text-2xs tabular-nums text-muted">
+              {pinnedVersionLabel(item.pinnedSnapshot)}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+};
+
 const DETAILS_HEADING = "Approval details";
 
 const DETAILS_FOCUSABLE =
@@ -983,6 +1042,7 @@ const ApprovalDetails = ({
               </button>
             </div>
           )}
+          <ApprovalHistoryList history={approval.history} />
           {canRevoke ? (
             <div className="border-t border-edge pt-3">
               <Button
