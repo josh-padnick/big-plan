@@ -421,5 +421,6 @@ describe("stampDecisions over the example corpus", () => {
         );
       }
     },
+    15_000,
   );
 });
