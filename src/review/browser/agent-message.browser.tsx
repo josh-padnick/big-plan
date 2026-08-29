@@ -37,7 +37,7 @@ import {
   renderReviewerNode,
 } from "./message-markdown-view.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
-import { tourIsBehind } from "./tour-advance.js";
+import { advancedTourPlaceId, tourIsBehind } from "./tour-advance.js";
 import { Badge, Button, Tooltip, WorkingMark } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
@@ -501,12 +501,20 @@ export const AgentChangeDigest = ({
   useEffect(() => {
     // The reviewer is reading this thread's change set, and the thread just
     // committed another round, so the stepper is handed the set as it now
-    // stands rather than the round it opened on. Where it lands is the set's
-    // own first open change: the round that advanced it renamed every place.
+    // stands rather than the round it opened on. It stays on the change the
+    // reviewer was reading: the round renamed every place, so the change is
+    // found again by the block it is about rather than by its id.
     if (!isBehind || diff === null) return;
+    const startPlaceId = advancedTourPlaceId({
+      activeDiff,
+      activePlaceId,
+      diff,
+      placeIds: placeIdsInTour,
+    });
     openTour({
       diff,
       ...(changeSetId === undefined ? {} : { changeSetId }),
+      ...(startPlaceId === undefined ? {} : { startPlaceId }),
       placeIds: placeIdsInTour,
       isSuperseded,
       onResolve,
@@ -516,6 +524,8 @@ export const AgentChangeDigest = ({
       onKeepChatting,
     });
   }, [
+    activeDiff,
+    activePlaceId,
     canRevert,
     changeSetId,
     diff,

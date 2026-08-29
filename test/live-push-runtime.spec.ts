@@ -473,6 +473,11 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       .getByRole("button", { name: /Continue review|Review changes \(2\)/u })
       .click();
     await expect(stepper).toContainText("All changes accepted (2 of 2)");
+    // Standing on the set's second change, so the push below can prove where
+    // the reviewer lands rather than only that the bounds moved.
+    await stepper.getByRole("button", { name: "Back to review" }).click();
+    await stepper.getByRole("button", { name: "Next change" }).click();
+    await expect(stepper).toContainText("2 of 2");
 
     const continuedPush = await runAgentCli([
       "push",
@@ -540,8 +545,14 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     ).toHaveCount(0);
 
     // The open stepper followed the set the push advanced on its own: it is
-    // reviewing the new bounds, not the accepted round it was opened on.
-    await expect(stepper).toContainText("1 of 2", { timeout: 15_000 });
+    // reviewing the new bounds, not the accepted round it was opened on. The
+    // push renamed every place, so the change the reviewer was standing on is
+    // found again by its block: the stepper holds its position instead of
+    // dropping back to the set's first change.
+    await expect(
+      stepper.getByRole("button", { name: "Accept this change" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(stepper).toContainText("2 of 2");
     await expect(stepper).not.toContainText("All changes accepted");
     await page.keyboard.press("Escape");
 
