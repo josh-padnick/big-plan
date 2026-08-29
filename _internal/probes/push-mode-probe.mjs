@@ -128,7 +128,7 @@ export const scoreReply = (reply) => {
         clause,
       );
     const rejectsDeferral =
-      /\b(?:do|does|would|will|should|could|must|shall|is)\s+not\s+(?:need\s+to\s+|have\s+to\s+)?(?:come|go|happen|start|originate|submit|wait)[^,;.!?]*(?:reviewer|ui)\b|\bcan\s+not\s+wait\s+for\s+the\s+reviewer\b|\bno\s+need\s+to\s+wait\s+for\s+the\s+reviewer\b/.test(
+      /\b(?:do|does|would|will|should|could|must|shall|is)\s+not\s+(?:need\s+to\s+|have\s+to\s+)?(?:come|go|happen|start|originate|submit|wait)[^,;.!?]*(?:reviewer|ui)\b|\bcan\s+not\s+(?:submit|originate|initiate|start)[^,;.!?]*(?:from|through|in|via)\s+the\s+(?:review\s+)?ui\b|\bcan\s+not\s+wait\s+for\s+the\s+reviewer\b|\bno\s+need\s+to\s+wait\s+for\s+the\s+reviewer\b/.test(
         clause,
       );
     return mentionsDeferral && !rejectsDeferral;
@@ -210,11 +210,15 @@ const askHarness = async ({ harness, prompt, workspace, replyPath }) => {
   return stdout;
 };
 
-const parseArguments = () => {
-  const args = process.argv.slice(2);
+export const parseArguments = (args = process.argv.slice(2)) => {
   const value = (flag) => {
     const index = args.indexOf(flag);
-    return index === -1 ? undefined : args[index + 1];
+    if (index === -1) return undefined;
+    const selected = args[index + 1];
+    if (selected === undefined || selected.startsWith("--")) {
+      throw new Error(`${flag} requires a value`);
+    }
+    return selected;
   };
   const harness = value("--harness");
   const trials = Number(value("--trials") ?? 3);

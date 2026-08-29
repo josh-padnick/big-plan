@@ -139,7 +139,8 @@ export const reconstructBaselinePrompt = async (prompt, baselineRev) => {
   return baseline;
 };
 
-export const resolveBaselineRevision = async () => {
+export const resolveBaselineRevision = async (explicitBaselineRev) => {
+  if (explicitBaselineRev !== undefined) return explicitBaselineRev;
   for (const defaultBranch of ["origin/main", "main"]) {
     try {
       await execFileAsync(
@@ -197,7 +198,7 @@ const main = async () => {
     process.argv.includes("--baseline")
       ? await reconstructBaselinePrompt(
           prompt,
-          explicitBaselineRev ?? (await resolveBaselineRevision()),
+          await resolveBaselineRevision(explicitBaselineRev),
         )
       : prompt,
   );
