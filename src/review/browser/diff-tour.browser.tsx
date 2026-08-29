@@ -32,6 +32,8 @@ import { Badge, Button } from "./ui.browser.js";
 
 type OpenTour = {
   readonly diff: SnapshotDiff;
+  /** The thread whose change set this tour is reviewing, where one owns it. */
+  readonly changeSetId?: string;
   readonly placeIds: ReadonlyArray<string>;
   readonly startPlaceId?: string;
   readonly isSuperseded?: boolean;
@@ -47,6 +49,7 @@ type OpenTour = {
 
 type DiffTourValue = {
   readonly activeDiff: SnapshotDiff | null;
+  readonly activeChangeSetId: string | null;
   readonly activePlaceId: string | null;
   readonly isPlaceAccepted: (diff: SnapshotDiff, placeId: string) => boolean;
   /** How much of one change set is closed, from the one selector that decides. */
@@ -165,6 +168,7 @@ export const DiffTourProvider = ({
   const value = useMemo<DiffTourValue>(
     () => ({
       activeDiff: tour?.diff ?? null,
+      activeChangeSetId: tour?.changeSetId ?? null,
       activePlaceId: active?.placeId ?? null,
       canRecordAcceptance: canRecord,
       ...tourValue,

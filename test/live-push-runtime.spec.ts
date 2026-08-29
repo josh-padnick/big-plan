@@ -467,6 +467,13 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await stepper.getByRole("button", { name: "Keep chatting" }).click();
     await expect(stepper).toBeHidden();
 
+    // The stepper reviews the thread's change set, not the round it was opened
+    // on, so it is left open across the next push below.
+    await thread
+      .getByRole("button", { name: /Continue review|Review changes \(2\)/u })
+      .click();
+    await expect(stepper).toContainText("All changes accepted (2 of 2)");
+
     const continuedPush = await runAgentCli([
       "push",
       planPath,
@@ -531,6 +538,12 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await expect(
       foldedChange.getByRole("button", { name: /Review change/u }),
     ).toHaveCount(0);
+
+    // The open stepper followed the set the push advanced on its own: it is
+    // reviewing the new bounds, not the accepted round it was opened on.
+    await expect(stepper).toContainText("1 of 2", { timeout: 15_000 });
+    await expect(stepper).not.toContainText("All changes accepted");
+    await page.keyboard.press("Escape");
 
     const latestChange = thread
       .locator('[data-review-message="agent"]')

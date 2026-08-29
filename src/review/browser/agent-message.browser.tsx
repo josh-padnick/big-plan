@@ -3,7 +3,13 @@
 // island. The Markdown walkers a body renders through are owned by
 // message-markdown-view.browser.tsx so every renderer shares one.
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
@@ -31,6 +37,7 @@ import {
   renderReviewerNode,
 } from "./message-markdown-view.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
+import { tourIsBehind } from "./tour-advance.js";
 import { Badge, Button, Tooltip, WorkingMark } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
@@ -432,6 +439,7 @@ export const AgentChangeIdentity = ({
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
   diff,
+  changeSetId,
   agentIdentity,
   placeIds,
   spilloverCount,
@@ -446,6 +454,8 @@ export const AgentChangeDigest = ({
   onKeepChatting,
 }: {
   readonly diff: SnapshotDiff | null;
+  /** The thread that owns this change set, where the set has one. */
+  readonly changeSetId?: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly placeIds?: ReadonlyArray<string>;
   readonly spilloverCount?: number;
@@ -464,6 +474,7 @@ export const AgentChangeDigest = ({
 }) => {
   const {
     activeDiff,
+    activeChangeSetId,
     activePlaceId,
     canRecordAcceptance,
     isPlaceAccepted,
@@ -480,6 +491,43 @@ export const AgentChangeDigest = ({
         : diff.places.filter((place) => placeIds.includes(place.placeId));
   const [expandedChoice, setExpandedChoice] = useState<boolean | null>(null);
   const isExpanded = expandedChoice ?? available.length <= 3;
+  const placeIdsInTour = available.map((place) => place.placeId);
+  const isBehind = tourIsBehind({
+    activeChangeSetId,
+    activeDiff,
+    changeSetId,
+    diff,
+  });
+  useEffect(() => {
+    // The reviewer is reading this thread's change set, and the thread just
+    // committed another round, so the stepper is handed the set as it now
+    // stands rather than the round it opened on. Where it lands is the set's
+    // own first open change: the round that advanced it renamed every place.
+    if (!isBehind || diff === null) return;
+    openTour({
+      diff,
+      ...(changeSetId === undefined ? {} : { changeSetId }),
+      placeIds: placeIdsInTour,
+      isSuperseded,
+      onResolve,
+      onRevert,
+      canRevert,
+      thread,
+      onKeepChatting,
+    });
+  }, [
+    canRevert,
+    changeSetId,
+    diff,
+    isBehind,
+    isSuperseded,
+    onKeepChatting,
+    onResolve,
+    onRevert,
+    openTour,
+    placeIdsInTour,
+    thread,
+  ]);
   if (diff === null) {
     return (
       <div className="mt-2 grid w-fit grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge pt-2">
@@ -584,7 +632,8 @@ export const AgentChangeDigest = ({
                   onClick={() =>
                     openTour({
                       diff,
-                      placeIds: available.map((place) => place.placeId),
+                      ...(changeSetId === undefined ? {} : { changeSetId }),
+                      placeIds: placeIdsInTour,
                       startPlaceId: entry.placeId,
                       isSuperseded,
                       onResolve,
@@ -640,7 +689,8 @@ export const AgentChangeDigest = ({
             }
             openTour({
               diff,
-              placeIds: available.map((place) => place.placeId),
+              ...(changeSetId === undefined ? {} : { changeSetId }),
+              placeIds: placeIdsInTour,
               isSuperseded,
               onResolve,
               onRevert,

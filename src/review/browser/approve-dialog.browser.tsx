@@ -1117,7 +1117,11 @@ export const ApproveControl = ({
   const jumpToChange = (changeSet: OpenChangeSet) => {
     const diff = diffs.get(`${changeSet.from}:${changeSet.to}`);
     if (diff !== undefined) {
-      openTour({ diff, placeIds: changeSet.placeIds });
+      openTour({
+        diff,
+        changeSetId: changeSet.id,
+        placeIds: changeSet.placeIds,
+      });
     }
     closeDialog();
   };

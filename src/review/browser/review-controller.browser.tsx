@@ -3170,6 +3170,7 @@ const ChangeAttachment = ({
   identity,
   from,
   to,
+  changeSetId,
   agentIdentity,
   changeTargets,
   currentSnapshot,
@@ -3183,6 +3184,8 @@ const ChangeAttachment = ({
   readonly identity: RuntimeIdentity;
   readonly from: string;
   readonly to: string;
+  /** The thread that owns this change set, so the stepper follows its rounds. */
+  readonly changeSetId?: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly changeTargets?: ReadonlyArray<string>;
   readonly currentSnapshot: string;
@@ -3221,6 +3224,7 @@ const ChangeAttachment = ({
   return (
     <AgentChangeDigest
       diff={diff}
+      {...(changeSetId === undefined ? {} : { changeSetId })}
       agentIdentity={agentIdentity}
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
@@ -4050,6 +4054,7 @@ const SentThread = ({
                             identity={identity}
                             from={threadChange.from}
                             to={threadChange.to}
+                            changeSetId={comment.id}
                             {...(threadChange.agentIdentity === undefined
                               ? {}
                               : { agentIdentity: threadChange.agentIdentity })}
