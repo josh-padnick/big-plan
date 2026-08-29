@@ -33,5 +33,6 @@ export const WIREFRAME_COMPONENT_DEFINITION = defineComponent({
   markdown: wireframeMarkdown,
   diff: compileWireframeDiff,
   diffView: WireframeDiffView,
+  commentableAnchors: [{ kind: "wireframe-screen", sides: "both" }],
   scopedChildren: buildScopedChildren(),
 });

@@ -11,6 +11,8 @@ import {
 import {
   DIFF_BASELINE_SIDE,
   DIFF_SIDE_ATTRIBUTE,
+  BASELINE_BLOCK_ID_ATTRIBUTE,
+  BASELINE_SNAPSHOT_ATTRIBUTE,
   isolateBaselineSide,
   isBaselineDiffSide,
 } from "./side-isolation.js";
@@ -221,6 +223,42 @@ const documentWithBothSides = () => {
 };
 
 describe("side isolation", () => {
+  it("should stamp inherited baseline identity in its own attribute space", () => {
+    const subtarget: Element = {
+      type: "element",
+      tagName: "span",
+      properties: { "data-block-id": "stale-proposed-id" },
+      children: [{ type: "text", value: "Field" }],
+    };
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: { "data-block-id": "stale-root-id" },
+      children: [subtarget],
+    };
+
+    isolateBaselineSide({
+      subtree,
+      key: "was-snapshot",
+      baselineBlockId: "section/contract/http-endpoint-1",
+      baselineSnapshot: "abc123",
+      baselineSubtargetIds: new Map([
+        [subtarget, "section/contract/http-endpoint-field-1"],
+      ]),
+    });
+
+    expect(subtree.properties[BASELINE_BLOCK_ID_ATTRIBUTE]).toBe(
+      "section/contract/http-endpoint-1",
+    );
+    expect(subtree.properties[BASELINE_SNAPSHOT_ATTRIBUTE]).toBe("abc123");
+    expect(subtarget.properties[BASELINE_BLOCK_ID_ATTRIBUTE]).toBe(
+      "section/contract/http-endpoint-field-1",
+    );
+    expect(subtarget.properties[BASELINE_SNAPSHOT_ATTRIBUTE]).toBe("abc123");
+    expect(subtree.properties["data-block-id"]).toBeUndefined();
+    expect(subtarget.properties["data-block-id"]).toBeUndefined();
+  });
+
   it("should mark the subtree as the baseline side", () => {
     const subtree: Element = {
       type: "element",

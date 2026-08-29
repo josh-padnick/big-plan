@@ -4,6 +4,15 @@
 /** Which snapshot a rendered component side belongs to. */
 export type DiffSide = "baseline" | "proposed";
 
+/** Which rendered sides expose one declared anchor for comments. */
+export type ComponentCommentableSides = DiffSide | "both";
+
+/** One semantic anchor kind a component's view may expose to comments. */
+export type ComponentCommentableAnchor = {
+  readonly kind: string;
+  readonly sides: ComponentCommentableSides;
+};
+
 /** The word-level alignment the engine already computed for the pair. */
 export type ComponentDiffRun = {
   readonly op: "same" | "del" | "ins";

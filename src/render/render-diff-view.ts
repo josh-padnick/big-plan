@@ -3,7 +3,10 @@
 
 import { toHtml } from "hast-util-to-html";
 import type { Element, Root, RootContent } from "hast";
-import type { ComponentDiffInput } from "../components/_model/component-diff/contract.js";
+import type {
+  ComponentCommentableAnchor,
+  ComponentDiffInput,
+} from "../components/_model/component-diff/contract.js";
 import {
   COMPONENT_REGISTRY,
   definitionFor,
@@ -79,16 +82,24 @@ export const renderIsolatedBlockView = ({
   document,
   blockId,
   key,
+  baselineSnapshot,
 }: {
   readonly document: CompiledMarkdown;
   readonly blockId: string | undefined;
   readonly key: string;
+  readonly baselineSnapshot?: string;
 }): string | undefined => {
   if (blockId === undefined) return undefined;
   const block = elementByBlockId({ node: document.root, blockId });
   if (block === null) return undefined;
   const isolated = structuredClone(block);
-  isolateBaselineSide({ subtree: isolated, key });
+  isolateBaselineSide({
+    subtree: isolated,
+    key,
+    ...(baselineSnapshot === undefined
+      ? {}
+      : { baselineBlockId: blockId, baselineSnapshot }),
+  });
   return toHtml(isolated, { allowDangerousHtml: false });
 };
 
@@ -153,6 +164,41 @@ const blockById = ({
     ? undefined
     : blocks.find((block) => block.id === blockId);
 
+const anchorAllows = ({
+  anchors,
+  kind,
+  side,
+}: {
+  readonly anchors: ReadonlyArray<ComponentCommentableAnchor>;
+  readonly kind: string;
+  readonly side: "baseline" | "proposed";
+}): boolean =>
+  anchors.some(
+    (anchor) =>
+      anchor.kind === kind &&
+      (anchor.sides === "both" || anchor.sides === side),
+  );
+
+const declaredAnchor = (
+  node: Element,
+): { readonly kind: string; readonly label: string } | undefined => {
+  const commentKind = node.properties["data-commentable-kind"];
+  if (
+    typeof commentKind === "string" &&
+    commentKind.length > 0 &&
+    typeof node.properties["data-commentable-label"] === "string"
+  ) {
+    return {
+      kind: commentKind,
+      label: node.properties["data-commentable-label"],
+    };
+  }
+  const screen = node.properties["data-wireframe-screen"];
+  return typeof screen === "string"
+    ? { kind: "wireframe-screen", label: screen }
+    : undefined;
+};
+
 const inputFor = ({
   status,
   baseline,
@@ -211,11 +257,13 @@ const inheritProposedSubtargetIdentity = ({
   proposedRoot,
   proposed,
   blocks,
+  anchors,
 }: {
   readonly diffRoot: Element;
   readonly proposedRoot: Element | null;
   readonly proposed: BlockDescriptor | undefined;
   readonly blocks: ReadonlyArray<BlockDescriptor>;
+  readonly anchors: ReadonlyArray<ComponentCommentableAnchor>;
 }): void => {
   if (proposedRoot === null || proposed === undefined) return;
   const proposedSide = elementByDataValue({
@@ -228,10 +276,13 @@ const inheritProposedSubtargetIdentity = ({
   const proposedElements = identifiedElements(proposedRoot);
   const claimed = new Set<string>();
   const visit = (node: Element): void => {
-    const kind = node.properties["data-commentable-kind"];
-    const label = node.properties["data-commentable-label"];
-    if (typeof kind === "string" && typeof label === "string") {
-      const normalizedLabel = label.replaceAll("`", "");
+    const anchor = declaredAnchor(node);
+    if (
+      anchor !== undefined &&
+      anchorAllows({ anchors, kind: anchor.kind, side: "proposed" })
+    ) {
+      const { kind } = anchor;
+      const normalizedLabel = anchor.label.replaceAll("`", "");
       const sourceRowIndex = node.properties["data-table-row"];
       const source = proposedElements.find(
         (element) =>
@@ -264,6 +315,62 @@ const inheritProposedSubtargetIdentity = ({
   visit(proposedSide);
 };
 
+const inheritBaselineSubtargetIdentity = ({
+  baselineSide,
+  baselineRoot,
+  baseline,
+  blocks,
+  anchors,
+}: {
+  readonly baselineSide: Element;
+  readonly baselineRoot: Element | null;
+  readonly baseline: BlockDescriptor | undefined;
+  readonly blocks: ReadonlyArray<BlockDescriptor>;
+  readonly anchors: ReadonlyArray<ComponentCommentableAnchor>;
+}): ReadonlyMap<Element, string> => {
+  if (baselineRoot === null || baseline === undefined) return new Map();
+  const available = blocks.filter((block) => block.ownerId === baseline.id);
+  const baselineElements = identifiedElements(baselineRoot);
+  const claimed = new Set<string>();
+  const identities = new Map<Element, string>();
+  const visit = (node: Element): void => {
+    const anchor = declaredAnchor(node);
+    if (
+      anchor !== undefined &&
+      anchorAllows({ anchors, kind: anchor.kind, side: "baseline" })
+    ) {
+      const { kind } = anchor;
+      const normalizedLabel = anchor.label.replaceAll("`", "");
+      const sourceRowIndex = node.properties["data-table-row"];
+      const source = baselineElements.find(
+        (element) =>
+          element.properties["data-block-kind"] === kind &&
+          element.properties["data-block-label"] === normalizedLabel &&
+          (sourceRowIndex === undefined ||
+            element.properties["data-table-row"] === sourceRowIndex) &&
+          elementText(element) === elementText(node),
+      );
+      const sourceId = source?.properties["data-block-id"];
+      const target = available.find(
+        (block) =>
+          !claimed.has(block.id) &&
+          block.kind === kind &&
+          block.label === normalizedLabel &&
+          (typeof sourceId !== "string" || block.id === sourceId),
+      );
+      if (target !== undefined) {
+        claimed.add(target.id);
+        identities.set(node, target.id);
+      }
+    }
+    for (const child of node.children) {
+      if (isElement(child)) visit(child);
+    }
+  };
+  visit(baselineSide);
+  return identities;
+};
+
 /** Compiles and renders one component-root location through its diff contract. */
 export const renderDiffView = ({
   baselineDocument,
@@ -272,6 +379,7 @@ export const renderDiffView = ({
   proposedBlockId,
   status,
   runs,
+  baselineSnapshot,
 }: {
   readonly baselineDocument: CompiledMarkdown;
   readonly proposedDocument: CompiledMarkdown;
@@ -279,6 +387,7 @@ export const renderDiffView = ({
   readonly proposedBlockId: string | undefined;
   readonly status: "added" | "removed" | "changed";
   readonly runs: ComponentDiffInput<unknown>["runs"];
+  readonly baselineSnapshot?: string;
 }): RenderedComponentDiff | null => {
   const baseline = blockById({
     blocks: baselineDocument.blocks,
@@ -313,9 +422,26 @@ export const renderDiffView = ({
     value: "baseline",
   });
   if (baselineSide !== null) {
+    const baselineRoot =
+      baselineBlockId === undefined
+        ? null
+        : elementByBlockId({
+            node: baselineDocument.root,
+            blockId: baselineBlockId,
+          });
+    const baselineSubtargetIds = inheritBaselineSubtargetIdentity({
+      baselineSide,
+      baselineRoot,
+      baseline,
+      blocks: baselineDocument.blocks,
+      anchors: definition.commentableAnchors,
+    });
     isolateBaselineSide({
       subtree: baselineSide,
       key: `${baselineBlockId ?? "removed"}:${proposedBlockId ?? "historical"}`,
+      ...(baselineBlockId === undefined ? {} : { baselineBlockId }),
+      ...(baselineSnapshot === undefined ? {} : { baselineSnapshot }),
+      baselineSubtargetIds,
     });
   }
   inheritProposedRootIdentity({
@@ -339,6 +465,7 @@ export const renderDiffView = ({
           }),
     proposed,
     blocks: proposedDocument.blocks,
+    anchors: definition.commentableAnchors,
   });
   return {
     model: compiled.model,
