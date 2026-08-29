@@ -1,14 +1,16 @@
 // Owns every "which live element is this semantic target?" question the review
 // island asks of plan DOM. A block id or diagram anchor is a name, not a node:
-// the same name can sit on replayed evidence inside a What-changed lens, on the
-// hidden theme variant of a diagram, or on a block whose content drifted since
-// the id was minted. Resolving those names in one place keeps the discipline
-// mandatory - scoped to the live article, never inert replayed evidence,
-// visible copy preferred - and makes a miss say why it missed instead of
-// degrading to a plausible default. A compiler-addressed component diff root
-// is live plan DOM, not replayed evidence. Where a lens belongs relative to the
-// blocks it finds stays pure in diff-anchor.ts; this module is the DOM half of
-// that decision, which is why it carries the browser-only suffix.
+// the same name can sit on the hidden theme variant of a diagram or on a block
+// whose content drifted since the id was minted. Resolving those names in one
+// place keeps the discipline mandatory - scoped to the live article, visible
+// copy preferred - and makes a miss say why it missed instead of degrading to
+// a plausible default. Every rendering of a change is the plan itself: a
+// component renders its own diff in place of its root, and the one side that
+// is not the plan carries no plan identity at all, because the side-isolation
+// module kept it out before the markup reached the browser. Where a lens
+// belongs relative to the blocks it finds stays pure in diff-anchor.ts; this
+// module is the DOM half of that decision, which is why it carries the
+// browser-only suffix.
 
 import type { DiffLocation } from "../shared/review-wire.js";
 import {
@@ -23,11 +25,6 @@ export type LiveTargetMissReason =
   // Nothing in the live article carries the name: the block was removed, or an
   // id minted for an older revision no longer exists.
   | "unknown-id"
-  // The only matches sit inside replayed lens evidence rather than the plan.
-  // Anchoring there would nest a lens inside a lens or attach a comment to
-  // evidence. An identity attribute surviving into a replay is an internal
-  // defect rather than something the author changed.
-  | "clone-only"
   // A name resolved but the block no longer holds the content the diff
   // recorded, so a structural path now points at different words.
   | "drifted-content"
@@ -50,55 +47,36 @@ export type LensAnchorResult =
 /** One match for a name, described for the pure choice between matches. */
 export type LiveCandidate<TElement> = {
   readonly element: TElement;
-  readonly isLensCopy: boolean;
   readonly isVisible: boolean;
 };
 
 /**
- * Chooses the element a name refers to. A lens copy is never the answer, and a
- * displayed copy wins over a hidden one because a diagram ships one copy per
- * theme variant with only one shown. Hidden is still an answer when it is the
- * only one: a block inside a collapsed slide is the right element for
- * containment, labelling, and existence questions.
+ * Chooses the element a name refers to. A displayed match wins over a hidden
+ * one because a diagram ships one copy per theme variant with only one shown.
+ * Hidden is still an answer when it is the only one: a block inside a
+ * collapsed slide is the right element for containment, labelling, and
+ * existence questions.
  */
 export const pickLiveCandidate = <TElement>(
   candidates: ReadonlyArray<LiveCandidate<TElement>>,
-):
-  | { readonly found: TElement }
-  | { readonly missing: "unknown-id" | "clone-only" } => {
-  const live = candidates.filter((candidate) => !candidate.isLensCopy);
-  const preferred = live.find((candidate) => candidate.isVisible) ?? live.at(0);
-  if (preferred !== undefined) return { found: preferred.element };
-  return { missing: candidates.length === 0 ? "unknown-id" : "clone-only" };
+): { readonly found: TElement } | { readonly missing: "unknown-id" } => {
+  const preferred =
+    candidates.find((candidate) => candidate.isVisible) ?? candidates.at(0);
+  return preferred === undefined
+    ? { missing: "unknown-id" }
+    : { found: preferred.element };
 };
 
 /**
  * Reduces one lens anchor's per-candidate misses to the reason worth telling.
- * Drift outranks the rest because it is the only evidence that an id resolved
- * against content it no longer names, and an identity attribute that survived
- * into a clone outranks a plain absence for the same reason: both say
- * something happened, while "unknown-id" says only that nothing is there.
+ * Drift outranks a plain absence because it is the only evidence that an id
+ * resolved against content it no longer names, while "unknown-id" says only
+ * that nothing is there.
  */
 export const lensMissReason = (
   reasons: ReadonlyArray<LiveTargetMissReason>,
-): LiveTargetMissReason => {
-  if (reasons.includes("drifted-content")) return "drifted-content";
-  if (reasons.includes("clone-only")) return "clone-only";
-  return "unknown-id";
-};
-
-// A lens still shows content that is not the plan: a picture replayed as
-// evidence, and, in the historical archive, a component card whose block the
-// plan no longer holds. A component-owned diff root that replaced a live block
-// is the plan, so its own frame is deliberately excluded from this selector;
-// the archive's host carries the host marker instead, which is what keeps a
-// dead change out of every identity answer.
-const LENS_COPY_SELECTOR =
-  "[data-review-diff-lens]:not([data-component-diff]), [data-review-diff-lens-host]";
-
-/** True when the element is replayed evidence inside a What-changed lens. */
-export const isLensCopy = (element: Element): boolean =>
-  element.closest(LENS_COPY_SELECTOR) !== null;
+): LiveTargetMissReason =>
+  reasons.includes("drifted-content") ? "drifted-content" : "unknown-id";
 
 export const liveArticle = (): HTMLElement | null =>
   document.querySelector<HTMLElement>("article");
@@ -113,7 +91,6 @@ const describeMatches = (
 ): ReadonlyArray<LiveCandidate<HTMLElement>> =>
   matches.map((element) => ({
     element,
-    isLensCopy: isLensCopy(element),
     isVisible: matches.length === 1 || element.getClientRects().length > 0,
   }));
 
@@ -131,49 +108,15 @@ const blockSelector = (blockId: string): string =>
   `[data-block-id="${CSS.escape(blockId)}"]`;
 
 /**
- * Names the block ids a lens is currently showing in place of. The lens sets
- * it when it hides those blocks, because only the lens knows which ones it
- * replaced; nothing about the hidden block itself records that it was.
- */
-export const LENS_STAND_IN_ATTRIBUTE = "data-review-diff-lens-for";
-
-/**
- * The element a reader can actually be sent to for a target, when the target
- * itself is off screen because a What-changed lens replaced it. Scrolling to
- * an element with no box does nothing at all, which reads as a control that
- * jumps somewhere random; the lens holds the reader's content, so it is where
- * the jump belongs. Returns null whenever the target can be scrolled to on its
- * own, which includes a block merely inside a collapsed slide.
- */
-export const displayedStandIn = (element: HTMLElement): HTMLElement | null => {
-  if (element.getClientRects().length > 0) return null;
-  const blockId =
-    element.dataset.blockId ??
-    element.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
-  if (blockId === undefined || blockId === "") return null;
-  const lenses = document.querySelectorAll<HTMLElement>(
-    `[${LENS_STAND_IN_ATTRIBUTE}]`,
-  );
-  for (const lens of lenses) {
-    const names = (lens.getAttribute(LENS_STAND_IN_ATTRIBUTE) ?? "").split(" ");
-    if (names.includes(blockId) && lens.getClientRects().length > 0) {
-      return lens;
-    }
-  }
-  return null;
-};
-
-/**
- * Lists the pictures the reader is reading. A lens replays a changed picture
- * as an isolated, identity-free rendering, so decorating every match in the
- * document would hang a comment affordance on evidence rather than the plan.
+ * Lists the pictures the reader is reading. A replayed picture is rendered
+ * without plan identity, so it carries no block kind for this lookup to find.
  */
 export const livePictures = (): ReadonlyArray<HTMLElement> => {
   const article = liveArticle();
   if (article === null) return [];
   return Array.from(
     article.querySelectorAll<HTMLElement>('[data-block-kind="image"]'),
-  ).filter((element) => !isLensCopy(element));
+  );
 };
 
 /** Resolves a block id to the block the reader is reading. */
@@ -244,7 +187,7 @@ export const candidateMatchesLivePicture = ({
     candidate.expectedPicture.source === livePicture.source &&
     candidate.expectedPicture.alt === livePicture.alt);
 
-/** Resolves a decision id to its live card, never inert replayed evidence. */
+/** Resolves a decision id to its live card. */
 export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };
@@ -253,9 +196,8 @@ export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
 
 /**
  * The first decision the reader can be sent to when a control says "those
- * decisions" without naming one. Same live-article, no-lens-copy rule as a
- * named lookup, so a jump from the approval stamp cannot land inside a
- * What-changed copy.
+ * decisions" without naming one. Same live-article rule as a named lookup, so
+ * a jump from the approval stamp resolves against the plan the reader reads.
  */
 export const liveFirstDecision = (): LiveTargetResult => {
   const article = liveArticle();

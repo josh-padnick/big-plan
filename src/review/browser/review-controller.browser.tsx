@@ -75,7 +75,12 @@ import {
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
-import { isRendered, measureThreadAnchor } from "./thread-anchor.browser.js";
+import {
+  holdsItsPlace,
+  isRendered,
+  measureThreadAnchor,
+  scrollToLiveElement,
+} from "./thread-anchor.browser.js";
 import {
   clearThreadOpenOverlay,
   isThreadOpen,
@@ -162,7 +167,6 @@ import {
 } from "./review-comment-submit.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
-  displayedStandIn,
   foundElement,
   liveBlock,
   liveDecisionFigure,
@@ -2019,14 +2023,6 @@ const threadAnchorContainer = (target: HTMLElement): HTMLElement =>
   target.parentElement ??
   target;
 
-// Whether the spot the thread remembers is still occupied. A lens hides the
-// block it replays but renders its copy in the same spot, so the remembered
-// distance still describes where that content sits. A collapse leaves nothing
-// behind at all: the card shrinks to its header, and the distance then names a
-// gap below the card rather than a place inside it.
-const targetHoldsItsPlace = (target: HTMLElement): boolean =>
-  isRendered(target) || displayedStandIn(target) !== null;
-
 const useThreadHosts = (
   comments: ReadonlyArray<ReviewComment>,
   isOpen: boolean,
@@ -2159,11 +2155,12 @@ const useThreadHosts = (
         );
         // The offset places the thread level with the target inside the card,
         // so it only applies when the card itself is what got measured and the
-        // target still holds its place inside it. A collapsed anchor is
-        // represented by an ancestor row instead, and that row's top is the
-        // whole answer.
+        // target still holds its place inside it. A lens re-renders the block
+        // in place, so the slot the distance was measured to is still there to
+        // point at. A collapse leaves nothing behind: the card shrinks to its
+        // header, and level with the card is then the whole answer.
         const targetOffset =
-          anchor.element === container && targetHoldsItsPlace(target)
+          anchor.element === container && holdsItsPlace(target)
             ? (targetOffsets.get(comment.id) ?? 0)
             : 0;
         const desiredTop =
@@ -6840,12 +6837,7 @@ export const ReviewController = () => {
       setStatus("This comment's target is no longer in the plan.");
       return;
     }
-    // With a What-changed lens open over the target, the reader's content is
-    // in the lens and the block behind it has no box at all.
-    (displayedStandIn(element) ?? element).scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
+    scrollToLiveElement(element, "center");
   };
   const updateDraft = (id: string, body: string) => {
     const current = latestReviewStateRef.current.state;
@@ -7639,10 +7631,7 @@ export const ReviewController = () => {
     // keeps it clear of the branding bar.
     const planBlock = targetElement(comment.target);
     if (planBlock !== null) {
-      (displayedStandIn(planBlock) ?? planBlock).scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      scrollToLiveElement(planBlock, "start");
     }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {

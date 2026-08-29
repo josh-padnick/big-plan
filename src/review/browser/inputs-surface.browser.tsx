@@ -36,7 +36,8 @@ import {
 } from "../shared/input-contract.js";
 import { decodeReviewInputContract } from "../shared/review-wire.js";
 import { Icon } from "./icon.browser.js";
-import { displayedStandIn, liveDecisionFigure } from "./live-target.browser.js";
+import { liveDecisionFigure } from "./live-target.browser.js";
+import { scrollToLiveElement } from "./thread-anchor.browser.js";
 import {
   onAppliedReviewRecord,
   requestJson,
@@ -214,10 +215,7 @@ const useReviewInputContract = (): {
 const showDecision = (decisionId: string): void => {
   const decision = liveDecisionFigure(decisionId);
   if ("missing" in decision) return;
-  (displayedStandIn(decision.found) ?? decision.found).scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-  });
+  scrollToLiveElement(decision.found, "center");
 };
 
 const InputRow = ({ input }: { readonly input: ReviewInput }) => (
