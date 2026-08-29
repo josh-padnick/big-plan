@@ -748,7 +748,7 @@ test("should draw marks, a two-ended toolbar, and a surface that covers the page
       ];
       return marks.map((mark) => {
         const words = mark.closest<HTMLElement>(
-          ".wireframe-button, .wireframe-icon, .wireframe-reference, .wireframe-list-disclosure",
+          ".wireframe-button, .wireframe-icon, .wireframe-reference, .wireframe-list-row-primary",
         );
         if (words === null) {
           throw new Error("inline wireframe glyph has no text-bearing owner");
