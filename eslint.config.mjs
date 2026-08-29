@@ -680,8 +680,8 @@ export default tseslint.config(
   },
   {
     // Node-runtime JavaScript: the bin shim, build-time generators, and the
-    // internal behavioral probes that drive real agent harnesses.
-    files: ["bin/**/*.mjs", "scripts/**/*.mjs", "_internal/**/*.mjs"],
+    // behavioral probes that drive real agent harnesses.
+    files: ["bin/**/*.mjs", "scripts/**/*.mjs", "test/probes/**/*.mjs"],
     languageOptions: { globals: globals.node },
   },
   {

@@ -13,6 +13,10 @@ const docsUrl = `http://127.0.0.1:${docsPort}/`;
 // execute them concurrently.
 export default defineConfig({
   testDir: "./test",
+  // Browser journeys are the *.spec.ts files. The behavioral probes under
+  // test/probes/ are node:test contract tests for harness-driving scripts and
+  // would otherwise be swept up by Playwright's default *.test.* match.
+  testMatch: "**/*.spec.ts",
   fullyParallel: true,
   forbidOnly: Boolean(process.env["CI"]),
   // One retry in CI, none locally. A browser journey that fails only under

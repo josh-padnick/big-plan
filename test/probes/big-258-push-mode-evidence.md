@@ -7,7 +7,7 @@ this file records one run of it.
 Command:
 
 ```sh
-node _internal/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
+node test/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
 ```
 
 Revision: `df17ac89821e1dd8477b7dcce9fa575d94e0bc21`.

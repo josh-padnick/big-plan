@@ -62,10 +62,10 @@ Method:
    to honor.
 
 ```sh
-node _internal/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
-node _internal/probes/push-mode-probe.mjs --arm control,before,after --baseline-rev <pre-change-rev> --trials 3 --transcripts <dir>
-node _internal/probes/push-mode-probe.mjs --trials 5 --harness claude --arm after
-node _internal/probes/push-mode-probe.mjs --arm control --question doubted
+node test/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
+node test/probes/push-mode-probe.mjs --arm control,before,after --baseline-rev <pre-change-rev> --trials 3 --transcripts <dir>
+node test/probes/push-mode-probe.mjs --trials 5 --harness claude --arm after
+node test/probes/push-mode-probe.mjs --arm control --question doubted
 ```
 
 One recorded run of this probe, for the connector prompt change that introduced it, is kept in [big-258-push-mode-evidence.md](big-258-push-mode-evidence.md).

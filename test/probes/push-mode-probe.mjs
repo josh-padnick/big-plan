@@ -5,7 +5,7 @@
 // It asks several coding-agent harnesses the same question under two arms - a
 // control without push guidance and the shipped prompt - and scores each
 // answer's structured next-command field. Run it as
-// `node _internal/probes/push-mode-probe.mjs [--trials N] [--harness claude]`.
+// `node test/probes/push-mode-probe.mjs [--trials N] [--harness claude]`.
 // See ./README.md for the method and how to read the result.
 
 import { execFile, spawn } from "node:child_process";
