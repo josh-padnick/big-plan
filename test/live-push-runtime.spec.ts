@@ -1324,6 +1324,7 @@ test("should arm auto-accept from a pushed thread and apply it only to later arr
         name: "Auto-accept all changes",
       }),
     ).toBeVisible();
+    await expect(restartedRail.getByText("Needs you (1)")).toBeVisible();
     expect(third).toContain("reviewed candidate");
   } finally {
     await closeReviewRuntime({ page, runtime });
