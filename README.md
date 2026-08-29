@@ -145,6 +145,11 @@ bun run build
 
 After building the root package, regenerate the docs' light/dark component screenshot pairs from `docs/` with `bun run screenshots`.
 
+## Security
+
+To report a vulnerability, follow [SECURITY.md](SECURITY.md).
+The full policy and Big Plan's security model are on the [security page](https://big-plan.ai/reference/security/).
+
 ## License
 
 [FSL-1.1-MIT](LICENSE.md). Each release becomes available under MIT two years after it is published.
