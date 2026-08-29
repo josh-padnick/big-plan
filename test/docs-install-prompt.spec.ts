@@ -5,7 +5,6 @@ import { expect, test } from "./fixtures";
 
 const AGENT_SETUP_PROMPT =
   "Set up Big Plan for me: read https://big-plan.ai/setup.md and follow it.";
-const DOCS_URL = "http://127.0.0.1:4321/";
 
 test("should deliver the install prompt when opened from the built homepage", async ({
   page,
@@ -22,7 +21,7 @@ test("should deliver the install prompt when opened from the built homepage", as
       },
     });
   });
-  await page.goto(DOCS_URL);
+  await page.goto("/");
 
   const trigger = page.getByRole("button", { name: "Install now" });
   const dialog = page.getByRole("dialog", {
