@@ -101,6 +101,20 @@ describe("prepareUpdateNotice", () => {
     expect(launchRefresh).toHaveBeenCalledOnce();
   });
 
+  it("should suppress a synchronous refresh-launch failure", async () => {
+    const prepared = await prepareUpdateNotice({
+      currentVersion: "1.1.0",
+      invokedAs: GLOBAL_ENTRY,
+      now: NOW,
+      resolveEntry: async (path) => path,
+      launchRefresh: () => {
+        throw new Error("unavailable");
+      },
+    });
+
+    expect(() => prepared.refreshAfterOutput?.()).not.toThrow();
+  });
+
   it("should show nothing when install detection cannot resolve the entry", async () => {
     await expect(
       prepareUpdateNotice({

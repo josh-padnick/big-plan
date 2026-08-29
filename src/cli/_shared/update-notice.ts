@@ -99,6 +99,17 @@ const launchRefreshWorker = (): void => {
   }
 };
 
+const ignoreRefreshFailure =
+  (launchRefresh: () => void): (() => void) =>
+  (): void => {
+    try {
+      launchRefresh();
+    } catch {
+      // A synchronous launcher failure remains invisible to the command that
+      // has already produced its output.
+    }
+  };
+
 /**
  * Reads an already-completed check for guidance output and arranges a stale
  * cache refresh. Ephemeral npx installs do neither because they already run
@@ -133,7 +144,9 @@ export const prepareUpdateNotice = async ({
     const line = updateLine(currentVersion, marker, now);
     return {
       ...(line === undefined ? {} : { line }),
-      ...(isFresh ? {} : { refreshAfterOutput: launchRefresh }),
+      ...(isFresh
+        ? {}
+        : { refreshAfterOutput: ignoreRefreshFailure(launchRefresh) }),
     };
   } catch {
     // Every part of this optional path is fail-open, including install
