@@ -1319,6 +1319,11 @@ test("should arm auto-accept from a pushed thread and apply it only to later arr
     await expect(
       restartedRail.getByText(/Auto-accept · on since/u),
     ).toHaveCount(0);
+    await expect(
+      restartedRail.getByRole("button", {
+        name: "Auto-accept all changes",
+      }),
+    ).toBeVisible();
     expect(third).toContain("reviewed candidate");
   } finally {
     await closeReviewRuntime({ page, runtime });
