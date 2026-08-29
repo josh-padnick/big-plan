@@ -42,20 +42,31 @@ export type LensAnchorCandidate = {
  * result snapshot's content facts for the block, because the displayed
  * document was rendered from a later snapshot and the id alone cannot prove
  * the block still holds the content the diff is about.
+ *
+ * A location that brought its own complete rendering is the exception, and it
+ * is a narrow one. The expectation exists because a lens built from recorded
+ * text is only honest beside a block that still holds that text; a component
+ * that carries `view` shows both of its own sides and reads the live block for
+ * nothing, so the id is asking where to stand rather than what to say. Holding
+ * such a location to the old text sends a change the plan still has a place for
+ * into the historical archive at the foot of the document - a stop the stepper
+ * still counts, with nothing to see where the reader is looking.
  */
 export const lensAnchorCandidates = (
   location: DiffLocation,
   { isSuperseded }: { readonly isSuperseded: boolean },
 ): ReadonlyArray<LensAnchorCandidate> => {
   if (isSuperseded) {
+    const carriesOwnRendering = location.view !== undefined;
     return location.newBlockId === undefined
       ? []
       : [
           {
             blockId: location.newBlockId,
             placement: "replace",
-            expectedText: location.newText,
-            ...(location.newPresentation?.aspect === "image"
+            ...(carriesOwnRendering ? {} : { expectedText: location.newText }),
+            ...(!carriesOwnRendering &&
+            location.newPresentation?.aspect === "image"
               ? { expectedPicture: location.newPresentation }
               : {}),
           },

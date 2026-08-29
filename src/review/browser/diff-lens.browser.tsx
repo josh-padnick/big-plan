@@ -27,7 +27,7 @@ import {
   liveLensAnchor,
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
-import { replacePlanDom } from "./plan-dom.browser.js";
+import { announcePlanDom, replacePlanDom } from "./plan-dom.browser.js";
 
 const placeLocations = ({
   diff,
@@ -550,6 +550,14 @@ const SnapshotSideContent = ({
  * address the plan still holds - which the superseded path proves is not
  * hypothetical - must never appear twice in one document. Held inert for the
  * same reason, since neither path is answerable.
+ *
+ * Installing the markup is a plan-DOM replacement like any other, and it is
+ * announced as one. A component that sizes itself in the browser - a wireframe
+ * scaling a fixed workspace into the measure it was given, a table deciding
+ * how to fit - has no layout at all until the shell runs over it, and an
+ * unannounced install leaves it at its natural size: a screen drawn at its
+ * authored 1200px inside a column half that wide. Nothing throws, so the only
+ * evidence is a replay that reads as broken.
  */
 const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -573,7 +581,10 @@ const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
       }
     }
     host.replaceChildren(document.importNode(root, true));
-    return () => host.replaceChildren();
+    announcePlanDom({ carriesNoPlanIdentity: true });
+    return () => {
+      host.replaceChildren();
+    };
   }, [view]);
   return <div className="min-w-0" inert ref={hostRef} />;
 };
@@ -933,7 +944,7 @@ const ComponentDiffReplacement = ({
       } else {
         if (anchor.placement === "before") anchor.found.before(next);
         else anchor.found.after(next);
-        document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+        announcePlanDom();
       }
       document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
       next.scrollIntoView({ behavior: lensScrollBehavior(), block: "center" });
@@ -972,7 +983,7 @@ const ComponentDiffReplacement = ({
         replacePlanDom({ target: liveReplacement, replacement: original });
       } else if (liveReplacement !== null) {
         liveReplacement.remove();
-        document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+        announcePlanDom();
       }
     };
   }, [

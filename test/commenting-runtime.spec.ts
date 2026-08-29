@@ -5933,6 +5933,115 @@ The release gets a full soak.
   }
 });
 
+test("should fit a component diff the archive replays, not draw it at its authored size", async ({
+  page,
+}) => {
+  // The archived replay installs a component's own diff view into a host of
+  // its own. A component that sizes itself in the browser has no layout until
+  // the shell runs over it, and nothing throws when it does not: the reader
+  // simply meets a screen drawn at its authored 1200px inside a column half
+  // that wide, at the foot of the document.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-replay-fit-"));
+  const planPath = join(directory, "plan.mdx");
+  const before = `# Review queue
+
+One screen carries the queue, so its shape is worth settling before it is built.
+
+## The queue screen
+
+Triage lives on one screen.
+
+<Wireframe id="review-queue" title="Review queue" initialScreen="queue">
+  <Screen id="queue" name="Queue" device="desktop">
+    <AppShell>
+      <AppContent>
+        <PageHeader title="Plan review" />
+        <Text text="Answer the oldest thread first." />
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>`;
+  const after = before.replace(
+    "Answer the oldest thread first.",
+    "Answer the oldest thread first, then name the rollback owner.",
+  );
+  await writeFile(planPath, after);
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    await rail
+      .getByRole("button", { name: /changes? across/u })
+      .first()
+      .click();
+
+    await test.step("show the change where the block it names still stands", async () => {
+      await rail
+        .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
+        .last()
+        .click();
+      await expect(page.locator("[data-component-diff]")).toBeVisible();
+      await expect(
+        page.locator("[data-review-historical-changes]"),
+      ).toHaveCount(0);
+      await page.getByRole("button", { name: "Exit review" }).first().click();
+    });
+
+    await test.step("fit the replay the archive stands in for the block with", async () => {
+      // Emptying the plan of its addresses is what leaves the change with
+      // nowhere of its own to stand, which is the only path to the archive.
+      await page
+        .locator("article [data-block-id]")
+        .evaluateAll((nodes) => nodes.forEach((node) => node.remove()));
+      await rail
+        .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
+        .last()
+        .click();
+      const archive = page.locator("[data-review-historical-changes]");
+      await expect(
+        archive.getByRole("region", { name: "Updated" }),
+      ).toBeVisible();
+      // Only the side the reader can see has a box to be fitted into; the
+      // other side of the toggle is not laid out at all until it is shown.
+      const shownScreen = archive.locator(
+        "[data-wireframe-screen][data-wireframe-current]:visible",
+      );
+      const frame = shownScreen.locator(".wireframe-frame").first();
+      await expect(frame).toHaveCount(1);
+      // The fit writes a zoom onto the frame and pins the card to the width it
+      // paints at. Both are empty until the shell has run over this markup.
+      await expect
+        .poll(async () =>
+          frame.evaluate((node) => (node as HTMLElement).style.zoom),
+        )
+        .not.toBe("");
+      const fitted = await shownScreen.first().evaluate((screen) => {
+        const card = screen.querySelector<HTMLElement>(
+          ":scope > .wireframe-frame-card",
+        );
+        return {
+          cardWidth: Math.round(card?.getBoundingClientRect().width ?? 0),
+          screenWidth: Math.round(screen.getBoundingClientRect().width),
+        };
+      });
+      expect(fitted.cardWidth).toBeGreaterThan(0);
+      expect(fitted.cardWidth).toBeLessThanOrEqual(fitted.screenWidth);
+    });
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should keep component replacements inside their slide and preserve Callout presentation", async ({
   page,
 }, testInfo) => {

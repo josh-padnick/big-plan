@@ -12,6 +12,7 @@ import {
 
 const location = (fields: Partial<DiffLocation>): DiffLocation => ({
   status: "changed",
+  isComponentRoot: false,
   scope: "section/approach",
   kind: "paragraph",
   label: "Approach",
@@ -131,6 +132,42 @@ describe("lensAnchorCandidates", () => {
         },
       },
     ]);
+  });
+
+  it("should hold a superseded component to its place rather than its old text", () => {
+    // A location that brought its own rendering reads the live block for
+    // nothing, so a text expectation could only exile a change the plan still
+    // has a place for into the archive at the foot of the document.
+    expect(
+      lensAnchorCandidates(
+        location({
+          kind: "data-table",
+          isComponentRoot: true,
+          newBlockId: "approach/data-table-1",
+          view: "<div data-component-diff></div>",
+        }),
+        { isSuperseded: true },
+      ),
+    ).toEqual([{ blockId: "approach/data-table-1", placement: "replace" }]);
+  });
+
+  it("should not expect a picture identity from a superseded component view", () => {
+    const candidates = lensAnchorCandidates(
+      location({
+        kind: "wireframe",
+        isComponentRoot: true,
+        newBlockId: "approach/wireframe-1",
+        view: "<div data-component-diff></div>",
+        newPresentation: {
+          aspect: "image",
+          source: "./assets/after.png",
+          alt: "Map",
+        },
+      }),
+      { isSuperseded: true },
+    );
+    expect(candidates[0]?.expectedPicture).toBeUndefined();
+    expect(candidates[0]?.expectedText).toBeUndefined();
   });
 
   it("should leave same-snapshot candidates without a text expectation", () => {
