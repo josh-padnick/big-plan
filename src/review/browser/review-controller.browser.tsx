@@ -4205,17 +4205,22 @@ const ChatExchange = ({
         createdAt={request.createdAt}
         delivery={delivery}
       />
-      {response === undefined ? (
+      {response === undefined || request.kind === "approval" ? (
         <div className="min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-dashed border-edge bg-paper px-2 py-2 text-muted">
           <RequestStatusStrip
             status={status}
             activity={activity}
             surface="chat"
             onShowAgent={onShowAgent}
-            onCancelRequest={() => onCancelRequest(request.requestId)}
+            onCancelRequest={
+              response === undefined && request.kind !== "approval"
+                ? () => onCancelRequest(request.requestId)
+                : undefined
+            }
           />
         </div>
-      ) : (
+      ) : null}
+      {response === undefined || request.kind === "approval" ? null : (
         <MessageTurn
           role="agent"
           surface="chat"
@@ -5971,12 +5976,14 @@ export const ReviewController = () => {
       }
     };
     void refresh();
+    document.addEventListener("bigplan:approval-changed", refresh);
     const timer = window.setInterval(
       () => void refresh(),
       REVIEW_POLL_INTERVAL_MS,
     );
     return () => {
       current = false;
+      document.removeEventListener("bigplan:approval-changed", refresh);
       window.clearInterval(timer);
     };
   }, [
@@ -6982,9 +6989,13 @@ export const ReviewController = () => {
   const statusForRequest = (
     request: AgentRequest,
     surface: MessageSurface,
-  ): AgentStatus =>
-    projectRequestStatus({
+  ): AgentStatus => {
+    const answer = agent.responses.find(
+      (candidate) => candidate.requestId === request.requestId,
+    );
+    return projectRequestStatus({
       request,
+      ...(answer === undefined ? {} : { response: answer }),
       requests: agent.requests,
       progressEvents: progress,
       presence: effectivePresence,
@@ -6999,8 +7010,10 @@ export const ReviewController = () => {
         cancelPendingRequestIds,
       }),
     });
+  };
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
+    responses: agent.responses,
     cancelPendingRequestIds,
     progressEvents: progress,
     agentConnected,
@@ -7016,7 +7029,7 @@ export const ReviewController = () => {
     everConnected: agentHasEverConnected({ events: agentConnection.events }),
   });
   const chatRequests = agent.requests.filter(
-    (request) => request.kind === "chat",
+    (request) => request.kind === "chat" || request.kind === "approval",
   );
   const activeChatRequests = chatRequests.filter(
     (request) => !archivedChatRequestIds.has(request.requestId),
@@ -7028,7 +7041,8 @@ export const ReviewController = () => {
     if (identity === null) return null;
     const response = agent.responses.find(
       (candidate) =>
-        candidate.requestId === request.requestId && candidate.kind === "chat",
+        candidate.requestId === request.requestId &&
+        (candidate.kind === "chat" || candidate.kind === "approval"),
     );
     return (
       <ChatExchange
@@ -7308,7 +7322,7 @@ export const ReviewController = () => {
     });
   };
   const viewAgentRequest = (requestId: string, kind: string) => {
-    if (kind === "chat") {
+    if (kind === "chat" || kind === "approval") {
       openFeedbackSidebar("chat");
       return;
     }

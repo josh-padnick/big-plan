@@ -9,6 +9,8 @@ import { join } from "node:path";
 import {
   deriveSnapshotDigest,
   messageAgentRequest,
+  outstandingAgentRequests,
+  readAgentExchange,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "../src/review/agent-exchange.js";
@@ -17,7 +19,17 @@ import {
   commitRequestTerminal,
 } from "../src/review/request-mailbox.js";
 import { writeSnapshot } from "../src/review/store.js";
-import { expect, startReviewRuntime, test, type Page } from "./fixtures";
+import {
+  agentIdOf,
+  agentSidebar,
+  agentStatusTrigger,
+  closeReviewRuntime,
+  expect,
+  runAgentCli,
+  startReviewRuntime,
+  test,
+  type Page,
+} from "./fixtures";
 
 const PLAN = `# Durable decision answers
 
@@ -678,6 +690,18 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
   const runtime = await startCompiledReviewRuntime(planPath);
   try {
     await openWritableReview(page, runtime.url);
+    await writeAgentRequest({
+      store: runtime.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "aaaaaaaaaaaaaaaa",
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-13T17:00:00.000Z",
+        body: "Please look at the retry queue.",
+      }),
+    });
     await page.getByRole("button", { name: "Approve plan" }).click();
     const dialog = page.getByRole("alertdialog", {
       name: "Approve this plan?",
@@ -731,6 +755,14 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     const approved = page.waitForResponse((response) =>
       response.url().endsWith("/api/approve"),
     );
+    const title = page.locator("article h1[data-authored-prose]").first();
+    const [titleBoxBeforeApproval, tocBoxBeforeApproval] = await Promise.all([
+      title.boundingBox(),
+      page.locator("[data-desktop-toc]").boundingBox(),
+    ]);
+    if (titleBoxBeforeApproval === null || tocBoxBeforeApproval === null) {
+      throw new Error("The plan title and contents were not laid out");
+    }
     await dialog.getByRole("button", { name: "Approve plan" }).click();
     expect((await approved).ok()).toBe(true);
 
@@ -750,108 +782,61 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     ).toBeVisible();
     const stampBox = await stamp.boundingBox();
     const approvedBox = await approvedButton.boundingBox();
-    const titleBox = await page
-      .getByRole("heading", { level: 1 })
-      .boundingBox();
+    const tocBox = await page.locator("[data-desktop-toc]").boundingBox();
     const headerBox = await page
       .locator("header[data-shell-chrome]")
       .boundingBox();
     const feedbackBox = await page
-      .getByRole("button", { name: "Feedback" })
+      .getByRole("button", { name: "Feedback", exact: true })
       .boundingBox();
     if (
       stampBox === null ||
       approvedBox === null ||
       feedbackBox === null ||
-      titleBox === null ||
+      tocBox === null ||
       headerBox === null
     ) {
       throw new Error(
-        "The approved stamp, Plan approved control, title, and Feedback were not laid out",
+        "The approved stamp, Plan approved control, contents, and Feedback were not laid out",
       );
     }
     expect(approvedBox.x + approvedBox.width).toBeLessThanOrEqual(
       feedbackBox.x,
     );
-    expect(stampBox.x).toBeLessThan(approvedBox.x);
-    expect(Math.abs(stampBox.x - titleBox.x)).toBeLessThan(24);
-    expect(stampBox.y + stampBox.height).toBeLessThanOrEqual(titleBox.y + 4);
-    expect(stampBox.y).toBeGreaterThan(headerBox.y + headerBox.height);
+    const titleBox = await title.boundingBox();
+    if (titleBox === null) {
+      throw new Error("The plan title left the layout after approval");
+    }
+    expect(Math.abs(stampBox.x - titleBox.x)).toBeLessThan(2);
+    expect(stampBox.x).toBeGreaterThan(tocBox.x + tocBox.width);
+    expect(stampBox.y + stampBox.height).toBeLessThanOrEqual(titleBox.y);
+    expect(Math.abs(titleBox.x - titleBoxBeforeApproval.x)).toBeLessThan(2);
+    expect(Math.abs(titleBox.y - titleBoxBeforeApproval.y)).toBeLessThan(2);
+    expect(Math.abs(tocBox.x - tocBoxBeforeApproval.x)).toBeLessThan(2);
+    expect(Math.abs(tocBox.y - tocBoxBeforeApproval.y)).toBeLessThan(2);
+    expect(stampBox.y).toBeGreaterThanOrEqual(
+      headerBox.y + headerBox.height + 4,
+    );
     const stampLayer = await stamp.evaluate((element) => {
-      const slot = element.closest("[data-review-approval-page-stamp]");
+      const slot = element.parentElement;
       if (slot === null) return null;
       const style = getComputedStyle(slot);
+      const type = element.querySelector("[data-review-approval-stamp-type]");
       return {
         position: style.position,
-        zIndex: style.zIndex,
+        rotate: style.rotate,
+        fontSize: type === null ? null : getComputedStyle(type).fontSize,
       };
     });
     expect(stampLayer?.position).toBe("absolute");
-    expect(
-      stampLayer?.zIndex === "auto" || Number(stampLayer?.zIndex) < 40,
-    ).toBe(true);
-    const stampTopBefore = stampBox.y;
-    const scrolled = await page.evaluate(() => {
-      const html = document.documentElement;
-      const previous = html.style.scrollBehavior;
-      html.style.scrollBehavior = "auto";
-      window.scrollBy(0, 240);
-      const y = window.scrollY;
-      html.style.scrollBehavior = previous;
-      return y;
-    });
-    expect(scrolled).toBeGreaterThanOrEqual(200);
-    const stampTopAfter = (await stamp.boundingBox())?.y;
-    if (stampTopAfter === undefined) {
-      throw new Error("The approved stamp left the layout while scrolling");
-    }
-    expect(Math.abs(stampTopAfter - (stampTopBefore - scrolled))).toBeLessThan(
-      2,
-    );
-    await page.evaluate(() => {
-      const html = document.documentElement;
-      const previous = html.style.scrollBehavior;
-      html.style.scrollBehavior = "auto";
-      window.scrollTo(0, 0);
-      html.style.scrollBehavior = previous;
-    });
-    const overlapScroll = Math.max(
-      8,
-      Math.round(stampTopBefore - headerBox.height / 2),
-    );
-    await page.evaluate((y) => {
-      const html = document.documentElement;
-      const previous = html.style.scrollBehavior;
-      html.style.scrollBehavior = "auto";
-      window.scrollTo(0, y);
-      html.style.scrollBehavior = previous;
-    }, overlapScroll);
-    const covered = await page.evaluate(() => {
-      const header = document.querySelector("header[data-shell-chrome]");
-      const mark = document.querySelector("[data-review-approval-stamp]");
-      if (header === null || mark === null) {
-        return { hitHeader: false, stampY: 0, headerBottom: 0 };
-      }
-      const headerRect = header.getBoundingClientRect();
-      const stampRect = mark.getBoundingClientRect();
-      const x = stampRect.x + stampRect.width / 2;
-      const y = headerRect.top + headerRect.height / 2;
-      const hit = document.elementFromPoint(x, y);
-      return {
-        hitHeader: hit !== null && header.contains(hit),
-        stampY: stampRect.y,
-        headerBottom: headerRect.bottom,
-      };
-    });
-    expect(covered.stampY).toBeLessThan(covered.headerBottom);
-    expect(covered.hitHeader).toBe(true);
-    await page.evaluate(() => {
-      const html = document.documentElement;
-      const previous = html.style.scrollBehavior;
-      html.style.scrollBehavior = "auto";
-      window.scrollTo(0, 0);
-      html.style.scrollBehavior = previous;
-    });
+    expect(stampLayer?.rotate).toBe("-3deg");
+    expect(stampLayer?.fontSize).toBe("14px");
+
+    await page.getByRole("button", { name: "Feedback" }).click();
+    await page.getByRole("tab", { name: "Chat" }).click();
+    await expect(
+      page.getByText("Approval recorded - no agent connected to notify"),
+    ).toBeVisible();
 
     await approvedButton.click();
     const details = page.locator("[data-review-approval-details]");
@@ -888,6 +873,154 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     await expect(
       page.getByRole("button", { name: "Approve plan" }),
     ).toHaveCount(0);
+
+    await test.step("approval clears the mailbox and the agent acknowledges through the CLI", async () => {
+      const pinned = deriveSnapshotDigest(source);
+      const claim = await runAgentCli(["next", planPath]);
+      expect(claim.stdout).toContain("pending: true");
+      expect(claim.stdout).toContain("kind: approval");
+      expect(claim.stdout).toContain(planPath);
+      expect(claim.stdout).toContain(pinned);
+      const exchange = await readAgentExchange({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+      });
+      const pending = outstandingAgentRequests(exchange);
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({
+        kind: "approval",
+        planPath,
+        pinnedSnapshot: pinned,
+      });
+      const chat = exchange.requests.find(
+        (request) => request.requestId === "aaaaaaaaaaaaaaaa",
+      );
+      expect(chat?.canceledAt).toBeDefined();
+      const approval = pending[0];
+      if (approval === undefined) {
+        throw new Error("The agent CLI did not return the approval request");
+      }
+      const draft = /response_file: (\S+)/u.exec(claim.stdout)?.[1];
+      if (draft === undefined) {
+        throw new Error(
+          `The agent CLI returned no response file:\n${claim.stdout}`,
+        );
+      }
+      await writeFile(
+        draft,
+        JSON.stringify({ requestId: approval.requestId }),
+        "utf8",
+      );
+      const response = await runAgentCli([
+        "respond",
+        planPath,
+        draft,
+        "--agent",
+        agentIdOf(claim.stdout, "agent_token"),
+      ]);
+      expect(agentIdOf(response.stdout, "responded")).toBe(approval.requestId);
+
+      await page.reload();
+      await openWritableReview(page, runtime.url);
+      await page.getByRole("button", { name: /Feedback/u }).click();
+      const rail = page.getByRole("complementary", { name: "Feedback" });
+      await rail.getByRole("tab", { name: "Chat" }).click();
+      await expect(rail).toContainText("Approval acknowledged");
+      await rail
+        .getByRole("button", { name: /Show \d+ earlier update/u })
+        .click();
+      await expect(rail).toContainText("Plan approved");
+      await expect(rail).toContainText("Approval acknowledged");
+      // Nothing was revised, so the session pill must not offer a re-review.
+      await expect(rail.locator("[data-review-agent-state]")).toHaveText(
+        "Approval acknowledged",
+      );
+
+      await agentStatusTrigger(page).click();
+      const status = agentSidebar(page);
+      await expect(status).not.toContainText("Plan approved");
+      await expect(status).not.toContainText("Approval acknowledged");
+    });
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should report an approval the agent refused to acknowledge", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-approve-stop-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  try {
+    await openWritableReview(page, runtime.url);
+    const dialog = page.getByRole("alertdialog", {
+      name: "Approve this plan?",
+    });
+    await page.getByRole("button", { name: "Approve plan" }).click();
+    const approved = page.waitForResponse((response) =>
+      response.url().endsWith("/api/approve"),
+    );
+    await dialog.getByRole("button", { name: "Approve plan" }).click();
+    expect((await approved).ok()).toBe(true);
+
+    // The plan moves after the handoff, so the agent cannot reach the digest
+    // it was pinned to and has a real stop to report.
+    await writeFile(planPath, `${PLAN}\nThe reviewer kept writing.\n`);
+    const claim = await runAgentCli(["next", planPath]);
+    const draft = /response_file: (\S+)/u.exec(claim.stdout)?.[1];
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const approval = exchange.requests.find(
+      (request) => request.kind === "approval",
+    );
+    if (draft === undefined || approval === undefined) {
+      throw new Error(
+        `The agent CLI did not hand over the approval:\n${claim.stdout}`,
+      );
+    }
+    await writeFile(
+      draft,
+      JSON.stringify({
+        requestId: approval.requestId,
+        hardStop: "The plan no longer matches the pinned snapshot.",
+      }),
+      "utf8",
+    );
+    await runAgentCli([
+      "respond",
+      planPath,
+      draft,
+      "--agent",
+      agentIdOf(claim.stdout, "agent_token"),
+    ]);
+
+    await page.reload();
+    await openWritableReview(page, runtime.url);
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    // The refusal is what the thread says, with the agent's own reason, and
+    // never that the agent holds the approved plan.
+    await expect(rail).toContainText(
+      "Approval not acknowledged \u2014 The plan no longer matches the pinned snapshot.",
+    );
+    await expect(rail).not.toContainText(
+      "The agent has the approved plan and the decisions recorded with it.",
+    );
+    await expect(rail.locator("[data-review-agent-state]")).not.toHaveText(
+      "Approval acknowledged",
+    );
+
+    await agentStatusTrigger(page).click();
+    const status = agentSidebar(page);
+    await expect(status).not.toContainText("Approval not acknowledged");
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

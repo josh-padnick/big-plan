@@ -4,6 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { constants } from "node:fs";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   open,
@@ -25,6 +26,7 @@ import {
   deriveSnapshotDigest,
   messageAgentRequest,
   nextPendingAgentRequest,
+  outstandingAgentRequests,
   readAgentCommentHistory,
   readAgentExchange,
   validateAgentResponseDraft,
@@ -37,6 +39,7 @@ import {
   withResolvedCommentLock,
 } from "./request-mailbox.js";
 import { recordCommittedRevision } from "./change-set-commit.js";
+import { recoverApprovalFinalization } from "./approval-finalization.js";
 import {
   decodeCommittedChangeSets,
   type CommittedChangeSetState,
@@ -6823,6 +6826,21 @@ describe("review runtime approval", () => {
       body,
     });
 
+  const approvalProgress = async (
+    target: ReviewRuntime,
+    sessionToken: string,
+  ): Promise<ReadonlyArray<Record<string, unknown>>> => {
+    const response = await callRuntime({
+      target,
+      sessionToken,
+      path: "/api/progress",
+    });
+    const body = (await response.json()) as {
+      readonly events: ReadonlyArray<Record<string, unknown>>;
+    };
+    return body.events;
+  };
+
   it("writes the approval record, pins the digest, and survives a reread", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,
@@ -6857,6 +6875,7 @@ describe("review runtime approval", () => {
         expect(body).toMatchObject({
           pinnedSnapshot: digest,
           canceledRequests: 0,
+          delivered: true,
           approval: { status: "approved", pinnedSnapshot: digest },
         });
 
@@ -6869,6 +6888,7 @@ describe("review runtime approval", () => {
             {
               kind: "approval",
               pinnedSnapshot: digest,
+              agentConnected: false,
               message: "Start on it now.",
               recordedAnswers: [
                 {
@@ -6967,6 +6987,76 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("writes the approval brief beside the feedback briefs", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+          message: "Start on it now.",
+        });
+        expect(approved.status).toBe(200);
+        const { approvalId } = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+        const written = (await readdir(target.store.feedbackDirectory)).filter(
+          (name) => name.endsWith(`-approval-${approvalId}.md`),
+        );
+        expect(written).toHaveLength(1);
+        const brief = await readFile(
+          join(target.store.feedbackDirectory, written[0] ?? ""),
+          "utf8",
+        );
+        expect(brief).toContain(planPath);
+        expect(brief).toContain(digest);
+        expect(brief).toContain("Start on it now.");
+      },
+    );
+  });
+
+  it("surfaces approval brief failure and recovers its publication", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await rm(target.store.feedbackDirectory, {
+          recursive: true,
+          force: true,
+        });
+        await writeFile(target.store.feedbackDirectory, "not a directory");
+
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+          message: "Start after the durable brief exists.",
+        });
+        expect(approved.status).toBe(500);
+        await expect(
+          readFile(target.store.approvalFinalizationPath, "utf8"),
+        ).resolves.toBeDefined();
+
+        await rm(target.store.feedbackDirectory, { force: true });
+        await mkdir(target.store.feedbackDirectory, { recursive: true });
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+
+        const written = (await readdir(target.store.feedbackDirectory)).filter(
+          (name) => name.includes("-approval-") && name.endsWith(".md"),
+        );
+        expect(written).toHaveLength(1);
+        await expect(
+          readFile(
+            join(target.store.feedbackDirectory, written[0] ?? ""),
+            "utf8",
+          ),
+        ).resolves.toContain("Start after the durable brief exists.");
+        await expect(
+          readFile(target.store.approvalFinalizationPath, "utf8"),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+      },
+    );
+  });
+
   it("refuses a second approve of the same snapshot", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,
@@ -7008,6 +7098,428 @@ describe("review runtime approval", () => {
           await callRuntime({ target, sessionToken, path: "/api/session" })
         ).json()) as { readonly approval?: unknown };
         expect(session.approval).toBeUndefined();
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          exchange.requests.find(
+            (request) => request.requestId === body.approvalId,
+          )?.canceledAt,
+        ).toBeDefined();
+        expect(outstandingAgentRequests(exchange)).toEqual([]);
+      },
+    );
+  });
+
+  it("requires approval revocation instead of generic handoff cancellation", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        const { approvalId } = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+
+        const canceled = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/agent-cancel",
+          method: "POST",
+          body: { requestId: approvalId },
+        });
+        expect(canceled.status).toBe(409);
+        await expect(canceled.json()).resolves.toMatchObject({
+          error: "Revoke the approval to cancel its agent handoff",
+        });
+        const beforeRevoke = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          beforeRevoke.requests.find(
+            (request) => request.requestId === approvalId,
+          )?.canceledAt,
+        ).toBeUndefined();
+
+        const revoked = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/revoke-approval",
+          method: "POST",
+          body: { approvalId },
+        });
+        expect(revoked.status).toBe(200);
+        const afterRevoke = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          afterRevoke.requests.find(
+            (request) => request.requestId === approvalId,
+          )?.canceledAt,
+        ).toBeDefined();
+      },
+    );
+  });
+
+  it("reports an undelivered handoff instead of implying the agent has it", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        // A mailbox nothing can be written into: the record still commits, so
+        // the answer has to say the agent was never handed the approval.
+        await chmod(target.store.agentRequestDirectory, 0o500);
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        try {
+          const approved = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          expect(approved.status).toBe(200);
+          await expect(approved.json()).resolves.toMatchObject({
+            delivered: false,
+            approval: { status: "approved" },
+          });
+        } finally {
+          stderr.mockRestore();
+          await chmod(target.store.agentRequestDirectory, 0o700);
+        }
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests).toEqual([]);
+        // The claim of delivery must not come back on the next load: the
+        // session route answers every reader, including a second tab.
+        const session = await (
+          await callRuntime({ target, sessionToken, path: "/api/session" })
+        ).json();
+        expect(session).toMatchObject({
+          approval: { status: "approved", delivered: false },
+        });
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+        const recovered = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(recovered.requests).toHaveLength(1);
+        expect(recovered.requests[0]).toMatchObject({ kind: "approval" });
+        await expect(
+          readFile(target.store.approvalFinalizationPath, "utf8"),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+      },
+    );
+  });
+
+  it("recovers a durable handoff after the plan source changes", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await chmod(target.store.agentRequestDirectory, 0o500);
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        try {
+          const approved = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          await expect(approved.json()).resolves.toMatchObject({
+            delivered: false,
+          });
+        } finally {
+          stderr.mockRestore();
+          await chmod(target.store.agentRequestDirectory, 0o700);
+        }
+        await writeFile(target.planPath, `${DECISION_PLAN}\nLater edit\n`);
+
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+
+        const recovered = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(recovered.requests).toHaveLength(1);
+        expect(recovered.requests[0]).toMatchObject({
+          kind: "approval",
+          pinnedSnapshot: digest,
+        });
+        await expect(
+          readFile(target.store.approvalFinalizationPath, "utf8"),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+      },
+    );
+  });
+
+  it("does not recover a handoff after its approval was revoked", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await chmod(target.store.agentRequestDirectory, 0o500);
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        const approvalId = await (async () => {
+          try {
+            const approved = await approve(target, sessionToken, {
+              expectedSnapshot: digest,
+            });
+            return ((await approved.json()) as { readonly approvalId: string })
+              .approvalId;
+          } finally {
+            stderr.mockRestore();
+            await chmod(target.store.agentRequestDirectory, 0o700);
+          }
+        })();
+        const revoked = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/revoke-approval",
+          method: "POST",
+          body: { approvalId },
+        });
+        expect(revoked.status).toBe(200);
+
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests).toEqual([]);
+        const session = await (
+          await callRuntime({ target, sessionToken, path: "/api/session" })
+        ).json();
+        expect(session).not.toHaveProperty("approval");
+      },
+    );
+  });
+
+  it("preserves an answered handoff when recovery repeats delivery", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await chmod(target.store.agentRequestDirectory, 0o500);
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        const { approvalId, journal } = await (async () => {
+          try {
+            const approved = await approve(target, sessionToken, {
+              expectedSnapshot: digest,
+            });
+            const { approvalId } = (await approved.json()) as {
+              readonly approvalId: string;
+            };
+            return {
+              approvalId,
+              journal: await readFile(
+                target.store.approvalFinalizationPath,
+                "utf8",
+              ),
+            };
+          } finally {
+            stderr.mockRestore();
+            await chmod(target.store.agentRequestDirectory, 0o700);
+          }
+        })();
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+        const claimed = await claimAgentRequest({
+          store: target.store,
+          requestId: approvalId,
+          claimedBy: target.sessionId,
+          baselineSnapshot: digest,
+          now: new Date().toISOString(),
+        });
+        await commitRequestTerminal({
+          store: target.store,
+          claimedBy: target.sessionId,
+          response: validateAgentResponseDraft({
+            value: { requestId: approvalId },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set(),
+            currentSnapshot: digest,
+            now: new Date().toISOString(),
+          }),
+          now: new Date().toISOString(),
+        });
+        await writeFile(target.store.approvalFinalizationPath, journal);
+
+        await recoverApprovalFinalization({
+          store: target.store,
+          planPath: target.planPath,
+        });
+
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(exchange.requests).toHaveLength(1);
+        expect(exchange.requests[0]).toMatchObject({
+          requestId: approvalId,
+          answeredAt: expect.any(String),
+        });
+        expect(exchange.responses).toHaveLength(1);
+      },
+    );
+  });
+
+  it("settles a revoke of an approval the agent already answered", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        const { approvalId } = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+        const claimed = await claimAgentRequest({
+          store: target.store,
+          requestId: approvalId,
+          claimedBy: target.sessionId,
+          baselineSnapshot: digest,
+          now: new Date().toISOString(),
+        });
+        await commitRequestTerminal({
+          store: target.store,
+          claimedBy: target.sessionId,
+          response: validateAgentResponseDraft({
+            value: { requestId: approvalId },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set(),
+            currentSnapshot: digest,
+            now: new Date().toISOString(),
+          }),
+          now: new Date().toISOString(),
+        });
+        const reported: Array<string> = [];
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation((chunk: unknown) => {
+            reported.push(String(chunk));
+            return true;
+          });
+        try {
+          const revoked = await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/revoke-approval",
+            method: "POST",
+            body: { approvalId },
+          });
+          expect(revoked.status).toBe(200);
+        } finally {
+          stderr.mockRestore();
+        }
+        await expect(approvalProgress(target, sessionToken)).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              requestId: approvalId,
+              stepCode: "plan-approved",
+            }),
+            expect.objectContaining({
+              requestId: approvalId,
+              stepCode: "approval-acknowledged",
+              step: "Approval acknowledged",
+            }),
+          ]),
+        );
+        // Nothing failed: the acknowledgment is in, so there was never a
+        // handoff left to withdraw.
+        expect(reported.join("")).not.toContain(
+          "The approval handoff could not be canceled after revoking",
+        );
+        const settled = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          settled.requests.find((request) => request.requestId === approvalId),
+        ).toMatchObject({ answeredAt: expect.any(String) });
+      },
+    );
+  });
+
+  it("reports a handoff it could not cancel because the answer is publishing", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const approved = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        const { approvalId } = (await approved.json()) as {
+          readonly approvalId: string;
+        };
+        // The journal the commit writes under the request lock is what tells
+        // every reviewer control the answer is no longer theirs to withdraw.
+        await mkdir(target.store.agentMutationJournalDirectory, {
+          recursive: true,
+        });
+        await writeFile(
+          agentMutationJournalPath({
+            store: target.store,
+            requestId: approvalId,
+          }),
+          "{}",
+        );
+        const reported: Array<string> = [];
+        const stderr = vi
+          .spyOn(process.stderr, "write")
+          .mockImplementation((chunk: unknown) => {
+            reported.push(String(chunk));
+            return true;
+          });
+        try {
+          const revoked = await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/revoke-approval",
+            method: "POST",
+            body: { approvalId },
+          });
+          expect(revoked.status).toBe(200);
+        } finally {
+          stderr.mockRestore();
+        }
+        expect(reported.join("")).toContain(
+          "The approval handoff could not be canceled after revoking",
+        );
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        expect(
+          exchange.requests.find((request) => request.requestId === approvalId)
+            ?.canceledAt,
+        ).toBeUndefined();
       },
     );
   });
@@ -7040,8 +7552,110 @@ describe("review runtime approval", () => {
           sessionId: target.sessionId,
           planId: target.planId,
         });
-        expect(exchange.requests[0]?.canceledAt).toBeDefined();
-        void planPath;
+        const chat = exchange.requests.find(
+          (request) => request.requestId === "aaaaaaaaaaaaaaaa",
+        );
+        expect(chat?.canceledAt).toBeDefined();
+        const pending = outstandingAgentRequests(exchange);
+        expect(pending).toHaveLength(1);
+        expect(pending[0]).toMatchObject({
+          kind: "approval",
+          planPath,
+          pinnedSnapshot: digest,
+        });
+      },
+    );
+  });
+
+  it("leaves the approval request waiting when no agent is connected", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        expect(
+          (await approve(target, sessionToken, { expectedSnapshot: digest }))
+            .status,
+        ).toBe(200);
+        const exchange = await readAgentExchange({
+          store: target.store,
+          sessionId: target.sessionId,
+          planId: target.planId,
+        });
+        const pending = outstandingAgentRequests(exchange);
+        expect(pending).toHaveLength(1);
+        expect(pending[0]).toMatchObject({
+          kind: "approval",
+          planPath,
+          pinnedSnapshot: digest,
+        });
+        expect(pending[0]?.answeredAt).toBeUndefined();
+        expect(pending[0]?.canceledAt).toBeUndefined();
+        const progress = await approvalProgress(target, sessionToken);
+        expect(progress.at(-1)).toMatchObject({
+          requestId: pending[0]?.requestId,
+          stepCode: "plan-approved",
+          step: "Plan approved",
+          detail: "Approval recorded - no agent connected to notify",
+        });
+      },
+    );
+  });
+
+  it("should derive agentless approval Chat when presence is malformed", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await writeFile(target.store.agentHeartbeatPath, "{");
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: digest,
+        });
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          delivered: true,
+          approval: { status: "approved", pinnedSnapshot: digest },
+        });
+        const progress = await approvalProgress(target, sessionToken);
+        expect(progress.at(-1)).toMatchObject({
+          stepCode: "plan-approved",
+          step: "Plan approved",
+          detail: "Approval recorded - no agent connected to notify",
+        });
+        const stored: unknown = JSON.parse(
+          await readFile(target.store.approvalPath, "utf8"),
+        );
+        expect(stored).toMatchObject({
+          entries: [
+            expect.objectContaining({
+              kind: "approval",
+              pinnedSnapshot: digest,
+            }),
+          ],
+        });
+      },
+    );
+  });
+
+  it("should derive approval Chat when progress storage is unwritable", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        await writeFile(target.store.progressPath, "");
+        await chmod(target.store.progressPath, 0o400);
+        try {
+          const response = await approve(target, sessionToken, {
+            expectedSnapshot: digest,
+          });
+          expect(response.status).toBe(200);
+        } finally {
+          await chmod(target.store.progressPath, 0o600);
+        }
+        await expect(approvalProgress(target, sessionToken)).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              stepCode: "plan-approved",
+              detail: "Approval recorded - no agent connected to notify",
+            }),
+          ]),
+        );
       },
     );
   });

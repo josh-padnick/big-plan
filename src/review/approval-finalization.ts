@@ -3,8 +3,9 @@
 
 import { readFile, unlink } from "node:fs/promises";
 import {
-  AgentExchangeRejected,
   deriveSnapshotDigest,
+  validateAgentRequest,
+  type AgentApprovalRequest,
 } from "./agent-exchange.js";
 import { validateApprovalRecord } from "./approval-record.js";
 import {
@@ -13,11 +14,17 @@ import {
   validateChangeVerdicts,
   type StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
-import { cancelAgentRequest } from "./request-mailbox.js";
-import type { ApprovalRecord } from "./shared/approval.js";
+import {
+  AgentRequestAlreadyAnswered,
+  cancelAgentRequest,
+  writeAgentRequestWhen,
+} from "./request-mailbox.js";
+import { inForceApproval, type ApprovalRecord } from "./shared/approval.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import {
+  readApprovalRecord,
   readStoreJson,
+  writeApprovalBrief,
   writeApprovalRecord,
   writeStoreJson,
   type ReviewStore,
@@ -33,6 +40,13 @@ type ApprovalFinalization = {
   readonly requestIds: ReadonlyArray<string>;
   readonly approval: ApprovalRecord;
   readonly verdicts: StoredChangeVerdicts;
+  readonly handoff: AgentApprovalRequest;
+  readonly brief: string;
+};
+
+type ApprovalFinalizationResult = {
+  readonly canceledRequestIds: ReadonlyArray<string>;
+  readonly delivered: boolean;
 };
 
 const validateFinalization = (value: unknown): ApprovalFinalization => {
@@ -55,9 +69,16 @@ const validateFinalization = (value: unknown): ApprovalFinalization => {
         typeof requestId === "string" && REQUEST_ID.test(requestId),
     ) ||
     !("approval" in value) ||
-    !("verdicts" in value)
+    !("verdicts" in value) ||
+    !("handoff" in value) ||
+    !("brief" in value) ||
+    typeof value.brief !== "string"
   ) {
     throw new Error("The interrupted approval finalization is invalid");
+  }
+  const handoff = validateAgentRequest(value.handoff);
+  if (handoff.kind !== "approval") {
+    throw new Error("The interrupted approval finalization handoff is invalid");
   }
   return {
     version: 1,
@@ -66,6 +87,8 @@ const validateFinalization = (value: unknown): ApprovalFinalization => {
     requestIds: value.requestIds,
     approval: validateApprovalRecord(value.approval),
     verdicts: validateChangeVerdicts(value.verdicts),
+    handoff,
+    brief: value.brief,
   };
 };
 
@@ -100,14 +123,29 @@ const settleLocked = async ({
   readonly store: ReviewStore;
   readonly planPath: string;
   readonly finalization: ApprovalFinalization;
-}): Promise<ReadonlyArray<string>> => {
-  const currentSnapshot = deriveSnapshotDigest(
-    await readFile(planPath, "utf8"),
+}): Promise<ApprovalFinalizationResult> => {
+  const journaledEntry = finalization.approval.entries.at(-1);
+  if (journaledEntry?.kind !== "approval") {
+    throw new Error("The approval finalization carries no approval entry");
+  }
+  const { record: storedApproval } = await readApprovalRecord({
+    store,
+    validate: validateApprovalRecord,
+  });
+  const hasJournaledApproval = storedApproval.entries.some(
+    (entry) =>
+      entry.kind === "approval" &&
+      entry.approvalId === journaledEntry.approvalId,
   );
-  if (currentSnapshot !== finalization.expectedSnapshot) {
-    throw new Error(
-      "The plan changed during an interrupted approval finalization",
+  if (!hasJournaledApproval) {
+    const currentSnapshot = deriveSnapshotDigest(
+      await readFile(planPath, "utf8"),
     );
+    if (currentSnapshot !== finalization.expectedSnapshot) {
+      throw new Error(
+        "The plan changed during an interrupted approval finalization",
+      );
+    }
   }
   const canceledRequestIds: string[] = [];
   for (const requestId of finalization.requestIds) {
@@ -121,12 +159,7 @@ const settleLocked = async ({
         canceledRequestIds.push(requestId);
       }
     } catch (error: unknown) {
-      if (
-        !(error instanceof AgentExchangeRejected) ||
-        error.message !== "The agent has already answered this request"
-      ) {
-        throw error;
-      }
+      if (!(error instanceof AgentRequestAlreadyAnswered)) throw error;
     }
   }
   await updateStoredChangeVerdicts({
@@ -137,15 +170,49 @@ const settleLocked = async ({
         finalized: finalization.verdicts,
       }),
   });
-  await writeApprovalRecord({
-    store,
-    record: withCanceledCount({
-      record: finalization.approval,
-      requestsCanceled: canceledRequestIds.length,
-    }),
+  const approvalWithCanceledCount = withCanceledCount({
+    record: finalization.approval,
+    requestsCanceled: canceledRequestIds.length,
   });
-  await unlink(store.approvalFinalizationPath);
-  return canceledRequestIds;
+  const currentApproval = hasJournaledApproval
+    ? storedApproval
+    : approvalWithCanceledCount;
+  if (!hasJournaledApproval) {
+    await writeApprovalRecord({ store, record: currentApproval });
+  }
+  await writeApprovalBrief({
+    store,
+    approvalId: journaledEntry.approvalId,
+    createdAt: journaledEntry.at,
+    brief: finalization.brief,
+  });
+  if (
+    inForceApproval(currentApproval)?.approvalId !== journaledEntry.approvalId
+  ) {
+    await unlink(store.approvalFinalizationPath);
+    return { canceledRequestIds, delivered: false };
+  }
+  let delivered = false;
+  try {
+    delivered = await writeAgentRequestWhen({
+      store,
+      request: finalization.handoff,
+      permitted: async () => {
+        const { record } = await readApprovalRecord({
+          store,
+          validate: validateApprovalRecord,
+        });
+        return (
+          inForceApproval(record)?.approvalId === journaledEntry.approvalId
+        );
+      },
+    });
+  } catch {
+    // Approval is already durable. Retain the journal so restart recovery can
+    // retry the required handoff without asking the reviewer to approve again.
+  }
+  if (delivered) await unlink(store.approvalFinalizationPath);
+  return { canceledRequestIds, delivered };
 };
 
 export const commitApprovalFinalization = async ({
@@ -156,7 +223,7 @@ export const commitApprovalFinalization = async ({
   readonly store: ReviewStore;
   readonly planPath: string;
   readonly finalization: ApprovalFinalization;
-}): Promise<ReadonlyArray<string>> =>
+}): Promise<ApprovalFinalizationResult> =>
   withPlanMutationLock({
     store,
     change: async (lockedStore) => {
