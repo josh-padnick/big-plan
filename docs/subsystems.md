@@ -14,7 +14,7 @@ The [agent guide](../AGENTS.md#subsystems) owns the workflow rule about naming a
 
 Comment threads and diffs are one subsystem, not two.
 The diff's content is computed, not stored: `src/review/snapshot-diff.ts` turns two snapshot endpoints into aligned change places on demand, and `/api/snapshot-diff` accepts those endpoints directly, independent of any thread.
-What does persist is thread-scoped: a thread's baseline and current endpoints live as fields on its own exchange records (`src/review/shared/thread-projection.ts`), and per-place review acceptance is recorded with the review, keyed by those same endpoints plus a place id (`src/review/change-verdicts-store.ts`).
+What does persist is change-set-scoped: committed revisions are recorded through `src/review/change-set-commit.ts` and folded into the stable baseline and current endpoint of the thread or request that owns them. Per-place review acceptance is recorded with the review, keyed by those same endpoints plus a place id (`src/review/change-verdicts-store.ts`).
 You cannot change diff semantics without changing thread semantics, so both live in the Change Engine.
 
 The session runtime is a different subsystem from either.
@@ -35,7 +35,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** The core entity of review is the change set: a baseline snapshot, a current snapshot, acceptance state and provenance, and an optionally attached conversation, diffed from its start, rendered in place of what it changes, and closed by a reviewer or by session-scoped auto-accept.
 
-**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/change-verdicts-store.ts`, `src/review/input-contract.ts`, `src/review/shared/change-verdict.ts`, `src/review/shared/input-contract.ts`, `src/review/browser/inputs-surface.browser.tsx`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/components/wireframe/compile-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, `src/components/_model/component-diff/contract.ts`, `src/components/_registration/define-component.ts`, `src/render/render-diff-view.ts`, snapshots in `src/review/store.ts`.
+**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/change-verdicts-store.ts`, `src/review/input-contract.ts`, `src/review/shared/change-verdict.ts`, `src/review/shared/input-contract.ts`, `src/review/shared/thread-change-set.ts`, `src/review/shared/open-items.ts`, `src/review/browser/inputs-surface.browser.tsx`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/components/wireframe/compile-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, `src/components/_model/component-diff/contract.ts`, `src/components/_registration/define-component.ts`, `src/render/render-diff-view.ts`, snapshots in `src/review/store.ts`.
 
 **Boundary rules.**
 
@@ -49,6 +49,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 - A change set describes committed revisions only.
   `src/review/change-set-commit.ts` is the seam: a revision is recorded inside the terminal commit and nowhere else, the reader's current snapshot advances from that log rather than from response files, and folding the log keeps an ordinary comment thread's baseline and provenance stable across later replies while pushes and replies in pushed threads remain immutable request-keyed transactions.
   `GET /api/change-sets` serves that fold on demand through the browser-safe contract in `src/review/shared/review-wire.ts`; the route exposes the aggregate without creating a second one or making claim stages domain state.
+  `src/review/shared/thread-change-set.ts` projects that fold into the one current diff a thread renders, and `src/review/shared/open-items.ts` projects the same committed ownership into approval; a feedback response that advances several comment-owned sets advances each independently.
 - A change set's verdict is a review fact, not a browser preference.
   `src/review/change-verdicts-store.ts` owns the record, including whether a place was accepted by the reviewer or by auto-accept, and `src/review/shared/change-verdict.ts` owns the one selector that turns it into a count, so every surface showing how much of a set is still open reads the same number and a reload never reopens closed work.
 - What a review is waiting for is one derived contract, never a per-surface tally.
