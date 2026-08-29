@@ -1148,7 +1148,12 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
     typeof value.from !== "string" ||
     typeof value.to !== "string" ||
     !Array.isArray(value.locations) ||
-    !Array.isArray(value.places)
+    !Array.isArray(value.places) ||
+    value.locations.some(
+      (location) =>
+        !isReviewWireRecord(location) ||
+        typeof location.isComponentRoot !== "boolean",
+    )
   ) {
     return null;
   }
@@ -1163,6 +1168,7 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
         typeof location.section !== "string" ||
         typeof location.scope !== "string" ||
         typeof location.kind !== "string" ||
+        typeof location.isComponentRoot !== "boolean" ||
         typeof location.oldText !== "string" ||
         typeof location.newText !== "string" ||
         !Array.isArray(location.runs)
@@ -1186,7 +1192,7 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
           status: location.status,
           scope: location.scope,
           kind: location.kind,
-          isComponentRoot: location.isComponentRoot === true,
+          isComponentRoot: location.isComponentRoot,
           ...(typeof location.ownerId === "string"
             ? { ownerId: location.ownerId }
             : {}),

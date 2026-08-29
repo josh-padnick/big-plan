@@ -23,9 +23,7 @@ export const DataTableDiffView = ({
         ? [{ ...row, diffSourceIndex: index }]
         : [],
     ),
-    ...(model.changedFields.some((field) => field.startsWith("Summary: "))
-      ? {}
-      : { summaryRow: undefined }),
+    ...(model.isSummaryChanged ? {} : { summaryRow: undefined }),
   });
   return (
     <NamedFieldDiffView

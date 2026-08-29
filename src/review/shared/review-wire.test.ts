@@ -603,6 +603,32 @@ describe("review wire contract", () => {
     expect(decoded?.locations[0]).toMatchObject({ isComponentRoot: true });
   });
 
+  it.each([undefined, "true"])(
+    "should reject structural ownership without a boolean component-root flag (%s)",
+    (isComponentRoot) => {
+      expect(
+        decodeSnapshotDiff({
+          from: "a".repeat(16),
+          to: "b".repeat(16),
+          locations: [
+            {
+              status: "changed",
+              scope: "section/risks",
+              kind: "callout",
+              ...(isComponentRoot === undefined ? {} : { isComponentRoot }),
+              label: "Rollback risk",
+              section: "Risks",
+              oldText: "Old body.",
+              newText: "New body.",
+              runs: [],
+            },
+          ],
+          places: [],
+        }),
+      ).toBeNull();
+    },
+  );
+
   it("should carry a picture's source, words, and replaced note across the wire", () => {
     const decoded = decodeSnapshotDiff({
       from: "a".repeat(16),
@@ -612,6 +638,7 @@ describe("review wire contract", () => {
           status: "changed",
           scope: "section/system-shape",
           kind: "image",
+          isComponentRoot: false,
           label: "Retry dashboard",
           section: "System shape",
           oldText: "",
@@ -634,6 +661,7 @@ describe("review wire contract", () => {
           status: "changed",
           scope: "section/system-shape",
           kind: "image",
+          isComponentRoot: false,
           label: "Broken fact",
           section: "System shape",
           oldText: "",
@@ -672,6 +700,7 @@ describe("review wire contract", () => {
           status: "removed",
           scope: "section/risks",
           kind: "list",
+          isComponentRoot: false,
           label: "Runbook",
           section: "Risks",
           oldText: "Freeze writes.",

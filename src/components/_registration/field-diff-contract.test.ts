@@ -483,14 +483,38 @@ describe("last-wave component diff fields", () => {
       groups: [],
       groupColumn: -1,
     };
-    expect(
-      compileDataTableDiff({
-        status: "changed",
-        baseline,
-        proposed: { ...baseline, summaryRow: undefined },
-        runs,
-      }).changedFields,
-    ).toEqual(["Summary: 1 job"]);
+    const diff = compileDataTableDiff({
+      status: "changed",
+      baseline,
+      proposed: { ...baseline, summaryRow: undefined },
+      runs,
+    });
+    expect(diff.changedFields).toEqual(["Summary: 1 job"]);
+    expect(diff.isSummaryChanged).toBe(true);
+  });
+
+  it("does not treat a summary-shaped row label as a summary change", () => {
+    const baseline: CompiledDataTable = {
+      id: "jobs",
+      filter: false,
+      fit: "wrap",
+      columns: [{ label: "Job", type: "text", align: "left" }],
+      rows: [{ cells: [cell("Build")] }],
+      summaryRow: { cells: [cell("1 job")] },
+      groups: [],
+      groupColumn: -1,
+    };
+    const diff = compileDataTableDiff({
+      status: "changed",
+      baseline,
+      proposed: {
+        ...baseline,
+        rows: [...baseline.rows, { cells: [cell("Summary: Build")] }],
+      },
+      runs,
+    });
+    expect(diff.changedFields).toEqual(["Summary: Build"]);
+    expect(diff.isSummaryChanged).toBe(false);
   });
 
   it("names only an inserted DataTable row", () => {

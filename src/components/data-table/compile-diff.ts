@@ -12,6 +12,7 @@ import type { CompiledDataTable, CompiledDataTableRow } from "./compile.js";
 export type CompiledDataTableDiff = NamedFieldDiff<CompiledDataTable> & {
   readonly baselineRowIndexes: ReadonlyArray<number>;
   readonly proposedRowIndexes: ReadonlyArray<number>;
+  readonly isSummaryChanged: boolean;
 };
 
 const rowLabel = (row: CompiledDataTableRow): string =>
@@ -180,5 +181,6 @@ export const compileDataTableDiff = (
       configurationChanged && input.status !== "removed"
         ? rowIndexes(input.proposed.rows)
         : rows.proposedIndexes,
+    isSummaryChanged: summary.changedFields.length > 0,
   };
 };
