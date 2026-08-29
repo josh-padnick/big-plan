@@ -8,11 +8,11 @@ The CLI remains the live instruction source every session.
 
 ## What lives where
 
-| Surface                         | Content                                                                                                      | Authority                         |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------- |
-| `big-plan skill`                | When to use Big Plan, invoke the CLI, run mandatory guidance, and present the stable review address          | Stable; rare edits                |
-| `big-plan guidance`             | Plan-writing principles                                                                                      | Changes with product quality work |
-| `big-plan guidance <Component>` | Per-component usage judgment                                                                                 | Changes with component design     |
+| Surface                         | Content                                                                                             | Authority                         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `big-plan skill`                | When to use Big Plan, invoke the CLI, run mandatory guidance, and present the stable review address | Stable; rare edits                |
+| `big-plan guidance`             | Plan-writing principles                                                                             | Changes with product quality work |
+| `big-plan guidance <Component>` | Per-component usage judgment                                                                        | Changes with component design     |
 
 Do not re-copy long guidance into chat memory, project `AGENTS.md`, or a hand-maintained skill fork as standing policy.
 Run the CLI each session instead.
