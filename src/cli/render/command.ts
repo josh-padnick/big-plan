@@ -2,7 +2,6 @@
 // around the pure renderer, supplying only HTML-specific derivation,
 // serialization, and result facts to the shared safe output workflow.
 
-import { readFile } from "node:fs/promises";
 import { renderDocument } from "../../render/render-document.js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { runDerivedOutputCommand } from "../_shared/derived-output-command.js";
@@ -19,31 +18,29 @@ export const renderCommand = async (
   // A malformed invocation is diagnosed before the guidance prerequisite, so
   // usage errors never hide behind GUIDANCE_REQUIRED. The parser is pure, so
   // the shared workflow below re-parsing the same arguments cannot disagree.
-  const { inputPath: planPath } = parseInputCommandArguments({
+  parseInputCommandArguments({
     args,
     usage: USAGE,
     maximumArguments: 2,
   });
   const { warnings } = await requireGuidanceAcknowledgment();
-  // The decoration is decided here rather than inside derive, because it needs
-  // the filesystem and derive is pure. A plan this command cannot read is left
-  // to the shared workflow below to diagnose in its own words.
-  const approval = await readFile(planPath, "utf8").then(
-    (markdown) => approvalDecorationFor({ planPath, markdown }),
-    () => undefined,
-  );
   return runDerivedOutputCommand({
     args,
     usage: USAGE,
     outputSuffix: ".html",
     invalidDocumentMessage: "Cannot render document with invalid MDX",
-    derive: ({ markdown, fallbackTitle, inputPath }) =>
-      renderDocument({
+    derive: async ({ markdown, fallbackTitle, inputPath }) => {
+      const approval = await approvalDecorationFor({
+        planPath: inputPath,
+        markdown,
+      });
+      return renderDocument({
         markdown,
         fallbackTitle,
         planPath: inputPath,
         ...(approval === undefined ? {} : { approval }),
-      }),
+      });
+    },
     // A document a human is asked to review must also pass authoring lint, so
     // a lint finding can never reach the reviewer through render.
     verify: assertPlanPassesLint,

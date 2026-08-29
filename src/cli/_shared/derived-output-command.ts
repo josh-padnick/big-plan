@@ -46,7 +46,7 @@ export const runDerivedOutputCommand = async <Derived>({
   readonly usage: string;
   readonly outputSuffix: string;
   readonly invalidDocumentMessage: string;
-  readonly derive: (input: DerivationInput) => Derived;
+  readonly derive: (input: DerivationInput) => Derived | Promise<Derived>;
   readonly verify?: (input: { readonly markdown: string }) => void;
   readonly serialize: (derived: Derived) => string;
   readonly result: (input: {

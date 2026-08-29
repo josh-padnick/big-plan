@@ -66,7 +66,7 @@ export const deriveInputFile = async <Derived>({
   readonly inputPath: string;
   readonly usage: string;
   readonly invalidDocumentMessage: string;
-  readonly derive: (input: DerivationInput) => Derived;
+  readonly derive: (input: DerivationInput) => Derived | Promise<Derived>;
 }): Promise<{ readonly markdown: string; readonly derived: Derived }> => {
   let markdown: string;
   try {
@@ -82,7 +82,7 @@ export const deriveInputFile = async <Derived>({
   try {
     return {
       markdown,
-      derived: derive({
+      derived: await derive({
         markdown,
         fallbackTitle: basename(inputPath, extname(inputPath)),
         inputPath,
