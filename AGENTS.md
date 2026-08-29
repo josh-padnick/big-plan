@@ -191,6 +191,7 @@ Route by the kind of fact:
 - A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
 - An architectural decision and its rationale live in an ADR when the decision needs a durable record.
 - A repeatable whole-task workflow becomes a skill only after the workflow has repeated and proven easy to get wrong.
+- How to measure what a real coding agent decides after reading text Big Plan wrote for it lives in [_internal/probes/README.md](_internal/probes/README.md); probes are evidence for prompt changes, never CI tests.
 - The installable Big Plan agent skill shell is authored at `assets/skill/SKILL.md`, embedded by `scripts/gen-skill.mjs`, and delivered by `big-plan skill`; live authoring rules stay in `big-plan guidance` (see `docs/src/content/docs/for-agents/use-the-skill.md`).
 - Future work, sequencing, and delivery status live in temporary planning artifacts or issue tracking.
 - The seven-subsystem partition, including its code anchors and boundary rules, lives in [docs/subsystems.md](docs/subsystems.md).

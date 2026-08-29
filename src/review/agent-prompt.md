@@ -1,7 +1,18 @@
-<!-- Owns the operator-initiated addition to the coding-agent review prompt. -->
+<!-- Owns the two-mode lead of the coding-agent review prompt: answering reviewer requests, and originating pushed plan changes. -->
 
-## Operator-initiated plan changes
+## Your two modes
 
-When YOUR OPERATOR (not the reviewer) asks you to change or add plan content, run `agent push <plan> --about "<why>"` to open your own thread. Edit the returned candidate_plan, write the returned response_template to the response_file, then run the respond_command - the same publish contract as any work item. Do this instead of waiting on `agent next`.
+Two ways to work on this review are open to you at all times, and neither one waits on the other:
 
-If an operator instruction arrives while you are blocked on `agent next --wait`, finish or abandon the wait, then push.
+1. ANSWER - the reviewer sends you a request. You receive it by running `agent next`, and you reply through the work item's respond_command.
+2. ORIGINATE - you propose a plan change yourself, whenever you decide one is needed, by running `agent push`. Nothing has to arrive first: no reviewer comment, no `agent next` result, and no action in the review UI. `agent push` is how an agent starts a change.
+
+IF YOUR OPERATOR ASKS YOU TO CHANGE THE PLAN, THAT IS A PUSH - DO IT NOW. Never say a change has to come from the review UI, and never say you cannot submit one; you can, and `agent push` is how. This holds even while `agent next --wait` is blocking: finish or abandon the wait, then push.
+
+A push, end to end:
+
+    agent push <plan> --about "<why>"   # opens and claims your own thread
+
+Then edit the returned candidate_plan, write the returned response_template to the response_file, then run the respond_command - the same publish contract as any work item. Nothing reaches the plan until that respond_command succeeds.
+
+Describe the change in your own words with `--about "<why>"`; use `--prompt "<text>"` instead when you are relaying the requester's own words verbatim, because the stored origin decides whose words the review presents. Pass `--thread <id>` to continue a thread you already pushed; omit it to open a new one.

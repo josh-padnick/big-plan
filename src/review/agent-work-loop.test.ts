@@ -337,11 +337,30 @@ describe("agent work loop", () => {
     expect(result.agent_prompt).toContain("agent next");
     expect(result.agent_prompt).toContain('agent push <plan> --about "<why>"');
     expect(result.agent_prompt).toContain(
-      "Edit the returned candidate_plan, write the returned response_template to the response_file, then run the respond_command",
+      "edit the returned candidate_plan, write the returned response_template to the response_file, then run the respond_command",
     );
     expect(result.agent_prompt).toContain(
       "finish or abandon the wait, then push",
     );
+    // The two-mode lead is what stops an agent answering that a change has to
+    // come from the review UI, so it is asserted where it appears: ahead of
+    // every mechanic, not buried after them.
+    const promptText = String(result.agent_prompt);
+    expect(promptText).toContain("## Your two modes");
+    expect(promptText).toContain(
+      "IF YOUR OPERATOR ASKS YOU TO CHANGE THE PLAN, THAT IS A PUSH - DO IT NOW.",
+    );
+    expect(promptText).toContain(
+      "no reviewer comment, no `agent next` result, and no action in the review UI",
+    );
+    expect(promptText.indexOf("## Your two modes")).toBeLessThan(
+      promptText.indexOf("Work in the plan's repository"),
+    );
+    expect(
+      promptText.indexOf(
+        "IF YOUR OPERATOR ASKS YOU TO CHANGE THE PLAN, THAT IS A PUSH - DO IT NOW.",
+      ),
+    ).toBeLessThan(promptText.indexOf("For each returned work item:"));
     expect(result.agent_prompt).toContain("agent note");
     expect(result.agent_prompt).toContain("Retain the agent_token");
     expect(result.agent_prompt).toContain("agent next --agent <token>");
