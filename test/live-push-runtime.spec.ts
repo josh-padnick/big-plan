@@ -554,7 +554,7 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await expect(stepper).toContainText("1 of 2");
     await stepper.getByRole("button", { name: "Accept this change" }).click();
     await stepper.getByRole("button", { name: "Accept this change" }).click();
-    await expect(stepper).toContainText("All changes accepted (1 of 1)");
+    await expect(stepper).toContainText("All changes accepted (2 of 2)");
     await page.keyboard.press("Escape");
 
     await thread
