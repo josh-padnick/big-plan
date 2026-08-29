@@ -101,8 +101,8 @@ export const AgentSurface = ({
         /* The card is drawn from the presence record, so it is named by that
            record's writer - in every state, including the ones where nobody is
            attached any more. `drawnByStatusCard` answers a different question:
-           whether the roster below may stop repeating this agent, which it may
-           only do while the agent is still there to repeat. */
+           which writer the roster below must stop repeating. The roster proves
+           attachment separately before treating that writer as carried. */
         {...(model.presenceWriterId === undefined
           ? {}
           : { writerId: model.presenceWriterId })}
