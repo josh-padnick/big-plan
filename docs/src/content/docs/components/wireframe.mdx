@@ -180,7 +180,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Heading`          | Required `text`; optional `level="1\|2\|3"`.                                                                        |
 | `Text`             | Required `text`; optional `role="body\|helper\|muted\|section"`.                                                      |
 | `Button`           | Required `label`; optional `icon`, `iconOnly`, `emphasis="primary\|secondary\|tertiary\|destructive"`, and `navigateTo`. `iconOnly` draws the glyph alone while `label` stays the accessible name and tooltip, so it needs an `icon` to draw. |
-| `Icon`             | Required `name` and `label`; optional `labelled` and `size="sm\|md\|lg"`. A mark, never a control. `label` always reaches assistive technology; `labelled` also draws those words beside the glyph. |
+| `Icon`             | Required `name` and `label`; optional `labelled`, and `size="sm\|md\|lg"` for a mark standing alone. A mark, never a control. `label` always reaches assistive technology; `labelled` also draws those words beside the glyph and sizes the mark against them, so `labelled` with `size` is refused. |
 | `Reference`        | Required `text`; optional `icon` and `copyLabel`. A verbatim string the reader copies or types exactly, drawn as one bordered object. `copyLabel` draws the copy control inside the border and is its accessible name. Prefer it over a `Text` with a copy `Button` beside it. |
 | `Nav`              | Optional `label`; holds only `NavItem`.                                                                             |
 | `NavItem`          | Required `label`; optional `active` and `navigateTo`; valid only in `Nav`.                                           |
@@ -212,10 +212,12 @@ Container elements accept nested drawing elements unless a narrower child rule i
 
 `Icon`'s `name` and the `icon` on `Button` and `Reference` share one named set, keyed by what a mark means rather than by what it looks like:
 
-`add`, `back`, `chevron`, `close`, `collapse`, `comment`, `copy`, `database`, `delete`, `done`, `down`, `drag`, `edit`, `error`, `expand`, `file`, `folder`, `help`, `inbox`, `info`, `lock`, `more`, `refresh`, `remove`, `search`, `settings`, `star`, `table`, `terminal`, `tip`, `undo`, `up`, `waiting`, `warning`.
+`add`, `alert`, `archive`, `attach`, `back`, `blocked`, `book`, `branch`, `bug`, `calendar`, `camera`, `chart`, `chevron`, `clock`, `close`, `cloud`, `code`, `collapse`, `comment`, `copy`, `dashboard`, `database`, `delete`, `done`, `down`, `download`, `drag`, `dropdown`, `edit`, `error`, `expand`, `external`, `file`, `filter`, `flag`, `folder`, `forward`, `grid`, `help`, `hide`, `history`, `home`, `image`, `inbox`, `info`, `key`, `like`, `link`, `list`, `loading`, `location`, `lock`, `mail`, `menu`, `merge`, `more`, `move`, `pause`, `phone`, `pin`, `play`, `previous`, `print`, `redo`, `refresh`, `remove`, `restore`, `save`, `scan`, `search`, `send`, `server`, `settings`, `share`, `shield`, `show`, `sidebar`, `sort`, `star`, `stop`, `success`, `sync`, `table`, `tag`, `terminal`, `tip`, `toggle`, `tune`, `undo`, `unlock`, `up`, `upload`, `user`, `users`, `verified`, `video`, `volume`, `waiting`, `warning`, `zoom`.
 
 A name outside the set draws a crossed placeholder carrying that name, so a drawing says what it is missing rather than showing a nearby glyph that would be wrong.
-`Icon` sizes on `sm`, `md`, and `lg`, each a multiple of the artboard's own body type, so one authored size is correct on every device.
+
+A mark standing alone sizes on `sm`, `md`, and `lg`, each a multiple of the artboard's own body type, so one authored size is correct on every device.
+A mark standing with words takes no size: a `Button` drawing both an `icon` and its label, a `labelled` `Icon`, and a `Reference` with its copy control all contain the mark to the text beside it - a little above its cap height, centred on its line, one consistent step away. `size` on a `labelled` `Icon` is refused, because there is no step left for it to pick.
 
 ### Tables
 

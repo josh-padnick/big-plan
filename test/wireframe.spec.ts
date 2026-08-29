@@ -737,6 +737,48 @@ test("should draw marks, a two-ended toolbar, and a surface that covers the page
     );
   });
 
+  // The inline icon-with-text containment rule. Its whole point is that a mark
+  // beside words is measured against those words, and only a browser that has
+  // laid the pair out can say whether it is: the source says 1.15em, and 1.15em
+  // of the wrong font-size is exactly the oversized mark this rule replaced.
+  await test.step("a mark standing with words is contained to them", async () => {
+    const contained = await review.evaluate((root) => {
+      const marks = [
+        ...root.querySelectorAll("[data-wireframe-glyph-with-text] > svg"),
+      ];
+      return marks.map((mark) => {
+        const words = mark.closest<HTMLElement>(
+          ".wireframe-button, .wireframe-icon, .wireframe-reference, .wireframe-list-row-primary",
+        );
+        if (words === null) {
+          throw new Error("inline wireframe glyph has no text-bearing owner");
+        }
+        const markBox = mark.getBoundingClientRect();
+        const wordsBox = words.getBoundingClientRect();
+        // An artboard lays out at its true device width and is then scaled as
+        // one unit, so a measured rect is in painted pixels while font-size is
+        // in the artboard's own. Recovering the scale from the host puts both
+        // sides of the ratio in the same units.
+        const scale = wordsBox.width / words.offsetWidth;
+        return {
+          ratio:
+            markBox.height /
+            (parseFloat(getComputedStyle(words).fontSize) * scale),
+          overflows:
+            markBox.top < wordsBox.top - 0.5 ||
+            markBox.bottom > wordsBox.bottom + 0.5,
+        };
+      });
+    });
+    expect(contained.length).toBeGreaterThan(0);
+    for (const mark of contained) {
+      // Drawn against the words' own size rather than the box around them, and
+      // never taller than the line it stands on.
+      expect(mark.ratio).toBeCloseTo(1.15, 2);
+      expect(mark.overflows).toBe(false);
+    }
+  });
+
   await test.step("an icon-only control keeps its words for a screen reader", async () => {
     const copy = review.getByRole("button", { name: "Copy command" });
     await expect(copy).toBeVisible();

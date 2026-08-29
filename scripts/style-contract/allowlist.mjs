@@ -89,8 +89,12 @@ export const STYLESHEET_BUDGETS = {
     // than wrapping, and the control that copies it drawn inside that border
     // at the same mark size, keeping the touch floor only where a finger is
     // the input. Raised for the Wireframe diff's Was/Now screen borders and
-    // frozen baseline-control treatment.
-    declarations: 1122,
+    // frozen baseline-control treatment. Net one more for the inline
+    // icon-with-text containment rule (BIG-208): two shared values and the
+    // one selector that sizes and aligns a mark against the words it stands
+    // with, paid for in part by retiring the per-owner sizing overrides the
+    // reference, its copy control, and a list row's push mark each carried.
+    declarations: 1123,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,
