@@ -9,7 +9,7 @@
 // See ./README.md for the method and how to read the result.
 
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -175,7 +175,7 @@ const askHarness = async ({ harness, prompt, workspace, replyPath }) => {
     try {
       const reply = await readFile(replyPath, "utf8");
       await rm(replyPath, { force: true });
-      if (reply.trim().length > 0) return reply;
+      if (code === 0 && reply.trim().length > 0) return reply;
     } catch {
       // Fall through to the error record below; a missing file means the
       // harness never produced a final message.
@@ -237,6 +237,9 @@ export const validateSelections = ({ harnesses, arms, questions }) => {
 const main = async () => {
   const options = parseArguments();
   validateSelections(options);
+  if (options.transcriptDir !== undefined) {
+    await mkdir(options.transcriptDir, { recursive: true });
+  }
   const prompts = {
     ...(options.arms.includes("control")
       ? { control: await capturePrompt(["--without-push-guidance"]) }
