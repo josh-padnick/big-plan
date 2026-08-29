@@ -41,11 +41,11 @@ There are no backports to earlier versions; the fix for a reported issue is to u
 Big Plan ships as the [`big-plan`](https://www.npmjs.com/package/big-plan) npm package and is normally run with `npx big-plan` or installed with `npm install -g big-plan`.
 Two properties of that model are worth knowing:
 
-- **An unversioned `npx` run may use a local package.** A machine that runs `npx big-plan` may execute a matching version already installed in the local project rather than fetch the latest published release. Use `npx big-plan@latest` for an always-current one-off run. Pin a version (`npx big-plan@0.0.1`) or install globally if your environment requires a fixed, reviewed version.
+- **An unversioned `npx` run may use a local package.** A machine that runs `npx big-plan` may execute a matching version already installed in the local project rather than fetch a release. Use `npm view big-plan dist-tags` to see which versions npm's `latest` and `next` channels currently select. Pin an exact version (`npx big-plan@0.0.1`) or install that version globally if your environment requires a fixed, reviewed release.
 - **Releases are published with npm provenance, from CI only.** Publishing happens exclusively in the tagged-release GitHub Actions workflow, using npm Trusted Publishing over OIDC rather than a long-lived token. That workflow refuses to publish unless the tag equals the package version and points at a commit on `main`, and it runs the full lint, build, generated-file-drift, unit, and end-to-end suites first. Every release is published to the `next` dist-tag, then both `big-plan@next` and the exact published version are smoke-tested from a clean environment. The provenance attestation lets you verify a published tarball was built by that workflow from this repository:
 
   ```sh
-  version="$(npm view big-plan@latest version)"
+  version="${BIG_PLAN_VERSION:?Set BIG_PLAN_VERSION to the exact version to verify}"
   audit_dir="$(mktemp -d)"
   npm --prefix "$audit_dir" install "big-plan@$version"
   npm --prefix "$audit_dir" audit signatures
