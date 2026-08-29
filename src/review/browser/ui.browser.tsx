@@ -639,15 +639,20 @@ export const useCopyToClipboard = (value: string) => {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
   const resetTimeout = useRef<number | undefined>(undefined);
-  useEffect(
-    () => () => {
+  const copyAttempt = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       if (resetTimeout.current !== undefined) {
         window.clearTimeout(resetTimeout.current);
       }
-    },
-    [],
-  );
+    };
+  }, []);
   const copy = async () => {
+    const attempt = copyAttempt.current + 1;
+    copyAttempt.current = attempt;
     if (resetTimeout.current !== undefined) {
       window.clearTimeout(resetTimeout.current);
       resetTimeout.current = undefined;
@@ -657,8 +662,10 @@ export const useCopyToClipboard = (value: string) => {
     try {
       if (navigator.clipboard === undefined) throw new Error("Unavailable");
       await navigator.clipboard.writeText(value);
+      if (!mounted.current || attempt !== copyAttempt.current) return;
       setCopied(true);
     } catch {
+      if (!mounted.current || attempt !== copyAttempt.current) return;
       setFailed(true);
       return;
     }
