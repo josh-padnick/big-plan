@@ -7,7 +7,7 @@ This page answers the narrower question this directory keeps being asked: where 
 
 Big Plan takes no dependency on a Lucide package.
 Each glyph is one hand-transcribed module holding Lucide's own icon-node data for that name, so the whole set is readable in the repository and ships without a build step resolving it.
-That is also the only reason a set ever looks small: it holds the marks something has asked for, one file at a time, with no cap and no upstream limit behind it.
+The original 34 glyphs were therefore an incidental hand-curated list: they were the marks the first wireframe drawings needed, added one file at a time, with no cap, lint limit, or upstream limit behind them.
 
 Upstream's `icon-nodes.json`, published in the `lucide-static` package, is the authoritative source for the node array.
 Copy a name's entry verbatim rather than redrawing it, and keep the local file's name and its `name` field as upstream spells them, so the next person can diff one against the other.
