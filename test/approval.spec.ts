@@ -830,7 +830,7 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
     });
     expect(stampLayer?.position).toBe("absolute");
     expect(stampLayer?.rotate).toBe("-3deg");
-    expect(stampLayer?.fontSize).toBe("20px");
+    expect(stampLayer?.fontSize).toBe("14px");
 
     await page.getByRole("button", { name: "Feedback" }).click();
     await page.getByRole("tab", { name: "Chat" }).click();

@@ -1127,7 +1127,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should preserve a later canonical edit while acknowledging the pinned candidate", async () => {
+  it("should refuse a pinned candidate after the canonical source moves", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "big-plan-agent-approve-source-moved-"),
     );
@@ -1176,7 +1176,7 @@ describe("agent work loop lifecycle", () => {
           executablePath,
           agentToken: pickup.agent_token,
         }),
-      ).resolves.toMatchObject({ responded: request.requestId });
+      ).rejects.toThrow(/digest equals the pinned snapshot/u);
       await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
       await expect(
         readAgentExchange({
@@ -1184,15 +1184,7 @@ describe("agent work loop lifecycle", () => {
           sessionId: review.sessionId,
           planId: review.planId,
         }),
-      ).resolves.toMatchObject({
-        responses: [
-          {
-            requestId: request.requestId,
-            kind: "approval",
-            resultSnapshot: pinned,
-          },
-        ],
-      });
+      ).resolves.toMatchObject({ responses: [] });
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

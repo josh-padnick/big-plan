@@ -136,7 +136,7 @@ const STAMP_INNER =
   "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-3 py-1";
 
 const STAMP_TYPE =
-  "text-xl font-bold tracking-caps whitespace-nowrap text-accent uppercase";
+  "text-sm font-bold tracking-caps whitespace-nowrap text-accent uppercase";
 
 const ApprovedStampMark = () => (
   <span className={STAMP_FRAME}>

@@ -839,12 +839,13 @@ export const commitStagedPlanMutation = async ({
       let committedResponse = response;
       if (response.kind === "approval") {
         approvalSource = await readFile(planPath, "utf8");
+        const approvalSnapshot = deriveSnapshotDigest(approvalSource);
         committedResponse = validateAgentResponseDraft({
           value: response,
           request,
           commentsById: new Map(),
           changedBlocks: new Set(),
-          currentSnapshot: response.resultSnapshot,
+          currentSnapshot: approvalSnapshot,
           now: response.createdAt,
         });
       }
