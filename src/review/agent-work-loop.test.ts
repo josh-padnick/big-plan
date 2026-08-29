@@ -1315,7 +1315,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should leave a reviewer edit standing when an acknowledgment restores the pin", async () => {
+  it("should refuse an acknowledgment when a reviewer edit predates pickup", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "big-plan-agent-approve-restore-"),
     );
@@ -1353,8 +1353,8 @@ describe("agent work loop lifecycle", () => {
       ) {
         throw new Error("Pickup did not return a candidate plan");
       }
-      // Restoring the pinned bytes is the one way an acknowledgment can satisfy
-      // the digest check here, and it must not hand back the reviewer's edit.
+      // Restoring only the staged candidate cannot satisfy acknowledgment: the
+      // canonical source under the commit boundary is still the reviewer's edit.
       await writeFile(pickup.candidate_plan, source);
       await writeFile(
         pickup.response_file,
@@ -1368,7 +1368,11 @@ describe("agent work loop lifecycle", () => {
           executablePath,
           agentToken: pickup.agent_token,
         }),
-      ).resolves.toMatchObject({ responded: request.requestId });
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        message:
+          'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
+      });
       await expect(readFile(planPath, "utf8")).resolves.toBe(edited);
     } finally {
       await review.close();
@@ -1437,7 +1441,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should acknowledge after the plan moved under the claim", async () => {
+  it("should refuse an acknowledgment after the plan moved under the claim", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "big-plan-agent-approve-moved-ack-"),
     );
@@ -1484,7 +1488,11 @@ describe("agent work loop lifecycle", () => {
           executablePath,
           agentToken: pickup.agent_token,
         }),
-      ).resolves.toMatchObject({ responded: request.requestId });
+      ).rejects.toMatchObject({
+        name: "AgentWorkLoopRejected",
+        message:
+          'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
+      });
       await expect(readFile(planPath, "utf8")).resolves.toBe(edited);
     } finally {
       await review.close();
