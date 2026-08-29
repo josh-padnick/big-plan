@@ -8712,7 +8712,12 @@ export const ReviewController = () => {
       <AlertDialog
         open={pendingAutoAcceptThreadId !== null}
         title="Turn on auto-accept?"
-        description={`${openChangesForThread(pendingAutoAcceptThreadId ?? "")} open changes in this pushed thread are accepted immediately. Every change the agent pushes from now on is accepted the moment it arrives.`}
+        description={(() => {
+          const openChanges = openChangesForThread(
+            pendingAutoAcceptThreadId ?? "",
+          );
+          return `${openChanges} open ${openChanges === 1 ? "change" : "changes"} in this pushed thread ${openChanges === 1 ? "is" : "are"} accepted immediately. Every change the agent pushes from now on is accepted the moment it arrives.`;
+        })()}
         cancelLabel="Cancel"
         actionLabel="Turn on auto-accept"
         tone="neutral"

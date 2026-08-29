@@ -1294,6 +1294,15 @@ test("should arm auto-accept from a pushed thread and apply it only to later arr
     );
     await expect(rail.getByText("Needs you (1)")).toBeVisible();
 
+    await thread
+      .getByRole("button", { name: "Auto-accept all changes" })
+      .click();
+    await page
+      .getByRole("alertdialog", { name: "Turn on auto-accept?" })
+      .getByRole("button", { name: "Turn on auto-accept" })
+      .click();
+    await expect(rail.getByText(/Auto-accept · on since/u)).toBeVisible();
+
     await closeReviewRuntime({ page, runtime });
     runtime = await startReviewRuntime({ planPath });
     await page.goto(runtime.url);
