@@ -167,41 +167,6 @@ const blockById = ({
     ? undefined
     : blocks.find((block) => block.id === blockId);
 
-const anchorAllows = ({
-  anchors,
-  kind,
-  side,
-}: {
-  readonly anchors: ReadonlyArray<ComponentCommentableAnchor>;
-  readonly kind: string;
-  readonly side: "baseline" | "proposed";
-}): boolean =>
-  anchors.some(
-    (anchor) =>
-      anchor.kind === kind &&
-      (anchor.sides === "both" || anchor.sides === side),
-  );
-
-const declaredAnchor = (
-  node: Element,
-): { readonly kind: string; readonly label: string } | undefined => {
-  const commentKind = node.properties["data-commentable-kind"];
-  if (
-    typeof commentKind === "string" &&
-    commentKind.length > 0 &&
-    typeof node.properties["data-commentable-label"] === "string"
-  ) {
-    return {
-      kind: commentKind,
-      label: node.properties["data-commentable-label"],
-    };
-  }
-  const screen = node.properties["data-wireframe-screen"];
-  return typeof screen === "string"
-    ? { kind: "wireframe-screen", label: screen }
-    : undefined;
-};
-
 const inputFor = ({
   status,
   baseline,
@@ -251,7 +216,7 @@ const inheritProposedRootIdentity = ({
   }
 };
 
-const commentableOn = ({
+const anchorAllows = ({
   anchors,
   kind,
   side,
@@ -299,7 +264,7 @@ const addressForRenderedNode = ({
   const kind = node.properties["data-commentable-kind"];
   const label = node.properties["data-commentable-label"];
   if (typeof kind !== "string" || typeof label !== "string") return undefined;
-  if (!commentableOn({ anchors, kind, side })) return undefined;
+  if (!anchorAllows({ anchors, kind, side })) return undefined;
   const normalizedLabel = (
     kind === "wireframe-screen" &&
     typeof node.properties["data-wireframe-screen"] === "string"
