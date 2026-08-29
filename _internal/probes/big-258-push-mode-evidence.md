@@ -10,6 +10,8 @@ Command:
 node _internal/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
 ```
 
+Revision: `df17ac89821e1dd8477b7dcce9fa575d94e0bc21`.
+
 Harnesses: `claude`, `codex`, `grok`. Arms: `control` (push guidance stripped
 out) and `after` (the prompt this change ships). Wordings: `direct`, and
 `doubted`, which adds "Or does a change like that have to come from the review
@@ -55,3 +57,7 @@ original failure happened in, so the ordering of the prompt is a judgment this
 evidence supports rather than proves. The `before` arm was dropped from the
 committed default for that reason and because it stopped working once this
 change merged; `--baseline-rev` remains for ad-hoc comparison.
+
+```text
+Push-mode probe: after 18/18 push; control 0/18 push (Claude, Codex, Grok; direct + doubted; 3 trials each).
+```

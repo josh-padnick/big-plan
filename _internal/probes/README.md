@@ -8,8 +8,8 @@ someone's live review.
 
 Probes live here rather than in `test/` because they call real agent harnesses,
 cost real tokens, and answer a distribution rather than a boolean. Nothing in CI
-runs them. Run one when you change text an agent acts on, and record its numbers
-in the pull request.
+runs them. Run one when you change text an agent acts on, preserve its numbers in
+a focused evidence file here, and link that record from the pull request.
 
 Read [../../AGENTS.md](../../AGENTS.md) first; the gold-standard plan-quality
 workflow it owns is the sibling procedure for judging authored plans, and this
@@ -76,11 +76,11 @@ zero on the `after` arm across every harness and both wordings, and stay there -
 and it is only evidence at all when the `control` arm stays non-push.
 
 Record the command, revision, per-arm totals, harnesses, wordings, and trial
-count in the pull request. End that evidence with one plain status line so the
+count in the evidence file. End that evidence with one plain status line so the
 result remains scannable, for example:
 
 ```text
-Push-mode probe: after 18/18 push; before 18/18 push; control 0/18 push (Claude, Codex, Grok; direct + doubted; 3 trials each).
+Push-mode probe: after 18/18 push; control 0/18 push (Claude, Codex, Grok; direct + doubted; 3 trials each).
 ```
 
 For ad-hoc baseline work, `capture-connector-prompt.mjs --baseline
