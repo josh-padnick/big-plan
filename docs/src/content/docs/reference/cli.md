@@ -402,12 +402,12 @@ Opening the port itself shows what the process is, when it started, and a
 lists nothing about the plans this machine knows, so an address cannot be
 guessed into an index of someone's work.
 
-The port is fixed at `8790` because saved links point at it. Big Plan never
-moves to a different port on its own: when something else already holds the
-port, every command says so, names the process holding it where the platform can
-report one, and keeps working with the session's direct address. Set
-`BIG_PLAN_PORT` to choose a different port, remembering that links saved at the
-old one stop resolving.
+The port defaults to `8790` because saved links point at a predictable address.
+Big Plan never moves to a different port on its own: when something else already
+holds the port, every command says so, names the process holding it where the
+platform can report one, and keeps working with the session's direct address.
+Set `BIG_PLAN_PORT` to choose a different port, remembering that links saved at
+the old one stop resolving.
 
 The service forwards a running review by default, so the browser stays on the
 stable address. `BIG_PLAN_PROXY=0` is the reversible escape hatch that restores

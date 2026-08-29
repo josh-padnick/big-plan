@@ -10,7 +10,7 @@ rendered blocks and hand the staged set to the agent.
 npx -y big-plan@latest review plans/checkout-retry.mdx
 ```
 
-The command prints a stable `http://127.0.0.1:8790/plan/<plan-id>` address and keeps running.
+By default, the command prints a stable `http://127.0.0.1:8790/plan/<plan-id>` address and keeps running.
 Open that address, review the plan, and stop the runtime with `Ctrl+C`.
 By default the review stays up until you stop it, so a link you were handed
 keeps working if you step away.
@@ -463,10 +463,10 @@ Loopback is not an authentication boundary.
 The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
 It checks the `Host` header on every request and refuses any value outside a short allow-list: its own address and the review-link service's, so the service hop can reach it while a rebound name still cannot.
 
-The service that answers saved links is a separate process on its own fixed loopback port, holding no review content. It forwards requests to this runtime by default, while `BIG_PLAN_PROXY=0` restores the redirect, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
+The service that answers saved links is a separate process on its own stable loopback port, holding no review content. It forwards requests to this runtime by default, while `BIG_PLAN_PROXY=0` restores the redirect, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
 [The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
 
-Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:
+Three types of read-only GET request do not use the review token, `Origin`, or `Sec-Fetch-Site` checks:
 
 - the document route `/`, which renders the selected MDX instead of serving arbitrary HTML;
 - plan-picture requests, which accept only supported picture file types; and
@@ -481,7 +481,7 @@ The attacker can then make the plan-picture route open a file outside the plan d
 The runtime accepts this limit because the attacker already has access to the reviewer's local files, and the server listens only on loopback.
 For a stored review-image request, the metadata and picture must be regular files and must stay inside their explicit size limits.
 
-All API routes require the per-session token in a request header.
+All API routes require the review token in a request header.
 They refuse a foreign `Origin` or a cross-site request.
 The runtime also validates every agent response against its pending request and the computed snapshot diff.
 It keeps requests, responses, heartbeats, and source snapshots in the owner-only ignored review store.
