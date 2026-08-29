@@ -66,6 +66,7 @@ import {
   changeSetsFromExchange,
   deriveOpenItems,
 } from "./shared/open-items.js";
+import { readCommittedChangeSets } from "./change-set-commit.js";
 import {
   commitApprovalFinalization,
   type ApprovalFinalization,
@@ -178,20 +179,29 @@ const changeSetsAtApproval = async (
     planId: context.planId,
   });
   const placeIdsByRevision = new Map<string, ReadonlyArray<string>>();
-  const requests = new Map(
-    exchange.requests.map((request) => [request.requestId, request]),
-  );
   const fallbackTitle = basename(
     context.resolvedPlanPath,
     extname(context.resolvedPlanPath),
   );
-  for (const response of exchange.responses) {
-    if (response.kind === "approval") continue;
-    const request = requests.get(response.requestId);
-    if (request === undefined) continue;
-    const from = request.baselineSnapshot ?? request.premiseSnapshot;
-    const to = response.resultSnapshot;
-    if (from === to) continue;
+  // Approval closes the sets the reviewer was shown, so it counts them the
+  // same way the review surface does: one folded set per thread, whose places
+  // are the ones its baseline-to-now diff actually has. An approval response
+  // is the decision that closes those sets rather than a change inside one, so
+  // it never contributes a set of its own.
+  const committedChangeSetIds = new Set(
+    (await readCommittedChangeSets({ store: context.store })).map(
+      (changeSet) => changeSet.changeSetId,
+    ),
+  );
+  const folded = changeSetsFromExchange({
+    requests: exchange.requests,
+    responses: exchange.responses.filter(
+      (response) => response.kind !== "approval",
+    ),
+    placeIdsByRevision: new Map(),
+    committedChangeSetIds,
+  });
+  for (const { from, to } of folded) {
     const [beforeSource, afterSource] = await Promise.all([
       readSnapshot({ store: context.store, snapshot: from }),
       readSnapshot({ store: context.store, snapshot: to }),
@@ -217,11 +227,10 @@ const changeSetsAtApproval = async (
       diff.places.map((place) => place.placeId),
     );
   }
-  return changeSetsFromExchange({
-    requests: exchange.requests,
-    responses: exchange.responses,
-    placeIdsByRevision,
-  });
+  return folded.map((changeSet) => ({
+    ...changeSet,
+    placeIds: placeIdsByRevision.get(`${changeSet.from}:${changeSet.to}`) ?? [],
+  }));
 };
 
 const acceptChangeSets = async ({
