@@ -67,4 +67,24 @@ describe("runtime session order", () => {
       kind: "drop",
     });
   });
+
+  it("should drop a pending response after a mutation invalidates it", () => {
+    const order = createRuntimeSessionOrder();
+    const pendingSequence = order.issueRequest();
+
+    order.invalidatePendingRequests();
+
+    expect(
+      order.decide({
+        sequence: pendingSequence,
+        session: sessionAt(1_000),
+      }),
+    ).toEqual({ kind: "drop" });
+    expect(
+      order.decide({
+        sequence: order.issueRequest(),
+        session: sessionAt(2_000),
+      }),
+    ).toMatchObject({ kind: "apply" });
+  });
 });

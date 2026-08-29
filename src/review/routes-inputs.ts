@@ -24,7 +24,7 @@ import {
 import type { StagedInputs } from "./plan-inputs-store.js";
 import type { DecisionInventory } from "./decision-inventory.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
-import { approvalSummary } from "./shared/approval.js";
+import { readApprovalSummary } from "./approval-view.js";
 import { encodeReviewState } from "./shared/review-wire.js";
 
 const answerState = async ({
@@ -37,7 +37,8 @@ const answerState = async ({
   readonly inventory: DecisionInventory;
 }): Promise<ReviewRouteResponse> => {
   const source = await readFile(context.resolvedPlanPath, "utf8");
-  const approval = approvalSummary({
+  const approval = await readApprovalSummary({
+    store: context.store,
     record: await context.approvals.read(),
     currentSnapshot: deriveSnapshotDigest(source),
   });

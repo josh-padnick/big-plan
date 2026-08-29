@@ -144,6 +144,9 @@ export const exportPlanMarkdown = async (context: {
   const summary = approvalSummary({
     record: approvalRecord,
     currentSnapshot: snapshot,
+    // Export reports whether the current plan is approved; mailbox delivery is
+    // a live-review concern and is not represented in the portable overlay.
+    delivered: true,
   });
   const approval = summary?.status === "approved" ? summary : undefined;
   const filename = markdownExportFilename(context.resolvedPlanPath);

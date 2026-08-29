@@ -130,20 +130,22 @@ const STAMP_FRAME =
   "inline-flex rounded-md border-2 border-accent p-0.5 bg-paper";
 
 const STAMP_INNER =
-  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-1.5 py-0.5";
+  "inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-3 py-1";
 
 const STAMP_TYPE =
-  "text-2xs font-bold tracking-caps whitespace-nowrap text-accent uppercase";
+  "text-sm font-bold tracking-caps whitespace-nowrap text-accent uppercase";
 
 const ApprovedStampMark = () => (
   <span className={STAMP_FRAME}>
     <span className={STAMP_INNER}>
-      <span className={STAMP_TYPE}>Approved</span>
+      <span className={STAMP_TYPE} data-review-approval-stamp-type="">
+        Approved
+      </span>
     </span>
   </span>
 );
 
-/** A rubber-stamp mark just above the plan title, on the reading surface. */
+/** A persistent rubber-stamp mark above the plan title. */
 const ApprovedStampOverlay = () => {
   const [slot, setSlot] = useState<HTMLElement | null>(() =>
     document.querySelector<HTMLElement>("[data-review-approval-page-stamp]"),
@@ -560,8 +562,8 @@ export const ApproveDialog = ({
       title={stale ? "Re-approve this plan?" : "Approve this plan?"}
       description={
         stale
-          ? "The plan has changed since you approved it. Approving again records the plan and message for the agent handoff."
-          : "Approving records the plan and your message for the agent handoff."
+          ? "The plan has changed since you approved it. Approving again records the plan and sends your message to the agent."
+          : "Approving records the plan and sends your message to the agent."
       }
       cancelLabel="Keep reviewing"
       actionLabel={stale ? "Re-approve" : "Approve plan"}
@@ -929,9 +931,19 @@ const ApprovalDetails = ({
               <p className="m-0 text-sm font-semibold text-ink">
                 Saved for your agent
               </p>
-              <p className="mt-1 mb-0 text-xs leading-normal text-muted">
-                This message is recorded for the agent handoff.
-              </p>
+              {approval.delivered ? (
+                <p className="mt-1 mb-0 text-xs leading-normal text-muted">
+                  This message was sent to the agent.
+                </p>
+              ) : (
+                <p
+                  className="mt-1 mb-0 text-xs leading-normal text-[var(--callout-warning-c)]"
+                  data-review-approve-undelivered=""
+                >
+                  This message did not reach the agent. The approval is
+                  recorded; revoke it and approve again to hand it over.
+                </p>
+              )}
               <blockquote className="mx-0 mt-2 mb-0 rounded-md border-l-2 border-edge bg-paper px-3 py-2 text-sm leading-normal text-ink not-italic">
                 {approval.message}
               </blockquote>
@@ -1140,6 +1152,12 @@ export const ApproveControl = ({
           : undefined;
       onApprovalChange(next);
       closeDialog();
+      /* The record is committed whatever the mailbox did, so an approval the
+         agent was never handed opens its own details rather than sitting behind
+         a stamp that reads like every other approval. What the popover then
+         says comes from the summary, so it survives the reload this moment
+         does not. */
+      if (next?.delivered === false) setDetailsOpen(true);
     } catch (error: unknown) {
       setBlockReason(
         error instanceof Error

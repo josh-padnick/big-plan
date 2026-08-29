@@ -39,12 +39,21 @@ export {
 export type AgentActivityRequest = ClaimedRequest &
   TerminalAgentRequest & {
     readonly requestId: string;
-    readonly kind: "feedback" | "reply" | "chat" | "push";
+    readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
     readonly createdAt: string;
     readonly claimedAt?: string;
     readonly baselineSnapshot?: string;
     readonly targetLabel?: string;
   };
+
+/**
+ * The settled answer to one request, as the card needs to read it: an approval
+ * that carries a refusal, or one that carries none.
+ */
+export type AgentActivityAnswer = {
+  readonly requestId: string;
+  readonly hardStop?: string;
+};
 
 export type AgentActivityProgress = {
   readonly requestId?: string;
@@ -231,7 +240,9 @@ const requestHeadline = (request: AgentActivityRequest): string =>
       ? "Responding in a comment thread"
       : request.kind === "push"
         ? "Preparing a pushed plan change"
-        : "Answering a plan question";
+        : request.kind === "approval"
+          ? "Acknowledging a plan approval"
+          : "Answering a plan question";
 
 const requestFacts = (request: AgentActivityRequest): ActivityRequestFacts => ({
   requestId: request.requestId,
@@ -703,6 +714,8 @@ export const deriveCurrentAgentActivity = ({
   everConnected,
 }: {
   readonly requests: ReadonlyArray<AgentActivityRequest>;
+  /** The answers already settled, for the readings a step cannot be trusted for. */
+  readonly responses?: ReadonlyArray<AgentActivityAnswer>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly progressEvents: ReadonlyArray<AgentActivityProgress>;
   readonly agentConnected: boolean;
@@ -892,6 +905,13 @@ export type AgentStatus = {
 export type AgentStatusInput = {
   readonly runtime: "static" | "online" | "offline";
   readonly request: "none" | "pending" | "answered";
+  /**
+   * What kind of work the request is, where the answer changes what an answer
+   * means. An acknowledgment is not a response the reviewer can read or reply
+   * to, so the settled reading for one cannot be the settled reading for a
+   * question (BIG-131).
+   */
+  readonly requestKind?: AgentActivityRequest["kind"];
   readonly agentConnected: boolean;
   readonly pickedUp: boolean;
   /**
@@ -908,6 +928,13 @@ export type AgentStatusInput = {
   readonly failure?: string;
   readonly nowMs: number;
 };
+
+/**
+ * The settled label an acknowledgment wears, named once because two surfaces
+ * read it: the strip that prints it, and the session pill that must not
+ * summarize it as a response there is something to re-review (BIG-131).
+ */
+export const ACKNOWLEDGED_STATUS_LABEL = "Acknowledged";
 
 /** Derives status from observable runtime, request, and agent-channel facts. */
 export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
@@ -940,6 +967,16 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     };
   }
   if (input.request === "answered") {
+    if (input.requestKind === "approval") {
+      return {
+        stage: "answered",
+        label: ACKNOWLEDGED_STATUS_LABEL,
+        headline: "Approval acknowledged",
+        detail:
+          "The agent has the approved plan and the decisions recorded with it.",
+        tone: "positive",
+      };
+    }
     return {
       stage: "answered",
       label: "Response ready",

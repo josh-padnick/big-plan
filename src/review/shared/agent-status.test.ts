@@ -1251,3 +1251,42 @@ describe("disconnecting the attached agent", () => {
     }
   });
 });
+
+describe("approval progress stays in the chat thread", () => {
+  const approvalRequest: AgentActivityRequest = {
+    requestId: "dddddddddddddddd",
+    kind: "approval",
+    createdAt: "2026-08-08T19:59:00.000Z",
+    answeredAt: "2026-08-08T20:00:00.000Z",
+  };
+
+  it("should not turn settled approval steps into an Agent Status state", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        everConnected: true,
+        requests: [approvalRequest],
+        cancelPendingRequestIds: new Set<string>(),
+        progressEvents: [
+          {
+            requestId: approvalRequest.requestId,
+            atMs: NOW - 2_000,
+            stepCode: "plan-approved",
+            step: "Plan approved",
+            state: "done",
+          },
+          {
+            requestId: approvalRequest.requestId,
+            atMs: NOW - 1_000,
+            stepCode: "approval-acknowledged",
+            step: "Approval acknowledged",
+            state: "done",
+          },
+        ],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW,
+      }),
+    ).toMatchObject({ state: "idle", headline: "Agent connected" });
+  });
+});

@@ -44,6 +44,7 @@ import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
+import { changeVerdictKey } from "../shared/change-verdict.js";
 import {
   AGENT_STALL_MS,
   agentDisconnectDropsWork,
@@ -106,6 +107,7 @@ import {
 } from "../shared/thread-projection.js";
 import {
   decodeAgentSnapshot as parseAgentSnapshot,
+  decodeCommittedChangeSets,
   decodeSnapshotDiff as parseSnapshotDiff,
   decodeProgress as parseProgress,
   decodeReviewSnapshot as parseSnapshot,
@@ -117,6 +119,7 @@ import {
   type AgentRequest,
   type AgentResponse,
   type AgentSnapshot,
+  type CommittedChangeSet,
   type SnapshotDiff,
   type ProgressEvent,
   type ReviewSnapshot,
@@ -186,6 +189,7 @@ import {
   reviewWriteBlock,
   reviewWriteRefusal,
   type ReviewWriteAvailability,
+  type ReviewWriteBlocked,
 } from "./review-write-availability.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../shared/resolved-thread-work.js";
 import {
@@ -3328,6 +3332,31 @@ const StalePremiseNotice = ({
   );
 };
 
+const AutoAcceptPrompt = ({
+  block,
+  onArm,
+}: {
+  readonly block: ReviewWriteBlocked | undefined;
+  readonly onArm: () => void;
+}) => (
+  <div className="mt-2 rounded-md bg-surface p-2 text-xs text-muted">
+    <p className="m-0 font-semibold text-ink">Authoring at pace?</p>
+    <p className="mt-0.5 mb-2">Stops asking for a verdict while you dictate.</p>
+    <Button
+      variant="outline"
+      size="micro"
+      disabled={block !== undefined}
+      data-tooltip={block?.cause}
+      onClick={onArm}
+    >
+      Auto-accept all changes
+    </Button>
+    {block === undefined ? null : (
+      <p className="mt-1 mb-0 font-semibold text-danger">{block.label}</p>
+    )}
+  </div>
+);
+
 const SentThread = ({
   comment,
   surface,
@@ -3356,6 +3385,8 @@ const SentThread = ({
   queuePosition,
   suppressPendingStatus = false,
   pushedOrigin,
+  onArmAutoAccept,
+  appliedSummaries = [],
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -3390,6 +3421,12 @@ const SentThread = ({
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
   readonly pushedOrigin?: "prompt" | "about";
+  /** Offered only by pushed threads while this session is in review mode. */
+  readonly onArmAutoAccept?: () => void;
+  readonly appliedSummaries?: ReadonlyArray<{
+    readonly changeSetId: string;
+    readonly text: string;
+  }>;
 }) => {
   const {
     exchanges,
@@ -3706,6 +3743,16 @@ const SentThread = ({
                 : `Expand pushed thread: ${comment.body}`
             }
           />
+          {onArmAutoAccept === undefined ? null : (
+            <AutoAcceptPrompt block={replyBlock} onArm={onArmAutoAccept} />
+          )}
+          {appliedSummaries.length === 0 ? null : (
+            <ul className="mt-2 mb-0 list-none p-0 text-2xs text-muted">
+              {appliedSummaries.map((summary) => (
+                <li key={summary.changeSetId}>{summary.text}</li>
+              ))}
+            </ul>
+          )}
           <div className="review-sent-metadata mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-edge pt-2 text-xs text-muted">
             <span className="flex min-w-0 items-baseline gap-1.5 truncate">
               <span className="font-medium">{railState}</span>
@@ -3836,6 +3883,16 @@ const SentThread = ({
           <Badge tone="secondary" size="status" className="mt-2">
             {pushedOriginLabel}
           </Badge>
+        )}
+        {onArmAutoAccept === undefined ? null : (
+          <AutoAcceptPrompt block={replyBlock} onArm={onArmAutoAccept} />
+        )}
+        {appliedSummaries.length === 0 ? null : (
+          <ul className="mt-2 mb-0 list-none p-0 text-2xs text-muted">
+            {appliedSummaries.map((summary) => (
+              <li key={summary.changeSetId}>{summary.text}</li>
+            ))}
+          </ul>
         )}
         {!targetPresent ? (
           <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)] [overflow-wrap:anywhere]">
@@ -4200,17 +4257,22 @@ const ChatExchange = ({
         createdAt={request.createdAt}
         delivery={delivery}
       />
-      {response === undefined ? (
+      {response === undefined || request.kind === "approval" ? (
         <div className="min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-dashed border-edge bg-paper px-2 py-2 text-muted">
           <RequestStatusStrip
             status={status}
             activity={activity}
             surface="chat"
             onShowAgent={onShowAgent}
-            onCancelRequest={() => onCancelRequest(request.requestId)}
+            onCancelRequest={
+              response === undefined && request.kind !== "approval"
+                ? () => onCancelRequest(request.requestId)
+                : undefined
+            }
           />
         </div>
-      ) : (
+      ) : null}
+      {response === undefined || request.kind === "approval" ? null : (
         <MessageTurn
           role="agent"
           surface="chat"
@@ -4234,7 +4296,8 @@ const ChatExchange = ({
 };
 
 export const ReviewController = () => {
-  const { closeTour } = useDiffTour();
+  const { autoAccepted, closeTour, refreshVerdicts, standingOf } =
+    useDiffTour();
   const identity = useMemo(runtimeIdentity, []);
   const initialSnapshot = useMemo(bootstrapSnapshot, []);
   const planId =
@@ -4275,6 +4338,7 @@ export const ReviewController = () => {
   // across effect instances because a press already in flight when an arrival
   // lands is exactly the one that must not be interrupted.
   const pointerPressed = useRef(false);
+  const previousIsWide = useRef(isWide);
   const seenPushResponseIds = useRef<ReadonlySet<string> | null>(null);
   // The blocks the next plan-DOM replacement should settle. Armed immediately
   // before the swap a push drove and consumed by the announcement it makes, so
@@ -4342,6 +4406,16 @@ export const ReviewController = () => {
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
   );
+  const [committedChangeSets, setCommittedChangeSets] = useState<
+    ReadonlyArray<CommittedChangeSet>
+  >([]);
+  const [changeSetDiffs, setChangeSetDiffs] = useState<
+    ReadonlyMap<string, SnapshotDiff>
+  >(new Map());
+  const [pendingAutoAcceptThreadId, setPendingAutoAcceptThreadId] = useState<
+    string | null
+  >(null);
+  const [isChangingReviewMode, setIsChangingReviewMode] = useState(false);
   const [approval, setApproval] = useState<ApprovalSummary | undefined>();
   const runtimeSessionOrder = useMemo(createRuntimeSessionOrder, []);
   const acceptRuntimeSession = useCallback(
@@ -4409,6 +4483,47 @@ export const ReviewController = () => {
     () => pushedThreadOpeners.map((opener) => opener.comment),
     [pushedThreadOpeners],
   );
+  const committedResponseKey = agent.responses
+    .filter((response) => response.resultSnapshot !== "")
+    .map((response) => `${response.requestId}:${response.resultSnapshot}`)
+    .join("|");
+  useEffect(() => {
+    if (identity === null) return;
+    let current = true;
+    let retryTimer: number | undefined;
+    const readCommittedChangeSets = async (): Promise<void> => {
+      try {
+        const value = await requestJson({ path: "/api/change-sets", identity });
+        const decoded = decodeCommittedChangeSets(value);
+        if (decoded === undefined) return;
+        const entries = await Promise.all(
+          decoded.changeSets.map(
+            async (changeSet) =>
+              [
+                changeSet.changeSetId,
+                await cachedSnapshotDiff(
+                  identity,
+                  changeSet.baseSnapshot,
+                  changeSet.resultSnapshot,
+                ),
+              ] as const,
+          ),
+        );
+        if (!current) return;
+        setCommittedChangeSets(decoded.changeSets);
+        setChangeSetDiffs(new Map(entries));
+      } catch {
+        if (current) {
+          retryTimer = window.setTimeout(readCommittedChangeSets, 2_000);
+        }
+      }
+    };
+    void readCommittedChangeSets();
+    return () => {
+      current = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [committedResponseKey, identity]);
   /* The roster's own ambiguity set, so the arrival entry and the card the
      reviewer compares it against never disagree about how many words it takes
      to name one agent. Two connectors on the same model are two agents, and
@@ -5966,12 +6081,14 @@ export const ReviewController = () => {
       }
     };
     void refresh();
+    document.addEventListener("bigplan:approval-changed", refresh);
     const timer = window.setInterval(
       () => void refresh(),
       REVIEW_POLL_INTERVAL_MS,
     );
     return () => {
       current = false;
+      document.removeEventListener("bigplan:approval-changed", refresh);
       window.clearInterval(timer);
     };
   }, [
@@ -6040,6 +6157,13 @@ export const ReviewController = () => {
     isOpen,
     isWide,
   ]);
+
+  useEffect(() => {
+    const enteredWide = !previousIsWide.current && isWide;
+    previousIsWide.current = isWide;
+    if (!enteredWide || pushArrival === null || isOpen) return;
+    setArrivalWantsRail(true);
+  }, [isOpen, isWide, pushArrival]);
 
   /*
   A press is an intent already in flight, and the reader is owed its result.
@@ -6972,9 +7096,13 @@ export const ReviewController = () => {
   const statusForRequest = (
     request: AgentRequest,
     surface: MessageSurface,
-  ): AgentStatus =>
-    projectRequestStatus({
+  ): AgentStatus => {
+    const answer = agent.responses.find(
+      (candidate) => candidate.requestId === request.requestId,
+    );
+    return projectRequestStatus({
       request,
+      ...(answer === undefined ? {} : { response: answer }),
       requests: agent.requests,
       progressEvents: progress,
       presence: effectivePresence,
@@ -6989,8 +7117,10 @@ export const ReviewController = () => {
         cancelPendingRequestIds,
       }),
     });
+  };
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
+    responses: agent.responses,
     cancelPendingRequestIds,
     progressEvents: progress,
     agentConnected,
@@ -7006,7 +7136,7 @@ export const ReviewController = () => {
     everConnected: agentHasEverConnected({ events: agentConnection.events }),
   });
   const chatRequests = agent.requests.filter(
-    (request) => request.kind === "chat",
+    (request) => request.kind === "chat" || request.kind === "approval",
   );
   const activeChatRequests = chatRequests.filter(
     (request) => !archivedChatRequestIds.has(request.requestId),
@@ -7018,7 +7148,8 @@ export const ReviewController = () => {
     if (identity === null) return null;
     const response = agent.responses.find(
       (candidate) =>
-        candidate.requestId === request.requestId && candidate.kind === "chat",
+        candidate.requestId === request.requestId &&
+        (candidate.kind === "chat" || candidate.kind === "approval"),
     );
     return (
       <ChatExchange
@@ -7039,6 +7170,138 @@ export const ReviewController = () => {
   const unresolvedPushedThreadComments = pushedThreadComments.filter(
     (comment) => !resolvedCommentIds.has(comment.id),
   );
+  const appliedThreadIds = useMemo(() => {
+    // The actor is intentionally consumed only for grouping here. A future
+    // per-thread provenance badge and explanatory detail can read this same
+    // stored fact without inventing a second definition of the verdict.
+    const pushedIds = new Set(
+      pushedThreadComments.map((comment) => comment.id),
+    );
+    const setsByThread = new Map<string, Array<CommittedChangeSet>>();
+    for (const changeSet of committedChangeSets) {
+      const request = agent.requests.find(
+        (candidate) => candidate.requestId === changeSet.changeSetId,
+      );
+      const replyCommentId =
+        request?.kind === "reply" ? request.commentId : undefined;
+      const threadId =
+        request?.kind === "push"
+          ? request.threadId
+          : replyCommentId !== undefined && pushedIds.has(replyCommentId)
+            ? replyCommentId
+            : undefined;
+      if (threadId === undefined) continue;
+      const current = setsByThread.get(threadId) ?? [];
+      current.push(changeSet);
+      setsByThread.set(threadId, current);
+    }
+    const applied = new Set<string>();
+    for (const [threadId, sets] of setsByThread) {
+      let hasModeVerdict = false;
+      let allClosed = true;
+      for (const changeSet of sets) {
+        const diff = changeSetDiffs.get(changeSet.changeSetId);
+        if (diff === undefined) continue;
+        const placeIds = diff.places.map((place) => place.placeId);
+        if (!standingOf(diff, placeIds).isAccepted) allClosed = false;
+        if (
+          placeIds.some((placeId) =>
+            autoAccepted.has(
+              changeVerdictKey({ from: diff.from, to: diff.to, placeId }),
+            ),
+          )
+        ) {
+          hasModeVerdict = true;
+        }
+      }
+      if (hasModeVerdict && allClosed) applied.add(threadId);
+    }
+    return applied;
+  }, [
+    agent.requests,
+    autoAccepted,
+    changeSetDiffs,
+    committedChangeSets,
+    pushedThreadComments,
+    standingOf,
+  ]);
+  const needsYouPushedThreadComments = unresolvedPushedThreadComments.filter(
+    (comment) => !appliedThreadIds.has(comment.id),
+  );
+  const appliedPushedThreadComments = unresolvedPushedThreadComments.filter(
+    (comment) => appliedThreadIds.has(comment.id),
+  );
+  const openChangesForThread = (threadId: string): number => {
+    let open = 0;
+    for (const changeSet of committedChangeSets) {
+      const request = agent.requests.find(
+        (candidate) => candidate.requestId === changeSet.changeSetId,
+      );
+      const belongs =
+        request?.kind === "push"
+          ? request.threadId === threadId
+          : request?.kind === "reply"
+            ? request.commentId === threadId
+            : false;
+      if (!belongs) continue;
+      const diff = changeSetDiffs.get(changeSet.changeSetId);
+      if (diff !== undefined) {
+        open += standingOf(
+          diff,
+          diff.places.map((place) => place.placeId),
+        ).open;
+      }
+    }
+    return open;
+  };
+  const changeReviewMode = async ({
+    mode,
+    threadId,
+  }: {
+    readonly mode: "review" | "auto-accept";
+    readonly threadId?: string;
+  }): Promise<void> => {
+    if (identity === null || isChangingReviewMode) return;
+    const refusal = reviewWriteRefusal({
+      path: "review-mode",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      setStatus(refusal);
+      return;
+    }
+    setIsChangingReviewMode(true);
+    try {
+      const value = await requestJson({
+        path: "/api/review-mode",
+        identity,
+        method: "POST",
+        body: { mode, ...(threadId === undefined ? {} : { threadId }) },
+      });
+      if (isRecord(value)) {
+        runtimeSessionOrder.invalidatePendingRequests();
+        const armedAtMs =
+          typeof value.armedAtMs === "number" ? value.armedAtMs : undefined;
+        setRuntimeSession((current) =>
+          current === null
+            ? null
+            : {
+                ...current,
+                mode,
+                ...(mode === "auto-accept" && armedAtMs !== undefined
+                  ? { armedAtMs }
+                  : { armedAtMs: undefined }),
+              },
+        );
+      }
+      refreshVerdicts();
+      setPendingAutoAcceptThreadId(null);
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setIsChangingReviewMode(false);
+    }
+  };
   const resolvedPushedThreadComments = pushedThreadComments.filter((comment) =>
     resolvedCommentIds.has(comment.id),
   );
@@ -7048,6 +7311,25 @@ export const ReviewController = () => {
     const pushedOrigin = pushedThreadOriginById.get(comment.id);
     if (thread === undefined || pushedOrigin === undefined) return null;
     const resolved = resolvedCommentIds.has(comment.id);
+    const appliedSummaries = committedChangeSets.flatMap((changeSet) => {
+      if (changeSet.provenance !== "push") return [];
+      const request = agent.requests.find(
+        (candidate) => candidate.requestId === changeSet.changeSetId,
+      );
+      if (request?.kind !== "push" || request.threadId !== comment.id)
+        return [];
+      const count = changeSetDiffs.get(changeSet.changeSetId)?.places.length;
+      const at = new Date(changeSet.committedAt).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      return [
+        {
+          changeSetId: changeSet.changeSetId,
+          text: `${count === undefined ? "Applied changes" : `${count} ${count === 1 ? "change" : "changes"}`} · ${at}`,
+        },
+      ];
+    });
     return (
       <li key={comment.id} className="min-w-0">
         <SentThread
@@ -7087,6 +7369,14 @@ export const ReviewController = () => {
           onReply={(body) => void sendThreadReply(comment.id, body)}
           writeAvailability={writeAvailability}
           pushedOrigin={pushedOrigin}
+          onArmAutoAccept={
+            runtimeSession?.mode === "review"
+              ? () => setPendingAutoAcceptThreadId(comment.id)
+              : undefined
+          }
+          appliedSummaries={
+            appliedThreadIds.has(comment.id) ? appliedSummaries : []
+          }
         />
       </li>
     );
@@ -7298,7 +7588,7 @@ export const ReviewController = () => {
     });
   };
   const viewAgentRequest = (requestId: string, kind: string) => {
-    if (kind === "chat") {
+    if (kind === "chat" || kind === "approval") {
       openFeedbackSidebar("chat");
       return;
     }
@@ -7639,13 +7929,16 @@ export const ReviewController = () => {
               >
                 <Icon icon={MESSAGE_SQUARE_ICON} />
                 <span className="sr-only wide:not-sr-only">Feedback</span>
-                {unresolvedDrafts.length > 0 ? (
+                {unresolvedDrafts.length +
+                  (!isWide && pushArrivalEntry !== null && !isOpen ? 1 : 0) >
+                0 ? (
                   <Badge
                     size="compact"
                     tone="accent"
                     className="h-5 min-w-5 justify-center px-1 py-0 leading-none"
                   >
-                    {unresolvedDrafts.length}
+                    {unresolvedDrafts.length +
+                      (!isWide && pushArrivalEntry !== null && !isOpen ? 1 : 0)}
                   </Badge>
                 ) : null}
               </button>
@@ -7968,10 +8261,26 @@ export const ReviewController = () => {
                 isSending: isSendingChat,
                 hasExchanges: activeChatRequests.length > 0,
                 arrivalEntry: pushArrivalEntry,
+                mode: runtimeSession?.mode ?? "review",
+                ...(runtimeSession?.armedAtMs === undefined
+                  ? {}
+                  : {
+                      modeSince: new Date(
+                        runtimeSession.armedAtMs,
+                      ).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      }),
+                    }),
+                onSwitchToReview: () =>
+                  void changeReviewMode({ mode: "review" }),
                 exchanges: activeChatRequests.map(renderChatExchange),
-                pushedThreadCount: unresolvedPushedThreadComments.length,
+                pushedThreadCount: needsYouPushedThreadComments.length,
                 pushedThreads:
-                  unresolvedPushedThreadComments.map(renderPushedThread),
+                  needsYouPushedThreadComments.map(renderPushedThread),
+                appliedThreadCount: appliedPushedThreadComments.length,
+                appliedThreads:
+                  appliedPushedThreadComments.map(renderPushedThread),
                 resolvedPushedThreadCount: resolvedPushedThreadComments.length,
                 resolvedPushedThreads:
                   resolvedPushedThreadComments.map(renderPushedThread),
@@ -8375,6 +8684,31 @@ export const ReviewController = () => {
           inlineComposeHost,
         )
       )}
+      <AlertDialog
+        open={pendingAutoAcceptThreadId !== null}
+        title="Turn on auto-accept?"
+        description={(() => {
+          const openChanges = openChangesForThread(
+            pendingAutoAcceptThreadId ?? "",
+          );
+          return `${openChanges} open ${openChanges === 1 ? "change" : "changes"} in this pushed thread ${openChanges === 1 ? "is" : "are"} accepted immediately. Every change the agent pushes from now on is accepted the moment it arrives.`;
+        })()}
+        cancelLabel="Cancel"
+        actionLabel="Turn on auto-accept"
+        tone="neutral"
+        actionVariant="default"
+        pending={isChangingReviewMode}
+        footnote="The record will say the mode closed them, never that you read them. This lasts for this review session; a fresh session starts back in review, and you can switch back at any time."
+        onCancel={() => setPendingAutoAcceptThreadId(null)}
+        onAction={() =>
+          pendingAutoAcceptThreadId === null
+            ? undefined
+            : void changeReviewMode({
+                mode: "auto-accept",
+                threadId: pendingAutoAcceptThreadId,
+              })
+        }
+      />
       <AlertDialog
         open={pendingCompose !== null}
         title="Finish your draft comment?"

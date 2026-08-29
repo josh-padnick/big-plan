@@ -1060,7 +1060,12 @@ const pushRevisionFrom = async ({
 }: {
   readonly planPath: string;
   readonly prompt: string;
-}): Promise<{ readonly threadId: string; readonly revised: string }> => {
+}): Promise<{
+  readonly threadId: string;
+  readonly revised: string;
+  readonly agentToken: string;
+  readonly connectionToken: string;
+}> => {
   const opened = await runAgentCli(["push", planPath, "--prompt", prompt]);
   const requestId = agentIdOf(opened.stdout, "requestId");
   const threadId = agentIdOf(opened.stdout, "threadId");
@@ -1101,8 +1106,337 @@ const pushRevisionFrom = async ({
     "--connection",
     connectionToken,
   ]);
-  return { threadId, revised };
+  return { threadId, revised, agentToken, connectionToken };
 };
+
+const continueThreadWithRevision = async ({
+  planPath,
+  threadId,
+  prompt,
+  source,
+  before,
+  after,
+  agentToken,
+  connectionToken,
+}: {
+  readonly planPath: string;
+  readonly threadId: string;
+  readonly prompt: string;
+  readonly source: string;
+  readonly before: string;
+  readonly after: string;
+  readonly agentToken: string;
+  readonly connectionToken: string;
+}): Promise<string> => {
+  const opened = await runAgentCli([
+    "push",
+    planPath,
+    "--thread",
+    threadId,
+    "--prompt",
+    prompt,
+    "--agent",
+    agentToken,
+    "--connection",
+    connectionToken,
+  ]);
+  const requestId = agentIdOf(opened.stdout, "requestId");
+  const revised = source.replace(before, after);
+  await writeFile(candidatePlanOf(opened.stdout), revised, "utf8");
+  await writeFile(
+    responseDraftOf(opened.stdout),
+    JSON.stringify({
+      requestId,
+      outcomes: [
+        {
+          commentId: threadId,
+          state: "changed",
+          message: prompt,
+          changeTargets: ["section/delivery-boundary/paragraph-1"],
+        },
+      ],
+    }),
+    "utf8",
+  );
+  await runAgentCli([
+    "respond",
+    planPath,
+    responseDraftOf(opened.stdout),
+    "--agent",
+    agentToken,
+    "--connection",
+    connectionToken,
+  ]);
+  return revised;
+};
+
+test("should arm auto-accept from a pushed thread and apply it only to later arrivals", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-mode-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  let runtime = await startReviewRuntime({ planPath });
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(runtime.url);
+    const first = await pushRevisionFrom({
+      planPath,
+      prompt: "Prepare this thread for rapid authoring.",
+    });
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(rail).toBeVisible({ timeout: 15_000 });
+    const thread = rail.locator(
+      `[data-review-pushed-thread="${first.threadId}"]`,
+    );
+    await thread
+      .getByRole("button", { name: "Auto-accept all changes" })
+      .click();
+    const confirmation = page.getByRole("alertdialog", {
+      name: "Turn on auto-accept?",
+    });
+    await expect(confirmation).toContainText(
+      "open changes in this pushed thread are accepted immediately",
+    );
+    await expect(confirmation).toContainText(
+      "Every change the agent pushes from now on is accepted the moment it arrives",
+    );
+    await confirmation
+      .getByRole("button", { name: "Turn on auto-accept" })
+      .click();
+    await expect(rail.getByText(/Auto-accept · on since/u)).toBeVisible();
+    await expect(rail.getByText("Applied (1)")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const second = await continueThreadWithRevision({
+      planPath,
+      threadId: first.threadId,
+      prompt: "Make the applied follow-up explicit.",
+      source: first.revised,
+      before: "publishes the arriving candidate atomically",
+      after: "publishes the applied candidate atomically",
+      agentToken: first.agentToken,
+      connectionToken: first.connectionToken,
+    });
+    await expect(page.locator("article")).toContainText(
+      "publishes the applied candidate atomically",
+      { timeout: 15_000 },
+    );
+    await expect(rail.getByText("Applied (1)")).toBeVisible();
+    await expect(thread.getByText(/1 change ·/u)).toBeVisible();
+
+    await thread.getByRole("button", { name: /Expand pushed thread/u }).click();
+    const replyPosted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/agent-requests") &&
+        response.request().method() === "POST",
+    );
+    await thread.getByPlaceholder("Reply to the agent…").fill("Keep going.");
+    await thread.getByRole("button", { name: "Reply" }).click();
+    expect((await replyPosted).ok()).toBe(true);
+
+    const reply = await runAgentCli([
+      "next",
+      planPath,
+      "--wait",
+      "--agent",
+      first.agentToken,
+      "--connection",
+      first.connectionToken,
+    ]);
+    const replyRequestId = agentIdOf(reply.stdout, "requestId");
+    await writeFile(
+      responseDraftOf(reply.stdout),
+      JSON.stringify({
+        requestId: replyRequestId,
+        outcomes: [
+          {
+            commentId: first.threadId,
+            state: "answered",
+            message: "No additional revision was needed.",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await runAgentCli([
+      "respond",
+      planPath,
+      responseDraftOf(reply.stdout),
+      "--agent",
+      agentIdOf(reply.stdout, "agent_token"),
+      "--connection",
+      first.connectionToken,
+    ]);
+    await expect(rail.getByText("Needs you (1)")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(rail.getByText("Applied (1)")).toHaveCount(0);
+
+    await rail.getByRole("button", { name: "Switch back to review" }).click();
+    await expect(rail.getByText(/Auto-accept · on since/u)).toBeHidden();
+    const third = await continueThreadWithRevision({
+      planPath,
+      threadId: first.threadId,
+      prompt: "Return this arrival to review.",
+      source: second,
+      before: "publishes the applied candidate atomically",
+      after: "publishes the reviewed candidate atomically",
+      agentToken: first.agentToken,
+      connectionToken: first.connectionToken,
+    });
+    await expect(page.locator("article")).toContainText(
+      "publishes the reviewed candidate atomically",
+      { timeout: 15_000 },
+    );
+    await expect(rail.getByText("Needs you (1)")).toBeVisible();
+
+    await thread
+      .getByRole("button", { name: "Auto-accept all changes" })
+      .click();
+    await page
+      .getByRole("alertdialog", { name: "Turn on auto-accept?" })
+      .getByRole("button", { name: "Turn on auto-accept" })
+      .click();
+    await expect(rail.getByText(/Auto-accept · on since/u)).toBeVisible();
+
+    await closeReviewRuntime({ page, runtime });
+    runtime = await startReviewRuntime({ planPath });
+    await page.goto(runtime.url);
+    const feedbackButton = page.getByRole("button", {
+      name: /^Feedback(?: \d+)?$/u,
+    });
+    await expect(async () => {
+      await page.reload();
+      await expect(feedbackButton).toBeVisible();
+    }).toPass({ timeout: 15_000 });
+    await feedbackButton.click();
+    const restartedRail = page.getByRole("complementary", { name: "Feedback" });
+    await restartedRail.getByRole("tab", { name: "Chat" }).click();
+    await expect(
+      restartedRail.getByText(/Auto-accept · on since/u),
+    ).toHaveCount(0);
+    await expect(
+      restartedRail.getByRole("button", {
+        name: "Auto-accept all changes",
+      }),
+    ).toBeVisible();
+    await expect(restartedRail.getByText("Needs you (1)")).toBeVisible();
+    expect(third).toContain("reviewed candidate");
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should disable review-mode controls when writes are unavailable", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-live-push-mode-block-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  let authoritative = true;
+  let modeRequests = 0;
+
+  await page.route("**/api/session", async (route) => {
+    const response = await route.fetch();
+    const value: unknown = await response.json();
+    if (typeof value !== "object" || value === null) {
+      throw new Error("The session route did not return an object");
+    }
+    await route.fulfill({ response, json: { ...value, authoritative } });
+  });
+  page.on("request", (request) => {
+    if (
+      request.url().endsWith("/api/review-mode") &&
+      request.method() === "POST"
+    ) {
+      modeRequests += 1;
+    }
+  });
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(runtime.url);
+    const first = await pushRevisionFrom({
+      planPath,
+      prompt: "Prepare an unavailable-mode control probe.",
+    });
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const thread = rail.locator(
+      `[data-review-pushed-thread="${first.threadId}"]`,
+    );
+    const arm = thread.getByRole("button", {
+      name: "Auto-accept all changes",
+    });
+
+    authoritative = false;
+    await expect(arm).toBeDisabled({ timeout: 15_000 });
+    await expect(thread.getByText("Review session replaced")).toBeVisible();
+    await arm.evaluate((button: HTMLButtonElement) => button.click());
+    await expect.poll(() => modeRequests).toBe(0);
+
+    authoritative = true;
+    await expect(arm).toBeEnabled({ timeout: 15_000 });
+    await arm.click();
+    await page
+      .getByRole("alertdialog", { name: "Turn on auto-accept?" })
+      .getByRole("button", { name: "Turn on auto-accept" })
+      .click();
+    await expect.poll(() => modeRequests).toBe(1);
+    await expect(rail.getByText(/Auto-accept · on since/u)).toBeVisible();
+
+    authoritative = false;
+    const switchBack = rail.getByRole("button", {
+      name: "Switch back to review",
+    });
+    await expect(switchBack).toBeDisabled({ timeout: 15_000 });
+    await expect(
+      rail.getByText("Review session replaced").first(),
+    ).toBeVisible();
+    await switchBack.evaluate((button: HTMLButtonElement) => button.click());
+    await expect.poll(() => modeRequests).toBe(1);
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should badge a narrow arrival and open it after resizing wide", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-narrow-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.setViewportSize({ width: 700, height: 900 });
+    await page.goto(runtime.url);
+    await pushRevisionFrom({ planPath, prompt: "Arrive on a narrow screen." });
+    await expect(
+      page.getByRole("complementary", { name: "Feedback" }),
+    ).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }),
+    ).toContainText("1", { timeout: 15_000 });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(rail).toBeVisible();
+    await expect(rail.locator("[data-review-push-arrival]")).toBeVisible();
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("should open the rail, name the agent, and settle the changed blocks when a push arrives mid-read", async ({
   page,
