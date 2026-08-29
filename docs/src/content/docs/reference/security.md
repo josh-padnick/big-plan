@@ -73,7 +73,7 @@ Because arbitrary HTML is arbitrary script, `big-plan review` always renders the
 `big-plan review` starts a local server. Loopback is deliberately **not** treated as an authentication boundary — any page your browser happens to be showing can reach `127.0.0.1`, and any process running as you can too — so every request is authorised on its own merits:
 
 - The runtime binds explicitly to `127.0.0.1` on an ephemeral port. Never `0.0.0.0`, never a hostname. The saved-link service binds the same way on port `8790` by default; `BIG_PLAN_PORT` changes that port when the default collides with another local service.
-- A per-session token is minted at start and injected into the one document the runtime serves. Every API request must carry it, in a header, so it stays out of browser history, referrers, and server logs.
+- A per-plan review token is injected into the one document the runtime serves. Every API request must carry it, in a header, so it stays out of browser history, referrers, and server logs.
 - Requests whose `Host` header is not the runtime's or the local service's address are refused. That allow-list, not the socket address, is what defeats DNS rebinding.
 - No CORS allowance is ever sent, and a foreign `Origin` or a `Sec-Fetch-Site` other than `same-origin` is refused outright. CORS hides a response; it does not stop a write, so it is not the control here.
 - Routes and methods are a fixed allow-list. There is no general static-file route and no directory listing. The plan-picture route serves only supported picture types, requires the requested and real paths to stay inside the plan directory with no dot-prefixed segment, and enforces a size limit.
