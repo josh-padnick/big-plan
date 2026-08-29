@@ -501,11 +501,42 @@ ${items}
  * bar, responsive navigation when nav entries exist, and content region.
  * Returns markup plus the styles the caller packages into a page.
  */
+/**
+ * The approval a static export carries. A served review leaves this out: its
+ * island paints the stamp from the runtime, and a second copy in the markup
+ * would double the mark the moment the portal mounted.
+ */
+export type ApprovalDecoration = {
+  readonly at: string;
+  readonly pinnedSnapshot: string;
+};
+
+/*
+The mark itself. It is deliberately the same markup the review island portals
+into this slot (ApprovedStampMark in
+`src/review/browser/approve-dialog.browser.tsx`); the two are separated by the
+dependency tiers, not by intent, so a change to one belongs in both. Only an
+export reaches this path, so the slot is shown rather than left hidden for a
+script to reveal, and the title carries the two facts the export has no popover
+to explain: when it was approved, and which version that approval pinned.
+*/
+const renderApprovalStamp = (approval: ApprovalDecoration): string => {
+  const title = `Approved ${approval.at} · Version ${approval.pinnedSnapshot.slice(0, 7)}`;
+  return `<span aria-hidden="true" data-review-approval-stamp title="${escapeHtml(title)}">
+<span class="inline-flex rounded-md border-2 border-accent bg-paper p-0.5">
+<span class="inline-flex items-center justify-center rounded-sm border border-accent bg-transparent px-3 py-1">
+<span class="text-sm font-bold tracking-caps whitespace-nowrap text-accent uppercase" data-review-approval-stamp-type>Approved</span>
+</span>
+</span>
+</span>`;
+};
+
 export const renderShell = ({
   nav,
   title,
   contentIds,
   contentHtml,
+  approval,
   chrome = "document",
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
@@ -517,6 +548,11 @@ export const renderShell = ({
   readonly title: string;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
+  /**
+   * The approval a static export stamps into the page. Absent everywhere else,
+   * including an unapproved or stale export, which renders no mark at all.
+   */
+  readonly approval?: ApprovalDecoration;
   /**
    * How much of the bar this surface earns.
    *
@@ -546,7 +582,7 @@ ${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="relative min-w-0" id="${overviewId}">
-<span class="pointer-events-none absolute -top-10 left-0 z-10 -rotate-3" data-review-approval-page-stamp hidden></span>
+<span class="pointer-events-none absolute -top-10 left-0 z-10 -rotate-3" data-review-approval-page-stamp${approval === undefined ? " hidden" : ""}>${approval === undefined ? "" : renderApprovalStamp(approval)}</span>
 <article>
 ${contentHtml}
 </article>

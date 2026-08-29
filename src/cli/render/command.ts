@@ -7,6 +7,7 @@ import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { runDerivedOutputCommand } from "../_shared/derived-output-command.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 import { parseInputCommandArguments } from "../_shared/input-command.js";
+import { approvalDecorationFor } from "./approval-decoration.js";
 
 const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 
@@ -17,19 +18,29 @@ export const renderCommand = async (
   // A malformed invocation is diagnosed before the guidance prerequisite, so
   // usage errors never hide behind GUIDANCE_REQUIRED. The parser is pure, so
   // the shared workflow below re-parsing the same arguments cannot disagree.
-  parseInputCommandArguments({ args, usage: USAGE, maximumArguments: 2 });
+  parseInputCommandArguments({
+    args,
+    usage: USAGE,
+    maximumArguments: 2,
+  });
   const { warnings } = await requireGuidanceAcknowledgment();
   return runDerivedOutputCommand({
     args,
     usage: USAGE,
     outputSuffix: ".html",
     invalidDocumentMessage: "Cannot render document with invalid MDX",
-    derive: ({ markdown, fallbackTitle, inputPath }) =>
-      renderDocument({
+    derive: async ({ markdown, fallbackTitle, inputPath }) => {
+      const approval = await approvalDecorationFor({
+        planPath: inputPath,
+        markdown,
+      });
+      return renderDocument({
         markdown,
         fallbackTitle,
         planPath: inputPath,
-      }),
+        ...(approval === undefined ? {} : { approval }),
+      });
+    },
     // A document a human is asked to review must also pass authoring lint, so
     // a lint finding can never reach the reviewer through render.
     verify: assertPlanPassesLint,

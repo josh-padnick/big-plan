@@ -894,6 +894,9 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
         detailsBox.x + detailsBox.width - (approvedBox.x + approvedBox.width),
       ),
     ).toBeLessThan(2);
+    await expect(
+      details.locator("[data-review-approval-history-entry]"),
+    ).toHaveCount(1);
     await page.locator("[data-review-approval-details-close]").click();
 
     const stored: unknown = JSON.parse(
@@ -988,6 +991,33 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
       const status = agentSidebar(page);
       await expect(status).not.toContainText("Plan approved");
       await expect(status).not.toContainText("Approval acknowledged");
+    });
+
+    await test.step("re-approving leaves both approvals in the details history", async () => {
+      await page.getByRole("button", { name: "Plan approved" }).click();
+      const details = page.locator("[data-review-approval-details]");
+      await details.locator("[data-review-approve-revoke]").click();
+      await page.getByRole("button", { name: "Revoke", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Approve plan" }),
+      ).toBeVisible();
+
+      await page.getByRole("button", { name: "Approve plan" }).click();
+      const reapproved = page.waitForResponse((response) =>
+        response.url().endsWith("/api/approve"),
+      );
+      await page
+        .getByRole("alertdialog", { name: "Approve this plan?" })
+        .getByRole("button", { name: "Approve plan" })
+        .click();
+      expect((await reapproved).ok()).toBe(true);
+
+      await page.getByRole("button", { name: "Plan approved" }).click();
+      const entries = details.locator("[data-review-approval-history-entry]");
+      await expect(entries).toHaveCount(2);
+      await expect(
+        details.locator("[data-review-approval-history-revoked]"),
+      ).toHaveCount(1);
     });
   } finally {
     await closeReviewRuntime({ page, runtime });

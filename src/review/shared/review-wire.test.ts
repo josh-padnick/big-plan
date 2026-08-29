@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { PROGRESS_STEP_CODES } from "./progress-code.js";
 import {
   decodeAgentSnapshot,
+  decodeApprovalSummary,
   decodeChangeVerdicts,
   decodeCommittedChangeSets,
   decodeProgress,
@@ -38,6 +39,34 @@ const encodeSnapshot = (
 ) => encodeAgentSnapshot({ agents: [], ...value }, { nowMs });
 
 describe("review wire contract", () => {
+  it("should drop an approval history item when its revocation time is invalid", () => {
+    const summary = decodeApprovalSummary({
+      approvalId: "a".repeat(16),
+      at: "2026-08-19T17:41:00.000Z",
+      pinnedSnapshot: "b".repeat(16),
+      status: "approved",
+      message: "Approved.",
+      delivered: true,
+      history: [
+        {
+          approvalId: "a".repeat(16),
+          at: "2026-08-19T17:41:00.000Z",
+          pinnedSnapshot: "b".repeat(16),
+          revokedAt: "not-a-date",
+        },
+      ],
+      openItemCounts: {
+        changeSetsAccepted: 0,
+        changeSetsTotal: 0,
+        decisionsAnswered: 0,
+        decisionsTotal: 0,
+        requestsCanceled: 0,
+      },
+    });
+
+    expect(summary?.history).toEqual([]);
+  });
+
   it("should load reviewer state a runtime of another vintage stored", () => {
     const decoded = decodeReviewSnapshot({
       drafts: [
