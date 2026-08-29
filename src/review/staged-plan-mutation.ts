@@ -874,8 +874,7 @@ export const commitStagedPlanMutation = async ({
         claimedBy,
         now,
         publish: async () => {
-          const source =
-            approvalSource ?? (await readFile(planPath, "utf8"));
+          const source = approvalSource ?? (await readFile(planPath, "utf8"));
           const currentSnapshot = deriveSnapshotDigest(source);
           if (!publishes) {
             journal = {

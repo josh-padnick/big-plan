@@ -227,6 +227,7 @@ Choose a listed item to inspect it before approving, or choose **Edit in Setting
 Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message.
 It then writes one `approval` mailbox request whose `requestId` is the new approval id, carrying the absolute `planPath`, the pinned snapshot digest, the recorded answers, the unanswered decisions, and the covering message.
 It also writes a human-readable approval brief beside the review's feedback briefs, containing those same facts and the canonical-source check.
+If brief publication fails, approval reports the failure and retains its finalization record so a runtime restart can retry the brief and mailbox delivery.
 If that mailbox write fails, the approval remains recorded, the confirmation reports that it was not delivered, and the approval details keep showing the delivery failure.
 The agent is expected to re-read that exact path, verify its digest equals `pinnedSnapshot`, and acknowledge without editing the plan.
 A missing path, a missing file, or a digest mismatch is a hard stop: the agent reports it through the response as a `hardStop` and must not search for another copy.

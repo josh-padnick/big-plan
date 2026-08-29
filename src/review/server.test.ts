@@ -7133,7 +7133,7 @@ describe("review runtime approval", () => {
         });
         expect(canceled.status).toBe(409);
         await expect(canceled.json()).resolves.toMatchObject({
-          reason: "Revoke the approval to cancel its agent handoff",
+          error: "Revoke the approval to cancel its agent handoff",
         });
         const beforeRevoke = await readAgentExchange({
           store: target.store,
@@ -7274,18 +7274,18 @@ describe("review runtime approval", () => {
         const stderr = vi
           .spyOn(process.stderr, "write")
           .mockImplementation(() => true);
-        let approvalId = "";
-        try {
-          const approved = await approve(target, sessionToken, {
-            expectedSnapshot: digest,
-          });
-          ({ approvalId } = (await approved.json()) as {
-            readonly approvalId: string;
-          });
-        } finally {
-          stderr.mockRestore();
-          await chmod(target.store.agentRequestDirectory, 0o700);
-        }
+        const approvalId = await (async () => {
+          try {
+            const approved = await approve(target, sessionToken, {
+              expectedSnapshot: digest,
+            });
+            return ((await approved.json()) as { readonly approvalId: string })
+              .approvalId;
+          } finally {
+            stderr.mockRestore();
+            await chmod(target.store.agentRequestDirectory, 0o700);
+          }
+        })();
         const revoked = await callRuntime({
           target,
           sessionToken,
@@ -7322,23 +7322,26 @@ describe("review runtime approval", () => {
         const stderr = vi
           .spyOn(process.stderr, "write")
           .mockImplementation(() => true);
-        let approvalId = "";
-        let journal = "";
-        try {
-          const approved = await approve(target, sessionToken, {
-            expectedSnapshot: digest,
-          });
-          ({ approvalId } = (await approved.json()) as {
-            readonly approvalId: string;
-          });
-          journal = await readFile(
-            target.store.approvalFinalizationPath,
-            "utf8",
-          );
-        } finally {
-          stderr.mockRestore();
-          await chmod(target.store.agentRequestDirectory, 0o700);
-        }
+        const { approvalId, journal } = await (async () => {
+          try {
+            const approved = await approve(target, sessionToken, {
+              expectedSnapshot: digest,
+            });
+            const { approvalId } = (await approved.json()) as {
+              readonly approvalId: string;
+            };
+            return {
+              approvalId,
+              journal: await readFile(
+                target.store.approvalFinalizationPath,
+                "utf8",
+              ),
+            };
+          } finally {
+            stderr.mockRestore();
+            await chmod(target.store.agentRequestDirectory, 0o700);
+          }
+        })();
         await recoverApprovalFinalization({
           store: target.store,
           planPath: target.planPath,

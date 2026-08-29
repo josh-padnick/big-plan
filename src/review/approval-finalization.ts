@@ -19,10 +19,7 @@ import {
   cancelAgentRequest,
   writeAgentRequestWhen,
 } from "./request-mailbox.js";
-import {
-  inForceApproval,
-  type ApprovalRecord,
-} from "./shared/approval.js";
+import { inForceApproval, type ApprovalRecord } from "./shared/approval.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import {
   readApprovalRecord,
