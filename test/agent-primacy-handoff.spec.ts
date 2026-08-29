@@ -253,9 +253,12 @@ test("should offer to make a newcomer primary after the incumbent's closed claim
       '[data-review-agent-card="request"]',
     );
     await expect(requestCard).toBeVisible();
-    await expect(requestCard).toContainText(
-      "Claude Code - claude-opus-4-8 - …2e29",
-    );
+    await expect(
+      requestCard.locator('[data-review-agent-model="claude-opus-4-8"]'),
+    ).toHaveText("claude-opus-4-8·Claude Code");
+    await expect(
+      requestCard.locator('[data-review-agent-session-id="session-2e29"]'),
+    ).toHaveText("…2e29");
     await expect(
       requestCard.getByRole("button", { name: "Make it primary" }),
     ).toBeVisible();
