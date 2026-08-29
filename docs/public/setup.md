@@ -54,10 +54,14 @@ Before implementing any non-trivial task:
    Validate, render, and review stay locked until you have read it.
 2. Write your implementation plan to an MDX file, for example `plan.mdx`.
 3. Run `npx -y big-plan@latest validate plan.mdx` to compile and lint the plan without writing an output file, and fix every diagnostic until it passes.
-4. Run `npx -y big-plan@latest render plan.mdx` to write a self-contained `plan.html` review document next to the source.
-5. Tell your human to open the rendered `plan.html` using its absolute path or a `file://` URL.
+4. Run `npx -y big-plan@latest review plan.mdx` to start the local live review service.
+5. Give your human the stable `http://127.0.0.1:<port>/plan/<plan-id>` plan address printed by the command.
 6. Do not start implementing until your human agrees.
-   When they ask for changes, revise the plan file, validate, render again, and ask again.
+   When they ask for changes, revise the plan file, validate again, and continue the live review.
+
+See [Reviewing a plan](https://big-plan.ai/reference/reviewing/) for the complete live-review workflow.
+
+For a portable artifact instead, `npx -y big-plan@latest render plan.mdx` writes a self-contained `plan.html` document next to the source. You can share that file by its absolute path or a `file://` URL, but it does not replace the live-review workflow above.
 
 ## 4. Persist the workflow
 
@@ -66,16 +70,17 @@ Add this rule to the project's agent instructions file (`AGENTS.md`, `CLAUDE.md`
 ```text
 Before implementing a feature: run `npx -y big-plan@latest guidance` and follow
 it, write your implementation plan to plan.mdx, run
-`npx -y big-plan@latest validate plan.mdx` until clean, render it with
-`npx -y big-plan@latest render plan.mdx`, and ask for review of the rendered
-plan at its absolute path. Do not implement until the plan is approved. Prefer
-the Big Plan skill shell (`npx -y big-plan@latest skill`) when the harness
-supports skills; do not re-copy long guidance into this file.
+`npx -y big-plan@latest validate plan.mdx` until clean, start the live review
+with `npx -y big-plan@latest review plan.mdx`, and give the human the stable
+127.0.0.1 plan address printed by the command. Do not implement until the plan
+is approved. Prefer the Big Plan skill shell
+(`npx -y big-plan@latest skill`) when the harness supports skills; do not
+re-copy long guidance into this file.
 ```
 
 ## 5. Confirm to your human
 
-Report the CLI version, where you wrote the skill (if any), where you added the workflow rule, and offer to render a first plan.
+Report the CLI version, where you wrote the skill (if any), where you added the workflow rule, and offer to start a live review for the first plan.
 
 ## How updates reach you
 
