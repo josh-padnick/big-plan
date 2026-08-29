@@ -39,7 +39,7 @@ const encodeSnapshot = (
 ) => encodeAgentSnapshot({ agents: [], ...value }, { nowMs });
 
 describe("review wire contract", () => {
-  it("drops an approval history item with an invalid revocation time", () => {
+  it("should drop an approval history item when its revocation time is invalid", () => {
     const summary = decodeApprovalSummary({
       approvalId: "a".repeat(16),
       at: "2026-08-19T17:41:00.000Z",

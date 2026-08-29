@@ -97,7 +97,7 @@ describe("approval record", () => {
     expect(revoked.entries).toHaveLength(3);
   });
 
-  it("lists every approval newest first, marking the revoked ones", () => {
+  it("should list every approval newest first and mark revoked entries", () => {
     const first = approval();
     const second = approval({
       approvalId: "b2c3d4e5f6071819",
@@ -125,7 +125,7 @@ describe("approval record", () => {
     ]);
   });
 
-  it("ignores a revocation that appears before the approval it names", () => {
+  it("should ignore a revocation when it precedes the approval it names", () => {
     const entry = approval();
     expect(
       approvalHistory({
@@ -148,7 +148,7 @@ describe("approval record", () => {
     ]);
   });
 
-  it("carries the whole history on the summary of the approval in force", () => {
+  it("should carry the whole history when summarizing an in-force approval", () => {
     const first = approval();
     const record = appendApproval({
       record: appendRevocation({

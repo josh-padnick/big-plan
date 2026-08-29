@@ -66,13 +66,13 @@ afterEach(async () => {
 });
 
 describe("approvalDecorationFor", () => {
-  it("stamps nothing when no review store sits beside the plan", async () => {
+  it("should stamp nothing when no review store sits beside the plan", async () => {
     await expect(
       approvalDecorationFor({ planPath, markdown: PLAN }),
     ).resolves.toBeUndefined();
   });
 
-  it("stamps an approval pinned to the bytes being rendered", async () => {
+  it("should stamp an approval when it is pinned to the bytes being rendered", async () => {
     const pinnedSnapshot = deriveSnapshotDigest(PLAN);
     await writeRecord({ version: 1, entries: [entryPinning(pinnedSnapshot)] });
     await expect(
@@ -80,7 +80,7 @@ describe("approvalDecorationFor", () => {
     ).resolves.toEqual({ at: AT, pinnedSnapshot });
   });
 
-  it("stamps nothing when the plan changed after the approval", async () => {
+  it("should stamp nothing when the plan changed after the approval", async () => {
     await writeRecord({
       version: 1,
       entries: [entryPinning(deriveSnapshotDigest(PLAN))],
@@ -90,7 +90,7 @@ describe("approvalDecorationFor", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("stamps nothing once the approval is revoked", async () => {
+  it("should stamp nothing when the approval is revoked", async () => {
     await writeRecord({
       version: 1,
       entries: [
