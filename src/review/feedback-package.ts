@@ -35,7 +35,7 @@ const PREAMBLE = [
 
 // A blockquote cannot open an ATX heading, so a body stays a body however it
 // is written.
-const asQuotedBody = (body: string): string =>
+export const asQuotedBody = (body: string): string =>
   body
     .split("\n")
     .map((line) => `> ${line}`)

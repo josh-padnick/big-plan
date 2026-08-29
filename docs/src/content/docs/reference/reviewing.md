@@ -10,7 +10,7 @@ rendered blocks and hand the staged set to the agent.
 npx -y big-plan@latest review plans/checkout-retry.mdx
 ```
 
-The command prints a stable `http://127.0.0.1:8790/plan/<plan-id>` address and keeps running.
+By default, the command prints a stable `http://127.0.0.1:8790/plan/<plan-id>` address and keeps running.
 Open that address, review the plan, and stop the runtime with `Ctrl+C`.
 By default the review stays up until you stop it, so a link you were handed
 keeps working if you step away.
@@ -183,7 +183,7 @@ server-rendered article without client-rendering or gating the plan.
 
 An open decision card - a `Decision`, a `QuickDecision`, or a `DecisionAnalysis` with `interaction="choose"` - can be answered during a live review.
 A confirmed choice is saved with the review: it survives reload and runtime restarts, so the answer is still there when you come back to the page, and it stays saved until you change or clear it.
-The answer stays inside the review session until approval records it for the later agent handoff; tell the agent through the feedback flow when you want it acted on before then.
+The answer stays inside the review session until approval records it and sends it to the agent; tell the agent through the feedback flow when you want it acted on before then.
 The card's caption always states what is true right now: saving, saved with this review, or noted for this reading session only.
 If a save fails, the card says the answer is not saved yet and retries automatically; keep the page open until it reports the answer saved.
 
@@ -224,12 +224,24 @@ A standalone rendered document has no Inputs tab: the contract is derived by the
 Its confirmation dialog reports accepted and open change sets, answered and unanswered decisions, in-flight agent work, and the covering message from **Settings**.
 Choose a listed item to inspect it before approving, or choose **Edit in Settings** to close the confirmation and open the **Approval message** page.
 
-Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message for the later agent handoff.
+Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message.
+It then writes one `approval` mailbox request whose `requestId` is the new approval id, carrying the absolute `planPath`, the pinned snapshot digest, the recorded answers, the unanswered decisions, and the covering message.
+It also writes a human-readable approval brief beside the review's feedback briefs, containing those same facts and the canonical-source check.
+If brief publication fails, approval reports the failure and retains its finalization record so a runtime restart can retry the brief and mailbox delivery.
+If that mailbox write fails, the approval remains recorded, the confirmation reports that it was not delivered, and the approval details keep showing the delivery failure.
+The agent is expected to re-read that exact path, verify its digest equals `pinnedSnapshot`, and acknowledge without editing the plan.
+A missing path, a missing file, or a digest mismatch is a hard stop: the agent reports it through the response as a `hardStop` and must not search for another copy.
+A reported hard stop is not an acknowledgment: the review records it as a failed step, and the Chat thread names it.
+An acknowledgment whose result digest does not match the pinned snapshot is refused.
+Revoking an approval that the agent has not yet answered cancels that still-open request.
+
 Every critical decision must be answered first; non-critical decisions may remain unanswered and are recorded that way.
 The approval is refused if the plan changes while the confirmation is open, so the record never silently covers a different revision.
 
-After approval, the branding-bar control reads **Plan approved**, and an approval stamp appears just above the document title in the reading column.
+After approval, the branding-bar control reads **Plan approved**, and a persistent approval stamp appears above the document title without moving the title or contents.
 Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
+The plan-wide Chat thread shows **Plan approved**, followed by **Approval acknowledged** after a successful acknowledgment or a warning when the agent reports a hard stop.
+When no agent is connected, the **Plan approved** entry instead says the approval was recorded but there was no agent to notify; the mailbox request remains waiting for the next agent.
 Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.
 If the plan source changes while an approval remains in force, the bar reports **Changed since approval** and offers **Re-approve** for the plan as it now reads.
 
@@ -463,10 +475,10 @@ Loopback is not an authentication boundary.
 The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
 It checks the `Host` header on every request and refuses any value outside a short allow-list: its own address and the review-link service's, so the service hop can reach it while a rebound name still cannot.
 
-The service that answers saved links is a separate process on its own fixed loopback port, holding no review content. It forwards requests to this runtime by default, while `BIG_PLAN_PROXY=0` restores the redirect, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
+The service that answers saved links is a separate process on its own stable loopback port, holding no review content. It forwards requests to this runtime by default, while `BIG_PLAN_PROXY=0` restores the redirect, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
 [The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
 
-Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:
+Three types of read-only GET request do not use the review token, `Origin`, or `Sec-Fetch-Site` checks:
 
 - the document route `/`, which renders the selected MDX instead of serving arbitrary HTML;
 - plan-picture requests, which accept only supported picture file types; and
@@ -481,7 +493,7 @@ The attacker can then make the plan-picture route open a file outside the plan d
 The runtime accepts this limit because the attacker already has access to the reviewer's local files, and the server listens only on loopback.
 For a stored review-image request, the metadata and picture must be regular files and must stay inside their explicit size limits.
 
-All API routes require the per-session token in a request header.
+All API routes require the review token in a request header.
 They refuse a foreign `Origin` or a cross-site request.
 The runtime also validates every agent response against its pending request and the computed snapshot diff.
 It keeps requests, responses, heartbeats, and source snapshots in the owner-only ignored review store.

@@ -60,7 +60,7 @@ Rendered and compiled output sit next to the input by default, while the MDX fil
 See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
 MermaidDiagram rendering additionally uses the pinned headless Chromium renderer at compile time; on a clean install, provision it once with `bunx playwright@1.61.1 install chromium`.
 A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog holds saved appearance, colour-theme, and approval-message pages. Standalone documents open it from the gear; live reviews open it from **More actions**, alongside Markdown export.
-In a live authoritative review, **Approve plan** records the current plan, its decision answers, and that message for the later agent handoff; [Reviewing a plan](docs/src/content/docs/reference/reviewing.md#approving-a-plan) owns the complete workflow.
+In a live authoritative review, **Approve plan** records the current plan, its decision answers, and that message, then sends them to the agent as an `approval` mailbox request; [Reviewing a plan](docs/src/content/docs/reference/reviewing.md#approving-a-plan) owns the complete workflow.
 
 Plans are prose plus validated components, like this callout:
 
@@ -144,6 +144,11 @@ bun run build
 ```
 
 After building the root package, regenerate the docs' light/dark component screenshot pairs from `docs/` with `bun run screenshots`.
+
+## Security
+
+To report a vulnerability, follow [SECURITY.md](SECURITY.md).
+The full policy and Big Plan's security model are on the [security page](https://big-plan.ai/reference/security/).
 
 ## License
 

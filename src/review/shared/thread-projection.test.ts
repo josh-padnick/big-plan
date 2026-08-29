@@ -1262,6 +1262,36 @@ describe("review-wide agent status", () => {
     ).toBe("working");
   });
 
+  // The review-wide pill speaks for the same answer the thread does, so a
+  // refusal must not read as an acknowledgment there just because the step that
+  // narrates it never landed or has aged out of the progress window.
+  it("should not call a refused approval acknowledged on the review-wide pill", () => {
+    const refused = answeredRequest({
+      kind: "approval",
+      commentIds: undefined,
+      commentId: undefined,
+    });
+    const status = projectLatestAgentStatus({
+      ...base,
+      requests: [refused],
+      responses: [
+        {
+          requestId: refused.requestId,
+          resultSnapshot: "2222222222222222",
+          createdAt: "2026-08-10T19:02:00Z",
+          kind: "approval",
+          hardStop: "The plan no longer matches the pinned snapshot.",
+        },
+      ],
+      progressEvents: [],
+    });
+    expect(status).toMatchObject({
+      stage: "failed",
+      detail: "The plan no longer matches the pinned snapshot.",
+    });
+    expect(status.headline).not.toBe("Approval acknowledged");
+  });
+
   it("should ignore a reviewer queue event when timing agent silence", () => {
     const queued = request({ claimedAt: undefined });
     expect(
@@ -1317,5 +1347,61 @@ describe("the threads a batch header still speaks for", () => {
 
   it("should release a thread it knows nothing about", () => {
     expect(awaiting(["unprojected0000"])).toEqual([]);
+  });
+
+  // The step that narrates a refusal is written best-effort after the answer
+  // commits, so the answer itself has to be able to say it refused.
+  it("should read a refused approval from the answer when its step is lost", () => {
+    const request = answeredRequest({
+      kind: "approval",
+      commentIds: undefined,
+      commentId: undefined,
+    });
+    const status = statusForOneRequest({
+      request,
+      response: {
+        requestId: request.requestId,
+        resultSnapshot: "2222222222222222",
+        createdAt: "2026-08-10T19:02:00Z",
+        kind: "approval",
+        hardStop: "The plan no longer matches the pinned snapshot.",
+      },
+      progressEvents: [],
+      presence,
+      runtime: "online",
+      surface: "chat",
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set(),
+    });
+    expect(status).toMatchObject({
+      stage: "failed",
+      detail: "The plan no longer matches the pinned snapshot.",
+    });
+    expect(status.headline).not.toBe("Approval acknowledged");
+  });
+
+  it("should not offer a response to review when an approval is acknowledged", () => {
+    // An acknowledgment publishes nothing and opens no thread, so the settled
+    // reading for a question would point the reviewer at neither.
+    expect(
+      statusForOneRequest({
+        request: answeredRequest({
+          kind: "approval",
+          commentIds: undefined,
+          commentId: undefined,
+        }),
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        surface: "chat",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({
+      stage: "answered",
+      headline: "Approval acknowledged",
+      detail:
+        "The agent has the approved plan and the decisions recorded with it.",
+    });
   });
 });

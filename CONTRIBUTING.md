@@ -12,6 +12,8 @@ The workflow is intentionally light:
 - **Feature branches.** Branch off `main` and open a pull request back into `main`.
 - **Small PRs.** Keep pull requests small and reviewable; prefer several self-contained increments over one large change.
 - **Checks.** Run `bun run lint`, `bun run build`, `bun run test`, and `bun run test:e2e` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
+  Browser tests get one retry in CI and none locally, because the self-hosted runner is one machine and contention alone can time a good tree out.
+  A retried test is not a green test: the run reports every retried attempt and its flaky count, and a spec that turns up there is owed a fix, not a second attempt.
 - **Merge gates.** A pull request merges only once its review is triaged and its validation is attested, both stated in comments that CI checks. See [Merge gates](#merge-gates).
 - **License.** Big Plan is [FSL-1.1-MIT](LICENSE.md) licensed; contributions are accepted under the same license.
 
@@ -161,6 +163,12 @@ Add a trailing `head <sha>` to scope it to one commit instead, and a later push 
 
 A gate re-runs by itself whenever the pull request changes: a push, a review, an inline comment, or a conversation comment, including an edited or deleted one.
 Writing the missing comment is therefore enough to turn a gate green; no push is needed.
+
+GitHub's pull-request check rollup can briefly retain the previous conclusion
+after the gate updates an existing check run. When the rollup and the check's
+detail page disagree, read the check run through the Checks API; its conclusion
+and output are the authoritative current verdict. Do not change or re-run the
+gate merely to refresh the rollup cache.
 
 One exception: a pull request from a fork.
 The events that carry a push, a review, or an inline comment run the pull request's own copy of the gate, and running fork-authored code on the self-hosted runner is what the policy at the top of `.github/workflows/ci.yml` forbids.

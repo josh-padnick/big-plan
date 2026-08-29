@@ -102,7 +102,7 @@ export type AgentRequest = TerminalAgentRequest & {
   readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat" | "push";
+  readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
   readonly body?: string;
   readonly commentId?: string;
   readonly commentIds: ReadonlyArray<string>;
@@ -115,9 +115,16 @@ export type AgentResponse = {
   readonly requestId: string;
   readonly resultSnapshot: string;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat" | "push";
+  readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
   readonly outcomes: ReadonlyArray<AgentOutcome>;
   readonly message?: string;
+  readonly summary?: string;
+  /**
+   * Present exactly when an approval answer refused to acknowledge. The status
+   * projection reads it as the refusal itself, so it is declared here rather
+   * than left to survive on the decoder's structural fit alone.
+   */
+  readonly hardStop?: string;
 };
 
 export type AgentPresence = {
@@ -359,9 +366,26 @@ export const encodeAgentRequests = (
   requests: ReadonlyArray<unknown>,
 ): ReadonlyArray<unknown> =>
   requests.map((request) => {
-    if (!isReviewWireRecord(request) || !Array.isArray(request.comments)) {
-      return request;
+    if (!isReviewWireRecord(request)) return request;
+    /*
+    An approval carries the canonical-source contract the agent has to satisfy:
+    the reviewer's absolute plan path, the digest to verify it against, and the
+    decisions recorded with it. Reading that contract is the agent's job and
+    checking it is the server's, and the browser projection keeps none of it -
+    so the page is not handed the reviewer's filesystem path on every poll to
+    render the covering message it does keep.
+    */
+    if (request.kind === "approval") {
+      const {
+        planPath: _planPath,
+        pinnedSnapshot: _pinnedSnapshot,
+        recordedAnswers: _recordedAnswers,
+        unansweredDecisions: _unansweredDecisions,
+        ...browserSafe
+      } = request;
+      return browserSafe;
     }
+    if (!Array.isArray(request.comments)) return request;
     return {
       ...request,
       comments: request.comments.map((comment) =>
@@ -661,6 +685,7 @@ export const decodeApprovalSummary = (
     !SNAPSHOT_DIGEST.test(value.pinnedSnapshot) ||
     (value.status !== "approved" && value.status !== "stale") ||
     typeof value.message !== "string" ||
+    typeof value.delivered !== "boolean" ||
     !isReviewWireRecord(value.openItemCounts)
   ) {
     return undefined;
@@ -681,6 +706,7 @@ export const decodeApprovalSummary = (
     pinnedSnapshot: value.pinnedSnapshot,
     status: value.status,
     message: value.message,
+    delivered: value.delivered,
     openItemCounts: {
       changeSetsAccepted: counts.changeSetsAccepted,
       changeSetsTotal: counts.changeSetsTotal,
@@ -733,7 +759,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           (request.kind !== "feedback" &&
             request.kind !== "reply" &&
             request.kind !== "chat" &&
-            request.kind !== "push") ||
+            request.kind !== "push" &&
+            request.kind !== "approval") ||
           (request.kind === "push" &&
             ((request.origin !== "prompt" && request.origin !== "about") ||
               typeof request.body !== "string" ||
@@ -811,7 +838,11 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
               : {}),
             ...(answeredAt === undefined ? {} : { answeredAt }),
             ...(canceledAt === undefined ? {} : { canceledAt }),
-            ...(typeof request.body === "string" ? { body: request.body } : {}),
+            ...(typeof request.body === "string"
+              ? { body: request.body }
+              : typeof request.message === "string"
+                ? { body: request.message }
+                : {}),
             ...(typeof request.commentId === "string"
               ? { commentId: request.commentId }
               : {}),
@@ -858,7 +889,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           (response.kind !== "feedback" &&
             response.kind !== "reply" &&
             response.kind !== "chat" &&
-            response.kind !== "push")
+            response.kind !== "push" &&
+            response.kind !== "approval")
         ) {
           return [];
         }
@@ -905,6 +937,12 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
             outcomes,
             ...(typeof response.message === "string"
               ? { message: response.message }
+              : {}),
+            ...(typeof response.summary === "string"
+              ? { summary: response.summary }
+              : {}),
+            ...(typeof response.hardStop === "string"
+              ? { hardStop: response.hardStop }
               : {}),
           },
         ];
