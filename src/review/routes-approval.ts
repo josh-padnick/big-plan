@@ -1,15 +1,25 @@
-// The routes that finalize a review: approve pins the plan as it reads now,
-// delivers the approval to the agent mailbox, and revoke cancels both the
-// approval still in force and a still-unresponded handoff.
+// The routes that finalize a review: approve records the reviewer's answers
+// into the plan source, pins the revision it just wrote, delivers the approval
+// to the agent mailbox, and revoke cancels both the approval still in force and
+// a still-unresponded handoff.
 //
-// Stamping decided attributes into the source belongs to a later increment.
-// This increment finalizes accepted changes, leftover work, the approval
-// record, and the agent handoff through one recoverable commit plus the
-// mailbox write that follows it. The browser never writes the log itself.
+// Approve pins the stamped revision rather than the one the reviewer was
+// reading. Pinning the pre-stamp digest would have the approval go stale
+// against the very write Big Plan made on the reviewer's behalf: the reviewer
+// would press Approve and watch the plan report itself changed a moment later.
+// So the stamp is computed first, proved to render, lint, and recompile as
+// decided, and only then does one recoverable commit publish it, the accepted
+// changes, the approval record, and the agent handoff. The browser never
+// writes the log itself.
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { renderDocument } from "../render/render-document.js";
+import {
+  DecisionStampRejected,
+  stampDecisions,
+} from "../render/stamp-decisions.js";
+import { lintPlan } from "../lint/lint-plan.js";
 import { jsonResponse, payloadOf, refusal } from "./review-route-context.js";
 import type {
   ReviewRouteContext,
@@ -66,6 +76,7 @@ import {
   changeSetsFromExchange,
   deriveOpenItems,
 } from "./shared/open-items.js";
+import { readCommittedChangeSets } from "./change-set-commit.js";
 import {
   commitApprovalFinalization,
   type ApprovalFinalization,
@@ -178,20 +189,29 @@ const changeSetsAtApproval = async (
     planId: context.planId,
   });
   const placeIdsByRevision = new Map<string, ReadonlyArray<string>>();
-  const requests = new Map(
-    exchange.requests.map((request) => [request.requestId, request]),
-  );
   const fallbackTitle = basename(
     context.resolvedPlanPath,
     extname(context.resolvedPlanPath),
   );
-  for (const response of exchange.responses) {
-    if (response.kind === "approval") continue;
-    const request = requests.get(response.requestId);
-    if (request === undefined) continue;
-    const from = request.baselineSnapshot ?? request.premiseSnapshot;
-    const to = response.resultSnapshot;
-    if (from === to) continue;
+  // Approval closes the sets the reviewer was shown, so it counts them the
+  // same way the review surface does: one folded set per thread, whose places
+  // are the ones its baseline-to-now diff actually has. An approval response
+  // is the decision that closes those sets rather than a change inside one, so
+  // it never contributes a set of its own.
+  const committedChangeSetIds = new Set(
+    (await readCommittedChangeSets({ store: context.store })).map(
+      (changeSet) => changeSet.changeSetId,
+    ),
+  );
+  const folded = changeSetsFromExchange({
+    requests: exchange.requests,
+    responses: exchange.responses.filter(
+      (response) => response.kind !== "approval",
+    ),
+    placeIdsByRevision: new Map(),
+    committedChangeSetIds,
+  });
+  for (const { from, to } of folded) {
     const [beforeSource, afterSource] = await Promise.all([
       readSnapshot({ store: context.store, snapshot: from }),
       readSnapshot({ store: context.store, snapshot: to }),
@@ -217,11 +237,10 @@ const changeSetsAtApproval = async (
       diff.places.map((place) => place.placeId),
     );
   }
-  return changeSetsFromExchange({
-    requests: exchange.requests,
-    responses: exchange.responses,
-    placeIdsByRevision,
-  });
+  return folded.map((changeSet) => ({
+    ...changeSet,
+    placeIds: placeIdsByRevision.get(`${changeSet.from}:${changeSet.to}`) ?? [],
+  }));
 };
 
 const acceptChangeSets = async ({
@@ -271,32 +290,30 @@ const acceptChangeSets = async ({
   };
 };
 
-const buildApprovalEntry = async ({
-  context,
-  pinnedSnapshot,
-  message,
-  agentConnected,
-  requestsCanceled,
-  changeSetsAccepted,
-  changeSetsTotal,
-}: {
-  readonly context: ReviewRouteContext;
-  readonly pinnedSnapshot: string;
-  readonly message: string;
-  readonly agentConnected: boolean;
-  readonly requestsCanceled: number;
-  readonly changeSetsAccepted: number;
-  readonly changeSetsTotal: number;
-}): Promise<ApprovalEntry> => {
+/**
+ * What the reviewer has settled, read once. The stamp and the approval entry
+ * are two views of the same answers, so they are computed from one reading:
+ * anything the entry says is recorded is a pair of attributes the stamp puts
+ * in the file, and an unanswered decision stays unanswered in both.
+ */
+type ApprovalAnswers = {
+  readonly recorded: ReadonlyArray<{
+    readonly decisionId: string;
+    readonly optionId: string;
+    readonly optionTitle: string;
+  }>;
+  readonly contract: ReturnType<typeof reviewInputs>;
+  readonly unanswered: ReadonlyArray<string>;
+};
+
+const readApprovalAnswers = async (
+  context: ReviewRouteContext,
+): Promise<ApprovalAnswers> => {
   const [inventory, inputs] = await Promise.all([
     context.decisionAnswers.inventory(),
     context.decisionAnswers.read(),
   ]);
-  const live = currentAnswers({ inputs, inventory });
   const contract = reviewInputs({ inventory, inputs });
-  const unanswered = contract
-    .filter((input) => input.state !== "answered")
-    .map((input) => input.inputId);
   const blocking = contract
     .filter((input) => input.isCritical && input.state !== "answered")
     .map((input) => input.inputId);
@@ -304,28 +321,98 @@ const buildApprovalEntry = async ({
     throw new CriticalDecisionsOpen(blocking);
   }
   return {
-    kind: "approval",
-    approvalId: randomId(),
-    at: new Date().toISOString(),
-    pinnedSnapshot,
-    agentConnected,
-    message,
-    recordedAnswers: live.map((answer) => ({
+    recorded: currentAnswers({ inputs, inventory }).map((answer) => ({
       decisionId: answer.decisionId,
       optionId: answer.optionId,
       optionTitle: answer.optionTitle,
     })),
-    alreadyDecided: [],
-    unansweredDecisions: unanswered,
-    openItemCounts: {
-      changeSetsAccepted,
-      changeSetsTotal,
-      decisionsAnswered: contract.filter((input) => input.state === "answered")
-        .length,
-      decisionsTotal: contract.length,
-      requestsCanceled,
-    },
+    contract,
+    unanswered: contract
+      .filter((input) => input.state !== "answered")
+      .map((input) => input.inputId),
   };
+};
+
+const buildApprovalEntry = ({
+  answers,
+  pinnedSnapshot,
+  message,
+  agentConnected,
+  requestsCanceled,
+  changeSetsAccepted,
+  changeSetsTotal,
+}: {
+  readonly answers: ApprovalAnswers;
+  readonly pinnedSnapshot: string;
+  readonly message: string;
+  readonly agentConnected: boolean;
+  readonly requestsCanceled: number;
+  readonly changeSetsAccepted: number;
+  readonly changeSetsTotal: number;
+}): ApprovalEntry => ({
+  kind: "approval",
+  approvalId: randomId(),
+  at: new Date().toISOString(),
+  pinnedSnapshot,
+  agentConnected,
+  message,
+  recordedAnswers: answers.recorded,
+  alreadyDecided: [],
+  unansweredDecisions: answers.unanswered,
+  openItemCounts: {
+    changeSetsAccepted,
+    changeSetsTotal,
+    decisionsAnswered: answers.contract.filter(
+      (input) => input.state === "answered",
+    ).length,
+    decisionsTotal: answers.contract.length,
+    requestsCanceled,
+  },
+});
+
+/**
+ * Writes the reviewer's answers into the plan source and proves the result is
+ * still a plan.
+ *
+ * The proof is the point. Stamping edits a document nobody asked Big Plan to
+ * edit, so bytes that no longer render, that a lint rule now rejects, or that
+ * read back as anything other than the option the reviewer picked must never
+ * reach the file - a reviewer who approved a plan would find one they cannot
+ * open. Lint is compared against the source it started from rather than
+ * required to be empty, because a finding the author already had is not one
+ * this write introduced and is not this write's to refuse.
+ */
+const stampApprovedAnswers = ({
+  source,
+  answers,
+  fallbackTitle,
+}: {
+  readonly source: string;
+  readonly answers: ApprovalAnswers;
+  readonly fallbackTitle: string;
+}): string => {
+  const { stamped } = stampDecisions({
+    markdown: source,
+    answers: answers.recorded.map((answer) => ({
+      decisionId: answer.decisionId,
+      optionTitle: answer.optionTitle,
+    })),
+  });
+  if (stamped === source) return stamped;
+  renderDocument({ markdown: stamped, fallbackTitle, identity: {} });
+  const before = lintPlan({ markdown: source }).length;
+  const after = lintPlan({ markdown: stamped });
+  if (after.length > before) {
+    throw new DecisionStampRejected(
+      `Recording the answers would leave the plan failing authoring lint: ${after
+        .map(
+          ({ ruleId, line, column, message }) =>
+            `${line}:${column} [${ruleId}] ${message}`,
+        )
+        .join("; ")}`,
+    );
+  }
+  return stamped;
 };
 
 class CriticalDecisionsOpen extends Error {
@@ -349,10 +436,10 @@ export const readApprovalState = async (
 };
 
 /**
- * Finalizes the review against the source as it reads right now. Stamping
- * decided attributes into the source is a later increment; this accepts
- * reviewed changes, cancels leftover work, publishes the derived approved
- * state, and writes the agent handoff.
+ * Finalizes the review against the source as it reads right now: records the
+ * reviewer's answers into it as decided decisions, accepts reviewed changes,
+ * cancels leftover work, publishes the derived approved state against the
+ * revision it just wrote, and writes the agent handoff.
  */
 export const approvePlan = async (
   context: ReviewRouteContext,
@@ -407,6 +494,7 @@ export const approvePlan = async (
 
   let entry: ApprovalEntry;
   let verdicts: StoredChangeVerdicts;
+  let stampedSource: string;
   let agentConnected = false;
   try {
     agentConnected = (
@@ -422,20 +510,25 @@ export const approvePlan = async (
     });
   }
   try {
-    const [inventory, inputs] = await Promise.all([
-      context.decisionAnswers.inventory(),
-      context.decisionAnswers.read(),
-    ]);
-    const contract = reviewInputs({ inventory, inputs });
+    const answers = await readApprovalAnswers(context);
     const changeSets = await acceptChangeSets({
       context,
-      inputs: contract,
+      inputs: answers.contract,
       requestIds,
     });
     verdicts = changeSets.verdicts;
-    entry = await buildApprovalEntry({
-      context,
-      pinnedSnapshot: settledSource.digest,
+    stampedSource = stampApprovedAnswers({
+      source: settledSource.source,
+      answers,
+      fallbackTitle: basename(
+        context.resolvedPlanPath,
+        extname(context.resolvedPlanPath),
+      ),
+    });
+    entry = buildApprovalEntry({
+      answers,
+      // The approval pins what it wrote, not what the reviewer was reading.
+      pinnedSnapshot: deriveSnapshotDigest(stampedSource),
       message,
       agentConnected,
       requestsCanceled: 0,
@@ -451,6 +544,16 @@ export const approvePlan = async (
           code: "critical-unanswered",
           blockingDecisionIds: error.blockingDecisionIds,
         },
+      });
+    }
+    // An answer that no longer fits the source it was given against - the
+    // option renamed, the decision settled or dropped - is the reviewer's to
+    // resolve by re-reading the plan, not something to stamp a guess for.
+    if (error instanceof DecisionStampRejected) {
+      return refusal({
+        status: 409,
+        reason: `The answers could not be recorded in the plan: ${error.message}`,
+        code: "plan-changed",
       });
     }
     throw error;
@@ -485,13 +588,13 @@ export const approvePlan = async (
   const next = appendApproval({ record: current, entry });
   await writeSnapshot({
     store: context.store,
-    snapshot: settledSource.digest,
-    source: settledSource.source,
+    snapshot: entry.pinnedSnapshot,
+    source: stampedSource,
   });
   const canceledAt = new Date().toISOString();
   const finalization: ApprovalFinalization = {
     version: 1,
-    expectedSnapshot: settledSource.digest,
+    expectedSnapshot: entry.pinnedSnapshot,
     canceledAt,
     requestIds,
     approval: next,
@@ -510,6 +613,16 @@ export const approvePlan = async (
       store: context.store,
       planPath: context.resolvedPlanPath,
       finalization,
+      // Publishing the stamp inside the commit's own hold of the plan mutation
+      // lock is what keeps the approval from going stale against itself.
+      ...(stampedSource === settledSource.source
+        ? {}
+        : {
+            stamp: {
+              baseSnapshot: settledSource.digest,
+              source: stampedSource,
+            },
+          }),
     });
   } catch (error: unknown) {
     if (
@@ -525,7 +638,9 @@ export const approvePlan = async (
     throw error;
   }
   const { canceledRequestIds, delivered } = finalizationResult;
-  context.readerProgress.accept(settledSource.digest);
+  // Moves the reader onto the revision approval just wrote, so the browser
+  // swaps in the decided rendering without the reviewer reloading the page.
+  context.readerProgress.accept(entry.pinnedSnapshot);
   for (const requestId of canceledRequestIds) {
     await emitProgress({
       context,
@@ -534,7 +649,7 @@ export const approvePlan = async (
       requestId,
     });
   }
-  const summary = await loadSummary(context, settledSource.digest);
+  const summary = await loadSummary(context, entry.pinnedSnapshot);
   return jsonResponse({
     status: 200,
     value: {

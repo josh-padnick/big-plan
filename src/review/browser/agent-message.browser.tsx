@@ -3,7 +3,13 @@
 // island. The Markdown walkers a body renders through are owned by
 // message-markdown-view.browser.tsx so every renderer shares one.
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
@@ -32,6 +38,7 @@ import {
   renderReviewerNode,
 } from "./message-markdown-view.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
+import { advancedTourPlaceId, tourIsBehind } from "./tour-advance.js";
 import { Badge, Button, Tooltip, WorkingMark } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
@@ -131,6 +138,30 @@ export const MessageTurn = ({
     </div>
   );
 };
+
+/*
+The thread's proposed plan changes, in a bubble of their own.
+
+A change set is what the reviewer decides on, so it is not a footnote on the
+sentence that announced it: it gets the same standing as a turn in the
+conversation, directly under the reply that produced it, and it keeps that
+standing however long the reply above it is.
+*/
+export const ProposedChangesTurn = ({
+  children,
+}: {
+  readonly children?: ReactNode;
+}) => (
+  <div
+    className={`${THREAD_BASE} ${ROLE_CLASSES.agent}`}
+    data-review-proposed-changes=""
+  >
+    <div className="flex items-center gap-1.5 text-2xs text-muted">
+      <strong className="text-2xs text-ink">Proposed changes</strong>
+    </div>
+    {children}
+  </div>
+);
 
 /** Keeps a collapsed reviewer message visually continuous with its full turn. */
 export const ReviewerMessagePreview = ({
@@ -446,6 +477,7 @@ export const AgentChangeIdentity = ({
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
   diff,
+  changeSetId,
   agentIdentity,
   placeIds,
   spilloverCount,
@@ -460,6 +492,8 @@ export const AgentChangeDigest = ({
   onKeepChatting,
 }: {
   readonly diff: SnapshotDiff | null;
+  /** The thread that owns this change set, where the set has one. */
+  readonly changeSetId?: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly placeIds?: ReadonlyArray<string>;
   readonly spilloverCount?: number;
@@ -478,6 +512,7 @@ export const AgentChangeDigest = ({
 }) => {
   const {
     activeDiff,
+    activeChangeSetId,
     activePlaceId,
     canRecordAcceptance,
     isPlaceAccepted,
@@ -494,6 +529,53 @@ export const AgentChangeDigest = ({
         : diff.places.filter((place) => placeIds.includes(place.placeId));
   const [expandedChoice, setExpandedChoice] = useState<boolean | null>(null);
   const isExpanded = expandedChoice ?? available.length <= 3;
+  const placeIdsInTour = available.map((place) => place.placeId);
+  const isBehind = tourIsBehind({
+    activeChangeSetId,
+    activeDiff,
+    changeSetId,
+    diff,
+  });
+  useEffect(() => {
+    // The reviewer is reading this thread's change set, and the thread just
+    // committed another round, so the stepper is handed the set as it now
+    // stands rather than the round it opened on. It stays on the change the
+    // reviewer was reading: the round renamed every place, so the change is
+    // found again by the block it is about rather than by its id.
+    if (!isBehind || diff === null) return;
+    const startPlaceId = advancedTourPlaceId({
+      activeDiff,
+      activePlaceId,
+      diff,
+      placeIds: placeIdsInTour,
+    });
+    openTour({
+      diff,
+      ...(changeSetId === undefined ? {} : { changeSetId }),
+      ...(startPlaceId === undefined ? {} : { startPlaceId }),
+      placeIds: placeIdsInTour,
+      isSuperseded,
+      onResolve,
+      onRevert,
+      canRevert,
+      thread,
+      onKeepChatting,
+    });
+  }, [
+    activeDiff,
+    activePlaceId,
+    canRevert,
+    changeSetId,
+    diff,
+    isBehind,
+    isSuperseded,
+    onKeepChatting,
+    onResolve,
+    onRevert,
+    openTour,
+    placeIdsInTour,
+    thread,
+  ]);
   if (diff === null) {
     return (
       <div className="mt-2 grid w-fit grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge pt-2">
@@ -598,7 +680,8 @@ export const AgentChangeDigest = ({
                   onClick={() =>
                     openTour({
                       diff,
-                      placeIds: available.map((place) => place.placeId),
+                      ...(changeSetId === undefined ? {} : { changeSetId }),
+                      placeIds: placeIdsInTour,
                       startPlaceId: entry.placeId,
                       isSuperseded,
                       onResolve,
@@ -654,7 +737,8 @@ export const AgentChangeDigest = ({
             }
             openTour({
               diff,
-              placeIds: available.map((place) => place.placeId),
+              ...(changeSetId === undefined ? {} : { changeSetId }),
+              placeIds: placeIdsInTour,
               isSuperseded,
               onResolve,
               onRevert,

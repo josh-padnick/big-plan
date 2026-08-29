@@ -60,7 +60,10 @@ import {
   agentPrimacyHealth,
   selectPrimaryAgent,
 } from "../shared/agent-primacy.js";
-import { selectAgentModelIdentity } from "../shared/agent-model.js";
+import {
+  selectAgentModelIdentity,
+  type AgentModelIdentity,
+} from "../shared/agent-model.js";
 import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
@@ -81,7 +84,12 @@ import {
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
-import { isRendered, measureThreadAnchor } from "./thread-anchor.browser.js";
+import {
+  holdsItsPlace,
+  isRendered,
+  measureThreadAnchor,
+  scrollToLiveElement,
+} from "./thread-anchor.browser.js";
 import { canMountReviewBlockHost } from "./review-controller-hosts.browser.js";
 import {
   clearThreadOpenOverlay,
@@ -152,6 +160,7 @@ import {
 import {
   AgentChangeDigest,
   MessageTurn,
+  ProposedChangesTurn,
   ReviewerMessagePreview,
   RequestStatusStrip,
   type MessageActivity,
@@ -169,7 +178,6 @@ import {
 } from "./review-comment-submit.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
-  displayedStandIn,
   foundElement,
   liveBlock,
   liveBaselineBlock,
@@ -232,6 +240,8 @@ import {
   type StoredLiveReviewRecovery,
 } from "./review-recovery-storage.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
+import { useChangeSets } from "./use-change-sets.browser.js";
+import { threadChangeFor } from "../shared/thread-change-set.js";
 import {
   requestJson,
   runtimeIdentity,
@@ -2137,14 +2147,6 @@ const threadAnchorContainer = (target: HTMLElement): HTMLElement =>
   target.parentElement ??
   target;
 
-// Whether the spot the thread remembers is still occupied. A lens hides the
-// block it replays but renders its copy in the same spot, so the remembered
-// distance still describes where that content sits. A collapse leaves nothing
-// behind at all: the card shrinks to its header, and the distance then names a
-// gap below the card rather than a place inside it.
-const targetHoldsItsPlace = (target: HTMLElement): boolean =>
-  isRendered(target) || displayedStandIn(target) !== null;
-
 const useThreadHosts = (
   comments: ReadonlyArray<ReviewComment>,
   isOpen: boolean,
@@ -2277,11 +2279,12 @@ const useThreadHosts = (
         );
         // The offset places the thread level with the target inside the card,
         // so it only applies when the card itself is what got measured and the
-        // target still holds its place inside it. A collapsed anchor is
-        // represented by an ancestor row instead, and that row's top is the
-        // whole answer.
+        // target still holds its place inside it. A lens re-renders the block
+        // in place, so the slot the distance was measured to is still there to
+        // point at. A collapse leaves nothing behind: the card shrinks to its
+        // header, and level with the card is then the whole answer.
         const targetOffset =
-          anchor.element === container && targetHoldsItsPlace(target)
+          anchor.element === container && holdsItsPlace(target)
             ? (targetOffsets.get(comment.id) ?? 0)
             : 0;
         const desiredTop =
@@ -3302,10 +3305,20 @@ const StagedCard = ({
   );
 };
 
+/**
+ * One change set, rendered where it was authored.
+ *
+ * The bounds are given rather than derived from the response that happens to
+ * be beside it: a comment thread's change set spans every reply it has
+ * committed, so the diff shown in the thread is the thread's baseline against
+ * the plan now, not the last reply's own before-and-after.
+ */
 const ChangeAttachment = ({
   identity,
-  request,
-  response,
+  from,
+  to,
+  changeSetId,
+  agentIdentity,
   changeTargets,
   currentSnapshot,
   onStatus,
@@ -3316,8 +3329,11 @@ const ChangeAttachment = ({
   onKeepChatting,
 }: {
   readonly identity: RuntimeIdentity;
-  readonly request: AgentRequest;
-  readonly response: AgentResponse;
+  readonly from: string;
+  readonly to: string;
+  /** The thread that owns this change set, so the stepper follows its rounds. */
+  readonly changeSetId?: string;
+  readonly agentIdentity?: AgentModelIdentity;
   readonly changeTargets?: ReadonlyArray<string>;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
@@ -3330,8 +3346,6 @@ const ChangeAttachment = ({
   };
   readonly onKeepChatting?: () => void;
 }) => {
-  const from = request.baselineSnapshot ?? request.premiseSnapshot;
-  const to = response.resultSnapshot;
   const [diff, setDiff] = useState<SnapshotDiff | null>(() =>
     readySnapshotDiff(identity, from, to),
   );
@@ -3357,12 +3371,11 @@ const ChangeAttachment = ({
   return (
     <AgentChangeDigest
       diff={diff}
-      agentIdentity={request.claimedModel}
+      {...(changeSetId === undefined ? {} : { changeSetId })}
+      agentIdentity={agentIdentity}
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
-      isSuperseded={
-        currentSnapshot !== "" && currentSnapshot !== response.resultSnapshot
-      }
+      isSuperseded={currentSnapshot !== "" && currentSnapshot !== to}
       isLoading={isLoading}
       onLoad={() => void load()}
       onResolve={onResolve}
@@ -3590,22 +3603,23 @@ const SentThread = ({
     deleteUnlockedByAbandonedClaim,
     group,
   } = thread;
+  const { changeSets } = useChangeSets();
+  const threadChange = useMemo(
+    () =>
+      threadChangeFor({
+        changeSets,
+        commentId: comment.id,
+        exchanges,
+        currentSnapshot,
+      }),
+    [changeSets, comment.id, currentSnapshot, exchanges],
+  );
   useEffect(() => {
-    if (
-      identity === null ||
-      latestChanged === undefined ||
-      latestChanged.response === undefined
-    )
-      return;
-    const from =
-      latestChanged.request.baselineSnapshot ??
-      latestChanged.request.premiseSnapshot;
-    void cachedSnapshotDiff(
-      identity,
-      from,
-      latestChanged.response.resultSnapshot,
-    ).catch(() => undefined);
-  }, [identity, latestChanged]);
+    if (identity === null || threadChange === undefined) return;
+    void cachedSnapshotDiff(identity, threadChange.from, threadChange.to).catch(
+      () => undefined,
+    );
+  }, [identity, threadChange]);
   const outcome = latestExchange?.outcome;
   const targetPresent = targetElement(comment.target) !== null;
   const cardClass = `mt-2 min-w-0 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
@@ -4163,7 +4177,7 @@ const SentThread = ({
                         <Badge
                           tone={
                             requestOutcome.state === "changed"
-                              ? "statusAccent"
+                              ? "statusAccentStrong"
                               : requestOutcome.state === "warning" ||
                                   requestOutcome.state === "needs-input"
                                 ? "statusWarning"
@@ -4191,8 +4205,12 @@ const SentThread = ({
                           ) : null}
                           {requestOutcome.state === "answered"
                             ? "Answered"
-                            : requestOutcome.state === "changed"
-                              ? "Changed"
+                            : /* One word for what a reply did to the plan,
+                                 whether this round's work is shown below it or
+                                 folded into a later round's set. A reader who
+                                 has to be told twice has been told nothing. */
+                              requestOutcome.state === "changed"
+                              ? "Updated plan"
                               : requestOutcome.state === "warning"
                                 ? "Warning"
                                 : requestOutcome.state === "needs-input"
@@ -4220,47 +4238,52 @@ const SentThread = ({
                             </Button>
                           </div>
                         ) : null}
-                        {requestOutcome.state === "changed" &&
-                        identity !== null ? (
-                          <ChangeAttachment
-                            key={`${request.requestId}:${response.resultSnapshot}`}
-                            identity={identity}
-                            request={request}
-                            response={response}
-                            changeTargets={requestOutcome.changeTargets}
-                            currentSnapshot={currentSnapshot}
-                            onStatus={onReplySent}
-                            onResolve={
-                              latestChanged?.request.requestId ===
-                              request.requestId
-                                ? onResolve
-                                : undefined
-                            }
-                            onRevert={
-                              latestChanged?.request.requestId ===
-                              request.requestId
-                                ? () => onRevert(request.requestId, comment.id)
-                                : undefined
-                            }
-                            canRevert={
-                              latestChanged?.request.requestId ===
-                                request.requestId && canRevertLatestChange
-                            }
-                            thread={{ label: comment.body, onOpen: onJump }}
-                            onKeepChatting={() => {
-                              onJump();
-                              window.setTimeout(
-                                () =>
-                                  document
-                                    .getElementById(`reply-${comment.id}`)
-                                    ?.focus(),
-                                0,
-                              );
-                            }}
-                          />
-                        ) : null}
                       </MessageTurn>
                     )}
+                    {/* One thread proposes one change set, so the diff hangs
+                        off the reply that most recently advanced it and spans
+                        every round behind it. An earlier round shows no
+                        superseded before-and-after of its own; its badge
+                        already says the plan was updated. */}
+                    {requestOutcome !== undefined &&
+                    response !== undefined &&
+                    requestOutcome.state === "changed" &&
+                    identity !== null &&
+                    threadChange?.requestId === request.requestId ? (
+                      <ProposedChangesTurn>
+                        <ChangeAttachment
+                          key={`${comment.id}:${threadChange.from}:${threadChange.to}`}
+                          identity={identity}
+                          from={threadChange.from}
+                          to={threadChange.to}
+                          changeSetId={comment.id}
+                          {...(threadChange.agentIdentity === undefined
+                            ? {}
+                            : { agentIdentity: threadChange.agentIdentity })}
+                          {...(threadChange.changeTargets === undefined
+                            ? {}
+                            : { changeTargets: threadChange.changeTargets })}
+                          currentSnapshot={currentSnapshot}
+                          onStatus={onReplySent}
+                          onResolve={onResolve}
+                          onRevert={() =>
+                            onRevert(request.requestId, comment.id)
+                          }
+                          canRevert={canRevertLatestChange}
+                          thread={{ label: comment.body, onOpen: onJump }}
+                          onKeepChatting={() => {
+                            onJump();
+                            window.setTimeout(
+                              () =>
+                                document
+                                  .getElementById(`reply-${comment.id}`)
+                                  ?.focus(),
+                              0,
+                            );
+                          }}
+                        />
+                      </ProposedChangesTurn>
+                    ) : null}
                   </div>
                 );
               },
@@ -4433,8 +4456,11 @@ const ChatExchange = ({
             <ChangeAttachment
               key={`${request.requestId}:${response.resultSnapshot}`}
               identity={identity}
-              request={request}
-              response={response}
+              from={request.baselineSnapshot ?? request.premiseSnapshot}
+              to={response.resultSnapshot}
+              {...(request.claimedModel === undefined
+                ? {}
+                : { agentIdentity: request.claimedModel })}
               currentSnapshot={currentSnapshot}
               onStatus={onStatus}
             />
@@ -6995,12 +7021,7 @@ export const ReviewController = () => {
       setStatus("This comment's target is no longer in the plan.");
       return;
     }
-    // With a What-changed lens open over the target, the reader's content is
-    // in the lens and the block behind it has no box at all.
-    (displayedStandIn(element) ?? element).scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
+    scrollToLiveElement(element, "center");
   };
   const updateDraft = (id: string, body: string) => {
     const current = latestReviewStateRef.current.state;
@@ -7794,10 +7815,7 @@ export const ReviewController = () => {
     // keeps it clear of the branding bar.
     const planBlock = targetElement(comment.target);
     if (planBlock !== null) {
-      (displayedStandIn(planBlock) ?? planBlock).scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      scrollToLiveElement(planBlock, "start");
     }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {

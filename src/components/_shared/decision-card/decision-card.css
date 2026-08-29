@@ -937,6 +937,26 @@
   article .decision-approved-note:not([hidden]) {
     display: flex;
   }
+  /* The settled record carries its display here for the same reason: it shares
+     the answered strip's surface, and a utility could not out-rank the rules
+     above it. */
+  article .decision-decided {
+    display: flex;
+    background: var(--decision-pro-bg);
+  }
+  /* This sentence is a review-session overlay, island-gated like the other
+     approval affordances, so it is absent with scripts disabled. Only a review
+     with an approval in force may say so, and only a reader who could act on
+     it: a read-only reader cannot revoke, so the sentence would name a door
+     they cannot open. */
+  article .decision-decided-approval {
+    display: none;
+  }
+  :root[data-review-approved]:not([data-review-read-only])
+    article
+    .decision-decided-approval {
+    display: block;
+  }
   article .decision[data-decision-approval-locked] .decision-fieldset {
     pointer-events: none;
   }

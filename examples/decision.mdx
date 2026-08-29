@@ -39,3 +39,41 @@ Setup must reach the documentation host.
 </Option>
 
 </Decision>
+
+<Decision question="Where does the installer put the skill?" state="decided">
+
+Settled before this review began; it is recorded here so the rest of the plan can rely on it.
+
+<Option title="The agent's own skills directory" chosen summary="The agent finds it without configuration.">
+
+<Consideration label="Discovery" verdict="Automatic" tone="good">
+
+The agent already reads that directory at startup.
+
+</Consideration>
+
+<Consideration label="Isolation" verdict="Per user" tone="good">
+
+Nothing outside the user's home is written.
+
+</Consideration>
+
+</Option>
+
+<Option title="A shared system directory" summary="One copy serves every user on the host.">
+
+<Consideration label="Discovery" verdict="Needs a path" tone="bad">
+
+Each agent must be told where to look.
+
+</Consideration>
+
+<Consideration label="Isolation" verdict="Host-wide" tone="bad">
+
+Installation needs elevated permissions.
+
+</Consideration>
+
+</Option>
+
+</Decision>

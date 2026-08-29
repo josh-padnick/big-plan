@@ -58,16 +58,17 @@ import {
 import { Icon } from "./icon.browser.js";
 import { requestOpenInputs } from "./inputs-surface.browser.js";
 import {
-  displayedStandIn,
   foundElement,
   liveBlock,
   liveDecisionFigure,
 } from "./live-target.browser.js";
+import { scrollToLiveElement } from "./thread-anchor.browser.js";
 import {
   onAppliedReviewRecord,
   requestJson,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
+import { useChangeSets } from "./use-change-sets.browser.js";
 import { useChangeVerdicts } from "./use-change-verdicts.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
@@ -85,10 +86,7 @@ const APPROVE_ITEM_ROW_CLASS =
 const APPROVE_ITEM_ACTION_CLASS = "shrink-0 text-xs font-medium text-accent";
 
 const showLiveElement = (element: HTMLElement): void => {
-  (displayedStandIn(element) ?? element).scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-  });
+  scrollToLiveElement(element, "center");
 };
 
 const showDecision = (decisionId: string): void => {
@@ -1045,14 +1043,20 @@ export const ApproveControl = ({
   const verdicts = useChangeVerdicts();
   const { openTour } = useDiffTour();
   const message = useApprovalMessage(dialogOpen);
+  const { changeSets: committed } = useChangeSets();
+  const committedChangeSetIds = useMemo(
+    () => new Set(committed.map((changeSet) => changeSet.changeSetId)),
+    [committed],
+  );
   const skeletonSets = useMemo(
     () =>
       changeSetsFromExchange({
         requests: agent.requests,
         responses: agent.responses,
         placeIdsByRevision: new Map(),
+        committedChangeSetIds,
       }),
-    [agent.requests, agent.responses],
+    [agent.requests, agent.responses, committedChangeSetIds],
   );
   const diffs = useChangeSetDiffs({ identity, changeSets: skeletonSets });
   const changeSets = useMemo(
@@ -1066,8 +1070,9 @@ export const ApproveControl = ({
             diff.places.map((place) => place.placeId),
           ]),
         ),
+        committedChangeSetIds,
       }),
-    [agent.requests, agent.responses, diffs],
+    [agent.requests, agent.responses, committedChangeSetIds, diffs],
   );
   const items = useMemo(
     () =>
@@ -1121,7 +1126,11 @@ export const ApproveControl = ({
   const jumpToChange = (changeSet: OpenChangeSet) => {
     const diff = diffs.get(`${changeSet.from}:${changeSet.to}`);
     if (diff !== undefined) {
-      openTour({ diff, placeIds: changeSet.placeIds });
+      openTour({
+        diff,
+        changeSetId: changeSet.id,
+        placeIds: changeSet.placeIds,
+      });
     }
     closeDialog();
   };

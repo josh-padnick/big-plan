@@ -467,6 +467,18 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await stepper.getByRole("button", { name: "Keep chatting" }).click();
     await expect(stepper).toBeHidden();
 
+    // The stepper reviews the thread's change set, not the round it was opened
+    // on, so it is left open across the next push below.
+    await thread
+      .getByRole("button", { name: /Continue review|Review changes \(2\)/u })
+      .click();
+    await expect(stepper).toContainText("All changes accepted (2 of 2)");
+    // Standing on the set's second change, so the push below can prove where
+    // the reviewer lands rather than only that the bounds moved.
+    await stepper.getByRole("button", { name: "Back to review" }).click();
+    await stepper.getByRole("button", { name: "Next change" }).click();
+    await expect(stepper).toContainText("2 of 2");
+
     const continuedPush = await runAgentCli([
       "push",
       planPath,
@@ -519,28 +531,39 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       { timeout: 15_000 },
     );
 
-    const historicalChange = thread
+    // The follow-up push joins the thread's own change set rather than opening
+    // a second review of its own, so the earlier reply keeps its message and
+    // hands its changes to the set below it.
+    const foldedChange = thread
       .locator('[data-review-message="agent"]')
       .filter({ hasText: "Clarified the safe publication flow." });
+    await expect(foldedChange).toContainText("Updated plan");
     await expect(
-      historicalChange.getByText("Accepted", { exact: true }),
-    ).toBeVisible();
-    await historicalChange
-      .getByRole("button", {
-        name: /2 changes across 2 slides Accepted/u,
-      })
-      .click();
-    await expect(
-      stepper.getByRole("button", { name: "Resolve thread" }),
+      foldedChange.getByRole("button", { name: /Review change/u }),
     ).toHaveCount(0);
+
+    // The open stepper followed the set the push advanced on its own: it is
+    // reviewing the new bounds, not the accepted round it was opened on. The
+    // push renamed every place, so the change the reviewer was standing on is
+    // found again by its block: the stepper holds its position instead of
+    // dropping back to the set's first change.
+    await expect(
+      stepper.getByRole("button", { name: "Accept this change" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(stepper).toContainText("2 of 2");
+    await expect(stepper).not.toContainText("All changes accepted");
     await page.keyboard.press("Escape");
 
-    const latestChange = thread
-      .locator('[data-review-message="agent"]')
-      .filter({ hasText: "Clarified the follow-up publication flow." });
-    await latestChange.getByRole("button", { name: "Review change" }).click();
+    // The thread's change set has a bubble of its own, so its controls are
+    // found there rather than inside the reply that announced it.
+    const latestChange = thread.locator("[data-review-proposed-changes]");
+    await latestChange
+      .getByRole("button", { name: /Review changes \(2\)/u })
+      .click();
+    await expect(stepper).toContainText("1 of 2");
     await stepper.getByRole("button", { name: "Accept this change" }).click();
-    await expect(stepper).toContainText("All changes accepted (1 of 1)");
+    await stepper.getByRole("button", { name: "Accept this change" }).click();
+    await expect(stepper).toContainText("All changes accepted (2 of 2)");
     await page.keyboard.press("Escape");
 
     await thread

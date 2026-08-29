@@ -16,3 +16,7 @@ Each `QuickDecision` is a standalone brief: recommendation framing, radio option
 
 `question` is required and `context` is optional.
 Add `critical` when the reviewer must settle this question before work begins; the card says so, and the review's [Inputs list](/reference/reviewing/#what-the-review-is-waiting-for) marks it. Add at least two uniquely titled options and at most one `recommended` option. Render several `QuickDecision` components in sequence when a plan has a batch of small questions.
+
+`state` is `proposed` or `decided` and defaults to `proposed`, so a question you are asking needs no `state` at all.
+A decided question marks exactly one option `chosen`, and a chosen option requires `state="decided"`; it renders as the record of what was chosen and stops accepting answers.
+Author the pair yourself only for a choice that was settled before the review began - when the reviewer answers the question, Big Plan writes `state="decided"` and `chosen` into the plan source at approval.

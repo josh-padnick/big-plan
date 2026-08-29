@@ -8691,27 +8691,22 @@ test("should open a digest entry in the slide its section header names", async (
   }
 });
 
-test("should jump to the visible lens standing in for a hidden commented block", async ({
+test("should jump to what stands in for a commented block a lens hid", async ({
   page,
 }) => {
   test.setTimeout(60_000);
   await page.addInitScript(() => {
     const originalScrollIntoView = Element.prototype.scrollIntoView;
-    Object.assign(window, { __bigPlanLensJumpTargets: [] });
+    Object.assign(window, { __bigPlanJumpTarget: null });
     Element.prototype.scrollIntoView = function scrollIntoView(
       options?: boolean | ScrollIntoViewOptions,
     ): void {
       if (
         this instanceof HTMLElement &&
-        this.hasAttribute("data-review-diff-lens-for") &&
         typeof options === "object" &&
         options?.block === "center"
       ) {
-        Object.assign(window, {
-          __bigPlanLensJumpTargets: (
-            this.getAttribute("data-review-diff-lens-for") ?? ""
-          ).split(" "),
-        });
+        Object.assign(window, { __bigPlanJumpTarget: this });
       }
       originalScrollIntoView.call(this, options);
     };
@@ -8892,21 +8887,40 @@ ${lowerContent}
       )
       .toBe(true);
     await page.evaluate(() =>
-      Object.assign(window, { __bigPlanLensJumpTargets: [] }),
+      Object.assign(window, { __bigPlanJumpTarget: null }),
     );
     await sentThread.locator(".review-sent-target").click();
+    /*
+    The jump asks for the commented block, which has no box while the lens
+    shows its change, so aiming the page at the block itself would move it
+    nowhere. Geometry answers instead: the lens took the block's slot beside
+    it, so the laid-out sibling is both where that content now is and what the
+    reader came to read. An ancestor would also contain the block and would
+    also have a box - and for a block at the top of the article that ancestor
+    is the whole article, which says nothing about where the change sits.
+    */
     await expect
       .poll(() =>
-        page.evaluate(
-          () =>
-            (
-              window as unknown as {
-                __bigPlanLensJumpTargets: ReadonlyArray<string>;
-              }
-            ).__bigPlanLensJumpTargets,
-        ),
+        page.evaluate((blockId) => {
+          const jumped = (
+            window as unknown as { __bigPlanJumpTarget: HTMLElement | null }
+          ).__bigPlanJumpTarget;
+          const block = document.querySelector<HTMLElement>(
+            `[data-block-id="${blockId}"]`,
+          );
+          if (jumped === null || block === null) return "no jump yet";
+          if (jumped.getClientRects().length === 0) {
+            return "jumped to an element with no box";
+          }
+          if (jumped.parentElement !== block.parentElement) {
+            return "jumped outside the place the block held";
+          }
+          return jumped.querySelector("[data-review-diff-lens]") === null
+            ? "jumped to a sibling that is not the lens"
+            : "jumped to the lens standing in the block's place";
+        }, comment.target.blockId),
       )
-      .toContain(comment.target.blockId);
+      .toBe("jumped to the lens standing in the block's place");
     await expect
       .poll(() =>
         page.evaluate(() => {
@@ -8925,7 +8939,7 @@ ${lowerContent}
   }
 });
 
-test("should refresh a thread digest when a later reply changes another block", async ({
+test("should fold a later reply into the thread's one change set", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -9153,14 +9167,27 @@ const verification = "first";
       { timeout: 15_000 },
     );
 
+    // The thread owns one change set, so the second reply does not open a
+    // review of its own: both rounds are reviewed together, against the plan
+    // the thread started from.
     await expect(
-      sentThread.getByRole("button", { name: "Review change" }).last(),
-    ).toBeVisible();
+      sentThread
+        .locator('[data-review-message="agent"]')
+        .filter({ hasText: "Revised the delivery boundary." }),
+    ).toContainText("Updated plan");
+    await expect(
+      sentThread.getByRole("button", { name: /Review changes \(2\)/u }),
+    ).toHaveCount(1);
     await sentThread
-      .getByRole("button", { name: "Review change" })
-      .last()
+      .getByRole("button", { name: /Review changes \(2\)/u })
       .click();
+    const stepper = page.locator("[data-review-diff-stepper]");
     const lens = page.locator("[data-review-diff-lens]");
+    await expect(stepper).toContainText("1 of 2");
+    await expect(lens).toContainText('const delivery = "first";');
+    await expect(lens).toContainText('const delivery = "revised";');
+    await stepper.getByRole("button", { name: "Next change" }).click();
+    await expect(stepper).toContainText("2 of 2");
     await expect(lens).toContainText('const verification = "revised";');
     await expect(lens).not.toContainText('const delivery = "revised";');
   } finally {

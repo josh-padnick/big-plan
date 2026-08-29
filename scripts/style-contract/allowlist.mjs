@@ -49,7 +49,10 @@ export const STYLESHEET_BUDGETS = {
     // superseded answer, a read-only review, and an in-force approval.
     // The changed-Decision Confirm gate adds its hazard-marked explanation,
     // keyboard focus treatment, and narrow-viewport width at point of use.
-    declarations: 429,
+    // The settled record strip adds its own surface and the approval sentence
+    // it shows only while an approval is in force, which is read from the
+    // document root and so cannot be a utility on the element itself.
+    declarations: 432,
   },
   "src/components/_shared/figure-controls/figure-controls.css": {
     declarations: 58,

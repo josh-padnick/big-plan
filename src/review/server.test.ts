@@ -6871,12 +6871,25 @@ describe("review runtime approval", () => {
           message: "Start on it now.",
         });
         expect(response.status).toBe(200);
+
+        // Approve wrote the answer into the source, so the revision it pins is
+        // the one it wrote, not the one the reviewer was reading.
+        const stampedSource = await readFile(target.planPath, "utf8");
+        expect(stampedSource).toContain(
+          '<Decision state="decided" question="Which release path should we use?">',
+        );
+        expect(stampedSource).toContain(
+          '<Option chosen title="Gradual rollout" recommended summary="Start with one group.">',
+        );
+        const stamped = deriveSnapshotDigest(stampedSource);
+        expect(stamped).not.toBe(digest);
+
         const body: unknown = await response.json();
         expect(body).toMatchObject({
-          pinnedSnapshot: digest,
+          pinnedSnapshot: stamped,
           canceledRequests: 0,
           delivered: true,
-          approval: { status: "approved", pinnedSnapshot: digest },
+          approval: { status: "approved", pinnedSnapshot: stamped },
         });
 
         const stored: unknown = JSON.parse(
@@ -6887,7 +6900,7 @@ describe("review runtime approval", () => {
           entries: [
             {
               kind: "approval",
-              pinnedSnapshot: digest,
+              pinnedSnapshot: stamped,
               agentConnected: false,
               message: "Start on it now.",
               recordedAnswers: [
@@ -6900,11 +6913,15 @@ describe("review runtime approval", () => {
           ],
         });
 
+        // The behavioural regression this whole increment risks: stamping
+        // changes the very file the approval is derived against, so an
+        // approval that pinned the pre-stamp digest would read as stale the
+        // instant it was granted.
         const session = await (
           await callRuntime({ target, sessionToken, path: "/api/session" })
         ).json();
         expect(session).toMatchObject({
-          approval: { status: "approved", pinnedSnapshot: digest },
+          approval: { status: "approved", pinnedSnapshot: stamped },
         });
 
         const exported = await callRuntime({
@@ -6929,6 +6946,91 @@ describe("review runtime approval", () => {
           path: "/api/export-markdown",
         });
         expect(await changed.text()).not.toContain("### Approval summary");
+      },
+    );
+  });
+
+  it("leaves a stamped decision alone when the plan is approved again", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest }) => {
+        const stage = async (answer: Record<string, unknown>) =>
+          callRuntime({
+            target,
+            sessionToken,
+            path: "/api/inputs",
+            method: "POST",
+            body: { op: "stage", answer },
+          });
+        expect(
+          (
+            await stage({
+              decisionId: DECISION_ID,
+              optionId: GRADUAL_OPTION_ID,
+              optionTitle: "Gradual rollout",
+              prompt: "Which release path should we use?",
+              premiseSnapshot: digest,
+            })
+          ).status,
+        ).toBe(200);
+        expect(
+          (
+            await approve(target, sessionToken, {
+              expectedSnapshot: digest,
+              message: "Start on it now.",
+            })
+          ).status,
+        ).toBe(200);
+
+        // A second question arrives on the already-stamped source. Approving
+        // again must settle only that one: no un-stamping exists, and the
+        // settled decision is no longer answerable, so it is never re-staged.
+        const withSecond = `${await readFile(target.planPath, "utf8")}
+<QuickDecision question="Announce the rollout first?">
+
+<Option title="Announce" recommended />
+
+<Option title="Stay quiet" />
+
+</QuickDecision>
+`;
+        await writeFile(target.planPath, withSecond);
+        const secondDigest = deriveSnapshotDigest(withSecond);
+        const secondId = "quick-decision-announce-the-rollout-first";
+        expect(
+          (
+            await stage({
+              decisionId: secondId,
+              optionId: `${secondId}-option-announce`,
+              optionTitle: "Announce",
+              prompt: "Announce the rollout first?",
+              premiseSnapshot: secondDigest,
+            })
+          ).status,
+        ).toBe(200);
+
+        const again = await approve(target, sessionToken, {
+          expectedSnapshot: secondDigest,
+          message: "Still good.",
+        });
+        expect(again.status).toBe(200);
+
+        const finalSource = await readFile(target.planPath, "utf8");
+        expect(finalSource.match(/state="decided"/gu)).toHaveLength(2);
+        expect(finalSource.match(/<Option chosen/gu)).toHaveLength(2);
+        expect(finalSource).toContain('<QuickDecision state="decided"');
+        expect(await again.json()).toMatchObject({
+          approval: {
+            status: "approved",
+            pinnedSnapshot: deriveSnapshotDigest(finalSource),
+          },
+        });
+        const stored = JSON.parse(
+          await readFile(target.store.approvalPath, "utf8"),
+        ) as { readonly entries: ReadonlyArray<Record<string, unknown>> };
+        expect(stored.entries.at(-1)).toMatchObject({
+          recordedAnswers: [{ decisionId: secondId, optionTitle: "Announce" }],
+        });
       },
     );
   });
