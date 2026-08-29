@@ -196,9 +196,18 @@ test("should review a static Mermaid SVG through the diagram canvas", async ({
     "edge",
   );
   await expect(removedEdgeMarker).toBeVisible();
-  const removedEdgeBox = await removedEdgeMarker.boundingBox();
-  expect(removedEdgeBox?.width).toBeCloseTo(16, 0);
-  expect(removedEdgeBox?.height).toBeCloseTo(16, 0);
+  // Visibility is not layout: a marker the browser has not placed yet answers
+  // with no box, so read the geometry through a poll like the node marker above.
+  await expect
+    .poll(async () => {
+      const box = await removedEdgeMarker.boundingBox();
+      if (!box) return null;
+      return { width: box.width, height: box.height };
+    })
+    .toEqual({
+      width: expect.closeTo(16, 0),
+      height: expect.closeTo(16, 0),
+    });
   await page.keyboard.press("Delete");
 
   await diagram.locator("[data-figure-maximize]").click();

@@ -10,6 +10,17 @@ name: CI
 on:
   push:
 
+# One lane per branch. The self-hosted runner is a single machine, so several
+# branch builds racing on it is what starves the browser suite into timing
+# failures a good tree does not deserve; a branch stacking its own superseded
+# pushes on top of that is the share this repository controls. Only the newest
+# push on a branch is worth a runner, and a run this cancels is a run whose
+# commit is no longer the branch tip. `main` is exempt: every commit that lands
+# there is verified on its own, and no later push may cancel that proof.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   lint:
     # Runs on the local self-hosted runner.

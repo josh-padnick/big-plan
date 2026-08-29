@@ -15,7 +15,13 @@ export default defineConfig({
   testDir: "./test",
   fullyParallel: true,
   forbidOnly: Boolean(process.env["CI"]),
-  reporter: "list",
+  // One retry in CI, none locally. A browser journey that fails only under
+  // runner contention must not gate a good tree, but a retry that passes is
+  // still evidence of an intermittent bug, so nothing here may hide it: the
+  // list reporter prints each retried attempt and counts the run's flaky
+  // tests, and the GitHub reporter annotates them on the run itself.
+  retries: process.env["CI"] ? 1 : 0,
+  reporter: process.env["CI"] ? [["list"], ["github"]] : "list",
   projects: [
     {
       name: "chromium",

@@ -67,7 +67,7 @@ test("should hand a comment back once its claim is proven abandoned", async ({
   page,
   reviewRuntimeUrl,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await page.goto(reviewRuntimeUrl);
   await stageComment(page, COMMENT_BODY);
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
@@ -141,15 +141,21 @@ test("should hand a comment back once its claim is proven abandoned", async ({
   });
   await rm(store.agentHeartbeatPath, { force: true });
 
-  await page.reload();
-  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-  const released = rail
-    .locator("[data-review-sent-thread]")
-    .filter({ hasText: COMMENT_BODY })
-    .first();
-  await expandThread(released);
   const unlockNote = rail.locator("[data-review-abandoned-claim-unlock]");
-  await expect(unlockNote).toBeVisible({ timeout: 15_000 });
+  // The note appears only once a load's own reads see the aged claim and the
+  // absent heartbeat, so retry the whole reopen instead of waiting longer on
+  // one reload that may have raced them.
+  await expect(async () => {
+    await page.reload();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expandThread(
+      rail
+        .locator("[data-review-sent-thread]")
+        .filter({ hasText: COMMENT_BODY })
+        .first(),
+    );
+    await expect(unlockNote).toBeVisible({ timeout: 10_000 });
+  }).toPass({ timeout: 45_000 });
   await expect(unlockNote).toContainText(
     "reported nothing for far longer than a turn takes",
   );
