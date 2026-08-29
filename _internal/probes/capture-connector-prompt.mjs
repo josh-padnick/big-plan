@@ -208,12 +208,26 @@ const stripPushGuidance = (prompt) => {
   return stripped;
 };
 
-const main = async () => {
-  const baselineRevIndex = process.argv.indexOf("--baseline-rev");
-  const explicitBaselineRev = process.argv[baselineRevIndex + 1];
-  if (baselineRevIndex !== -1 && explicitBaselineRev === undefined) {
+/**
+ * Reads the optional explicit baseline revision out of an argument list.
+ *
+ * Split out so it can be exercised directly: the flag's absence and the flag
+ * with no value look identical if the value is read before the flag is found,
+ * because at index -1 the next element is argv[0] - the node executable - which
+ * sails past a missing-value check and reaches git as a revision.
+ */
+export const readBaselineRevision = (argv) => {
+  const index = argv.indexOf("--baseline-rev");
+  if (index === -1) return undefined;
+  const revision = argv[index + 1];
+  if (revision === undefined || revision.startsWith("--")) {
     throw new Error("--baseline-rev requires a revision");
   }
+  return revision;
+};
+
+const main = async () => {
+  const explicitBaselineRev = readBaselineRevision(process.argv);
   const prompt = await captureCurrentPrompt();
   if (process.argv.includes("--without-push-guidance")) {
     process.stdout.write(stripPushGuidance(prompt));
@@ -229,6 +243,9 @@ const main = async () => {
   );
 };
 
-if (resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   await main();
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  namesPushCommand,
   parseArguments,
   scoreReply,
   validateSelections,
@@ -87,4 +88,31 @@ test("should reject invalid trial counts", () => {
       new RegExp(`Invalid --trials value ${value.replace(".", "\\.")}`),
     );
   }
+});
+
+test("should not score a sentence that rejects the push command as push", () => {
+  assert.equal(
+    scoreReply("I will wait.\nNEXT_COMMAND: do not run agent push").verdict,
+    "other",
+  );
+});
+
+test("should score a launched push invocation as push", () => {
+  assert.equal(
+    namesPushCommand(
+      "node '/repo/bin/big-plan.mjs' agent push '/p/plan.mdx' --about 'why'",
+    ),
+    true,
+  );
+});
+
+test("should not score prose mentioning the push command as a command", () => {
+  assert.equal(namesPushCommand("I will not use agent push here"), false);
+});
+
+test("should not score a different subcommand as push", () => {
+  assert.equal(
+    namesPushCommand("node bin/big-plan.mjs agent next plan.mdx --wait"),
+    false,
+  );
 });

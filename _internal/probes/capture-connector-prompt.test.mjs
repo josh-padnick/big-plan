@@ -4,6 +4,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import {
+  readBaselineRevision,
   reconstructBaselinePrompt,
   resolveBaselineRevision,
 } from "./capture-connector-prompt.mjs";
@@ -50,4 +51,39 @@ test("should resolve the default-branch merge base", async () => {
     ]));
   }
   assert.equal(baselineRev, expected.trim());
+});
+
+test("should read no baseline revision when the flag is absent", () => {
+  assert.equal(
+    readBaselineRevision([
+      "node",
+      "capture-connector-prompt.mjs",
+      "--baseline",
+    ]),
+    undefined,
+  );
+});
+
+test("should read the revision that follows the baseline flag", () => {
+  assert.equal(
+    readBaselineRevision(["node", "script.mjs", "--baseline-rev", "abc1234"]),
+    "abc1234",
+  );
+});
+
+test("should refuse a baseline flag given no revision", () => {
+  assert.throws(
+    () => readBaselineRevision(["node", "script.mjs", "--baseline-rev"]),
+    /requires a revision/,
+  );
+  assert.throws(
+    () =>
+      readBaselineRevision([
+        "node",
+        "script.mjs",
+        "--baseline-rev",
+        "--baseline",
+      ]),
+    /requires a revision/,
+  );
 });

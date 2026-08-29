@@ -103,6 +103,29 @@ const HARNESSES = {
   },
 };
 
+/** Interpreters and binaries that may legitimately precede the subcommand. */
+const LAUNCHER =
+  /^['"]?([\w.@/\\-]*[/\\])?(node|npx|bunx?|big-plan(\.mjs)?)['"]?$/i;
+
+/**
+ * Decides whether one NEXT_COMMAND field is a runnable `agent push` invocation.
+ *
+ * Matching the words anywhere would score `do not run agent push` as a push -
+ * the exact wrong answer this probe exists to catch - so `agent push` has to
+ * sit where a shell would find it: as consecutive tokens, preceded only by an
+ * interpreter or the executable path.
+ */
+export const namesPushCommand = (command) => {
+  const tokens = command.trim().split(/\s+/);
+  const at = tokens.findIndex(
+    (token, index) =>
+      token.replace(/^['"]|['"]$/g, "").toLowerCase() === "agent" &&
+      tokens[index + 1]?.replace(/^['"]|['"]$/g, "").toLowerCase() === "push",
+  );
+  if (at === -1) return false;
+  return tokens.slice(0, at).every((token) => LAUNCHER.test(token));
+};
+
 /** One reply passes only when its structured next command names agent push. */
 export const scoreReply = (reply) => {
   const commands = [...reply.matchAll(/^NEXT_COMMAND:\s*(\S.*)$/gm)];
@@ -115,7 +138,7 @@ export const scoreReply = (reply) => {
       verdict: "harness_error",
     };
   }
-  const reachedForPush = /\bagent\s+push\b/i.test(nextCommand);
+  const reachedForPush = namesPushCommand(nextCommand);
   return {
     nextCommand,
     reachedForPush,
@@ -300,6 +323,9 @@ const main = async () => {
   );
 };
 
-if (resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   await main();
 }
