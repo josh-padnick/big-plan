@@ -13,6 +13,7 @@ import { basename, extname } from "node:path";
 import { renderDocument } from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
+  CommentRejected,
   validateCommentUpdates,
   validateResolvedCommentIds,
   validateStoredComments,
@@ -23,6 +24,7 @@ import {
   readChangeVerdicts,
   readComments,
   readResolvedCommentIds,
+  readSnapshot,
   readStagedInputs,
   writeApprovalRecord,
   writeChangeVerdicts,
@@ -396,6 +398,78 @@ export const createPlanRenderer = ({
   // carry their already-validated target metadata across later revisions.
   const blocks = new Map<string, BlockMapEntry>();
   let blockMapMarkdown: string | undefined;
+  const snapshotBlockMaps = new Map<
+    string,
+    Promise<ReadonlyMap<string, BlockMapEntry> | undefined>
+  >();
+  const snapshotBlockMapUses = new Map<string, number>();
+  let snapshotBlockMapUseSequence = 0;
+
+  const MAX_SNAPSHOT_TARGETS_PER_BATCH = 8;
+  const MAX_SNAPSHOT_BLOCK_MAPS = 16;
+
+  const snapshotDigestsIn = (value: unknown): ReadonlySet<string> => {
+    if (!Array.isArray(value)) return new Set();
+    const snapshots = new Set<string>();
+    for (const entry of value) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const target = (entry as Readonly<Record<string, unknown>>).target;
+      if (typeof target !== "object" || target === null) continue;
+      const snapshot = (target as Readonly<Record<string, unknown>>).snapshot;
+      if (typeof snapshot === "string") snapshots.add(snapshot);
+    }
+    if (snapshots.size > MAX_SNAPSHOT_TARGETS_PER_BATCH) {
+      throw new CommentRejected(
+        `A comment batch may name at most ${MAX_SNAPSHOT_TARGETS_PER_BATCH} snapshots`,
+      );
+    }
+    return snapshots;
+  };
+
+  const evictSnapshotBlockMap = (): void => {
+    let oldestSnapshot: string | undefined;
+    let oldestUse = Number.POSITIVE_INFINITY;
+    for (const [snapshot, use] of snapshotBlockMapUses) {
+      if (use < oldestUse) {
+        oldestSnapshot = snapshot;
+        oldestUse = use;
+      }
+    }
+    if (oldestSnapshot !== undefined) {
+      snapshotBlockMaps.delete(oldestSnapshot);
+      snapshotBlockMapUses.delete(oldestSnapshot);
+    }
+  };
+
+  const readSnapshotBlockMap = (
+    snapshot: string,
+    readStore: ReviewStore,
+  ): Promise<ReadonlyMap<string, BlockMapEntry> | undefined> => {
+    const existing = snapshotBlockMaps.get(snapshot);
+    if (existing !== undefined) {
+      snapshotBlockMapUses.set(snapshot, snapshotBlockMapUseSequence++);
+      return existing;
+    }
+    while (snapshotBlockMaps.size >= MAX_SNAPSHOT_BLOCK_MAPS) {
+      evictSnapshotBlockMap();
+    }
+    const value = Promise.resolve().then(async () => {
+      try {
+        const markdown = await readSnapshot({ store: readStore, snapshot });
+        const rendered = renderDocument({
+          markdown,
+          fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+          identity: { planId, reviewSessionId: sessionId, reviewToken: token },
+        });
+        return new Map(rendered.blocks.map((block) => [block.id, block]));
+      } catch {
+        return undefined;
+      }
+    });
+    snapshotBlockMaps.set(snapshot, value);
+    snapshotBlockMapUses.set(snapshot, snapshotBlockMapUseSequence++);
+    return value;
+  };
 
   const validateStored = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateStoredComments({
@@ -420,17 +494,27 @@ export const createPlanRenderer = ({
   const validateUpdates = async (
     value: unknown,
     readStore: ReviewStore = store,
-  ): Promise<ReadonlyArray<ReviewComment>> =>
-    validateCommentUpdates({
+  ): Promise<ReadonlyArray<ReviewComment>> => {
+    const snapshots = new Map<string, ReadonlyMap<string, BlockMapEntry>>();
+    await Promise.all(
+      [...snapshotDigestsIn(value)].map(async (snapshot) => {
+        const cached = blocksForSnapshot?.(snapshot);
+        const blockMap =
+          cached ?? (await readSnapshotBlockMap(snapshot, readStore));
+        if (blockMap !== undefined) snapshots.set(snapshot, blockMap);
+      }),
+    );
+    return validateCommentUpdates({
       value,
       blocks,
-      blocksForSnapshot,
+      snapshots,
       existing: [
         ...(await readStoredComments(readStore.draftsPath)),
         ...(await readStoredComments(readStore.sentPath)),
       ],
       now: new Date().toISOString(),
     });
+  };
 
   const readBootstrap = async (markdown: string): Promise<string> => {
     const drafts = await readStoredComments(store.draftsPath);

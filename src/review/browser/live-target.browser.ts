@@ -23,9 +23,6 @@ export type LiveTargetMissReason =
   // Nothing in the live article carries the name: the block was removed, or an
   // id minted for an older revision no longer exists.
   | "unknown-id"
-  // A qualified baseline address has no matching retained snapshot in the
-  // current document, so it must never fall through to proposed identity.
-  | "missing-snapshot"
   // The only matches sit inside replayed lens evidence rather than the plan.
   // Anchoring there would nest a lens inside a lens or attach a comment to
   // evidence. An identity attribute surviving into a replay is an internal
@@ -132,12 +129,8 @@ const resolveWithin = (
     ),
   );
 
-const blockSelector = (blockId: string, snapshot?: string): string =>
-  snapshot === undefined
-    ? `[data-block-id="${CSS.escape(blockId)}"]`
-    : `[data-baseline-block-id="${CSS.escape(
-        blockId,
-      )}"][data-baseline-snapshot="${CSS.escape(snapshot)}"]`;
+const blockSelector = (blockId: string): string =>
+  `[data-block-id="${CSS.escape(blockId)}"]`;
 
 const baselineBlockSelector = (blockId: string, snapshot: string): string =>
   `[data-baseline-block-id="${CSS.escape(blockId)}"][data-baseline-snapshot="${CSS.escape(snapshot)}"]`;
@@ -191,16 +184,10 @@ export const livePictures = (): ReadonlyArray<HTMLElement> => {
 /** Resolves a block id to the block the reader is reading. */
 export const liveBlock = (
   blockId: string,
-  snapshot?: string,
 ): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };
-  const resolved = resolveWithin(article, blockSelector(blockId, snapshot));
-  return "missing" in resolved &&
-    snapshot !== undefined &&
-    resolved.missing === "unknown-id"
-    ? { missing: "missing-snapshot" }
-    : resolved;
+  return resolveWithin(article, blockSelector(blockId));
 };
 
 /** Resolves a block address minted by a retained baseline snapshot. */

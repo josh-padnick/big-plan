@@ -96,13 +96,26 @@ export const renderIsolatedBlockView = ({
   if (blockId === undefined) return undefined;
   const block = elementByBlockId({ node: document.root, blockId });
   if (block === null) return undefined;
+  const descriptor = document.blocks.find(
+    (candidate) => candidate.id === blockId,
+  );
+  if (descriptor === undefined) return undefined;
   const isolated = structuredClone(block);
   isolateBaselineSide({
     subtree: isolated,
     key,
-    ...(baselineSnapshot === undefined
-      ? {}
-      : { baselineBlockId: blockId, baselineSnapshot }),
+    ...(baselineSnapshot === undefined ? {} : { snapshot: baselineSnapshot }),
+    addressFor: (node) =>
+      node === isolated
+        ? {
+            blockId,
+            kind: descriptor.kind,
+            label: descriptor.label,
+            ...(descriptor.section === undefined
+              ? {}
+              : { section: descriptor.section }),
+          }
+        : undefined,
   });
   return toHtml(isolated, { allowDangerousHtml: false });
 };

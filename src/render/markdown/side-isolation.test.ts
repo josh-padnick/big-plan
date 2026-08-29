@@ -259,11 +259,21 @@ describe("side isolation", () => {
     isolateBaselineSide({
       subtree,
       key: "was-snapshot",
-      baselineBlockId: "section/contract/http-endpoint-1",
-      baselineSnapshot: "abc123",
-      baselineSubtargetIds: new Map([
-        [subtarget, "section/contract/http-endpoint-field-1"],
-      ]),
+      snapshot: "abc123",
+      addressFor: (node) =>
+        node === subtree
+          ? {
+              blockId: "section/contract/http-endpoint-1",
+              kind: "http-endpoint",
+              label: "Endpoint",
+            }
+          : node === subtarget
+            ? {
+                blockId: "section/contract/http-endpoint-field-1",
+                kind: "field",
+                label: "Field",
+              }
+            : undefined,
     });
 
     expect(subtree.properties[BASELINE_BLOCK_ID_ATTRIBUTE]).toBe(

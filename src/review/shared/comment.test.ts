@@ -290,7 +290,7 @@ describe("validateComments target resolution", () => {
         },
       ],
       blocks: BLOCKS,
-      blocksForSnapshot: () => BLOCKS,
+      snapshots: new Map([[snapshot, BLOCKS]]),
       now: NOW,
     });
     expect(comment?.target).toEqual({
@@ -319,10 +319,10 @@ describe("validateComments target resolution", () => {
           },
         ],
         blocks: BLOCKS,
-        blocksForSnapshot: () => undefined,
+        snapshots: new Map(),
         now: NOW,
       }),
-    ).toThrow("no longer retained");
+    ).toThrow("no longer retains");
   });
 
   it("should refuse a target naming a block this document does not contain", () => {

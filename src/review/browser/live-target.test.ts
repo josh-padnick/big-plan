@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   candidateMatchesLivePicture,
-  liveBlock,
+  liveBaselineBlock,
   lensMissReason,
   pickLiveCandidate,
   type LiveCandidate,
@@ -119,7 +119,7 @@ describe("candidateMatchesLivePicture", () => {
   });
 });
 
-describe("liveBlock", () => {
+describe("liveBlock and liveBaselineBlock", () => {
   const globals = globalThis as unknown as {
     CSS?: { escape(value: string): string };
     document?: {
@@ -153,28 +153,25 @@ describe("liveBlock", () => {
       querySelector: () => article,
     };
 
-    expect(liveBlock("block]id", "abcdef012345")).toEqual({ found: element });
+    expect(liveBaselineBlock("block]id", "abcdef012345")).toEqual({
+      found: element,
+    });
     expect(selectors).toEqual([
       `[${"data-baseline-" + "block-id"}="escaped(block]id)"][${"data-baseline-" + "snapshot"}="escaped(abcdef012345)"]`,
     ]);
   });
 
   it("reports a missing snapshot without falling back to a proposed match", () => {
-    const proposedElement = {
-      closest: () => null,
-      getClientRects: () => [{}],
-    } as unknown as HTMLElement;
     const article = {
-      querySelectorAll: (selector: string) =>
-        selector.startsWith(`[${"data-block-id"}="`) ? [proposedElement] : [],
+      querySelectorAll: () => [],
     };
     globals.CSS = { escape: (value) => value };
     globals.document = {
       querySelector: () => article,
     };
 
-    expect(liveBlock("same-id", "abcdef012345")).toEqual({
-      missing: "missing-snapshot",
+    expect(liveBaselineBlock("same-id", "abcdef012345")).toEqual({
+      missing: "snapshot-not-retained",
     });
   });
 });

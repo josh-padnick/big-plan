@@ -421,45 +421,19 @@ export const isolateBaselineSide = ({
   key,
   snapshot,
   addressFor,
-  baselineBlockId,
-  baselineSnapshot,
-  baselineSubtargetIds,
 }: {
   readonly subtree: Element;
   readonly key: string;
   readonly snapshot?: string;
   readonly addressFor?: (node: Element) => BaselineBlockAddress | undefined;
-  readonly baselineBlockId?: string;
-  readonly baselineSnapshot?: string;
-  readonly baselineSubtargetIds?: ReadonlyMap<Element, string>;
 }): void => {
   subtree.properties[DIFF_SIDE_ATTRIBUTE] = DIFF_BASELINE_SIDE;
   stripReviewIdentity(subtree);
-  const resolvedSnapshot = snapshot ?? baselineSnapshot;
-  const resolvedAddressFor =
-    addressFor ??
-    ((node: Element): BaselineBlockAddress | undefined => {
-      const blockId =
-        node === subtree ? baselineBlockId : baselineSubtargetIds?.get(node);
-      return blockId === undefined
-        ? undefined
-        : {
-            blockId,
-            kind:
-              typeof node.properties["data-block-kind"] === "string"
-                ? node.properties["data-block-kind"]
-                : "",
-            label:
-              typeof node.properties["data-block-label"] === "string"
-                ? node.properties["data-block-label"]
-                : "",
-          };
-    });
-  if (resolvedSnapshot !== undefined && resolvedAddressFor !== undefined) {
+  if (snapshot !== undefined && addressFor !== undefined) {
     stampBaselineIdentity({
       subtree,
-      snapshot: resolvedSnapshot,
-      addressFor: resolvedAddressFor,
+      snapshot,
+      addressFor,
     });
   }
   namespaceOrdinaryIdentity(subtree, key);
