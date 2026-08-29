@@ -41,6 +41,7 @@ const PATHS = [
   "delete-comment",
   "revert-changes",
   "cancel-request",
+  "review-mode",
   "attach-image",
 ] as const satisfies ReadonlyArray<ReviewWritePath>;
 

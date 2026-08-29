@@ -13,9 +13,19 @@ const docsUrl = `http://127.0.0.1:${docsPort}/`;
 // execute them concurrently.
 export default defineConfig({
   testDir: "./test",
+  // Browser journeys are the *.spec.ts files. The behavioral probes under
+  // test/probes/ are node:test contract tests for harness-driving scripts and
+  // would otherwise be swept up by Playwright's default *.test.* match.
+  testMatch: "**/*.spec.ts",
   fullyParallel: true,
   forbidOnly: Boolean(process.env["CI"]),
-  reporter: "list",
+  // One retry in CI, none locally. A browser journey that fails only under
+  // runner contention must not gate a good tree, but a retry that passes is
+  // still evidence of an intermittent bug, so nothing here may hide it: the
+  // list reporter prints each retried attempt and counts the run's flaky
+  // tests, and the GitHub reporter annotates them on the run itself.
+  retries: process.env["CI"] ? 1 : 0,
+  reporter: process.env["CI"] ? [["list"], ["github"]] : "list",
   projects: [
     {
       name: "chromium",

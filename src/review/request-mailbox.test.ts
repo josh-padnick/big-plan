@@ -18,6 +18,8 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./shared/comment.js";
 import {
+  AgentExchangeRejected,
+  approvalAgentRequest,
   deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
@@ -52,6 +54,7 @@ import {
   ResolvedThreadWorkRejected,
   reviseQueuedRequest,
   withResolvedCommentLock,
+  writeAgentRequestWhen,
 } from "./request-mailbox.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
@@ -674,6 +677,128 @@ describe("request mailbox", () => {
     ).resolves.toMatchObject({
       requestId: secondRequest.requestId,
       claimedBy: agentB,
+    });
+  });
+
+  it("should not deliver a request after its owning state was withdrawn", async () => {
+    const { store } = await preparedReview();
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Do not deliver this after the reviewer withdraws it.",
+    });
+
+    await expect(
+      writeAgentRequestWhen({
+        store,
+        request,
+        permitted: async () => false,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should let a withdrawal prevent a delayed request from being created", async () => {
+    const { store } = await preparedReview();
+    const request = approvalAgentRequest({
+      approvalId: "4444444444444444",
+      sessionId,
+      planId,
+      planPath: "/tmp/plan.mdx",
+      pinnedSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "Begin after this approval is handed off.",
+    });
+    let permitted = true;
+    const withdrawalStarted = deferred();
+    const finishWithdrawal = deferred();
+
+    const withdrawal = cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+      beforeCancel: async () => {
+        permitted = false;
+        withdrawalStarted.resolve();
+        await finishWithdrawal.promise;
+      },
+    });
+    await withdrawalStarted.promise;
+    const delivery = writeAgentRequestWhen({
+      store,
+      request,
+      permitted: async () => permitted,
+    });
+    finishWithdrawal.resolve();
+
+    await expect(withdrawal).rejects.toBeInstanceOf(AgentExchangeRejected);
+    await expect(delivery).resolves.toBe(false);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should order an owning withdrawal after an in-flight delivery", async () => {
+    const { store } = await preparedReview();
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Do not survive a withdrawal racing this delivery.",
+    });
+    const deliveryChecked = deferred();
+    const finishDelivery = deferred();
+    const order: Array<string> = [];
+    const delivery = writeAgentRequestWhen({
+      store,
+      request,
+      permitted: async () => {
+        order.push("delivery checked");
+        deliveryChecked.resolve();
+        await finishDelivery.promise;
+        order.push("delivery permitted");
+        return true;
+      },
+    });
+    await deliveryChecked.promise;
+
+    const withdrawal = cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+      beforeCancel: async () => {
+        order.push("withdrawn");
+      },
+    });
+
+    finishDelivery.resolve();
+    await expect(delivery).resolves.toBe(true);
+    await expect(withdrawal).resolves.toMatchObject({
+      requestId: request.requestId,
+      canceledAt: "2026-08-10T12:00:01.000Z",
+    });
+    expect(order).toEqual([
+      "delivery checked",
+      "delivery permitted",
+      "withdrawn",
+    ]);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({
+      requests: [
+        { requestId: request.requestId, canceledAt: expect.any(String) },
+      ],
     });
   });
 

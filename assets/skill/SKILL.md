@@ -73,8 +73,10 @@ Re-run `skill write` only when this thin shell itself changed (rare).
 5. **Review.** `npx -y big-plan@latest review <plan.mdx>`.
 6. **Present.** Give the human the stable plan address the command prints.
    Treat it as the plan's address; the session address is only for debugging.
-7. **Wait.** Do not implement until the human accepts the plan.
-   On feedback, revise the MDX source, re-validate, and ask again in the live review.
+7. **Wait for approval.** Do not implement until an `approval` request arrives.
+   Re-read `work.planPath`, confirm its digest matches `work.pinnedSnapshot`, acknowledge without editing the plan, and begin execution.
+   A missing path, a missing file, or a digest mismatch is a hard stop: report it through the response by adding `hardStop` (one line naming what you found), and do not search for another copy.
+   On feedback before approval, revise the MDX source, re-validate, and ask again in the live review.
 
 `compile` produces machine-readable JSON for tools; it does not replace human review of the HTML document.
 

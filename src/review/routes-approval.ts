@@ -1,10 +1,11 @@
 // The routes that finalize a review: approve pins the plan as it reads now,
-// revoke cancels the approval still in force.
+// delivers the approval to the agent mailbox, and revoke cancels both the
+// approval still in force and a still-unresponded handoff.
 //
-// Stamping the source and enqueueing the agent handoff belong to later
-// increments. This increment finalizes accepted changes, leftover work, and
-// the approval record through one recoverable commit. The browser never writes
-// the log itself.
+// Stamping decided attributes into the source belongs to a later increment.
+// This increment finalizes accepted changes, leftover work, the approval
+// record, and the agent handoff through one recoverable commit plus the
+// mailbox write that follows it. The browser never writes the log itself.
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
@@ -15,18 +16,33 @@ import type {
   ReviewRouteRequest,
   ReviewRouteResponse,
 } from "./review-route-context.js";
-import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
-import { appendProgressEvent } from "./request-mailbox.js";
-import { randomId, readSnapshot, writeSnapshot } from "./store.js";
+import {
+  AgentExchangeRejected,
+  type AgentApprovalRequest,
+  approvalAgentRequest,
+  deriveSnapshotDigest,
+  readAgentExchange,
+} from "./agent-exchange.js";
+import {
+  AgentRequestNotWithdrawable,
+  appendProgressEvent,
+  cancelAgentRequest,
+} from "./request-mailbox.js";
+import {
+  randomId,
+  readAgentPresence,
+  readSnapshot,
+  writeSnapshot,
+} from "./store.js";
 import { currentAnswers } from "./plan-inputs-store.js";
 import { reviewInputs } from "./input-contract.js";
 import {
   appendApproval,
   appendRevocation,
   ApprovalRecordRejected,
+  buildApprovalBrief,
 } from "./approval-record.js";
 import {
-  approvalSummary,
   APPROVAL_ID,
   deriveApprovalStatus,
   inForceApproval,
@@ -55,6 +71,7 @@ import {
   commitApprovalFinalization,
   type ApprovalFinalization,
 } from "./approval-finalization.js";
+import { readApprovalSummary } from "./approval-view.js";
 
 const coveringMessage = (value: unknown): string => {
   if (typeof value !== "string") return DEFAULT_APPROVAL_MESSAGE;
@@ -88,7 +105,8 @@ const loadSummary = async (
   context: ReviewRouteContext,
   currentSnapshot: string,
 ): Promise<ApprovalSummary | undefined> =>
-  approvalSummary({
+  readApprovalSummary({
+    store: context.store,
     record: await context.approvals.read(),
     currentSnapshot,
   });
@@ -101,7 +119,7 @@ const emitProgress = async ({
   detail,
 }: {
   readonly context: ReviewRouteContext;
-  readonly stepCode: "plan-approved" | "approval-revoked" | "request-canceled";
+  readonly stepCode: "approval-revoked" | "request-canceled";
   readonly step: string;
   readonly requestId?: string;
   readonly detail?: string;
@@ -167,7 +185,9 @@ const changeSetsAtApproval = async (
   );
   // Approval closes the sets the reviewer was shown, so it counts them the
   // same way the review surface does: one folded set per thread, whose places
-  // are the ones its baseline-to-now diff actually has.
+  // are the ones its baseline-to-now diff actually has. An approval response
+  // is the decision that closes those sets rather than a change inside one, so
+  // it never contributes a set of its own.
   const committedChangeSetIds = new Set(
     (await readCommittedChangeSets({ store: context.store })).map(
       (changeSet) => changeSet.changeSetId,
@@ -175,7 +195,9 @@ const changeSetsAtApproval = async (
   );
   const folded = changeSetsFromExchange({
     requests: exchange.requests,
-    responses: exchange.responses,
+    responses: exchange.responses.filter(
+      (response) => response.kind !== "approval",
+    ),
     placeIdsByRevision: new Map(),
     committedChangeSetIds,
   });
@@ -262,6 +284,7 @@ const buildApprovalEntry = async ({
   context,
   pinnedSnapshot,
   message,
+  agentConnected,
   requestsCanceled,
   changeSetsAccepted,
   changeSetsTotal,
@@ -269,6 +292,7 @@ const buildApprovalEntry = async ({
   readonly context: ReviewRouteContext;
   readonly pinnedSnapshot: string;
   readonly message: string;
+  readonly agentConnected: boolean;
   readonly requestsCanceled: number;
   readonly changeSetsAccepted: number;
   readonly changeSetsTotal: number;
@@ -293,6 +317,7 @@ const buildApprovalEntry = async ({
     approvalId: randomId(),
     at: new Date().toISOString(),
     pinnedSnapshot,
+    agentConnected,
     message,
     recordedAnswers: live.map((answer) => ({
       decisionId: answer.decisionId,
@@ -333,9 +358,10 @@ export const readApprovalState = async (
 };
 
 /**
- * Finalizes the review against the source as it reads right now. Stamping and
- * the agent mailbox handoff are later increments; this accepts reviewed
- * changes, cancels leftover work, and publishes the derived approved state.
+ * Finalizes the review against the source as it reads right now. Stamping
+ * decided attributes into the source is a later increment; this accepts
+ * reviewed changes, cancels leftover work, publishes the derived approved
+ * state, and writes the agent handoff.
  */
 export const approvePlan = async (
   context: ReviewRouteContext,
@@ -390,6 +416,20 @@ export const approvePlan = async (
 
   let entry: ApprovalEntry;
   let verdicts: StoredChangeVerdicts;
+  let agentConnected = false;
+  try {
+    agentConnected = (
+      await readAgentPresence({
+        store: context.store,
+        sessionId: context.sessionId,
+      })
+    ).connected;
+  } catch (error: unknown) {
+    context.reportDiagnostic({
+      message: "Agent presence could not be read before approval",
+      error,
+    });
+  }
   try {
     const [inventory, inputs] = await Promise.all([
       context.decisionAnswers.inventory(),
@@ -406,6 +446,7 @@ export const approvePlan = async (
       context,
       pinnedSnapshot: settledSource.digest,
       message,
+      agentConnected,
       requestsCanceled: 0,
       changeSetsAccepted: changeSets.accepted,
       changeSetsTotal: changeSets.total,
@@ -419,6 +460,32 @@ export const approvePlan = async (
           code: "critical-unanswered",
           blockingDecisionIds: error.blockingDecisionIds,
         },
+      });
+    }
+    throw error;
+  }
+
+  let handoff: AgentApprovalRequest;
+  try {
+    handoff = approvalAgentRequest({
+      approvalId: entry.approvalId,
+      sessionId: context.sessionId,
+      planId: context.planId,
+      planPath: context.resolvedPlanPath,
+      pinnedSnapshot: entry.pinnedSnapshot,
+      createdAt: entry.at,
+      recordedAnswers: entry.recordedAnswers.map((answer) => ({
+        decisionId: answer.decisionId,
+        optionId: answer.optionId,
+      })),
+      unansweredDecisions: entry.unansweredDecisions,
+      message: entry.message,
+    });
+  } catch (error: unknown) {
+    if (error instanceof AgentExchangeRejected) {
+      return refusal({
+        status: 500,
+        reason: `The approval could not be handed to the agent: ${error.message}`,
       });
     }
     throw error;
@@ -438,10 +505,17 @@ export const approvePlan = async (
     requestIds,
     approval: next,
     verdicts,
+    handoff,
+    brief: buildApprovalBrief({
+      planPath: context.resolvedPlanPath,
+      entry,
+    }),
   };
-  let canceledRequestIds: ReadonlyArray<string>;
+  let finalizationResult: Awaited<
+    ReturnType<typeof commitApprovalFinalization>
+  >;
   try {
-    canceledRequestIds = await commitApprovalFinalization({
+    finalizationResult = await commitApprovalFinalization({
       store: context.store,
       planPath: context.resolvedPlanPath,
       finalization,
@@ -459,6 +533,7 @@ export const approvePlan = async (
     }
     throw error;
   }
+  const { canceledRequestIds, delivered } = finalizationResult;
   context.readerProgress.accept(settledSource.digest);
   for (const requestId of canceledRequestIds) {
     await emitProgress({
@@ -468,22 +543,17 @@ export const approvePlan = async (
       requestId,
     });
   }
-  await emitProgress({
-    context,
-    stepCode: "plan-approved",
-    step: "Plan approved",
-    requestId: entry.approvalId,
-  });
-  const summary = approvalSummary({
-    record: await context.approvals.read(),
-    currentSnapshot: settledSource.digest,
-  });
+  const summary = await loadSummary(context, settledSource.digest);
   return jsonResponse({
     status: 200,
     value: {
       approvalId: entry.approvalId,
       pinnedSnapshot: entry.pinnedSnapshot,
       canceledRequests: canceledRequestIds.length,
+      // The record is committed either way, so the approve answer carries what
+      // the reviewer would otherwise have to take on faith: whether the agent
+      // was actually handed the decision.
+      delivered,
       approval: summary === undefined ? null : encodeApprovalSummary(summary),
     },
   });
@@ -504,12 +574,45 @@ export const revokeApproval = async (
   }
   const current = await context.approvals.read();
   try {
+    const at = new Date().toISOString();
     const next = appendRevocation({
       record: current,
       approvalId,
-      at: new Date().toISOString(),
+      at,
     });
-    await context.approvals.write(next);
+    let revoked = false;
+    try {
+      await cancelAgentRequest({
+        store: context.store,
+        requestId: approvalId,
+        now: at,
+        // The approval handler checks the record while it holds this same
+        // request lock. Commit revocation here so a handler abandoned by the
+        // HTTP write gate cannot pass that check and create the handoff after
+        // cancellation has already looked for it.
+        beforeCancel: async () => {
+          await context.approvals.write(next);
+          revoked = true;
+        },
+      });
+    } catch (error: unknown) {
+      if (!revoked) {
+        return refusal({
+          status: 409,
+          reason:
+            "The approval handoff is being updated. Try revoking it again.",
+        });
+      }
+      if (
+        error instanceof AgentRequestNotWithdrawable ||
+        !(error instanceof AgentExchangeRejected)
+      ) {
+        context.reportDiagnostic({
+          message: "The approval handoff could not be canceled after revoking",
+          error,
+        });
+      }
+    }
     await emitProgress({
       context,
       stepCode: "approval-revoked",
@@ -518,7 +621,11 @@ export const revokeApproval = async (
     });
     const { digest } = await readCurrentSource(context);
     return summaryResponse(
-      approvalSummary({ record: next, currentSnapshot: digest }),
+      await readApprovalSummary({
+        store: context.store,
+        record: next,
+        currentSnapshot: digest,
+      }),
     );
   } catch (error: unknown) {
     if (error instanceof ApprovalRecordRejected) {

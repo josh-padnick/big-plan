@@ -124,6 +124,7 @@ export const changeSetsFromExchange = ({
   readonly responses: ReadonlyArray<{
     readonly requestId: string;
     readonly resultSnapshot: string;
+    readonly kind?: string;
   }>;
   readonly placeIdsByRevision: ReadonlyMap<string, ReadonlyArray<string>>;
   readonly committedChangeSetIds?: ReadonlySet<string>;
@@ -134,6 +135,11 @@ export const changeSetsFromExchange = ({
     { readonly from: string; to: string; readonly label: string }
   >();
   for (const response of responses) {
+    // An approval answer publishes nothing, so there is no revision to accept
+    // or revert. Judged by digests alone an agent that wrote to its candidate
+    // and then refused would still list a change set for bytes that never
+    // reached the plan.
+    if (response.kind === "approval") continue;
     const request = byId.get(response.requestId);
     if (request === undefined) continue;
     const from = request.baselineSnapshot ?? request.premiseSnapshot;
@@ -201,6 +207,9 @@ const requestLabel = (request: {
   readonly kind: string;
   readonly targetLabel?: string;
 }): string => {
+  // The approval always carries a covering message, and quoting it here named
+  // the reviewer's own words where every other row names the work.
+  if (request.kind === "approval") return "Plan approval";
   const body = request.body?.trim() ?? "";
   if (body !== "") {
     const firstLine = body.split("\n", 1)[0] ?? body;
@@ -209,7 +218,8 @@ const requestLabel = (request: {
   if (request.targetLabel !== undefined && request.targetLabel !== "") {
     return request.targetLabel;
   }
-  return request.kind === "chat" ? "Plan-wide question" : "Pending request";
+  if (request.kind === "chat") return "Plan-wide question";
+  return "Pending request";
 };
 
 /** The one join the toolbar, the dialog, and the record all read. */

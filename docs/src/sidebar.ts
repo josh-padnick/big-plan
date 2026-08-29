@@ -61,6 +61,7 @@ export const SIDEBAR: readonly SidebarGroup[] = [
       { label: "CLI", slug: "reference/cli" },
       { label: "Reviewing a plan", slug: "reference/reviewing" },
       { label: "Linting rules", slug: "reference/lint-rules" },
+      { label: "Security", slug: "reference/security" },
     ],
   },
   {

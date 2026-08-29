@@ -167,6 +167,18 @@ describe("openRequestsFromExchange", () => {
       ]),
     ).toEqual([{ requestId: "aaaaaaaaaaaaaaaa", label: "Please start." }]);
   });
+
+  it("names an unanswered approval as the handoff, not its covering message", () => {
+    expect(
+      openRequestsFromExchange([
+        {
+          requestId: "dddddddddddddddd",
+          kind: "approval",
+          body: "This plan is approved and we are ready to begin. Start on it now and check in when the first stage is done.",
+        },
+      ]),
+    ).toEqual([{ requestId: "dddddddddddddddd", label: "Plan approval" }]);
+  });
 });
 
 describe("changeSetsFromExchange", () => {

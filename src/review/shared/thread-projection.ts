@@ -34,7 +34,7 @@ export type ThreadRequest = CancelableRequest &
     readonly claimedAt?: string;
     readonly claimedModel?: AgentModelIdentity;
     readonly createdAt: string;
-    readonly kind: "feedback" | "reply" | "chat" | "push";
+    readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
     readonly body?: string;
     readonly commentId?: string;
     readonly commentIds?: ReadonlyArray<string>;
@@ -57,9 +57,12 @@ export type ThreadResponse = {
   readonly requestId: string;
   readonly resultSnapshot: string;
   readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat" | "push";
+  readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
   readonly outcomes?: ReadonlyArray<ThreadOutcome>;
   readonly message?: string;
+  readonly summary?: string;
+  /** Present exactly when an approval answer refused to acknowledge. */
+  readonly hardStop?: string;
 };
 
 export type ThreadProgress = {
@@ -248,7 +251,10 @@ export const projectRequestActivity = ({
   progressEvents.filter(
     (event) =>
       event.requestId === request.requestId &&
-      progressStepCodeIsAgentOwned(event.stepCode),
+      (request.kind === "approval"
+        ? event.stepCode === "plan-approved" ||
+          progressStepCodeIsAgentOwned(event.stepCode)
+        : progressStepCodeIsAgentOwned(event.stepCode)),
   );
 
 /**
@@ -271,6 +277,7 @@ export const canReviseQueuedMessage = ({
 }): boolean =>
   request.kind !== "feedback" &&
   request.kind !== "push" &&
+  request.kind !== "approval" &&
   !canceled &&
   response === undefined &&
   !agentStillOwnsRequest({ request, agentConnected, nowMs });
@@ -293,6 +300,7 @@ export const canDeleteQueuedMessage = ({
 }): boolean =>
   request.kind !== "feedback" &&
   request.kind !== "push" &&
+  request.kind !== "approval" &&
   response === undefined &&
   !agentStillOwnsRequest({ request, agentConnected, nowMs });
 
@@ -367,8 +375,15 @@ export const projectLatestAgentStatus = ({
       nowMs,
     });
   }
+  // The answer travels with the request here for the same reason it does on the
+  // thread: a refusal is a fact about the answer, and the step that narrates it
+  // is written best-effort and ages out of the progress window.
+  const answer = responses.find(
+    (candidate) => candidate.requestId === request.requestId,
+  );
   return projectRequestStatus({
     request,
+    ...(answer === undefined ? {} : { response: answer }),
     requests,
     progressEvents,
     presence: { ...presence, connected: agentConnected },
@@ -395,6 +410,7 @@ export const projectRequestStatus = ({
   nowMs,
   cancelPendingRequestIds,
   queuedAhead,
+  response,
 }: {
   readonly request: ThreadRequest;
   /** Every request on the plan, so this one can tell a queue from an absence. */
@@ -406,6 +422,8 @@ export const projectRequestStatus = ({
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly queuedAhead?: number;
+  /** The answer this request settled with, where the caller has it. */
+  readonly response?: ThreadResponse;
 }): AgentStatus => {
   if (
     requestIsCanceled({
@@ -425,10 +443,20 @@ export const projectRequestStatus = ({
   const failed = [...activity]
     .reverse()
     .find((event) => event.state === "failed");
+  /*
+  A refusal to acknowledge is a reported failure, and it is read from the answer
+  itself rather than only from the step that narrates it. The step is written
+  best-effort after the answer commits, so a review that lost it would otherwise
+  fall through to the settled reading and tell the reviewer the agent holds an
+  approval it explicitly refused to start (BIG-131).
+  */
+  const reportedFailure =
+    failed === undefined ? response?.hardStop : (failed.detail ?? failed.step);
   const lastSignalAtMs = claimSignalAtMs(request) ?? 0;
   return deriveAgentStatus({
     runtime,
     request: requestIsTerminal(request) ? "answered" : "pending",
+    requestKind: request.kind,
     agentConnected: presence.connected,
     // Pickup, not lease freshness: a quiet turn has still been picked up, and
     // reporting it as queued described started work as waiting in line. The
@@ -442,7 +470,7 @@ export const projectRequestStatus = ({
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
-    ...(failed === undefined ? {} : { failure: failed.detail ?? failed.step }),
+    ...(reportedFailure === undefined ? {} : { failure: reportedFailure }),
     nowMs,
   });
 };
