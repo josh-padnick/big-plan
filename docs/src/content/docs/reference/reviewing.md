@@ -252,7 +252,7 @@ The approval is refused if the plan changes while the confirmation is open, so t
 
 After approval, the branding-bar control reads **Plan approved**, and a persistent approval stamp appears above the document title without moving the title or contents.
 Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
-It also lists this plan's approval history, newest first: the time of each approval, the plan version it pinned, and a struck-through **Revoked** row for any approval that was revoked.
+It also lists this plan's approval history, newest first: the time of each approval, the plan version it pinned, and a struck-through row with a **Revoked** marker for any approval that was revoked.
 The plan-wide Chat thread shows **Plan approved**, followed by **Approval acknowledged** after a successful acknowledgment or a warning when the agent reports a hard stop.
 When no agent is connected, the **Plan approved** entry instead says the approval was recorded but there was no agent to notify; the mailbox request remains waiting for the next agent.
 Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.

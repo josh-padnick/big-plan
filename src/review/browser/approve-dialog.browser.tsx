@@ -785,7 +785,7 @@ const ApprovalHistoryList = ({
         History
       </h3>
       <ol
-        className="m-0 mt-2 grid list-none grid-cols-[minmax(0,1fr)] gap-2.5 p-0"
+        className="m-0 mt-2 grid list-none grid-cols-[minmax(0,1fr)] gap-3 p-0"
         data-review-approval-history=""
       >
         {history.map((item) => (
