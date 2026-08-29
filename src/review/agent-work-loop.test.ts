@@ -1185,7 +1185,13 @@ describe("agent work loop lifecycle", () => {
           planId: review.planId,
         }),
       ).resolves.toMatchObject({
-        responses: [{ kind: "approval", resultSnapshot: pinned }],
+        responses: [
+          {
+            requestId: request.requestId,
+            kind: "approval",
+            resultSnapshot: pinned,
+          },
+        ],
       });
     } finally {
       await review.close();
