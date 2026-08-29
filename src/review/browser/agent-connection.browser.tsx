@@ -3,23 +3,12 @@
 // projection and local disclosure/copy interactions.
 
 import type { ReactNode } from "react";
-import { Fragment, useEffect, useState } from "react";
-import type { BrandIcon } from "../../icons/brand-icon.js";
-import { CLAUDE_ICON } from "../../icons/brands/claude.js";
-import { GROK_ICON } from "../../icons/brands/grok.js";
-import { MISTRAL_ICON } from "../../icons/brands/mistral.js";
-import { OPENAI_ICON } from "../../icons/brands/openai.js";
+import { useEffect, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
-import {
-  agentClientDisplayName,
-  agentModelDisplayName,
-  agentModelVendor,
-  type AgentModelVendor,
-} from "../shared/agent-identity-catalog.js";
 import { agentSessionAffordance } from "../shared/agent-session-link.js";
 import {
   AGENT_SESSION_ENDED_REASON,
@@ -38,7 +27,8 @@ import {
   compactDurationLabel,
   relativeSignalLabel,
 } from "../shared/time-label.js";
-import { BrandIconView, Icon } from "./icon.browser.js";
+import { Icon } from "./icon.browser.js";
+import { AgentIdentityLine } from "./agent-identity.browser.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { AgentRoleBadge } from "./agent-roster.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
@@ -49,27 +39,6 @@ import {
   Tooltip,
   WorkingMark,
 } from "./ui.browser.js";
-
-const VENDOR_ICONS: Record<AgentModelVendor, BrandIcon> = {
-  openai: OPENAI_ICON,
-  claude: CLAUDE_ICON,
-  grok: GROK_ICON,
-  mistral: MISTRAL_ICON,
-};
-
-/**
- * Draws the reported model's own mark, or nothing at all.
- *
- * A model the catalog has no faithful mark for shows its name alone. The
- * generic robot that used to stand in was a placeholder in the literal sense:
- * it occupied the space a mark would occupy while identifying nobody.
- */
-const ModelIcon = ({ modelName }: { readonly modelName: string }) => {
-  const vendor = agentModelVendor(modelName);
-  return vendor === undefined ? null : (
-    <BrandIconView icon={VENDOR_ICONS[vendor]} />
-  );
-};
 
 // The comment glyph that heads the subject block; it names what the block is
 // about, so it travels with the label rather than being set at each call.
@@ -449,6 +418,7 @@ const CurrentActivityCard = ({
   modelClient,
   sessionUrl,
   sessionId,
+  writerId,
   connection,
   nowMs,
   isPrimary,
@@ -464,6 +434,11 @@ const CurrentActivityCard = ({
   readonly modelClient?: string;
   readonly sessionUrl?: string;
   readonly sessionId?: string;
+  /**
+   * The roster id of the agent this card is drawing, which names its session
+   * when the connector declared no handle of its own.
+   */
+  readonly writerId?: string;
   readonly connection: ReturnType<typeof summarizeAgentConnection>;
   readonly nowMs: number;
   /**
@@ -537,24 +512,6 @@ const CurrentActivityCard = ({
       : activity.state === "offline"
         ? "Unreachable since"
         : "Connected since";
-  /*
-  What the connector said about itself, in the order a reader asks it: which
-  tool, which model, how hard it was told to think. Each segment is independent,
-  because each is declared independently, and the catalog decides how a declared
-  id is written - never this component, and never by re-casing what it was
-  handed.
-  */
-  const identitySegments = [
-    modelClient === undefined
-      ? undefined
-      : { key: "client", text: agentClientDisplayName(modelClient) },
-    modelName === undefined
-      ? undefined
-      : { key: "model", text: agentModelDisplayName(modelName) },
-    modelEffort === undefined
-      ? undefined
-      : { key: "effort", text: modelEffort },
-  ].filter((segment) => segment !== undefined);
   const sessionAffordance = agentSessionAffordance({
     ...(sessionUrl === undefined ? {} : { sessionUrl }),
     ...(sessionId === undefined ? {} : { sessionId }),
@@ -600,48 +557,19 @@ const CurrentActivityCard = ({
         {isPrimary ? <AgentRoleBadge isPrimary /> : null}
       </div>
       {/*
-      Identity is shown only where it exists, segment by segment. A session that
-      declared nothing renders nothing here: a line saying so would occupy the
-      space an answer occupies while carrying none, and the reader who wants to
-      know which agent this is learns more from the absence than from being told
-      about it.
+      The same identity line the roster cards below carry, so the agent holding
+      the plan is named exactly as it is named everywhere else on this rail
+      (BIG-273). Identity is shown only where it exists: a session that declared
+      nothing and has no roster id renders nothing here, because a line saying
+      so would occupy the space an answer occupies while carrying none.
       */}
-      {identitySegments.length === 0 ? null : (
-        <span
-          className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
-          {...(modelName === undefined
-            ? {}
-            : { "data-review-agent-model": modelName })}
-          {...(modelEffort === undefined
-            ? {}
-            : { "data-review-agent-effort": modelEffort })}
-          {...(modelClient === undefined
-            ? {}
-            : { "data-review-agent-client": modelClient })}
-        >
-          {modelName === undefined ? null : <ModelIcon modelName={modelName} />}
-          {identitySegments.map((segment, index) => (
-            <Fragment key={segment.key}>
-              {index === 0 ? null : (
-                /* The separator carries its own even spacing rather than
-                   inheriting the row's gap on one side only. */
-                <span aria-hidden="true" className="shrink-0 opacity-50">
-                  ·
-                </span>
-              )}
-              <span
-                className={
-                  segment.key === "effort"
-                    ? "shrink-0 font-normal text-muted"
-                    : "min-w-0 truncate"
-                }
-              >
-                {segment.text}
-              </span>
-            </Fragment>
-          ))}
-        </span>
-      )}
+      <AgentIdentityLine
+        {...(modelName === undefined ? {} : { model: modelName })}
+        {...(modelEffort === undefined ? {} : { effort: modelEffort })}
+        {...(modelClient === undefined ? {} : { client: modelClient })}
+        {...(sessionId === undefined ? {} : { sessionId })}
+        {...(writerId === undefined ? {} : { writerId })}
+      />
       {/*
       A link only where one can actually be followed. Big Plan decides that from
       the interfaces it knows, not from the declaration: an address it cannot
@@ -793,8 +721,10 @@ const AgentPresenceUnavailableCard = () => (
     data-review-connection-health="unobservable"
   >
     <strong className="text-sm text-ink">Agent status unavailable</strong>
+    {/* "Unreachable", the same word the offline card and the toolbar use, so
+        one condition is not reported in two vocabularies (BIG-273). */}
     <p className="m-0 [overflow-wrap:anywhere]">
-      The review session is offline, so agent presence cannot be checked.
+      The review session is unreachable, so agent presence cannot be checked.
     </p>
   </article>
 );
@@ -1102,6 +1032,7 @@ export const AgentConnectionPanel = ({
   modelClient,
   sessionUrl,
   sessionId,
+  writerId,
   connectionLog,
   recoveryPrompt,
   isReadOnly,
@@ -1122,6 +1053,8 @@ export const AgentConnectionPanel = ({
   readonly modelClient?: string;
   readonly sessionUrl?: string;
   readonly sessionId?: string;
+  /** The roster id of the agent the status card is drawing, when there is one. */
+  readonly writerId?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
   readonly isReadOnly: boolean;
@@ -1201,6 +1134,7 @@ export const AgentConnectionPanel = ({
             modelClient={modelClient}
             sessionUrl={sessionUrl}
             sessionId={sessionId}
+            writerId={writerId}
             connection={connection}
             nowMs={currentNowMs}
             isPrimary={isActivityPrimary}

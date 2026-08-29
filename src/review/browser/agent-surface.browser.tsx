@@ -92,6 +92,14 @@ export const AgentSurface = ({
         modelClient={model.modelClient}
         sessionUrl={model.sessionUrl}
         sessionId={model.sessionId}
+        /* The card is drawn from the presence record, so it is named by that
+           record's writer - in every state, including the ones where nobody is
+           attached any more. `drawnByStatusCard` answers a different question:
+           whether the roster below may stop repeating this agent, which it may
+           only do while the agent is still there to repeat. */
+        {...(model.presenceWriterId === undefined
+          ? {}
+          : { writerId: model.presenceWriterId })}
         connectionLog={model.connectionLog}
         recoveryPrompt={model.recoveryPrompt}
         replacementUrl={

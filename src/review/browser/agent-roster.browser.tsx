@@ -23,15 +23,8 @@ import {
   selectPrimaryAgent,
   type RosterAgent,
 } from "../shared/agent-primacy.js";
-import {
-  agentClientDisplayName,
-  agentModelDisplayName,
-} from "../shared/agent-identity-catalog.js";
 import { compactDurationLabel } from "../shared/time-label.js";
-import {
-  AgentIdentityChip,
-  AgentIdentityText,
-} from "./agent-identity.browser.js";
+import { AgentIdentityLine } from "./agent-identity.browser.js";
 import { Icon } from "./icon.browser.js";
 import { AlertDialog, Badge, Button, Tooltip } from "./ui.browser.js";
 
@@ -159,45 +152,29 @@ const AnswerRow = ({
   </div>
 );
 
-/** The identity line every agent card carries. */
-const AgentIdentity = ({
-  agent,
-  label,
-}: {
-  readonly agent: RosterAgent;
-  readonly label: string;
-}) => (
-  <p
-    className="m-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]"
-    data-review-agent-writer={agent.writerId}
-  >
-    <AgentIdentityText label={label} client={agent.model?.client} />
-  </p>
+/**
+ * The identity line every roster card carries, settled or arriving.
+ *
+ * It is the shared line and nothing local, because the reviewer meets the same
+ * agent on this card, on the status card above it, and in the question an
+ * arrival raises - and a name that changes shape between them reads as a
+ * different agent each time (BIG-273).
+ */
+const AgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => (
+  <AgentIdentityLine
+    {...(agent.model?.name === undefined ? {} : { model: agent.model.name })}
+    {...(agent.model?.effort === undefined
+      ? {}
+      : { effort: agent.model.effort })}
+    {...(agent.model?.client === undefined
+      ? {}
+      : { client: agent.model.client })}
+    {...(agent.model?.sessionId === undefined
+      ? {}
+      : { sessionId: agent.model.sessionId })}
+    writerId={agent.writerId}
+  />
 );
-
-/** Names an arriving agent with every identity fact it declared. */
-const ArrivalAgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
-  const sessionId = agent.model?.sessionId ?? agent.writerId;
-  const parts = [
-    agent.model?.client === undefined
-      ? undefined
-      : agentClientDisplayName(agent.model.client),
-    agent.model?.name === undefined
-      ? undefined
-      : agentModelDisplayName(agent.model.name),
-    `…${sessionId.slice(-4)}`,
-  ].filter((part): part is string => part !== undefined);
-  return (
-    <AgentIdentityChip>
-      <span
-        className="[overflow-wrap:anywhere]"
-        data-review-agent-writer={agent.writerId}
-      >
-        {parts.join(" - ")}
-      </span>
-    </AgentIdentityChip>
-  );
-};
 
 /**
  * The card's top line: who this is, and what it currently is.
@@ -207,16 +184,14 @@ const ArrivalAgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
  */
 const AgentCardHeader = ({
   agent,
-  label,
   badge,
 }: {
   readonly agent: RosterAgent;
-  readonly label: string;
   readonly badge: ReactNode;
 }) => (
   <div className="flex min-w-0 items-start gap-2">
     <div className="min-w-0 flex-1">
-      <AgentIdentity agent={agent} label={label} />
+      <AgentIdentity agent={agent} />
     </div>
     {badge}
   </div>
@@ -269,7 +244,7 @@ const PrimacyRequestCard = ({
       </span>
       A second agent wants to answer you
     </h3>
-    <ArrivalAgentIdentity agent={agent} />
+    <AgentIdentity agent={agent} />
     <AttachedSince agent={agent} nowMs={nowMs} />
     {isReadOnly ? (
       <p className="m-0 text-xs text-muted">
@@ -329,14 +304,12 @@ const PrimacyRequestCard = ({
 /** A settled card: this agent owns the plan, or reads it. */
 const AgentCard = ({
   agent,
-  label,
   isPrimary,
   nowMs,
   isReadOnly,
   onAnswer,
 }: {
   readonly agent: RosterAgent;
-  readonly label: string;
   readonly isPrimary: boolean;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
@@ -348,7 +321,6 @@ const AgentCard = ({
   >
     <AgentCardHeader
       agent={agent}
-      label={label}
       badge={<AgentRoleBadge isPrimary={isPrimary} />}
     />
     {isPrimary ? (
@@ -487,16 +459,14 @@ export const AgentRoster = ({
   carriedByActivity,
   onAnswer,
 }: AgentRosterProps) => {
-  const { attached, cards, primary, requesting, isShown } = readAgentRosterFor({
+  const { cards, primary, requesting, isShown } = readAgentRosterFor({
     agents,
     nowMs,
     ...(carriedByActivity === undefined ? {} : { carriedByActivity }),
   });
-  /* Ambiguity is judged over everyone attached, not over the cards this
-     section happens to draw. The agent the activity card carries is one of the
-     names the reviewer is telling these apart from, and leaving it out would
-     drop the id from a pair that genuinely collides. */
-  const labelFor = agentLabelResolver(attached);
+  /* No disambiguating label is resolved here any more: every card carries the
+     agent's own session tail, which tells two connectors running one model
+     apart without the reviewer having to be told they need telling apart. */
   if (!isShown) return null;
   return (
     <section
@@ -515,7 +485,6 @@ export const AgentRoster = ({
         <AgentCard
           key={agent.writerId}
           agent={agent}
-          label={labelFor(agent)}
           isPrimary={agent.writerId === primary?.writerId}
           nowMs={nowMs}
           isReadOnly={isReadOnly}

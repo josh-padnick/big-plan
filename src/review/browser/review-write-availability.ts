@@ -47,10 +47,14 @@ const BLOCKS = {
     remedy: "Open the newest review to send changes.",
     label: "Review session replaced",
   },
+  /* "Unreachable" throughout, matching the agent surface. The reviewer meets
+     this block and the offline agent card in the same moment - the send button
+     refuses while the rail explains why - and "offline" against "unreachable"
+     read as two separate faults (BIG-273). */
   "runtime-offline": {
-    cause: "The review session is offline.",
+    cause: "The review session is unreachable.",
     remedy: "It can accept changes again after reconnecting.",
-    label: "Review session offline",
+    label: "Review session unreachable",
   },
   "writes-stalled": {
     cause: "The review session has stopped accepting changes.",

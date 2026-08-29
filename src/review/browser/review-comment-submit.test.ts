@@ -33,9 +33,9 @@ describe("review comment submit availability", () => {
     expect(availability).toEqual({
       state: "unavailable",
       reason: "review-runtime",
-      label: "Review session offline",
+      label: "Review session unreachable",
       status:
-        "The review session is offline. Your comment is saved. It can accept changes again after reconnecting.",
+        "The review session is unreachable. Your comment is saved. It can accept changes again after reconnecting.",
     });
   });
 

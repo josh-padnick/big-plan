@@ -8513,7 +8513,7 @@ export const ReviewController = () => {
                   aria-live="polite"
                 >
                   Agent status is unavailable while the review session is
-                  offline.
+                  unreachable.
                 </p>
               ) : (
                 <div role="status" aria-live="polite">
