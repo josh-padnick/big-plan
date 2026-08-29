@@ -19,7 +19,7 @@ import eslintConfigPrettier from "eslint-config-prettier";
 
 // live-target.browser.ts is the one owner of identity lookups against plan
 // DOM. A hand-written selector for a block id or a flow anchor skips its
-// article scoping, its lens-copy exclusion, and its drift check, and every
+// article scoping, its visible-copy preference, and its drift check, and every
 // one of those omissions fails silently by resolving something plausible,
 // so the selector text itself is fenced to the resolver. The shell scripts
 // are fenced too even though they have no such lookup today: the layering
@@ -29,7 +29,7 @@ const PLAN_IDENTITY_SELECTOR = {
   selector:
     'TemplateElement[value.raw=/data-(block-id|flow-anchor)="/], Literal[value=/data-(block-id|flow-anchor)="/]',
   message:
-    "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
+    "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, the visible-copy preference, and the drift check.",
 };
 
 // Anything laid out as a grid in a bounded column must say what its column
