@@ -32,8 +32,9 @@ Method:
    command, so the probe measures the shipped text rather than a copy of it.
    It produces three arms: `after` is the working tree's prompt; `before`
    reconstructs the prompt as it stood before the change under test, by reading
-   the prompt block from `HEAD^` (or `--baseline-rev <rev>`) and restoring its
-   former position; and
+   the prompt block from the merge base with `origin/main` (falling back to
+   local `main`, or using `--baseline-rev <rev>`) and restoring its former
+   position; and
    `control` removes the push guidance entirely.
    The control arm is what makes the other two readable. A probe on which every
    arm passes has not shown that the prompt works, only that the question was
@@ -67,6 +68,7 @@ it as a distribution: the change is good when `deferred` and `other` go to zero
 on the `after` arm across every harness and both wordings, and stay there - and
 it is only evidence at all when the `control` arm shows some of them.
 
-The before arm uses `HEAD^` by default. Pass `--baseline-rev <rev>` when the
-pre-change prompt lives at another revision. Baseline capture refuses revisions
-that already contain the new two-mode prompt.
+The before arm uses the merge base with `origin/main` by default, falling back
+to local `main` when that remote-tracking branch is absent. Pass
+`--baseline-rev <rev>` when the pre-change prompt lives at another revision.
+Baseline capture refuses revisions that already contain the new two-mode prompt.

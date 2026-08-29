@@ -34,7 +34,7 @@
     "gen:review": "node scripts/gen-review-script.mjs",
     "build": "bun run gen && tsc",
     "test": "bun run gen && vitest run && bun run test:proxy-overhead && bun run test:contracts",
-    "test:contracts": "node --test eslint.config.test.mjs scripts/style-contract/*.test.mjs scripts/design-system/*.test.mjs scripts/git-hooks/*.test.mjs scripts/merge-guard/*.test.mjs scripts/merge-gates/*.test.mjs",
+    "test:contracts": "node --test eslint.config.test.mjs _internal/probes/*.test.mjs scripts/style-contract/*.test.mjs scripts/design-system/*.test.mjs scripts/git-hooks/*.test.mjs scripts/merge-guard/*.test.mjs scripts/merge-gates/*.test.mjs",
     "test:proxy-overhead": "BIG_PLAN_PROXY_BENCHMARK=1 vitest run src/review/service/proxy.test.ts -t 'approved stable-hop overhead figures' --maxWorkers=1 --minWorkers=1",
     "check:merge-guard": "node scripts/merge-guard/check.mjs",
     "check:merge-gates": "node scripts/merge-gates/check.mjs",

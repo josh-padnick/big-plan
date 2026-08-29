@@ -111,10 +111,15 @@ export const scoreReply = (reply) => {
     /\b(?:do|would|will|should|can|could|must)(?:\s+not|n't)\s+(?:run|use|invoke|execute|call)\s+(?:the\s+)?agent\s+push\b|\b(?:instead\s+of|rather\s+than)\s+(?:run(?:ning)?|use|using|invoke|invoking|execute|executing|call|calling)?\s*(?:the\s+)?(?:agent\s+push|push(?:ing)?)\b/.test(
       text,
     );
-  const deferredToTheUi =
+  const mentionsDeferral =
     /(from|through|in|via)\s+the\s+(review\s+)?ui|cannot\s+(submit|originate|initiate|start)|wait\s+for\s+the\s+reviewer/.test(
       text,
     );
+  const rejectedDeferral =
+    /\b(?:do|does|would|will|should|can|could|must|need)(?:\s+not|n't)\s+(?:have\s+to\s+)?(?:come|go|happen|start|originate|submit|wait)[^.;!?]*(?:reviewer|ui)\b/.test(
+      text,
+    );
+  const deferredToTheUi = mentionsDeferral && !rejectedDeferral;
   return {
     reachedForPush,
     deferredToTheUi,
@@ -215,13 +220,22 @@ const parseArguments = () => {
   };
 };
 
-const main = async () => {
-  const options = parseArguments();
-  for (const harness of options.harnesses) {
-    if (!(harness in HARNESSES)) {
-      throw new Error(`Unknown harness ${harness}`);
+export const validateSelections = ({ harnesses, arms, questions }) => {
+  const selections = [
+    ["harness", harnesses, Object.keys(HARNESSES)],
+    ["arm", arms, ["control", "before", "after"]],
+    ["question", questions, Object.keys(QUESTIONS)],
+  ];
+  for (const [kind, selected, known] of selections) {
+    for (const value of selected) {
+      if (!known.includes(value)) throw new Error(`Unknown ${kind} ${value}`);
     }
   }
+};
+
+const main = async () => {
+  const options = parseArguments();
+  validateSelections(options);
   const prompts = {
     ...(options.arms.includes("control")
       ? { control: await capturePrompt(["--without-push-guidance"]) }

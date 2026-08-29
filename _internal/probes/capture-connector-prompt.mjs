@@ -6,7 +6,7 @@
 // session. With --baseline it prints the pre-BIG-258 prompt instead,
 // reconstructed from the captured prompt by inverting exactly the two edits
 // BIG-258 made: the operator block's text, and its position. The block comes
-// from --baseline-rev, which defaults to HEAD^.
+// from --baseline-rev, which defaults to the default-branch merge base.
 
 import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
@@ -139,6 +139,29 @@ export const reconstructBaselinePrompt = async (prompt, baselineRev) => {
   return baseline;
 };
 
+export const resolveBaselineRevision = async () => {
+  for (const defaultBranch of ["origin/main", "main"]) {
+    try {
+      await execFileAsync(
+        "git",
+        ["rev-parse", "--verify", `${defaultBranch}^{commit}`],
+        { cwd: repoRoot, maxBuffer: 1024 * 1024 },
+      );
+      const { stdout } = await execFileAsync(
+        "git",
+        ["merge-base", "HEAD", defaultBranch],
+        { cwd: repoRoot, maxBuffer: 1024 * 1024 },
+      );
+      return stdout.trim();
+    } catch {
+      continue;
+    }
+  }
+  throw new Error(
+    "Cannot resolve the default-branch merge base; pass --baseline-rev explicitly",
+  );
+};
+
 /**
  * Strips the push guidance out of the captured prompt entirely.
  *
@@ -161,9 +184,8 @@ const stripPushGuidance = (prompt) => {
 
 const main = async () => {
   const baselineRevIndex = process.argv.indexOf("--baseline-rev");
-  const baselineRev =
-    baselineRevIndex === -1 ? "HEAD^" : process.argv[baselineRevIndex + 1];
-  if (baselineRevIndex !== -1 && baselineRev === undefined) {
+  const explicitBaselineRev = process.argv[baselineRevIndex + 1];
+  if (baselineRevIndex !== -1 && explicitBaselineRev === undefined) {
     throw new Error("--baseline-rev requires a revision");
   }
   const prompt = await captureCurrentPrompt();
@@ -173,7 +195,10 @@ const main = async () => {
   }
   process.stdout.write(
     process.argv.includes("--baseline")
-      ? await reconstructBaselinePrompt(prompt, baselineRev)
+      ? await reconstructBaselinePrompt(
+          prompt,
+          explicitBaselineRev ?? (await resolveBaselineRevision()),
+        )
       : prompt,
   );
 };
