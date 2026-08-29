@@ -71,11 +71,12 @@ describe("approval chrome", () => {
     expect(html).not.toContain("data-review-approval-brand-slot");
   });
 
-  it("should start the contents list at the top of the sidebar", () => {
+  it("should reserve the persistent approval stamp above the plan title", () => {
     const html = shellFor("<p>Plan.</p>");
     expect(html).toMatch(
-      /aria-label="Contents">\s*<p class="[^"]*" data-toc-header>/,
+      /<main class="[^"]*relative[^"]*"[^>]*>\s*<span class="(?=[^"]*absolute)(?=[^"]*-top-10)(?=[^"]*left-0)(?=[^"]*-rotate-3)[^"]*" data-review-approval-page-stamp hidden><\/span>\s*<article>/,
     );
+    expect(html.match(/data-review-approval-page-stamp/g)).toHaveLength(1);
   });
 });
 

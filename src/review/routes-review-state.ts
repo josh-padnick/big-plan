@@ -596,7 +596,7 @@ export const revertAgentChanges = async (
     (candidate) => candidate.requestId === requestId,
   );
   const changedOutcome =
-    agentResponse?.kind === "chat"
+    agentResponse?.kind === "chat" || agentResponse?.kind === "approval"
       ? undefined
       : agentResponse?.outcomes.find(
           (outcome) =>
@@ -709,6 +709,7 @@ export const deleteSentComment = async (
   const answeredRequestIds = new Set(
     exchange.responses.flatMap((candidate) =>
       candidate.kind !== "chat" &&
+      candidate.kind !== "approval" &&
       candidate.outcomes.some((outcome) => outcome.commentId === commentId)
         ? [candidate.requestId]
         : [],
@@ -728,6 +729,7 @@ export const deleteSentComment = async (
   const revertedChangedResponse = exchange.responses.some(
     (candidate) =>
       candidate.kind !== "chat" &&
+      candidate.kind !== "approval" &&
       revertedAnsweredRequestIds.has(candidate.requestId) &&
       candidate.outcomes.some(
         (outcome) =>

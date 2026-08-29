@@ -61,6 +61,10 @@ type DiffTourValue = {
   ) => void;
   /** False while this page may not record anything, so no control offers to. */
   readonly canRecordAcceptance: boolean;
+  /** Keys closed specifically by the session's auto-accept mode. */
+  readonly autoAccepted: ReadonlySet<string>;
+  /** Re-read verdicts after arming auto-accept closes the current thread. */
+  readonly refreshVerdicts: () => void;
   readonly openTour: (tour: OpenTour) => void;
   readonly closeTour: () => void;
 };
@@ -95,7 +99,8 @@ export const DiffTourProvider = ({
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [showCompletionSummary, setShowCompletionSummary] = useState(false);
-  const { accepted, canRecord, recordChangeVerdicts } = useChangeVerdicts();
+  const { accepted, autoAccepted, canRecord, recordChangeVerdicts, refresh } =
+    useChangeVerdicts();
   const places = useMemo(() => {
     if (tour === null) return [];
     const allowed = new Set(tour.placeIds);
@@ -167,11 +172,13 @@ export const DiffTourProvider = ({
       activeDiff: tour?.diff ?? null,
       activePlaceId: active?.placeId ?? null,
       canRecordAcceptance: canRecord,
+      autoAccepted,
+      refreshVerdicts: refresh,
       ...tourValue,
       openTour,
       closeTour,
     }),
-    [active?.placeId, canRecord, tourValue, tour],
+    [active?.placeId, autoAccepted, canRecord, refresh, tourValue, tour],
   );
   const isActiveAccepted =
     tour !== null &&

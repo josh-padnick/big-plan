@@ -662,7 +662,9 @@ describe("the service listener", () => {
       },
       body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
     });
-    expect((await fetch(`${stopping.origin}/stopped`)).status).toBe(200);
+    const landed = await fetch(`${stopping.origin}/stopped`);
+    expect(landed.status).toBe(200);
+    await landed.text();
 
     await vi.waitFor(async () => {
       expect(await readServiceRuntimeRecord()).toBe(undefined);

@@ -164,6 +164,12 @@ Add a trailing `head <sha>` to scope it to one commit instead, and a later push 
 A gate re-runs by itself whenever the pull request changes: a push, a review, an inline comment, or a conversation comment, including an edited or deleted one.
 Writing the missing comment is therefore enough to turn a gate green; no push is needed.
 
+GitHub's pull-request check rollup can briefly retain the previous conclusion
+after the gate updates an existing check run. When the rollup and the check's
+detail page disagree, read the check run through the Checks API; its conclusion
+and output are the authoritative current verdict. Do not change or re-run the
+gate merely to refresh the rollup cache.
+
 One exception: a pull request from a fork.
 The events that carry a push, a review, or an inline comment run the pull request's own copy of the gate, and running fork-authored code on the self-hosted runner is what the policy at the top of `.github/workflows/ci.yml` forbids.
 What stops it is the repository setting "Fork pull request workflows from outside collaborators", which is off, so a fork pull request runs no workflow here at all; the same-repository condition in the job is a second belt, and the workflow header explains why a condition written in a file a fork supplies cannot be the boundary.

@@ -128,6 +128,7 @@ export type ReviewWritePath =
   | "cancel-request"
   | "disconnect-agent"
   | "agent-primacy"
+  | "review-mode"
   | "attach-image";
 
 /**
@@ -144,6 +145,7 @@ const PATH_OUTCOMES = {
   "cancel-request": "The request is still with the agent.",
   "disconnect-agent": "The agent is still connected.",
   "agent-primacy": "The agents are unchanged.",
+  "review-mode": "The review mode was not changed.",
   "attach-image": "The image was not attached.",
 } as const satisfies Readonly<Record<ReviewWritePath, string>>;
 

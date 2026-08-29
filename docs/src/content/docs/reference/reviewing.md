@@ -89,7 +89,7 @@ The page then shows a **This review session has stopped accepting changes** aler
 The runtime keeps renewing its heartbeat, so the coding agent still sees the session as live, but it cannot save changes through that runtime.
 Already persisted review data remains available, and a newly staged comment stays in the page and its local recovery snapshot, so keep the tab open, stop the runtime, and start it again on the same plan.
 
-Every action that changes the review asks the same question before it sends: submitting comments, replying in a thread, asking a plan-wide question, deleting a sent comment, reverting the agent's changes, cancelling a queued request, and attaching an image.
+Every action that changes the review asks the same question before it sends: submitting comments, replying in a thread, asking a plan-wide question, deleting a sent comment, reverting the agent's changes, cancelling a queued request, changing auto-accept mode, and attaching an image.
 When the answer is no, the action is refused up front and says why, what became of what you typed, and what clears the block, rather than appearing to start and failing seconds later.
 Reading is never affected, and nothing you typed is discarded: text stays in its box, an unattached image leaves the message unchanged, and a request you could not cancel is still reported as being with the agent.
 The same refusal covers a runtime the page has lost contact with and a session a newer review runtime has replaced, so the reason you are given always matches the condition the page actually observed.
@@ -133,19 +133,25 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 
-The **Chat** tab groups unresolved pushed conversations under **Threads** and files resolved ones under **Resolved**.
+The **Chat** tab keeps pushed conversations that still need a verdict under **Needs you**, ranks them above changes already accepted by auto-accept under **Applied**, and files reviewer-resolved conversations under **Resolved**.
 Every pushed card uses the bot icon and **Added by agent** heading.
 A push that relays reviewer wording needs no extra origin marker, while an agent-authored opener carries the narrower **Agent-opened · About** context.
 Open the card to reply, review and accept its changes, revert a response, or resolve the thread after its pending work finishes.
 When the agent continues a pushed thread, Big Plan adds another exchange to the same card.
 The card keeps the opener's presentation.
+An unresolved pushed card offers **Auto-accept all changes**.
+Its confirmation separates the immediate consequence - accepting the open changes in that thread - from the session-wide consequence that every later push arrives accepted, including pushes in other threads.
+While armed, the Chat tab shows when auto-accept was turned on and offers **Switch back to review**.
+Applied cards remain conversations: you can reply, receive a follow-up push, inspect each pushed revision's summary, or revert it.
+Switching back changes only later arrivals: it leaves the card and its conversation available, while the next pushed change arrives open for review.
+Starting a fresh review session always starts in review mode.
 
 A push that lands while you are reading announces itself.
 The **Chat** tab leads with a **Pushed just now** entry naming the agent's model and client, plus how many blocks changed when the push revised the plan.
 **Open thread** takes you to the conversation, and **Dismiss** clears the entry; either way the entry names the newest arrival, and a newer push replaces it.
 On a wide screen, where the sidebar sits beside the plan rather than over it, an arrival opens the sidebar on **Chat** for you, unless you are part-way through writing a comment or reply or a pointer press is in flight: reserving the sidebar's gutter would move or recreate the control you are using, so the arrival waits until that interaction finishes.
 On a narrower screen it waits as well, because the sidebar would cover the sentence you are reading.
-The entry waits on **Chat** without adding a closed-sidebar toolbar indicator; once the sidebar is open on another tab, **Chat** carries a mark until you view the entry.
+Instead, the closed **Feedback** control carries the arrival count; once the sidebar is open on another tab, **Chat** carries a mark until you view the entry.
 Your reading position is kept either way.
 
 The blocks the revision changed settle briefly in place, so you can see what moved without hunting for it.
@@ -183,7 +189,7 @@ server-rendered article without client-rendering or gating the plan.
 
 An open decision card - a `Decision`, a `QuickDecision`, or a `DecisionAnalysis` with `interaction="choose"` - can be answered during a live review.
 A confirmed choice is saved with the review: it survives reload and runtime restarts, so the answer is still there when you come back to the page, and it stays saved until you change or clear it.
-The answer stays inside the review session until approval records it for the later agent handoff; tell the agent through the feedback flow when you want it acted on before then.
+The answer stays inside the review session until approval records it and sends it to the agent; tell the agent through the feedback flow when you want it acted on before then.
 The card's caption always states what is true right now: saving, saved with this review, or noted for this reading session only.
 If a save fails, the card says the answer is not saved yet and retries automatically; keep the page open until it reports the answer saved.
 
@@ -224,12 +230,24 @@ A standalone rendered document has no Inputs tab: the contract is derived by the
 Its confirmation dialog reports accepted and open change sets, answered and unanswered decisions, in-flight agent work, and the covering message from **Settings**.
 Choose a listed item to inspect it before approving, or choose **Edit in Settings** to close the confirmation and open the **Approval message** page.
 
-Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message for the later agent handoff.
+Confirming approval accepts every still-open change set, cancels every in-flight agent request, and records the current plan snapshot, saved decision answers, unanswered decisions, and covering message.
+It then writes one `approval` mailbox request whose `requestId` is the new approval id, carrying the absolute `planPath`, the pinned snapshot digest, the recorded answers, the unanswered decisions, and the covering message.
+It also writes a human-readable approval brief beside the review's feedback briefs, containing those same facts and the canonical-source check.
+If brief publication fails, approval reports the failure and retains its finalization record so a runtime restart can retry the brief and mailbox delivery.
+If that mailbox write fails, the approval remains recorded, the confirmation reports that it was not delivered, and the approval details keep showing the delivery failure.
+The agent is expected to re-read that exact path, verify its digest equals `pinnedSnapshot`, and acknowledge without editing the plan.
+A missing path, a missing file, or a digest mismatch is a hard stop: the agent reports it through the response as a `hardStop` and must not search for another copy.
+A reported hard stop is not an acknowledgment: the review records it as a failed step, and the Chat thread names it.
+An acknowledgment whose result digest does not match the pinned snapshot is refused.
+Revoking an approval that the agent has not yet answered cancels that still-open request.
+
 Every critical decision must be answered first; non-critical decisions may remain unanswered and are recorded that way.
 The approval is refused if the plan changes while the confirmation is open, so the record never silently covers a different revision.
 
-After approval, the branding-bar control reads **Plan approved**, and an approval stamp appears just above the document title in the reading column.
+After approval, the branding-bar control reads **Plan approved**, and a persistent approval stamp appears above the document title without moving the title or contents.
 Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
+The plan-wide Chat thread shows **Plan approved**, followed by **Approval acknowledged** after a successful acknowledgment or a warning when the agent reports a hard stop.
+When no agent is connected, the **Plan approved** entry instead says the approval was recorded but there was no agent to notify; the mailbox request remains waiting for the next agent.
 Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.
 If the plan source changes while an approval remains in force, the bar reports **Changed since approval** and offers **Re-approve** for the plan as it now reads.
 
