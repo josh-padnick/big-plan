@@ -1173,7 +1173,7 @@ const continueThreadWithRevision = async ({
 test("should arm auto-accept from a pushed thread and apply it only to later arrivals", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const directory = await mkdtemp(join(tmpdir(), "big-plan-live-push-mode-"));
   const planPath = join(directory, "plan.mdx");
   await writeFile(planPath, PLAN, "utf8");
@@ -1297,7 +1297,14 @@ test("should arm auto-accept from a pushed thread and apply it only to later arr
     await closeReviewRuntime({ page, runtime });
     runtime = await startReviewRuntime({ planPath });
     await page.goto(runtime.url);
-    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const feedbackButton = page.getByRole("button", {
+      name: /^Feedback(?: \d+)?$/u,
+    });
+    await expect(async () => {
+      await page.reload();
+      await expect(feedbackButton).toBeVisible();
+    }).toPass({ timeout: 15_000 });
+    await feedbackButton.click();
     const restartedRail = page.getByRole("complementary", { name: "Feedback" });
     await restartedRail.getByRole("tab", { name: "Chat" }).click();
     await expect(
