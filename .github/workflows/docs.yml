@@ -1,5 +1,5 @@
 # Builds the public documentation from its authoritative sources and deploys
-# the resulting static site to GitHub Pages after each merge to main.
+# the resulting static site to GitHub Pages after each push to main, including merges.
 name: Deploy docs
 
 on:
