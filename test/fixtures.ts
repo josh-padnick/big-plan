@@ -1108,11 +1108,9 @@ export const reviewRuntimeRequestUrl = (
 /**
  * Ends a journey's own review runtime.
  *
- * The open document polls its runtime until its page closes, so closing the
- * runtime under a live page makes the browser log a connection failure that
- * the render-health contract then counts against the test. Closing the page
- * also settles requests already queued through the stable proxy; navigating
- * away can leave those requests racing the runtime shutdown. The shared
+ * The open document polls its runtime until it is navigated away, so closing
+ * the runtime under a live page makes the browser log a connection failure
+ * that the render-health contract then counts against the test. The shared
  * `reviewRuntimeUrl` fixture unmounts for the same reason.
  */
 export const closeReviewRuntime = async ({
@@ -1122,7 +1120,7 @@ export const closeReviewRuntime = async ({
   readonly page: Page;
   readonly runtime: { readonly close: () => Promise<void> };
 }): Promise<void> => {
-  if (!page.isClosed()) await page.close();
+  if (!page.isClosed()) await page.goto("about:blank");
   await runtime.close();
 };
 
