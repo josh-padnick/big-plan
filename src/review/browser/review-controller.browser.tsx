@@ -76,6 +76,7 @@ import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
 import {
+  holdsItsPlace,
   isRendered,
   measureThreadAnchor,
   scrollToLiveElement,
@@ -2154,11 +2155,12 @@ const useThreadHosts = (
         );
         // The offset places the thread level with the target inside the card,
         // so it only applies when the card itself is what got measured and the
-        // target still holds its place inside it. A collapse leaves nothing
-        // behind: the card shrinks to its header, an ancestor row represents
-        // the anchor instead, and that row's top is the whole answer.
+        // target still holds its place inside it. A lens re-renders the block
+        // in place, so the slot the distance was measured to is still there to
+        // point at. A collapse leaves nothing behind: the card shrinks to its
+        // header, and level with the card is then the whole answer.
         const targetOffset =
-          anchor.element === container && isRendered(target)
+          anchor.element === container && holdsItsPlace(target)
             ? (targetOffsets.get(comment.id) ?? 0)
             : 0;
         const desiredTop =

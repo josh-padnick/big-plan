@@ -8300,7 +8300,7 @@ test("should open a digest entry in the slide its section header names", async (
   }
 });
 
-test("should jump to the commented block itself while a lens shows its change", async ({
+test("should jump to what stands in for a commented block a lens hid", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -8499,20 +8499,37 @@ ${lowerContent}
       Object.assign(window, { __bigPlanJumpTarget: null }),
     );
     await sentThread.locator(".review-sent-target").click();
-    // The jump asks for the changed block itself. The block is the reader's
-    // own, not a container the lens named, and the page moves to where that
-    // block sits even while the lens is showing its change in its place.
+    /*
+    The jump asks for the commented block, which has no box while the lens
+    shows its change, so aiming the page at the block itself would move it
+    nowhere. Geometry answers instead: the lens took the block's slot beside
+    it, so the laid-out sibling is both where that content now is and what the
+    reader came to read. An ancestor would also contain the block and would
+    also have a box - and for a block at the top of the article that ancestor
+    is the whole article, which says nothing about where the change sits.
+    */
     await expect
       .poll(() =>
         page.evaluate((blockId) => {
           const jumped = (
             window as unknown as { __bigPlanJumpTarget: HTMLElement | null }
           ).__bigPlanJumpTarget;
-          const block = document.querySelector(`[data-block-id="${blockId}"]`);
-          return jumped !== null && block !== null && jumped.contains(block);
+          const block = document.querySelector<HTMLElement>(
+            `[data-block-id="${blockId}"]`,
+          );
+          if (jumped === null || block === null) return "no jump yet";
+          if (jumped.getClientRects().length === 0) {
+            return "jumped to an element with no box";
+          }
+          if (jumped.parentElement !== block.parentElement) {
+            return "jumped outside the place the block held";
+          }
+          return jumped.querySelector("[data-review-diff-lens]") === null
+            ? "jumped to a sibling that is not the lens"
+            : "jumped to the lens standing in the block's place";
         }, comment.target.blockId),
       )
-      .toBe(true);
+      .toBe("jumped to the lens standing in the block's place");
     await expect
       .poll(() =>
         page.evaluate(() => {
