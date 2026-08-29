@@ -117,12 +117,16 @@ const listPresentationChanged = (location: DiffLocation): boolean =>
 // A block that declares sub-targets deliberately overlaps with them for
 // attribution: a table with its rows, columns, and cells, and a component
 // root with its declared internals. A presentation must choose one
-// non-overlapping level or it repeats the same text several times, so rows
-// win over every other table identity and declared internals win over the
-// component root that contains them.
-const presentationLocations = (
+// non-overlapping level or it repeats the same text several times. A compiled
+// component diff is already that component's overlap-free projection, so it
+// wins intact; only the legacy text fallback chooses rows or declared fields.
+export const presentationLocations = (
   locations: ReadonlyArray<DiffLocation>,
 ): ReadonlyArray<DiffLocation> => {
+  const component = locations.find(
+    (location) => location.isComponentRoot && location.view !== undefined,
+  );
+  if (component !== undefined) return [component];
   const wholeComponentIds = new Set(
     locations.flatMap((location) =>
       location.isComponentRoot && location.status !== "changed"
