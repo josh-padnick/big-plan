@@ -8,11 +8,11 @@ assignees: ""
 
 ## What happened?
 
-Describe the problem.
+<!-- Describe the problem. -->
 
 ## Expected behavior
 
-Describe what you expected to happen.
+<!-- Describe what you expected to happen. -->
 
 ## Steps to reproduce
 
@@ -22,4 +22,4 @@ Describe what you expected to happen.
 
 ## Environment and version
 
-Include the Big Plan version, operating system, runtime, and any other relevant details.
+<!-- Include the Big Plan version, operating system, runtime, and any other relevant details. -->

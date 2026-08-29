@@ -8,12 +8,12 @@ assignees: ""
 
 ## Problem or motivation
 
-Describe the need or problem this request would address.
+<!-- Describe the need or problem this request would address. -->
 
 ## Proposed solution
 
-Describe the outcome or approach you would like.
+<!-- Describe the outcome or approach you would like. -->
 
 ## Alternatives considered
 
-Describe any alternatives or workarounds you considered.
+<!-- Describe any alternatives or workarounds you considered. -->
