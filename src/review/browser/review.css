@@ -147,6 +147,9 @@ here; all values use the document theme's closed token vocabulary.
     box-shadow: 0 0 0 0.25rem var(--annotation-bg);
   }
 
+  /* Maximized figures own the frame, so a screen-level comment toolbar must
+     not become a second control row inside the frame or change its fit box.
+     The screen remains commentable when it returns to the reading surface. */
   :root[data-figure-maximized-open]
     :is([data-review-anchor-host], [data-review-toolbar-host]) {
     display: none;

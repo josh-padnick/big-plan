@@ -142,6 +142,20 @@ const blockSelector = (blockId: string, snapshot?: string): string =>
 const baselineBlockSelector = (blockId: string, snapshot: string): string =>
   `[data-baseline-block-id="${CSS.escape(blockId)}"][data-baseline-snapshot="${CSS.escape(snapshot)}"]`;
 
+const baselineSnapshotSelector = (snapshot: string): string =>
+  `[data-baseline-snapshot="${CSS.escape(snapshot)}"]`;
+
+export const baselineMissReason = ({
+  result,
+  snapshotPresent,
+}: {
+  readonly result: LiveTargetResult;
+  readonly snapshotPresent: boolean;
+}): LiveTargetResult =>
+  "missing" in result && result.missing === "unknown-id" && !snapshotPresent
+    ? { missing: "snapshot-not-retained" }
+    : result;
+
 /**
  * Names the block ids a lens is currently showing in place of. The lens sets
  * it when it hides those blocks, because only the lens knows which ones it
@@ -210,13 +224,15 @@ export const liveBaselineBlock = (
 ): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };
+  const snapshotSelector = baselineSnapshotSelector(snapshot);
+  const snapshotPresent =
+    article.matches(snapshotSelector) ||
+    article.querySelector(snapshotSelector) !== null;
   const result = resolveWithin(
     article,
     baselineBlockSelector(blockId, snapshot),
   );
-  return "missing" in result && result.missing === "unknown-id"
-    ? { missing: "snapshot-not-retained" }
-    : result;
+  return baselineMissReason({ result, snapshotPresent });
 };
 
 /**

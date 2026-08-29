@@ -85,7 +85,6 @@ export const compileSnapshotDiffPayload = ({
         document: compiled.baseline,
         blockId: location.oldBlockId,
         key: `was-${from}`,
-        baselineSnapshot: from,
       });
       const newView = renderIsolatedBlockView({
         document: compiled.proposed,

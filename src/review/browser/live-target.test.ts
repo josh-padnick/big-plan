@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  baselineMissReason,
   candidateMatchesLivePicture,
   liveBlock,
   lensMissReason,
@@ -58,6 +59,35 @@ describe("pickLiveCandidate", () => {
     expect(
       pickLiveCandidate([candidate("first"), candidate("second")]),
     ).toEqual({ found: "first" });
+  });
+});
+
+describe("baselineMissReason", () => {
+  it("should report an unknown id in a retained snapshot", () => {
+    expect(
+      baselineMissReason({
+        result: { missing: "unknown-id" },
+        snapshotPresent: true,
+      }),
+    ).toEqual({ missing: "unknown-id" });
+  });
+
+  it("should report a missing snapshot when no live element carries it", () => {
+    expect(
+      baselineMissReason({
+        result: { missing: "unknown-id" },
+        snapshotPresent: false,
+      }),
+    ).toEqual({ missing: "snapshot-not-retained" });
+  });
+
+  it("should preserve clone-only misses in an available snapshot", () => {
+    expect(
+      baselineMissReason({
+        result: { missing: "clone-only" },
+        snapshotPresent: false,
+      }),
+    ).toEqual({ missing: "clone-only" });
   });
 });
 
