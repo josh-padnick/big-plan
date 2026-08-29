@@ -159,7 +159,6 @@ import {
 } from "./review-comment-submit.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
-  displayedStandIn,
   foundElement,
   liveBlock,
   liveDecisionFigure,
@@ -2015,14 +2014,6 @@ const threadAnchorContainer = (target: HTMLElement): HTMLElement =>
   target.parentElement ??
   target;
 
-// Whether the spot the thread remembers is still occupied. A lens hides the
-// block it replays but renders its copy in the same spot, so the remembered
-// distance still describes where that content sits. A collapse leaves nothing
-// behind at all: the card shrinks to its header, and the distance then names a
-// gap below the card rather than a place inside it.
-const targetHoldsItsPlace = (target: HTMLElement): boolean =>
-  isRendered(target) || displayedStandIn(target) !== null;
-
 const useThreadHosts = (
   comments: ReadonlyArray<ReviewComment>,
   isOpen: boolean,
@@ -2159,7 +2150,7 @@ const useThreadHosts = (
         // represented by an ancestor row instead, and that row's top is the
         // whole answer.
         const targetOffset =
-          anchor.element === container && targetHoldsItsPlace(target)
+          anchor.element === container && isRendered(target)
             ? (targetOffsets.get(comment.id) ?? 0)
             : 0;
         const desiredTop =
@@ -6716,9 +6707,7 @@ export const ReviewController = () => {
       setStatus("This comment's target is no longer in the plan.");
       return;
     }
-    // With a What-changed lens open over the target, the reader's content is
-    // in the lens and the block behind it has no box at all.
-    (displayedStandIn(element) ?? element).scrollIntoView({
+    element.scrollIntoView({
       behavior: "smooth",
       block: "center",
     });
@@ -7349,7 +7338,7 @@ export const ReviewController = () => {
     // keeps it clear of the branding bar.
     const planBlock = targetElement(comment.target);
     if (planBlock !== null) {
-      (displayedStandIn(planBlock) ?? planBlock).scrollIntoView({
+      planBlock.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });

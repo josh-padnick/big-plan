@@ -104,8 +104,9 @@ because breaking it fails silently rather than loudly.
 The review island may replace plan DOM only through `src/review/browser/plan-dom.browser.ts`, which announces the swap as `bigplan:article-replaced`.
 Every shell script and every island effect that holds a node re-resolves on that event, because a replaced article or component root detaches everything wired beneath it and a dead handler throws nothing.
 `src/review/browser/live-target.browser.ts` resolves plan identity in one place.
-It scopes lookups to the live article and excludes evidence that a lens replays beside or after the plan.
-It treats a compiler-addressed component diff replacement as live and returns either an element or the reason it is missing.
+It scopes lookups to the live article, prefers the copy the reader can see, and checks that a name still holds the content a diff recorded.
+Evidence a lens replays carries no review address, so it can never answer a name; a compiler-addressed component diff replacement is live plan DOM and rightly can.
+It returns either an element or the reason it is missing.
 A lint rule keeps it the only such place, because a raw selector silently returns a plausible wrong node instead of failing.
 Identity is deliberately not geometry: that resolver rightly answers with
 elements the browser never laid out, such as a block inside a collapsed slide,

@@ -58,7 +58,6 @@ import {
 import { Icon } from "./icon.browser.js";
 import { requestOpenInputs } from "./inputs-surface.browser.js";
 import {
-  displayedStandIn,
   foundElement,
   liveBlock,
   liveDecisionFigure,
@@ -85,7 +84,7 @@ const APPROVE_ITEM_ROW_CLASS =
 const APPROVE_ITEM_ACTION_CLASS = "shrink-0 text-xs font-medium text-accent";
 
 const showLiveElement = (element: HTMLElement): void => {
-  (displayedStandIn(element) ?? element).scrollIntoView({
+  element.scrollIntoView({
     behavior: "smooth",
     block: "center",
   });
