@@ -4355,6 +4355,7 @@ export const ReviewController = () => {
   // across effect instances because a press already in flight when an arrival
   // lands is exactly the one that must not be interrupted.
   const pointerPressed = useRef(false);
+  const previousIsWide = useRef(isWide);
   const seenPushResponseIds = useRef<ReadonlySet<string> | null>(null);
   // The blocks the next plan-DOM replacement should settle. Armed immediately
   // before the swap a push drove and consumed by the announcement it makes, so
@@ -6173,6 +6174,13 @@ export const ReviewController = () => {
     isOpen,
     isWide,
   ]);
+
+  useEffect(() => {
+    const enteredWide = !previousIsWide.current && isWide;
+    previousIsWide.current = isWide;
+    if (!enteredWide || pushArrival === null || isOpen) return;
+    setArrivalWantsRail(true);
+  }, [isOpen, isWide, pushArrival]);
 
   /*
   A press is an intent already in flight, and the reader is owed its result.

@@ -1394,7 +1394,7 @@ test("should disable review-mode controls when writes are unavailable", async ({
   }
 });
 
-test("should badge a narrow arrival without opening the sidebar", async ({
+test("should badge a narrow arrival and open it after resizing wide", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -1412,6 +1412,11 @@ test("should badge a narrow arrival without opening the sidebar", async ({
     await expect(
       page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }),
     ).toContainText("1", { timeout: 15_000 });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(rail).toBeVisible();
+    await expect(rail.locator("[data-review-push-arrival]")).toBeVisible();
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
