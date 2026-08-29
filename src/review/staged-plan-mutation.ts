@@ -772,6 +772,26 @@ export const revertPlanSource = async ({
     },
   });
 
+/**
+ * Writes one already-decided revision for a caller that is inside the plan
+ * mutation lock right now.
+ *
+ * The approval commit is that caller. Its stamp and its approval record have
+ * to land under one hold of the lock - a stamp published in its own hold could
+ * be overtaken by an agent revision before the record naming it was written,
+ * and the reviewer would be told the plan changed by the very write Big Plan
+ * had just made on their behalf. Taking the lock again here would deadlock, so
+ * the byte-writing call still lives in this module and the hold belongs to the
+ * caller, which is what keeps the authoritative source's writer count at one.
+ */
+export const replacePlanSourceUnderPlanMutationLock = async ({
+  planPath,
+  source,
+}: {
+  readonly planPath: string;
+  readonly source: string;
+}): Promise<void> => replacePlanSource({ path: planPath, source });
+
 /** Retains the published revision and clears the attempt that produced it. */
 const finalizeCommittedMutation = async ({
   store,

@@ -21,6 +21,10 @@ description: A compact option-by-option choice with inline considerations.
 `question` is required. Add at least two uniquely titled options and at most one `recommended` option.
 Add `critical` when the reviewer must settle this question before work begins; the card says so, and the review's [Inputs list](/reference/reviewing/#what-the-review-is-waiting-for) marks it. A `Consideration` requires `label` and `verdict`; its optional `tone` is `good`, `bad`, `mixed`, or `neutral`.
 
+`state` is `proposed` or `decided` and defaults to `proposed`, so a question you are asking needs no `state` at all.
+A decided decision marks exactly one option `chosen`, and a chosen option requires `state="decided"`; it renders as the record of what was chosen rather than as a question, and it stops accepting answers.
+Author the pair yourself only for a choice that was settled before the review began - when the reviewer answers the question, Big Plan writes `state="decided"` and `chosen` into the plan source at approval.
+
 A `Consideration` body defines its label: the first body authored for a label becomes the definition that label reveals on hover and keyboard focus.
 A label authored without a body stays plain text.
 

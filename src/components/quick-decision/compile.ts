@@ -2,6 +2,7 @@
 
 import type { ElementContent } from "hast";
 import { meaningfulChildren } from "../_authoring/authored-body.js";
+import { validateChosenSelection } from "../_authoring/decision-selection.js";
 import {
   createComponentIdAllocator,
   validateComponentAttributes,
@@ -16,14 +17,28 @@ import type {
   CompiledDecisionCardOption,
 } from "../_model/decision-card.js";
 
+/**
+ * A QuickDecision is proposed until it is settled. Absent means proposed, so
+ * an author writes nothing to ask a question; Big Plan writes "decided" itself
+ * when the reviewer answers it at approval.
+ */
+export type QuickDecisionState = "proposed" | "decided";
+
+const QUICK_DECISION_STATES: ReadonlyArray<QuickDecisionState> = [
+  "proposed",
+  "decided",
+];
+
 const QUICK_DECISION_SCHEMA = {
   question: { kind: "string", required: true, nonEmpty: true },
+  state: { kind: "enum", values: QUICK_DECISION_STATES },
   context: { kind: "string" },
   critical: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 const OPTION_SCHEMA = {
   title: { kind: "string", required: true, nonEmpty: true },
   recommended: { kind: "booleanShorthand" },
+  chosen: { kind: "booleanShorthand" },
   summary: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 
@@ -69,7 +84,7 @@ const compileOption = ({
     titleId: `${id}-title`,
     title,
     recommended: validated.recommended === true,
-    chosen: false,
+    chosen: validated.chosen === true,
     ...(validated.summary === undefined ? {} : { summary: validated.summary }),
     considerations: [],
     detail: [],
@@ -101,6 +116,7 @@ export const compileQuickDecisionComponent = ({
     });
   }
   const question = validated.question ?? "";
+  const state = validated.state ?? "proposed";
   const id = ids.allocate({
     prefix: "quick-decision",
     label: question,
@@ -139,11 +155,23 @@ export const compileQuickDecisionComponent = ({
   const options = optionChildren.map((child) =>
     compileOption({ child, diagnostics, ids, idPrefix: id }),
   );
+  const status = state === "proposed" ? "open" : state;
+  validateChosenSelection({
+    component: "QuickDecision",
+    options,
+    status,
+    position,
+    diagnostics,
+  });
+  const chosenOption = options.find((option) => option.chosen);
+  // A settled QuickDecision keeps interaction: "choose". It stops being
+  // answerable because its status moved, which is the one fact the card and
+  // the review runtime both read.
   return {
     id,
     questionId: `${id}-question`,
     question,
-    status: "open",
+    status,
     layout: "brief",
     scoring: "qualitative",
     interaction: "choose",
@@ -153,6 +181,7 @@ export const compileQuickDecisionComponent = ({
     detail: [],
     criteria: [],
     options,
+    ...(chosenOption === undefined ? {} : { chosenOption }),
     discriminating: [],
   };
 };

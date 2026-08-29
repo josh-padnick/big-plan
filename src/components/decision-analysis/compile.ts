@@ -4,6 +4,7 @@
 
 import type { Element, ElementContent } from "hast";
 import { meaningfulChildren } from "../_authoring/authored-body.js";
+import { validateChosenSelection } from "../_authoring/decision-selection.js";
 import {
   createComponentIdAllocator,
   validateComponentAttributes,
@@ -385,8 +386,8 @@ const validateUniqueTitles = ({
   }
 };
 
-// Recommendation, selection, and status are three separate states, and only
-// some combinations are honest: a chosen option means the decision is settled.
+// Recommendation is this component's own rule; the chosen/state triangle is
+// the one every decision component shares, so it is read from its owner.
 const validateSelection = ({
   options,
   status,
@@ -405,27 +406,13 @@ const validateSelection = ({
       position,
     });
   }
-  const chosen = options.filter((option) => option.chosen);
-  if (chosen.length > 1) {
-    diagnostics.add({
-      message: "DecisionAnalysis cannot contain more than one chosen Option",
-      position,
-    });
-  }
-  if (chosen.length === 1 && status !== "decided") {
-    diagnostics.add({
-      message:
-        'A DecisionAnalysis with a chosen Option must set state="decided"',
-      position,
-    });
-  }
-  if (chosen.length === 0 && status === "decided") {
-    diagnostics.add({
-      message:
-        'A DecisionAnalysis with state="decided" must mark one Option chosen',
-      position,
-    });
-  }
+  validateChosenSelection({
+    component: "DecisionAnalysis",
+    options,
+    status,
+    position,
+    diagnostics,
+  });
 };
 
 const validateWeightedScoring = ({
