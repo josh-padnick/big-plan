@@ -29,7 +29,7 @@ const PLAN_IDENTITY_SELECTOR = {
   selector:
     'TemplateElement[value.raw=/data-(block-id|baseline-block-id|flow-anchor)="/], Literal[value=/data-(block-id|baseline-block-id|flow-anchor)="/]',
   message:
-    "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
+    "Resolve plan identity through live-target.browser.ts (liveBlock, liveBaselineBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
 };
 
 // Anything laid out as a grid in a bounded column must say what its column

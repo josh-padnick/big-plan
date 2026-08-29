@@ -196,15 +196,18 @@ export const livePictures = (): ReadonlyArray<HTMLElement> => {
 };
 
 /** Resolves a block id to the block the reader is reading. */
-export const liveBlock = (
-  blockId: string,
-): LiveTargetResult => {
+export const liveBlock = (blockId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };
   return resolveWithin(article, blockSelector(blockId));
 };
 
-/** Resolves a block address minted by a retained baseline snapshot. */
+/**
+ * Resolves a block address minted by a retained baseline snapshot.
+ *
+ * This stays separate from liveBlock because it can distinguish a snapshot
+ * absent from the page from an id absent within a snapshot that is present.
+ */
 export const liveBaselineBlock = (
   blockId: string,
   snapshot: string,

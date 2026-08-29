@@ -149,7 +149,7 @@ describe("candidateMatchesLivePicture", () => {
   });
 });
 
-describe("liveBlock and liveBaselineBlock", () => {
+describe("liveBaselineBlock", () => {
   const globals = globalThis as unknown as {
     CSS?: { escape(value: string): string };
     document?: {
@@ -172,7 +172,8 @@ describe("liveBlock and liveBaselineBlock", () => {
     const selectors: string[] = [];
     const article = {
       matches: () => false,
-      querySelector: () => null,
+      querySelector: (selector: string) =>
+        selector.includes("data-baseline-snapshot") ? element : null,
       querySelectorAll: (selector: string) => {
         selectors.push(selector);
         return [element];
@@ -194,10 +195,15 @@ describe("liveBlock and liveBaselineBlock", () => {
   });
 
   it("reports a missing snapshot without falling back to a proposed match", () => {
+    const proposedElement = {
+      closest: () => null,
+      getClientRects: () => [{}],
+    } as unknown as HTMLElement;
     const article = {
       matches: () => false,
       querySelector: () => null,
-      querySelectorAll: () => [],
+      querySelectorAll: (selector: string) =>
+        selector.startsWith(`[${"data-block-id"}="`) ? [proposedElement] : [],
     };
     globals.CSS = { escape: (value) => value };
     globals.document = {
@@ -206,6 +212,23 @@ describe("liveBlock and liveBaselineBlock", () => {
 
     expect(liveBaselineBlock("same-id", "abcdef012345")).toEqual({
       missing: "snapshot-not-retained",
+    });
+  });
+
+  it("reports an unknown id when the requested snapshot is retained", () => {
+    const article = {
+      matches: () => false,
+      querySelector: (selector: string) =>
+        selector.includes("data-baseline-snapshot") ? {} : null,
+      querySelectorAll: () => [],
+    };
+    globals.CSS = { escape: (value) => value };
+    globals.document = {
+      querySelector: () => article,
+    };
+
+    expect(liveBaselineBlock("missing-id", "abcdef012345")).toEqual({
+      missing: "unknown-id",
     });
   });
 });
