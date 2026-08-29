@@ -12,6 +12,8 @@ The workflow is intentionally light:
 - **Feature branches.** Branch off `main` and open a pull request back into `main`.
 - **Small PRs.** Keep pull requests small and reviewable; prefer several self-contained increments over one large change.
 - **Checks.** Run `bun run lint`, `bun run build`, `bun run test`, and `bun run test:e2e` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
+  Browser tests get one retry in CI and none locally, because the self-hosted runner is one machine and contention alone can time a good tree out.
+  A retried test is not a green test: the run reports every retried attempt and its flaky count, and a spec that turns up there is owed a fix, not a second attempt.
 - **Merge gates.** A pull request merges only once its review is triaged and its validation is attested, both stated in comments that CI checks. See [Merge gates](#merge-gates).
 - **License.** Big Plan is [FSL-1.1-MIT](LICENSE.md) licensed; contributions are accepted under the same license.
 
