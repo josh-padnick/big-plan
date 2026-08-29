@@ -14,7 +14,7 @@ Reading on anyway is a fine way to audit exactly what your agent is told.
 - [Use the skill](/for-agents/use-the-skill/): install the thin skill shell and keep guidance fresh via package upgrades.
 - [Render a plan](/for-agents/render-a-plan/): the operational loop for rendering a plan and handing it to a human for review.
 - [Authoring plans](/for-agents/authoring-plans/): what a plan document is, how the guidance gate works, and where each kind of rule lives.
-- [setup.md](/setup.md): the one-time setup instructions an agent follows after installing Big Plan.
+- [setup.md](/setup.md): the one-time setup instructions an agent follows using the current Big Plan CLI without a global install.
 
 ## Read these docs as Markdown
 

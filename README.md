@@ -16,20 +16,37 @@ The [features](docs/src/content/docs/intro/features.md) and [components](docs/sr
 Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
 Everything runs locally, and the MDX file on your disk is the source of truth.
 
+## Set up Big Plan
+
+Give this stable prompt to your coding agent; the linked setup document stays current as the product evolves:
+
+```text
+Set up Big Plan for me: read https://big-plan.ai/setup.md and follow it.
+```
+
+Prefer to do it yourself? Run the current release without installing it globally:
+
+```sh
+npx -y big-plan@latest guidance
+npx -y big-plan@latest render plan.mdx
+```
+
+See the [Installation guide](docs/src/content/docs/intro/installation.md) for the explicit global-install alternative.
+
 ## Usage
 
 Read the plan-writing guidance, print or install the agent skill shell, validate a plan without writing anything, render it as self-contained themed HTML, or compile its validated contents as machine-readable JSON:
 
 ```sh
-npx big-plan guidance
-npx big-plan skill
-npx big-plan skill write <path/to/SKILL.md>
-npx big-plan validate <file.mdx>
-npx big-plan render <file.mdx> [output.html]
-npx big-plan compile <file.mdx> [output.json]
-npx big-plan review <file.mdx>
-npx big-plan service status
-npx big-plan agent <file.mdx>
+npx -y big-plan@latest guidance
+npx -y big-plan@latest skill
+npx -y big-plan@latest skill write <path/to/SKILL.md>
+npx -y big-plan@latest validate <file.mdx>
+npx -y big-plan@latest render <file.mdx> [output.html]
+npx -y big-plan@latest compile <file.mdx> [output.json]
+npx -y big-plan@latest review <file.mdx>
+npx -y big-plan@latest service status
+npx -y big-plan@latest agent <file.mdx>
 ```
 
 `guidance` prints the principles for writing a plan a human loves to review; the [CLI reference](docs/src/content/docs/reference/cli.md#guidance-and-the-acknowledgment-gate) owns which commands require a current acknowledgment.
@@ -67,10 +84,10 @@ Big Plan ships a **thin skill shell** under `assets/skill/SKILL.md`, embedded in
 
 **Update story for end users:**
 
-1. Upgrade Big Plan (`npm i -g big-plan@latest`, bump the dependency, or run `npx big-plan@latest ...`).
-2. New guidance arrives automatically on the next `big-plan guidance` - no skill-file edits.
-3. Re-run `big-plan skill write <path>` only if the thin shell text itself changed (rare).
-4. Prefer `npx big-plan@latest` for always-current one-off runs over silent global mutation.
+1. Upgrade Big Plan (`npm i -g big-plan@latest`, bump the dependency, or run `npx -y big-plan@latest ...`).
+2. New guidance arrives automatically on the next `npx -y big-plan@latest guidance` - no skill-file edits.
+3. Re-run `npx -y big-plan@latest skill write <path>` only if the thin shell text itself changed (rare).
+4. Prefer `npx -y big-plan@latest` for always-current one-off runs over silent global mutation.
    The CLI also exposes axi-sdk's built-in `update` for global installs when you want that path explicitly.
 
 Agents should not re-copy long guidance into chat memory as policy; the installed CLI is authoritative each session.

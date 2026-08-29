@@ -27,7 +27,7 @@ It renders plans beautifully through discrete components, diagrams, annotated co
 
 The difference is packaging and custody.
 Agent-Native Plans is part of a larger platform, and the default flow signs you in to view your plan.
-Big Plan sees no reason a plan on your own disk should require an account: it is one standalone command (`npx big-plan render plan.mdx`), the output is one HTML file, and nothing about reviewing it involves logging in or leaving your machine.
+Big Plan sees no reason a plan on your own disk should require an account: it is one standalone command (`npx -y big-plan@latest render plan.mdx`), the output is one HTML file, and nothing about reviewing it involves logging in or leaving your machine.
 
 Big Plan is pre-alpha, but its [local review workflow](/reference/reviewing/) now carries comments and agent responses without an account or third-party service.
 What it offers is the combination the others do not: structured, consistent plan documents and a live feedback loop from a standalone tool that keeps everything on your disk.

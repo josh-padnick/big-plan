@@ -36,20 +36,20 @@ The output argument is optional for `render` and `compile`.
 The equivalent package runner forms are:
 
 ```sh
-npx big-plan guidance
-npx big-plan skill
-npx big-plan skill write <path/to/SKILL.md>
-npx big-plan validate <input.mdx>
-npx big-plan render <input.mdx> [output.html]
-npx big-plan compile <input.mdx> [output.json]
-npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
-npx big-plan service status
-npx big-plan agent <input.mdx>
-npx big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
-npx big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]
-npx big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
-npx big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]
-npx big-plan update --check
+npx -y big-plan@latest guidance
+npx -y big-plan@latest skill
+npx -y big-plan@latest skill write <path/to/SKILL.md>
+npx -y big-plan@latest validate <input.mdx>
+npx -y big-plan@latest render <input.mdx> [output.html]
+npx -y big-plan@latest compile <input.mdx> [output.json]
+npx -y big-plan@latest review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
+npx -y big-plan@latest service status
+npx -y big-plan@latest agent <input.mdx>
+npx -y big-plan@latest agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
+npx -y big-plan@latest agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]
+npx -y big-plan@latest agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
+npx -y big-plan@latest agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]
+npx -y big-plan@latest update --check
 ```
 
 ## Guidance and the acknowledgment gate
@@ -86,13 +86,13 @@ Overwriting an existing file at that path is allowed only because `write` was ex
 
 After a package upgrade, new guidance is available immediately via `big-plan guidance`.
 Re-run `skill write` only when the thin shell itself changed.
-Prefer `npx big-plan@latest` for always-current one-off runs; see [Use the skill](/for-agents/use-the-skill/) for the full update-propagation story.
+Prefer `npx -y big-plan@latest` for always-current one-off runs; see [Use the skill](/for-agents/use-the-skill/) for the full update-propagation story.
 
 ## Optional global update
 
 `big-plan update --check` reports the installed and latest published versions without installing anything.
 Running `big-plan update` without `--check` is opt-in mutation: for a recognized global npm or pnpm install, the built-in updater runs the matching global package-manager upgrade.
-Use it only when a global upgrade is wanted; prefer `npx big-plan@latest` for always-current one-off runs.
+Use it only when a global upgrade is wanted; prefer `npx -y big-plan@latest` for always-current one-off runs.
 
 ## Input and output paths
 

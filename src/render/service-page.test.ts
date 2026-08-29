@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { GLOBAL_CSS } from "./global.generated.js";
 import {
+  AGENT_SETUP_PROMPT,
   renderPlanEndedPage,
   renderPlanInterruptedPage,
   renderPlanNeverStartedPage,
@@ -254,6 +255,17 @@ describe("the service's pages", () => {
     const html = renderPlanUnknownPage();
     expect(html).toContain("This machine has no review at this address.");
     expect(html).not.toContain("/plan/");
+  });
+
+  it("should hand the unknown-address reader the agent prompt before the CLI", () => {
+    const html = renderPlanUnknownPage();
+    expect(html).toContain(AGENT_SETUP_PROMPT);
+    expect(html).toContain('aria-label="Copy prompt"');
+    expect(html).toContain("data-copy-label");
+    expect(html.indexOf(AGENT_SETUP_PROMPT)).toBeLessThan(
+      html.indexOf("big-plan review &lt;your-plan.mdx&gt;"),
+    );
+    expect(html).toContain("Or run this yourself:");
   });
 
   it("should quote a recorded ending and never invent one", () => {

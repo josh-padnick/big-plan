@@ -39,7 +39,7 @@
     "check:merge-guard": "node scripts/merge-guard/check.mjs",
     "check:merge-gates": "node scripts/merge-gates/check.mjs",
     "warn:stale-copy": "node scripts/merge-guard/warn-stale-copy.mjs",
-    "test:e2e": "playwright test",
+    "test:e2e": "bun install --cwd docs --frozen-lockfile && playwright test",
     "lint": "eslint . && node scripts/style-contract/check.mjs && node scripts/design-system/check.mjs && node scripts/design-system/palettes.mjs && prettier --check .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

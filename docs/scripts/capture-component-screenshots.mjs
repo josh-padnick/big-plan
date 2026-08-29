@@ -26,7 +26,7 @@ Approving this plan green-lights the cache rewrite; the rollout plan ships separ
 
 <Callout type="tip">
 
-Render this plan locally with \`npx big-plan render plan.mdx\` to review it in your own browser.
+Render this plan locally with \`npx -y big-plan@latest render plan.mdx\` to review it in your own browser.
 
 </Callout>
 

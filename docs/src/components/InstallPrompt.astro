@@ -1,0 +1,221 @@
+---
+// Owns the homepage's progressively enhanced install-prompt dialog.
+
+type Props = {
+  readonly prompt: string;
+};
+
+const { prompt } = Astro.props;
+---
+
+<dialog
+  aria-describedby="install-prompt-description"
+  aria-labelledby="install-prompt-title"
+  data-install-prompt-dialog
+>
+  <form method="dialog" class="dialog-close">
+    <button type="submit" aria-label="Close install prompt">&times;</button>
+  </form>
+  <h2 id="install-prompt-title">Give this to your coding agent</h2>
+  <p id="install-prompt-description">
+    Copy this prompt into your project&rsquo;s coding agent. The linked setup guide
+    stays current as Big Plan evolves.
+  </p>
+  <pre><code data-install-prompt-text>{prompt}</code></pre>
+  <div class="dialog-actions">
+    <button type="button" class="copy-prompt" data-copy-install-prompt>
+      Copy prompt
+    </button>
+    <a href="/intro/installation/">Or install it yourself</a>
+  </div>
+  <p
+    class="copy-status"
+    role="status"
+    aria-live="polite"
+    data-copy-status
+    hidden
+  ></p>
+</dialog>
+
+<script>
+  const triggerLink = document.querySelector<HTMLAnchorElement>(
+    "a[data-install-prompt-trigger]",
+  );
+  const dialog = document.querySelector<HTMLDialogElement>(
+    "[data-install-prompt-dialog]",
+  );
+  const copyButton = dialog?.querySelector<HTMLButtonElement>(
+    "[data-copy-install-prompt]",
+  );
+  const prompt = dialog?.querySelector<HTMLElement>(
+    "[data-install-prompt-text]",
+  );
+  const status = dialog?.querySelector<HTMLElement>("[data-copy-status]");
+
+  if (triggerLink !== null && dialog !== null) {
+    const trigger = document.createElement("button");
+    for (const attribute of triggerLink.attributes) {
+      if (attribute.name !== "href") {
+        trigger.setAttribute(attribute.name, attribute.value);
+      }
+    }
+    trigger.type = "button";
+    trigger.innerHTML = triggerLink.innerHTML;
+    trigger.addEventListener("click", () => dialog.showModal());
+    dialog.addEventListener("close", () => trigger.focus());
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      const controls = Array.from(
+        dialog.querySelectorAll<HTMLElement>("button, a[href]"),
+      );
+      const firstControl = controls.at(0);
+      const lastControl = controls.at(-1);
+      if (firstControl === undefined || lastControl === undefined) return;
+      if (event.shiftKey && document.activeElement === firstControl) {
+        event.preventDefault();
+        lastControl.focus();
+      } else if (!event.shiftKey && document.activeElement === lastControl) {
+        event.preventDefault();
+        firstControl.focus();
+      }
+    });
+    triggerLink.replaceWith(trigger);
+  }
+
+  if (
+    copyButton !== null &&
+    copyButton !== undefined &&
+    prompt !== null &&
+    prompt !== undefined &&
+    status !== null &&
+    status !== undefined
+  ) {
+    const control = copyButton;
+    const promptText = prompt;
+    const feedback = status;
+    control.addEventListener("click", async () => {
+      const value = promptText.textContent;
+      if (value === null) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        control.textContent = "Copied!";
+        feedback.textContent = "Prompt copied to clipboard.";
+      } catch {
+        control.textContent = "Copy failed";
+        feedback.textContent =
+          "The prompt could not be copied. Select it manually.";
+      }
+      feedback.hidden = false;
+      window.setTimeout(() => {
+        control.textContent = "Copy prompt";
+        feedback.textContent = "";
+        feedback.hidden = true;
+      }, 1_500);
+    });
+  }
+</script>
+
+<style>
+  dialog {
+    width: min(36rem, calc(100% - 2rem));
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    color: var(--sl-color-white);
+    background: var(--sl-color-bg-nav);
+    box-shadow: var(--sl-shadow-lg);
+  }
+
+  dialog::backdrop {
+    background: rgb(0 0 0 / 65%);
+  }
+
+  h2,
+  p {
+    margin-block: 0;
+  }
+
+  h2 {
+    padding-inline-end: 2rem;
+    font-size: var(--sl-text-2xl);
+  }
+
+  #install-prompt-description {
+    margin-block-start: 0.75rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  pre {
+    margin-block: 1.5rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    overflow-x: auto;
+    background: var(--sl-color-bg-inline-code);
+    white-space: pre-wrap;
+  }
+
+  code {
+    color: var(--sl-color-white);
+  }
+
+  .dialog-close {
+    float: inline-end;
+  }
+
+  .dialog-close button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    border: 0;
+    color: var(--sl-color-gray-2);
+    background: transparent;
+    font-size: var(--sl-text-2xl);
+    cursor: pointer;
+  }
+
+  .dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .copy-prompt {
+    min-height: 2.75rem;
+    border: 1px solid var(--sl-color-text-accent);
+    border-radius: 999rem;
+    padding-inline: 1.125rem;
+    color: var(--sl-color-black);
+    background: var(--sl-color-text-accent);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .dialog-actions a {
+    color: var(--sl-color-white);
+  }
+
+  .copy-status {
+    position: fixed;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    z-index: 1;
+    margin: 0;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: var(--sl-color-white);
+    background: var(--sl-color-bg-nav);
+    box-shadow: var(--sl-shadow-lg);
+    font-size: var(--sl-text-sm);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+  }
+
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--sl-color-text-accent);
+    outline-offset: 0.25rem;
+  }
+</style>
