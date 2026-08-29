@@ -32,7 +32,8 @@ Method:
    command, so the probe measures the shipped text rather than a copy of it.
    It produces three arms: `after` is the working tree's prompt; `before`
    reconstructs the prompt as it stood before the change under test, by reading
-   the committed prompt block from `git` and restoring its former position; and
+   the prompt block from `HEAD^` (or `--baseline-rev <rev>`) and restoring its
+   former position; and
    `control` removes the push guidance entirely.
    The control arm is what makes the other two readable. A probe on which every
    arm passes has not shown that the prompt works, only that the question was
@@ -56,6 +57,7 @@ Method:
 
 ```sh
 node _internal/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
+node _internal/probes/push-mode-probe.mjs --baseline-rev <pre-change-rev>
 node _internal/probes/push-mode-probe.mjs --trials 5 --harness claude --arm after
 node _internal/probes/push-mode-probe.mjs --arm control --question doubted
 ```
@@ -65,6 +67,6 @@ it as a distribution: the change is good when `deferred` and `other` go to zero
 on the `after` arm across every harness and both wordings, and stay there - and
 it is only evidence at all when the `control` arm shows some of them.
 
-`--baseline` only works while the prior prompt is still what `HEAD` carries, so
-run the before arm before committing the change under test, or point the probe
-at the pre-change commit.
+The before arm uses `HEAD^` by default. Pass `--baseline-rev <rev>` when the
+pre-change prompt lives at another revision. Baseline capture refuses revisions
+that already contain the new two-mode prompt.

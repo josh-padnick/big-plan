@@ -5,7 +5,8 @@
 // `big-plan agent <plan>` command, prints the assembled prompt, and stops the
 // session. With --baseline it prints the pre-BIG-258 prompt instead,
 // reconstructed from the captured prompt by inverting exactly the two edits
-// BIG-258 made: the operator block's text, and its position.
+// BIG-258 made: the operator block's text, and its position. The block comes
+// from --baseline-rev, which defaults to HEAD^.
 
 import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
@@ -101,10 +102,10 @@ const captureCurrentPrompt = async () => {
  * change exactly: read the committed operator block from git, swap it in for
  * the new lead block, and put it back where it used to sit.
  */
-const reconstructBaselinePrompt = async (prompt) => {
+export const reconstructBaselinePrompt = async (prompt, baselineRev) => {
   const { stdout: committed } = await execFileAsync(
     "git",
-    ["show", "HEAD:src/review/agent-prompt.md"],
+    ["show", `${baselineRev}:src/review/agent-prompt.md`],
     { cwd: repoRoot, maxBuffer: 1024 * 1024 },
   );
   const priorBlock = committed
@@ -114,7 +115,7 @@ const reconstructBaselinePrompt = async (prompt) => {
     .trim();
   if (priorBlock.includes("## Your two modes")) {
     throw new Error(
-      "HEAD already carries the BIG-258 prompt, so it cannot serve as the baseline; run the probe before committing, or point it at the pre-change commit",
+      `${baselineRev} already carries the BIG-258 prompt, so it cannot serve as the baseline; choose a revision from before the change with --baseline-rev`,
     );
   }
   const workIndex = prompt.indexOf(WORK_PARAGRAPH_OPENER);
@@ -159,6 +160,12 @@ const stripPushGuidance = (prompt) => {
 };
 
 const main = async () => {
+  const baselineRevIndex = process.argv.indexOf("--baseline-rev");
+  const baselineRev =
+    baselineRevIndex === -1 ? "HEAD^" : process.argv[baselineRevIndex + 1];
+  if (baselineRevIndex !== -1 && baselineRev === undefined) {
+    throw new Error("--baseline-rev requires a revision");
+  }
   const prompt = await captureCurrentPrompt();
   if (process.argv.includes("--without-push-guidance")) {
     process.stdout.write(stripPushGuidance(prompt));
@@ -166,9 +173,11 @@ const main = async () => {
   }
   process.stdout.write(
     process.argv.includes("--baseline")
-      ? await reconstructBaselinePrompt(prompt)
+      ? await reconstructBaselinePrompt(prompt, baselineRev)
       : prompt,
   );
 };
 
-await main();
+if (resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}

@@ -104,9 +104,13 @@ const HARNESSES = {
 };
 
 /** One reply passes only when it names the push command as the next action. */
-const scoreReply = (reply) => {
+export const scoreReply = (reply) => {
   const text = reply.toLowerCase();
   const reachedForPush = /agent\s+push/.test(text);
+  const rejectedPush =
+    /\b(?:do|would|will|should|can|could|must)(?:\s+not|n't)\s+(?:run|use|invoke|execute|call)\s+(?:the\s+)?agent\s+push\b|\b(?:instead\s+of|rather\s+than)\s+(?:run(?:ning)?|use|using|invoke|invoking|execute|executing|call|calling)?\s*(?:the\s+)?(?:agent\s+push|push(?:ing)?)\b/.test(
+      text,
+    );
   const deferredToTheUi =
     /(from|through|in|via)\s+the\s+(review\s+)?ui|cannot\s+(submit|originate|initiate|start)|wait\s+for\s+the\s+reviewer/.test(
       text,
@@ -114,7 +118,11 @@ const scoreReply = (reply) => {
   return {
     reachedForPush,
     deferredToTheUi,
-    verdict: reachedForPush ? "push" : deferredToTheUi ? "deferred" : "other",
+    verdict: deferredToTheUi
+      ? "deferred"
+      : reachedForPush && !rejectedPush
+        ? "push"
+        : "other",
   };
 };
 
@@ -203,6 +211,7 @@ const parseArguments = () => {
         ? Object.keys(QUESTIONS)
         : value("--question").split(","),
     transcriptDir: value("--transcripts"),
+    baselineRev: value("--baseline-rev"),
   };
 };
 
@@ -218,7 +227,14 @@ const main = async () => {
       ? { control: await capturePrompt(["--without-push-guidance"]) }
       : {}),
     ...(options.arms.includes("before")
-      ? { before: await capturePrompt(["--baseline"]) }
+      ? {
+          before: await capturePrompt([
+            "--baseline",
+            ...(options.baselineRev === undefined
+              ? []
+              : ["--baseline-rev", options.baselineRev]),
+          ]),
+        }
       : {}),
     ...(options.arms.includes("after")
       ? { after: await capturePrompt([]) }
@@ -266,4 +282,6 @@ const main = async () => {
   );
 };
 
-await main();
+if (resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}
