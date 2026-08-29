@@ -8,6 +8,7 @@ import {
   unionNamedFields,
 } from "../_model/component-diff/named-fields.js";
 import type { CompiledDatabaseTableSchema } from "./compile.js";
+import { qualifiedTableName } from "./qualified-table-name.js";
 
 export type CompiledDatabaseTableSchemaDiff =
   NamedFieldDiff<CompiledDatabaseTableSchema>;
@@ -15,7 +16,7 @@ const fieldsFor = (
   model: CompiledDatabaseTableSchema,
 ): ReadonlyArray<NamedField<CompiledDatabaseTableSchema>> => [
   {
-    name: "Table",
+    name: `Table: ${qualifiedTableName(model.schemaName, model.tableName)}`,
     value: (value) => ({
       tableName: value.tableName,
       schemaName: value.schemaName,

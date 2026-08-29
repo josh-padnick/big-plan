@@ -231,6 +231,24 @@ describe("last-wave component diff fields", () => {
     });
   });
 
+  it("uses both declared DatabaseTableSchema header identities on rename", () => {
+    const baseline: CompiledDatabaseTableSchema = {
+      tableName: "jobs",
+      schemaName: "public.",
+      schema: { columns: [], indexes: [] },
+      source: "",
+      ddlSections: [],
+    };
+    expect(
+      compileDatabaseTableSchemaDiff({
+        status: "changed",
+        baseline,
+        proposed: { ...baseline, tableName: "tasks" },
+        runs,
+      }).changedFields,
+    ).toEqual(["Table: public.jobs", "Table: public.tasks"]);
+  });
+
   it("names Callout text fields", () => {
     const baseline: CompiledCallout = {
       type: "note",
@@ -304,6 +322,35 @@ describe("last-wave component diff fields", () => {
         runs,
       }).changedFields,
     ).toEqual(["Query parameter: legacy"]);
+  });
+
+  it("names only the HttpEndpoint request example when its body changes", () => {
+    const baseline: CompiledHttpEndpoint = {
+      method: "POST",
+      path: "/jobs",
+      deprecated: false,
+      description: [],
+      params: [],
+      request: {
+        contentType: "application/json",
+        children: text('{"state":"queued"}'),
+      },
+      responses: [],
+    };
+    expect(
+      compileHttpEndpointDiff({
+        status: "changed",
+        baseline,
+        proposed: {
+          ...baseline,
+          request: {
+            contentType: "application/json",
+            children: text('{"state":"running"}'),
+          },
+        },
+        runs,
+      }).changedFields,
+    ).toEqual(["Request example"]);
   });
 
   it("names both GraphqlOperation argument identities on rename", () => {

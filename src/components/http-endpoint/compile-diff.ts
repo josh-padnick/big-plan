@@ -40,7 +40,14 @@ const fieldsFor = (
           candidate.name === param.name,
       ),
   })),
-  { name: "Request body", value: (value) => value.request },
+  {
+    name: "Request body",
+    value: (value) => value.request?.contentType,
+  },
+  {
+    name: "Request example",
+    value: (value) => value.request?.children,
+  },
   ...model.responses.map((response) => ({
     name: `Response: ${response.status}${response.label === undefined ? "" : ` ${response.label}`}`,
     value: (value: CompiledHttpEndpoint) =>

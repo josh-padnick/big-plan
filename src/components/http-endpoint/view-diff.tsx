@@ -25,7 +25,18 @@ const project = (
       }: ${param.name}`,
     ),
   ),
-  ...(fields.has("Request body") ? {} : { request: undefined }),
+  ...(model.request === undefined ||
+  (!fields.has("Request body") && !fields.has("Request example"))
+    ? { request: undefined }
+    : {
+        request: {
+          ...(fields.has("Request body") &&
+          model.request.contentType !== undefined
+            ? { contentType: model.request.contentType }
+            : {}),
+          children: fields.has("Request example") ? model.request.children : [],
+        },
+      }),
   responses: model.responses.filter((response) =>
     fields.has(
       `Response: ${response.status}${response.label === undefined ? "" : ` ${response.label}`}`,
