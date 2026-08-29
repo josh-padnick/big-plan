@@ -99,7 +99,11 @@ const commentSection = ({
   const address =
     comment.target.type === "document"
       ? "Target: the plan as a whole"
-      : `Target: \`${asOneLine(comment.target.blockId)}\` (${asOneLine(comment.target.kind)})`;
+      : `Target: \`${asOneLine(comment.target.blockId)}\` (${asOneLine(comment.target.kind)})${
+          comment.target.snapshot === undefined
+            ? ""
+            : ` from snapshot \`${asOneLine(comment.target.snapshot)}\``
+        }`;
   // An excerpt says so in its own label. The block and offsets above still
   // address the whole highlight, so an agent that needs the rest reads it from
   // the plan rather than assuming the fence held all of it.

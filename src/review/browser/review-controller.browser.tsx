@@ -162,6 +162,7 @@ import {
   displayedStandIn,
   foundElement,
   liveBlock,
+  liveBaselineBlock,
   liveDecisionFigure,
   liveFlowAnchor,
   livePictures,
@@ -1032,13 +1033,29 @@ const randomId = (): string => {
 };
 
 const blockIdentity = (block: HTMLElement) => ({
-  blockId: block.dataset.blockId ?? "",
-  kind: block.dataset.blockKind ?? "block",
-  label: block.dataset.blockLabel ?? "This block",
-  ...(block.dataset.blockSection === undefined
+  blockId: block.dataset.blockId ?? block.dataset.baselineBlockId ?? "",
+  kind: block.dataset.blockKind ?? block.dataset.baselineBlockKind ?? "block",
+  label:
+    block.dataset.blockLabel ??
+    block.dataset.baselineBlockLabel ??
+    "This block",
+  ...((block.dataset.blockSection ?? block.dataset.baselineBlockSection) ===
+  undefined
     ? {}
-    : { section: block.dataset.blockSection }),
+    : {
+        section:
+          block.dataset.blockSection ?? block.dataset.baselineBlockSection,
+      }),
+  ...(block.dataset.baselineSnapshot === undefined
+    ? {}
+    : { snapshot: block.dataset.baselineSnapshot }),
 });
+
+const blockKind = (block: HTMLElement): string =>
+  block.dataset.blockKind ?? block.dataset.baselineBlockKind ?? "";
+
+const blockAddressId = (block: HTMLElement): string =>
+  block.dataset.blockId ?? block.dataset.baselineBlockId ?? "";
 
 const targetForBlock = (
   block: HTMLElement,
@@ -1050,7 +1067,9 @@ const targetForBlock = (
 const targetForSlide = (
   slide: HTMLElement,
 ): Extract<CommentTarget, { readonly type: "block" }> | null => {
-  const firstBlock = slide.querySelector<HTMLElement>("[data-block-id]");
+  const firstBlock = slide.querySelector<HTMLElement>(
+    "[data-block-id], [data-baseline-block-id]",
+  );
   if (firstBlock === null) {
     return null;
   }
@@ -1137,7 +1156,7 @@ const parentElementFor = (node: Node): Element | null =>
   node instanceof Element ? node : node.parentElement;
 
 const SELECTION_BLOCK_SELECTOR =
-  '[data-block-id]:not([data-block-kind="part"])';
+  '[data-block-id]:not([data-block-kind="part"]), [data-baseline-block-id]';
 
 const selectionBoundaryBlock = ({
   container,
@@ -1261,7 +1280,7 @@ const selectionControlState = (): SelectionControlState | null => {
   const images = authoredImagesIntersecting(range);
   const text = selection.toString();
   const imageEvidence = images
-    .map((image) => `[Image: ${image.dataset.blockLabel ?? "Image"}]`)
+    .map((image) => `[Image: ${blockIdentity(image).label}]`)
     .join("\n");
   const selected = [text, imageEvidence]
     .filter((part) => part.trim() !== "")
@@ -1292,13 +1311,11 @@ const selectionControlState = (): SelectionControlState | null => {
       ...blockIdentity(startBlock),
       ...(startBlock === endBlock
         ? {}
-        : { endBlockId: endBlock.dataset.blockId ?? "" }),
+        : { endBlockId: blockAddressId(endBlock) }),
       ...(images.length === 0
         ? {}
         : {
-            imageBlockIds: images
-              .map((image) => image.dataset.blockId)
-              .filter((id): id is string => id !== undefined),
+            imageBlockIds: images.map(blockAddressId).filter((id) => id !== ""),
           }),
       start,
       end,
@@ -1311,10 +1328,9 @@ const selectionControlState = (): SelectionControlState | null => {
 };
 
 const blockCommentLabel = (block: HTMLElement): string =>
-  block.dataset.blockKind === "code" ||
-  block.dataset.blockKind?.startsWith("code-") === true
+  blockKind(block) === "code" || blockKind(block).startsWith("code-")
     ? "Comment on this code snippet"
-    : `Comment on ${block.dataset.blockLabel ?? "this component"}`;
+    : `Comment on ${blockIdentity(block).label}`;
 
 const selectionCommentLabel = (target: SelectionTarget): string =>
   `Comment on selected text${
@@ -1329,11 +1345,25 @@ const selectionCommentLabel = (target: SelectionTarget): string =>
 // themselves; jumpTo is the one that does.
 const targetElement = (target: CommentTarget): HTMLElement | null => {
   if (target.type === "document") return document.querySelector("main");
-  const block = foundElement(liveBlock(target.blockId));
+  const block = foundElement(
+    target.snapshot === undefined
+      ? liveBlock(target.blockId)
+      : liveBaselineBlock(target.blockId, target.snapshot),
+  );
   return target.type === "block" && target.kind === "slide"
     ? (block?.closest<HTMLElement>("[data-slide]") ?? block)
     : block;
 };
+
+const liveTargetBlock = (
+  blockId: string,
+  snapshot: string | undefined,
+): HTMLElement | null =>
+  foundElement(
+    snapshot === undefined
+      ? liveBlock(blockId)
+      : liveBaselineBlock(blockId, snapshot),
+  );
 
 const targetAssociationElements = (
   target: CommentTarget,
@@ -1364,7 +1394,7 @@ const targetAssociationElements = (
   }
   if (target.type === "selection") {
     for (const imageId of target.imageBlockIds ?? []) {
-      const image = foundElement(liveBlock(imageId));
+      const image = liveTargetBlock(imageId, target.snapshot);
       if (image !== null) elements.add(image);
     }
   }
@@ -1375,9 +1405,9 @@ const targetAssociationElements = (
 const targetAddress = (target: CommentTarget): string => {
   if (target.type === "document") return "document";
   if (target.type === "selection") {
-    return `selection:${target.blockId}:${target.start}:${target.endBlockId ?? target.blockId}:${target.end}`;
+    return `selection:${target.snapshot ?? "proposed"}:${target.blockId}:${target.start}:${target.endBlockId ?? target.blockId}:${target.end}`;
   }
-  return `block:${target.blockId}`;
+  return `block:${target.snapshot ?? "proposed"}:${target.blockId}`;
 };
 
 type HighlightRegistry = {
@@ -1392,7 +1422,7 @@ const selectionRange = (
   const endBlock =
     target.endBlockId === undefined
       ? startBlock
-      : foundElement(liveBlock(target.endBlockId));
+      : liveTargetBlock(target.endBlockId, target.snapshot);
   if (startBlock === null || endBlock === null) return null;
   const textPoint = (
     block: HTMLElement,
@@ -1434,10 +1464,10 @@ const selectionTargetResolves = (target: SelectionTarget): boolean => {
   if (range === null) return false;
   const images: Array<HTMLElement> = [];
   for (const imageId of target.imageBlockIds ?? []) {
-    const image = foundElement(liveBlock(imageId));
+    const image = liveTargetBlock(imageId, target.snapshot);
     if (
       image === null ||
-      image.dataset.blockKind !== "image" ||
+      blockKind(image) !== "image" ||
       !range.intersectsNode(image)
     ) {
       return false;
@@ -1445,7 +1475,7 @@ const selectionTargetResolves = (target: SelectionTarget): boolean => {
     images.push(image);
   }
   const imageEvidence = images
-    .map((image) => `[Image: ${image.dataset.blockLabel ?? "Image"}]`)
+    .map((image) => `[Image: ${blockIdentity(image).label}]`)
     .join("\n");
   const selected = [range.toString(), imageEvidence]
     .filter((part) => part.trim() !== "")
@@ -1564,7 +1594,10 @@ const ownedPresentationDescendant = (
   Array.from(
     commentPresentation(block).querySelectorAll<HTMLElement>(selector),
   ).find(
-    (element) => element.closest<HTMLElement>("[data-block-id]") === block,
+    (element) =>
+      element.closest<HTMLElement>(
+        "[data-block-id], [data-baseline-block-id]",
+      ) === block,
   ) ?? null;
 
 // A comment control that stands alone - floating beside a card, hovering over
@@ -1593,14 +1626,14 @@ const useBlockHosts = () => {
       if (article === null) return [];
       return Array.from(
         article.querySelectorAll<HTMLElement>(
-          '[data-block-id]:not([data-block-kind="part"])',
+          '[data-block-id]:not([data-block-kind="part"]), [data-baseline-block-id]',
         ),
       ).filter(
         (block) =>
-          block.dataset.blockKind !== "image" &&
-          !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
-          !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
-          !DERIVED_KINDS.has(block.dataset.blockKind ?? "") &&
+          blockKind(block) !== "image" &&
+          !PROSE_KINDS.has(blockKind(block)) &&
+          !TABLE_PRECISION_KINDS.has(blockKind(block)) &&
+          !DERIVED_KINDS.has(blockKind(block)) &&
           block.closest("[data-quick-summary]") === null &&
           // A figure that already offers its own whole-figure comment owns
           // that affordance, and its notes join the batch the reader submits
@@ -1614,10 +1647,7 @@ const useBlockHosts = () => {
     const mount = (blocks: ReadonlyArray<HTMLElement>) =>
       blocks.map((block) => {
         const host = document.createElement("span");
-        if (
-          block.dataset.blockKind === "data-table" ||
-          block.dataset.blockKind === "table"
-        ) {
+        if (blockKind(block) === "data-table" || blockKind(block) === "table") {
           const tableActions = ownedPresentationDescendant(
             block,
             ".figure-action-group",
@@ -1653,7 +1683,7 @@ const useBlockHosts = () => {
           );
           const inlineHeader = ownedPresentationDescendant(
             block,
-            ".file-tree-header, .callout-header",
+            ".file-tree-header, .callout-header, .wireframe-screen-caption",
           );
           const overlayHeader = ownedPresentationDescendant(
             block,
@@ -5503,7 +5533,7 @@ export const ReviewController = () => {
       selection === null
         ? []
         : (selection.imageBlockIds ?? [])
-            .map((imageId) => foundElement(liveBlock(imageId)))
+            .map((imageId) => liveTargetBlock(imageId, selection.snapshot))
             .filter((image): image is HTMLElement => image !== null);
     for (const image of images) {
       image.dataset.reviewSelectionAssociated = "";
@@ -7499,8 +7529,7 @@ export const ReviewController = () => {
       })}
       {blockHosts.map(({ block, host }) =>
         createPortal(
-          block.dataset.blockKind === "data-table" ||
-            block.dataset.blockKind === "table" ? (
+          blockKind(block) === "data-table" || blockKind(block) === "table" ? (
             <Tooltip label="Comment on this table" placement="below" asChild>
               <button
                 type="button"
@@ -7545,7 +7574,7 @@ export const ReviewController = () => {
               variant="secondary"
               size="sm"
               className="review-block-button"
-              aria-label={`Comment on ${block.dataset.blockLabel ?? "this component"}`}
+              aria-label={`Comment on ${blockIdentity(block).label}`}
               data-review-block-button=""
               onClick={() =>
                 beginTarget(
@@ -7558,7 +7587,7 @@ export const ReviewController = () => {
             </Button>
           ),
           host,
-          block.dataset.blockId,
+          blockAddressId(block),
         ),
       )}
       {imageHosts.map(({ block, host }) =>
@@ -7584,7 +7613,7 @@ export const ReviewController = () => {
             </button>
           </Tooltip>,
           host,
-          block.dataset.blockId,
+          blockAddressId(block),
         ),
       )}
       {selectionControl === null ? null : (

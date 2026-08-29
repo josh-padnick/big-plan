@@ -981,6 +981,8 @@ export const startReviewRuntime = async ({
     }
   };
 
+  const snapshotDiffs = createSnapshotDiffs();
+
   // Every piece of state the routes share is built once, here, and named after
   // what it means. Anything a route may read travels through this record.
   const context: ReviewRouteContext = {
@@ -999,6 +1001,7 @@ export const startReviewRuntime = async ({
       resolvedPlanPath,
       initialSnapshot,
       isDiffPreview: diffPreviewSource !== undefined,
+      blocksForSnapshot: snapshotDiffs.blocksForSnapshot,
     }),
     decisionAnswers: createDecisionAnswers({
       store,
@@ -1006,7 +1009,7 @@ export const startReviewRuntime = async ({
       reportDiagnostic,
     }),
     changeVerdicts: createChangeVerdicts({ store }),
-    snapshotDiffs: createSnapshotDiffs(),
+    snapshotDiffs,
     approvals: createApprovals({ store, reportDiagnostic }),
     readerProgress: createReaderProgress({
       initialSnapshot,

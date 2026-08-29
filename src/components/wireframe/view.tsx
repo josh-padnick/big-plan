@@ -1013,6 +1013,8 @@ const Screen = ({
     <figure
       className="wireframe-screen mx-auto w-full overflow-x-auto [container-type:inline-size]"
       data-wireframe-screen={screen.id}
+      data-commentable-kind="wireframe-screen"
+      data-commentable-label={screen.name}
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >

@@ -38,7 +38,9 @@ export type LiveTargetMissReason =
   // a block inside a collapsed slide is the honest answer to "which element is
   // this?" and no answer at all to "where on screen is it?". Only a caller
   // that must paint something asks for this distinction.
-  | "unlaid-out";
+  | "unlaid-out"
+  // A qualified baseline address has no retained baseline rendering.
+  | "snapshot-not-retained";
 
 export type LiveTargetResult =
   { readonly found: HTMLElement } | { readonly missing: LiveTargetMissReason };
@@ -130,6 +132,9 @@ const resolveWithin = (
 const blockSelector = (blockId: string): string =>
   `[data-block-id="${CSS.escape(blockId)}"]`;
 
+const baselineBlockSelector = (blockId: string, snapshot: string): string =>
+  `[data-baseline-block-id="${CSS.escape(blockId)}"][data-baseline-snapshot="${CSS.escape(snapshot)}"]`;
+
 /**
  * Names the block ids a lens is currently showing in place of. The lens sets
  * it when it hides those blocks, because only the lens knows which ones it
@@ -181,6 +186,22 @@ export const liveBlock = (blockId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };
   return resolveWithin(article, blockSelector(blockId));
+};
+
+/** Resolves a block address minted by a retained baseline snapshot. */
+export const liveBaselineBlock = (
+  blockId: string,
+  snapshot: string,
+): LiveTargetResult => {
+  const article = liveArticle();
+  if (article === null) return { missing: "no-article" };
+  const result = resolveWithin(
+    article,
+    baselineBlockSelector(blockId, snapshot),
+  );
+  return "missing" in result && result.missing === "unknown-id"
+    ? { missing: "snapshot-not-retained" }
+    : result;
 };
 
 /**

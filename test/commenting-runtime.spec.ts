@@ -6543,13 +6543,19 @@ ${unrelatedWorkspace}
       await page.setViewportSize({ width: 1600, height: 1000 });
     });
 
-    await test.step("leave a comment on the wireframe from inside the diff", async () => {
-      // The diff root inherits the proposed component's one address, so the
-      // change offers exactly one comment control however many sides it draws.
-      const comment = componentDiff.getByRole("button", {
-        name: /^Comment on /u,
+    let baselineTargetId = "";
+    let baselineSnapshot = "";
+    await test.step("leave a comment on the Was-side wireframe screen", async () => {
+      await was.click();
+      const screen = baseline.locator('[data-wireframe-screen="queue"]');
+      baselineTargetId =
+        (await screen.getAttribute("data-baseline-block-id")) ?? "";
+      baselineSnapshot =
+        (await screen.getAttribute("data-baseline-snapshot")) ?? "";
+      const comment = screen.getByRole("button", {
+        name: "Comment on Queue",
       });
-      await expect(comment).toHaveCount(1);
+      await screen.hover();
       await expect(comment).toBeVisible();
       await comment.click();
       const composer = page.getByRole("dialog", { name: /Comment on/u });
@@ -6560,28 +6566,78 @@ ${unrelatedWorkspace}
       if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
         await submitRightAway.click();
       }
-      const body = "Name the rollback owner on the queue screen.";
-      await composer.getByLabel("Add a comment").fill(body);
+      await composer
+        .getByLabel("Add a comment")
+        .fill("Name the rollback owner on the Was queue screen.");
       const addComment = composer.getByRole("button", { name: "Add Comment" });
       await expect(addComment).toBeEnabled();
       await addComment.click();
+    });
+
+    await test.step("leave a second comment on the Now-side screen", async () => {
+      await now.click();
+      const screen = proposed.locator('[data-wireframe-screen="queue"]');
+      const comment = screen.getByRole("button", {
+        name: "Comment on Queue",
+      });
+      await screen.hover();
+      await expect(comment).toBeVisible();
+      await comment.click();
+      const composer = page.getByRole("dialog", { name: /Comment on/u });
+      await composer
+        .getByLabel("Add a comment")
+        .fill("Name the rollback owner on the Now queue screen.");
+      await composer.getByRole("button", { name: "Add Comment" }).click();
+    });
+
+    await test.step("send both comments with their distinct side addresses", async () => {
       if (!(await rail.isVisible())) {
         await page
           .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
           .click();
       }
-      const staged = rail
-        .locator("[data-review-comment-ui]")
-        .filter({ hasText: body });
-      await expect(staged).toBeVisible();
-      // The diff root is the only element carrying the wireframe's address, so
-      // this is what proves the comment anchored to the block the reader was
-      // looking at rather than to nothing resolvable.
-      await staged.hover();
-      await expect(componentDiff).toHaveAttribute(
-        "data-review-comment-associated",
-        "",
+      const submitted = page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/feedback") &&
+          response.request().method() === "POST",
       );
+      await rail
+        .getByRole("button", { name: "Send all comments to agent" })
+        .click();
+      expect((await submitted).ok()).toBe(true);
+
+      const session = await liveReviewSession(page);
+      const store = reviewStoreFor({
+        planPath: session.plan,
+        planId: session.planId,
+      });
+      const exchange = await readAgentExchange({
+        store,
+        sessionId: session.sessionId,
+        planId: session.planId,
+      });
+      const request = nextPendingAgentRequest(exchange, agentViewer());
+      if (request === undefined || request.kind !== "feedback") {
+        throw new Error("Sending did not create wireframe feedback work");
+      }
+      const wasComment = request.comments.find((comment) =>
+        comment.body.includes("Was queue screen"),
+      );
+      const nowComment = request.comments.find((comment) =>
+        comment.body.includes("Now queue screen"),
+      );
+      if (
+        wasComment === undefined ||
+        nowComment === undefined ||
+        wasComment.target.type !== "block" ||
+        nowComment.target.type !== "block"
+      ) {
+        throw new Error("The wireframe comments did not retain block targets");
+      }
+      expect(wasComment.target.snapshot).toBe(baselineSnapshot);
+      expect(wasComment.target.blockId).toBe(baselineTargetId);
+      expect(nowComment.target.snapshot).toBeUndefined();
+      expect(nowComment.target.blockId).toBe(wasComment.target.blockId);
     });
   } finally {
     await closeReviewRuntime({ page, runtime });

@@ -190,6 +190,57 @@ describe("boundQuote", () => {
 });
 
 describe("validateComments target resolution", () => {
+  it("should resolve a qualified target through its retained snapshot map", () => {
+    const snapshot = "2222222222222222";
+    const [comment] = validateComments({
+      value: [
+        {
+          ...commentOn({
+            type: "block",
+            blockId: "section/status-quo/paragraph-1",
+            snapshot,
+            kind: "ignored",
+            label: "ignored",
+          })[0],
+          premiseSnapshot: PREMISE,
+        },
+      ],
+      blocks: BLOCKS,
+      blocksForSnapshot: () => BLOCKS,
+      now: NOW,
+    });
+    expect(comment?.target).toEqual({
+      type: "block",
+      blockId: "section/status-quo/paragraph-1",
+      snapshot,
+      kind: "paragraph",
+      label: "Today's reality",
+      section: "Status quo",
+    });
+  });
+
+  it("should refuse a qualified target when its snapshot is no longer retained", () => {
+    expect(() =>
+      validateComments({
+        value: [
+          {
+            ...commentOn({
+              type: "block",
+              blockId: "section/status-quo/paragraph-1",
+              snapshot: "2222222222222222",
+              kind: "ignored",
+              label: "ignored",
+            })[0],
+            premiseSnapshot: PREMISE,
+          },
+        ],
+        blocks: BLOCKS,
+        blocksForSnapshot: () => undefined,
+        now: NOW,
+      }),
+    ).toThrow("no longer retained");
+  });
+
   it("should refuse a target naming a block this document does not contain", () => {
     expect(() =>
       validate(commentOn({ type: "block", blockId: "section/made-up/p-1" })),

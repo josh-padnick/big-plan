@@ -246,6 +246,53 @@ ${description}
     ).toBe(true);
   });
 
+  it("should inherit baseline addresses from the baseline snapshot", () => {
+    const source = (text: string): string => `# Plan
+
+## Flow
+
+<Wireframe id="wf" initialScreen="one">
+  <Screen id="one" name="One" device="desktop">
+    <Text text="${text}" />
+  </Screen>
+</Wireframe>`;
+    const baselineDocument = compileMarkdown({ markdown: source("Old") });
+    const proposedDocument = compileMarkdown({ markdown: source("New") });
+    const baselineRoot = baselineDocument.blocks.find(
+      (block) => block.kind === "wireframe",
+    );
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "wireframe",
+    );
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineSnapshot: "1111111111111111",
+      baselineBlockId: baselineRoot?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+    });
+    const nodes = elements(fromHtml(rendered?.view ?? "", { fragment: true }));
+    const baselineScreen = baselineDocument.blocks.find(
+      (block) => block.kind === "wireframe-screen",
+    );
+    expect(
+      nodes.find(
+        (node) => node.properties.dataBaselineBlockId === baselineScreen?.id,
+      )?.properties.dataBaselineSnapshot,
+    ).toBe("1111111111111111");
+    expect(
+      nodes
+        .filter(
+          (node) =>
+            node.properties.dataDiffSide === "baseline" ||
+            node.properties.dataBaselineBlockId !== undefined,
+        )
+        .some((node) => node.properties.dataBlockId !== undefined),
+    ).toBe(false);
+  });
+
   it("should omit unchanged Callout content from a one-field diff", () => {
     const compile = (type: "note" | "warning") =>
       compileMarkdown({

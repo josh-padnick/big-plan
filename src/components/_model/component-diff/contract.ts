@@ -12,7 +12,6 @@ export type ComponentCommentableAnchor = {
   readonly kind: string;
   readonly sides: ComponentCommentableSides;
 };
-
 /** The word-level alignment the engine already computed for the pair. */
 export type ComponentDiffRun = {
   readonly op: "same" | "del" | "ins";

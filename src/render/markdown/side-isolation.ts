@@ -48,6 +48,9 @@ const REVIEW_IDENTITY_ATTRIBUTES = [
   COMPONENT_INSTANCE_ATTRIBUTE,
   BASELINE_BLOCK_ID_ATTRIBUTE,
   BASELINE_SNAPSHOT_ATTRIBUTE,
+  "data-baseline-block-kind",
+  "data-baseline-block-label",
+  "data-baseline-block-section",
 ] as const;
 
 const ROOT_AFFORDANCE_ATTRIBUTES = [
@@ -385,6 +388,40 @@ const holdRootAffordancesInert = (subtree: Element): void => {
   stripRootAffordances({ node: subtree, paths, insideLive: false });
 };
 
+export type BaselineBlockAddress = {
+  readonly blockId: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly section?: string;
+};
+
+const stampBaselineIdentity = ({
+  subtree,
+  snapshot,
+  addressFor,
+}: {
+  readonly subtree: Element;
+  readonly snapshot: string;
+  readonly addressFor: (node: Element) => BaselineBlockAddress | undefined;
+}): void => {
+  forEachElement({
+    node: subtree,
+    visit: (node) => {
+      const address = addressFor(node);
+      if (address === undefined) return;
+      node.properties["data-baseline-block-id"] = address.blockId;
+      node.properties["data-baseline-snapshot"] = snapshot;
+      node.properties["data-baseline-block-kind"] = address.kind;
+      node.properties["data-baseline-block-label"] = address.label;
+      if (address.section === undefined) {
+        delete node.properties["data-baseline-block-section"];
+      } else {
+        node.properties["data-baseline-block-section"] = address.section;
+      }
+    },
+  });
+};
+
 /**
  * Applies every per-side rule to one baseline rendering: mark it, keep review
  * identity out of it, namespace its ordinary DOM identity, and hold its root
@@ -405,24 +442,19 @@ const holdRootAffordancesInert = (subtree: Element): void => {
 export const isolateBaselineSide = ({
   subtree,
   key,
-  baselineBlockId,
-  baselineSnapshot,
-  baselineSubtargetIds,
+  snapshot,
+  addressFor,
 }: {
   readonly subtree: Element;
   readonly key: string;
-  readonly baselineBlockId?: string;
-  readonly baselineSnapshot?: string;
-  readonly baselineSubtargetIds?: ReadonlyMap<Element, string>;
+  readonly snapshot?: string;
+  readonly addressFor?: (node: Element) => BaselineBlockAddress | undefined;
 }): void => {
   subtree.properties[DIFF_SIDE_ATTRIBUTE] = DIFF_BASELINE_SIDE;
   stripReviewIdentity(subtree);
+  if (snapshot !== undefined && addressFor !== undefined) {
+    stampBaselineIdentity({ subtree, snapshot, addressFor });
+  }
   namespaceOrdinaryIdentity(subtree, key);
-  stampBaselineIdentity({
-    subtree,
-    baselineBlockId,
-    baselineSnapshot,
-    baselineSubtargetIds,
-  });
   holdRootAffordancesInert(subtree);
 };

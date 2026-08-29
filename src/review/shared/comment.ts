@@ -22,6 +22,7 @@ type TargetBlockIdentity = {
   readonly kind: string;
   readonly label: string;
   readonly section?: string;
+  readonly snapshot?: string;
   readonly slideText?: string;
   readonly isSlideTextExcerpt?: boolean;
   readonly slideSubHeadings?: ReadonlyArray<string>;
@@ -255,11 +256,14 @@ const asTimestamp = (value: unknown, fallback: string): string => {
   return new Date(value).toISOString();
 };
 
-const asSnapshotDigest = (value: unknown): string => {
-  const digest = asText({ value, field: "premiseSnapshot", limit: 64 });
+const asSnapshotDigest = (
+  value: unknown,
+  field = "premiseSnapshot",
+): string => {
+  const digest = asText({ value, field, limit: 64 });
   if (!/^[a-f0-9]{16,64}$/.test(digest)) {
     throw new CommentRejected(
-      '"premiseSnapshot" must be a hexadecimal snapshot digest',
+      `"${field}" must be a hexadecimal snapshot digest`,
     );
   }
   return digest;
@@ -303,21 +307,37 @@ const resolveBlock = ({
 const validateTarget = ({
   value,
   blocks,
+  blocksForSnapshot,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly blocksForSnapshot?: (
+    snapshot: string,
+  ) => ReadonlyMap<string, BlockMapEntry> | undefined;
 }): CommentTarget => {
   const target = asRecord({ value, field: "target" });
   const type = target.type;
   if (type === "document") {
     return { type: "document" };
   }
-  const block = resolveBlock({ value: target.blockId, blocks });
+  const snapshot =
+    target.snapshot === undefined
+      ? undefined
+      : asSnapshotDigest(target.snapshot, "snapshot");
+  const targetBlocks =
+    snapshot === undefined ? blocks : blocksForSnapshot?.(snapshot);
+  if (targetBlocks === undefined) {
+    throw new CommentRejected(
+      "That snapshot is no longer retained by the review",
+    );
+  }
+  const block = resolveBlock({ value: target.blockId, blocks: targetBlocks });
   // Kind, label, and slide scope come back from the block map rather than from
   // the request, so the label a tray showed can never become the label an agent
   // reads, and no request can claim to address a slide it does not name.
   const identity = {
     blockId: block.id,
+    ...(snapshot === undefined ? {} : { snapshot }),
     label: block.label,
     ...(block.section === undefined ? {} : { section: block.section }),
     ...slideScopeOf(block),
@@ -330,14 +350,14 @@ const validateTarget = ({
     const end = asOffset({ value: target.end, field: "end" });
     const endBlock =
       type === "selection" && target.endBlockId !== undefined
-        ? resolveBlock({ value: target.endBlockId, blocks })
+        ? resolveBlock({ value: target.endBlockId, blocks: targetBlocks })
         : undefined;
     const imageBlockIds =
       type === "selection" && Array.isArray(target.imageBlockIds)
         ? boundedImageBlockIds(target.imageBlockIds).map((value, index) => {
             const image = resolveBlock({
               value,
-              blocks,
+              blocks: targetBlocks,
             });
             if (image.kind !== "image") {
               throw new CommentRejected(
@@ -425,6 +445,9 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
     blockId: target.blockId,
     kind: asTargetText({ value: target.kind, field: "kind", limit: 100 }),
     label: asTargetText({ value: target.label, field: "label", limit: 300 }),
+    ...(target.snapshot === undefined
+      ? {}
+      : { snapshot: asSnapshotDigest(target.snapshot, "snapshot") }),
     ...(target.section === undefined
       ? {}
       : {
@@ -598,17 +621,26 @@ const validateCommentList = ({
 export const validateComments = ({
   value,
   blocks,
+  blocksForSnapshot,
   now,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly blocksForSnapshot?: (
+    snapshot: string,
+  ) => ReadonlyMap<string, BlockMapEntry> | undefined;
   readonly now: string;
 }): ReadonlyArray<ReviewComment> =>
   validateCommentList({
     value,
     now,
     limit: COMMENT_LIMIT,
-    targetFor: (comment) => validateTarget({ value: comment.target, blocks }),
+    targetFor: (comment) =>
+      validateTarget({
+        value: comment.target,
+        blocks,
+        blocksForSnapshot,
+      }),
   });
 
 /** Re-checks stored comments without requiring their targets to remain rendered. */
@@ -637,11 +669,15 @@ export const validateStoredComments = ({
 export const validateCommentUpdates = ({
   value,
   blocks,
+  blocksForSnapshot,
   existing,
   now,
 }: {
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly blocksForSnapshot?: (
+    snapshot: string,
+  ) => ReadonlyMap<string, BlockMapEntry> | undefined;
   readonly existing: ReadonlyArray<ReviewComment>;
   readonly now: string;
 }): ReadonlyArray<ReviewComment> => {
@@ -654,7 +690,11 @@ export const validateCommentUpdates = ({
     limit: COMMENT_LIMIT,
     targetFor: (comment, id) =>
       existingById.get(id)?.target ??
-      validateTarget({ value: comment.target, blocks }),
+      validateTarget({
+        value: comment.target,
+        blocks,
+        blocksForSnapshot,
+      }),
     createdAtFor: (comment, id) =>
       existingById.get(id)?.createdAt ?? asTimestamp(comment.createdAt, now),
     premiseSnapshotFor: (comment, id) =>
