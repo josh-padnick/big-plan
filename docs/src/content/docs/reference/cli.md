@@ -63,6 +63,7 @@ With a component name, `big-plan guidance <Component>` prints that component's j
 The component form records no acknowledgment, and an unknown name fails with the list of components that have guidance.
 
 For a persistent or project-local install, guidance also ends with one passive update line when a recent registry check found a newer published version.
+The line points to the installation guide and asks the user to update with the package manager that owns that installation.
 The check refreshes silently after command output and is cached, so a slow or unavailable registry never delays or fails guidance; a failed check produces no line.
 Ephemeral `npx` runs skip the check and notice because `npx -y big-plan@latest` already selects the current release.
 

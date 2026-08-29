@@ -80,7 +80,7 @@ const updateLine = (
   ) {
     return undefined;
   }
-  return `Update available: Big Plan ${marker.latest} (running ${current}); run \`big-plan update\` to upgrade.`;
+  return `Update available: Big Plan ${marker.latest} (running ${current}); update with your package manager (https://big-plan.ai/intro/installation/).`;
 };
 
 const launchRefreshWorker = (): void => {
@@ -92,6 +92,7 @@ const launchRefreshWorker = (): void => {
       detached: true,
       stdio: "ignore",
     });
+    child.on("error", () => undefined);
     child.unref();
   } catch {
     // Failure to start the optional check never affects the user's command.
