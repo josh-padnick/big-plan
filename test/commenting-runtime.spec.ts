@@ -8765,9 +8765,11 @@ const verification = "first";
     // The thread owns one change set, so the second reply does not open a
     // review of its own: both rounds are reviewed together, against the plan
     // the thread started from.
-    await expect(sentThread).toContainText(
-      "Folded into this thread’s change set below.",
-    );
+    await expect(
+      sentThread
+        .locator('[data-review-message="agent"]')
+        .filter({ hasText: "Revised the delivery boundary." }),
+    ).toContainText("Updated plan");
     await expect(
       sentThread.getByRole("button", { name: /Review changes \(2\)/u }),
     ).toHaveCount(1);

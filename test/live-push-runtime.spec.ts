@@ -537,9 +537,7 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     const foldedChange = thread
       .locator('[data-review-message="agent"]')
       .filter({ hasText: "Clarified the safe publication flow." });
-    await expect(foldedChange).toContainText(
-      "Folded into this thread’s change set below.",
-    );
+    await expect(foldedChange).toContainText("Updated plan");
     await expect(
       foldedChange.getByRole("button", { name: /Review change/u }),
     ).toHaveCount(0);
@@ -556,9 +554,9 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await expect(stepper).not.toContainText("All changes accepted");
     await page.keyboard.press("Escape");
 
-    const latestChange = thread
-      .locator('[data-review-message="agent"]')
-      .filter({ hasText: "Clarified the follow-up publication flow." });
+    // The thread's change set has a bubble of its own, so its controls are
+    // found there rather than inside the reply that announced it.
+    const latestChange = thread.locator("[data-review-proposed-changes]");
     await latestChange
       .getByRole("button", { name: /Review changes \(2\)/u })
       .click();

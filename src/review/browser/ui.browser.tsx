@@ -211,6 +211,7 @@ type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
     | "annotation"
     | "secondary"
     | "statusAccent"
+    | "statusAccentStrong"
     | "statusNeutral"
     | "statusWarning"
     | "statusWarningOutline"
@@ -234,6 +235,12 @@ const BADGE_TONES = {
   secondary: "border border-transparent bg-well text-muted",
   statusAccent:
     "bg-[color-mix(in_srgb,var(--accent-c)_14%,var(--bg))] text-accent",
+  // The same accent reading as statusAccent, in ink a reader can actually read
+  // at this size. The accent itself only clears AA against the page ground, not
+  // against a wash of itself, so this tone takes the accent family's soft-
+  // surface ink, which clears 4.5:1 over the wash in both modes.
+  statusAccentStrong:
+    "bg-[color-mix(in_srgb,var(--accent-c)_18%,var(--bg))] text-[var(--accent-soft-ink-c)]",
   statusNeutral: "bg-[color-mix(in_srgb,var(--ink-c)_8%,var(--bg))] text-muted",
   statusWarning:
     "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,var(--bg))] text-[var(--callout-warning-c)]",

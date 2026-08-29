@@ -145,6 +145,7 @@ import {
 import {
   AgentChangeDigest,
   MessageTurn,
+  ProposedChangesTurn,
   ReviewerMessagePreview,
   RequestStatusStrip,
   type MessageActivity,
@@ -3977,7 +3978,7 @@ const SentThread = ({
                         <Badge
                           tone={
                             requestOutcome.state === "changed"
-                              ? "statusAccent"
+                              ? "statusAccentStrong"
                               : requestOutcome.state === "warning" ||
                                   requestOutcome.state === "needs-input"
                                 ? "statusWarning"
@@ -4005,8 +4006,12 @@ const SentThread = ({
                           ) : null}
                           {requestOutcome.state === "answered"
                             ? "Answered"
-                            : requestOutcome.state === "changed"
-                              ? "Changed"
+                            : /* One word for what a reply did to the plan,
+                                 whether this round's work is shown below it or
+                                 folded into a later round's set. A reader who
+                                 has to be told twice has been told nothing. */
+                              requestOutcome.state === "changed"
+                              ? "Updated plan"
                               : requestOutcome.state === "warning"
                                 ? "Warning"
                                 : requestOutcome.state === "needs-input"
@@ -4034,55 +4039,52 @@ const SentThread = ({
                             </Button>
                           </div>
                         ) : null}
-                        {/* One thread proposes one change set, so the diff
-                            hangs off the reply that most recently advanced it
-                            and spans every round behind it. An earlier round
-                            says where its own work went rather than showing a
-                            superseded before-and-after of its own. */}
-                        {requestOutcome.state === "changed" &&
-                        threadChange !== undefined &&
-                        threadChange.requestId !== request.requestId ? (
-                          <p className="mt-2 text-xs text-muted">
-                            Folded into this thread’s change set below.
-                          </p>
-                        ) : null}
-                        {requestOutcome.state === "changed" &&
-                        identity !== null &&
-                        threadChange?.requestId === request.requestId ? (
-                          <ChangeAttachment
-                            key={`${comment.id}:${threadChange.from}:${threadChange.to}`}
-                            identity={identity}
-                            from={threadChange.from}
-                            to={threadChange.to}
-                            changeSetId={comment.id}
-                            {...(threadChange.agentIdentity === undefined
-                              ? {}
-                              : { agentIdentity: threadChange.agentIdentity })}
-                            {...(threadChange.changeTargets === undefined
-                              ? {}
-                              : { changeTargets: threadChange.changeTargets })}
-                            currentSnapshot={currentSnapshot}
-                            onStatus={onReplySent}
-                            onResolve={onResolve}
-                            onRevert={() =>
-                              onRevert(request.requestId, comment.id)
-                            }
-                            canRevert={canRevertLatestChange}
-                            thread={{ label: comment.body, onOpen: onJump }}
-                            onKeepChatting={() => {
-                              onJump();
-                              window.setTimeout(
-                                () =>
-                                  document
-                                    .getElementById(`reply-${comment.id}`)
-                                    ?.focus(),
-                                0,
-                              );
-                            }}
-                          />
-                        ) : null}
                       </MessageTurn>
                     )}
+                    {/* One thread proposes one change set, so the diff hangs
+                        off the reply that most recently advanced it and spans
+                        every round behind it. An earlier round shows no
+                        superseded before-and-after of its own; its badge
+                        already says the plan was updated. */}
+                    {requestOutcome !== undefined &&
+                    response !== undefined &&
+                    requestOutcome.state === "changed" &&
+                    identity !== null &&
+                    threadChange?.requestId === request.requestId ? (
+                      <ProposedChangesTurn>
+                        <ChangeAttachment
+                          key={`${comment.id}:${threadChange.from}:${threadChange.to}`}
+                          identity={identity}
+                          from={threadChange.from}
+                          to={threadChange.to}
+                          changeSetId={comment.id}
+                          {...(threadChange.agentIdentity === undefined
+                            ? {}
+                            : { agentIdentity: threadChange.agentIdentity })}
+                          {...(threadChange.changeTargets === undefined
+                            ? {}
+                            : { changeTargets: threadChange.changeTargets })}
+                          currentSnapshot={currentSnapshot}
+                          onStatus={onReplySent}
+                          onResolve={onResolve}
+                          onRevert={() =>
+                            onRevert(request.requestId, comment.id)
+                          }
+                          canRevert={canRevertLatestChange}
+                          thread={{ label: comment.body, onOpen: onJump }}
+                          onKeepChatting={() => {
+                            onJump();
+                            window.setTimeout(
+                              () =>
+                                document
+                                  .getElementById(`reply-${comment.id}`)
+                                  ?.focus(),
+                              0,
+                            );
+                          }}
+                        />
+                      </ProposedChangesTurn>
+                    ) : null}
                   </div>
                 );
               },

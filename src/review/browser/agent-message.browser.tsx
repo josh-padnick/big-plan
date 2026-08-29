@@ -138,6 +138,30 @@ export const MessageTurn = ({
   );
 };
 
+/*
+The thread's proposed plan changes, in a bubble of their own.
+
+A change set is what the reviewer decides on, so it is not a footnote on the
+sentence that announced it: it gets the same standing as a turn in the
+conversation, directly under the reply that produced it, and it keeps that
+standing however long the reply above it is.
+*/
+export const ProposedChangesTurn = ({
+  children,
+}: {
+  readonly children?: ReactNode;
+}) => (
+  <div
+    className={`${THREAD_BASE} ${ROLE_CLASSES.agent}`}
+    data-review-proposed-changes=""
+  >
+    <div className="flex items-center gap-1.5 text-2xs text-muted">
+      <strong className="text-2xs text-ink">Proposed changes</strong>
+    </div>
+    {children}
+  </div>
+);
+
 /** Keeps a collapsed reviewer message visually continuous with its full turn. */
 export const ReviewerMessagePreview = ({
   body,
