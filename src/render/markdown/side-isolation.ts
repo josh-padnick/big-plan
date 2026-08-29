@@ -440,9 +440,7 @@ export const isolateBaselineSide = ({
     addressFor ??
     ((node: Element): BaselineBlockAddress | undefined => {
       const blockId =
-        node === subtree
-          ? baselineBlockId
-          : baselineSubtargetIds?.get(node);
+        node === subtree ? baselineBlockId : baselineSubtargetIds?.get(node);
       return blockId === undefined
         ? undefined
         : {
