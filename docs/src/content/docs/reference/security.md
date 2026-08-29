@@ -51,7 +51,7 @@ Two properties of that model are worth knowing:
   npm --prefix "$audit_dir" audit signatures
   ```
 
-Big Plan makes no network requests of its own. It reads and writes plan files and its own state directory on your machine, and the local review runtime listens only on loopback.
+Big Plan makes no outbound network requests to remote services. It reads and writes plan files and its own state directory on your machine, and the local review runtime communicates only over loopback.
 
 ## Rendered plans are inert
 
