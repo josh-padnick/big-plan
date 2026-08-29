@@ -186,6 +186,7 @@ import {
   reviewWriteBlock,
   reviewWriteRefusal,
   type ReviewWriteAvailability,
+  type ReviewWriteBlocked,
 } from "./review-write-availability.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../shared/resolved-thread-work.js";
 import {
@@ -3336,6 +3337,31 @@ const StalePremiseNotice = ({
   );
 };
 
+const AutoAcceptPrompt = ({
+  block,
+  onArm,
+}: {
+  readonly block: ReviewWriteBlocked | undefined;
+  readonly onArm: () => void;
+}) => (
+  <div className="mt-2 rounded-md bg-surface p-2 text-xs text-muted">
+    <p className="m-0 font-semibold text-ink">Authoring at pace?</p>
+    <p className="mt-0.5 mb-2">Stops asking for a verdict while you dictate.</p>
+    <Button
+      variant="outline"
+      size="micro"
+      disabled={block !== undefined}
+      data-tooltip={block?.cause}
+      onClick={onArm}
+    >
+      Auto-accept all changes
+    </Button>
+    {block === undefined ? null : (
+      <p className="mt-1 mb-0 font-semibold text-danger">{block.label}</p>
+    )}
+  </div>
+);
+
 const SentThread = ({
   comment,
   surface,
@@ -3723,26 +3749,7 @@ const SentThread = ({
             }
           />
           {onArmAutoAccept === undefined ? null : (
-            <div className="mt-2 rounded-md bg-surface p-2 text-xs text-muted">
-              <p className="m-0 font-semibold text-ink">Authoring at pace?</p>
-              <p className="mt-0.5 mb-2">
-                Stops asking for a verdict while you dictate.
-              </p>
-              <Button
-                variant="outline"
-                size="micro"
-                disabled={replyBlock !== undefined}
-                data-tooltip={replyBlock?.cause}
-                onClick={onArmAutoAccept}
-              >
-                Auto-accept all changes
-              </Button>
-              {replyBlock === undefined ? null : (
-                <p className="mt-1 mb-0 font-semibold text-danger">
-                  {replyBlock.label}
-                </p>
-              )}
-            </div>
+            <AutoAcceptPrompt block={replyBlock} onArm={onArmAutoAccept} />
           )}
           {appliedSummaries.length === 0 ? null : (
             <ul className="mt-2 mb-0 list-none p-0 text-2xs text-muted">
@@ -3883,26 +3890,7 @@ const SentThread = ({
           </Badge>
         )}
         {onArmAutoAccept === undefined ? null : (
-          <div className="mt-2 rounded-md bg-surface p-2 text-xs text-muted">
-            <p className="m-0 font-semibold text-ink">Authoring at pace?</p>
-            <p className="mt-0.5 mb-2">
-              Stops asking for a verdict while you dictate.
-            </p>
-            <Button
-              variant="outline"
-              size="micro"
-              disabled={replyBlock !== undefined}
-              data-tooltip={replyBlock?.cause}
-              onClick={onArmAutoAccept}
-            >
-              Auto-accept all changes
-            </Button>
-            {replyBlock === undefined ? null : (
-              <p className="mt-1 mb-0 font-semibold text-danger">
-                {replyBlock.label}
-              </p>
-            )}
-          </div>
+          <AutoAcceptPrompt block={replyBlock} onArm={onArmAutoAccept} />
         )}
         {appliedSummaries.length === 0 ? null : (
           <ul className="mt-2 mb-0 list-none p-0 text-2xs text-muted">
