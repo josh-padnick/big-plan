@@ -156,17 +156,25 @@ export const prepareUpdateNotice = async ({
 };
 
 /** Refreshes the shared marker. Called only by the detached worker. */
-export const refreshUpdateNoticeCache = async (): Promise<void> => {
-  let latest: string | undefined;
-  try {
-    latest = await fetchLatestVersion("big-plan", {
+export const refreshUpdateNoticeCache = async ({
+  fetchLatest = () =>
+    fetchLatestVersion("big-plan", {
       fetchTimeoutMs: REGISTRY_TIMEOUT_MS,
       // The npm-process fallback is intentionally omitted for this passive,
       // best-effort check; a failed HTTP lookup simply produces no notice.
       npmView: async () => null,
-    });
+    }),
+}: {
+  readonly fetchLatest?: () => Promise<string | null>;
+} = {}): Promise<void> => {
+  let latest: string | undefined;
+  try {
+    latest = (await fetchLatest()) ?? undefined;
   } catch {
-    latest = undefined;
+    return;
+  }
+  if (latest === undefined) {
+    return;
   }
 
   const content = JSON.stringify({ checkedAtMs: Date.now(), latest });

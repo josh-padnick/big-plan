@@ -1,11 +1,14 @@
 // Exercises the passive notice policy at the CLI boundary: install-method and
 // version gates, stale-cache refresh, and silent failure behavior.
 
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { prepareUpdateNotice } from "./update-notice.js";
+import {
+  prepareUpdateNotice,
+  refreshUpdateNoticeCache,
+} from "./update-notice.js";
 
 const NOW = 2_000_000_000_000;
 const GLOBAL_ENTRY = "/usr/local/lib/node_modules/big-plan/bin/big-plan.mjs";
@@ -142,5 +145,21 @@ describe("prepareUpdateNotice", () => {
         resolveEntry: async (path) => path,
       }),
     ).resolves.toEqual({});
+  });
+});
+
+describe("refreshUpdateNoticeCache", () => {
+  it.each([
+    [
+      "failed",
+      async (): Promise<string> => Promise.reject(new Error("offline")),
+    ],
+    ["incomplete", async (): Promise<null> => null],
+  ])("should not cache a %s registry check", async (_case, fetchLatest) => {
+    await refreshUpdateNoticeCache({ fetchLatest });
+
+    await expect(
+      readFile(join(stateDirectory, "update-check.json"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
