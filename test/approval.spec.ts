@@ -1007,7 +1007,7 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
         response.url().endsWith("/api/approve"),
       );
       await page
-        .locator("[data-review-approve-dialog]")
+        .getByRole("alertdialog", { name: "Approve this plan?" })
         .getByRole("button", { name: "Approve plan" })
         .click();
       expect((await reapproved).ok()).toBe(true);
