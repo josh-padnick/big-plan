@@ -1127,6 +1127,72 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should refuse an approval acknowledgment after canonical source moves", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-approve-source-moved-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nBegin after approval.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const pinned = deriveSnapshotDigest(source);
+    const request = approvalAgentRequest({
+      approvalId: "c2d3e4f506172839",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      planPath,
+      pinnedSnapshot: pinned,
+      createdAt: "2026-08-13T17:41:00.000Z",
+      recordedAnswers: [],
+      unansweredDecisions: [],
+      message: "This plan is approved and we are ready to begin.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a response file");
+      }
+      const moved = `${source}\nA later canonical edit.\n`;
+      await writeFile(planPath, moved);
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({ requestId: request.requestId }),
+      );
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toThrow(
+        'An approval acknowledgment must not change the plan. Restore the source so its digest equals the pinned snapshot and respond again, or report what you found with "hardStop".',
+      );
+      await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({ responses: [] });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should report an approval hard stop where the reviewer can see it", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "big-plan-agent-approve-stop-"),

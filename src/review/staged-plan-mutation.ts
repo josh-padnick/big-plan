@@ -21,6 +21,7 @@ import {
   AgentExchangeRejected,
   deriveSnapshotDigest,
   validateAgentResponse,
+  validateAgentResponseDraft,
 } from "./agent-exchange.js";
 import type { AgentRequest, AgentResponse } from "./agent-exchange.js";
 import {
@@ -834,6 +835,19 @@ export const commitStagedPlanMutation = async ({
     store,
     change: async (lockedStore) => {
       const publishes = response.kind !== "approval";
+      let approvalSource: string | undefined;
+      let committedResponse = response;
+      if (response.kind === "approval") {
+        approvalSource = await readFile(planPath, "utf8");
+        committedResponse = validateAgentResponseDraft({
+          value: response,
+          request,
+          commentsById: new Map(),
+          changedBlocks: new Set(),
+          currentSnapshot: deriveSnapshotDigest(approvalSource),
+          now: response.createdAt,
+        });
+      }
       /*
       What the journal names has to be true of the file, because recovery reads
       it as the two revisions an interrupted commit could be caught between. An
@@ -851,16 +865,17 @@ export const commitStagedPlanMutation = async ({
         baseSnapshot,
         resultSnapshot,
         answeredAt: now,
-        response,
+        response: committedResponse,
       };
       let settledSource = resultSource;
       const answered = await commitRequestTerminal({
         store: lockedStore,
-        response,
+        response: committedResponse,
         claimedBy,
         now,
         publish: async () => {
-          const source = await readFile(planPath, "utf8");
+          const source =
+            approvalSource ?? (await readFile(planPath, "utf8"));
           const currentSnapshot = deriveSnapshotDigest(source);
           if (!publishes) {
             journal = {
@@ -916,7 +931,7 @@ export const commitStagedPlanMutation = async ({
           await autoAcceptPushIfArmed({
             store: lockedStore,
             planPath,
-            response,
+            response: committedResponse,
             baseSnapshot,
             resultSnapshot,
             acceptedAt: now,
