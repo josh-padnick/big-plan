@@ -69,7 +69,10 @@ type ChangeSetRequest = {
   readonly premiseSnapshot: string;
   readonly baselineSnapshot?: string;
   readonly targetLabel?: string;
+  /** The browser's projection of a feedback request's comments. */
   readonly commentIds?: ReadonlyArray<string>;
+  /** The comments a feedback request carries, as the store holds them. */
+  readonly comments?: ReadonlyArray<{ readonly id: string }>;
   readonly commentId?: string;
   readonly threadId?: string;
 };
@@ -81,6 +84,11 @@ type ChangeSetRequest = {
  * request carries are tried against the committed fold before the request
  * falls back to owning a set alone - which is what a chat turn or a revision
  * committed before the fold knew about it actually does.
+ *
+ * A feedback request names its comments one way in the store and another over
+ * the wire, and both callers pass their own shape straight through, so both
+ * are read here: missing the store's shape would leave a thread's opening
+ * round owning a set of its own that no later reply could fold into.
  */
 const changeSetIdFor = ({
   request,
@@ -91,6 +99,7 @@ const changeSetIdFor = ({
 }): string =>
   [
     ...(request.commentIds ?? []),
+    ...(request.comments ?? []).map((comment) => comment.id),
     ...(request.commentId === undefined ? [] : [request.commentId]),
     ...(request.threadId === undefined ? [] : [request.threadId]),
   ].find((id) => changeSetIds.has(id)) ?? request.requestId;

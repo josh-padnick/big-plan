@@ -211,6 +211,31 @@ describe("changeSetsFromExchange", () => {
     ]);
   });
 
+  it("folds the opening feedback round the store names by its comments", () => {
+    expect(
+      changeSetsFromExchange({
+        requests: [
+          {
+            requestId: "req1req1req1req1",
+            premiseSnapshot: S1,
+            comments: [{ id: "c0de" }],
+          },
+          {
+            requestId: "req2req2req2req2",
+            premiseSnapshot: S2,
+            commentId: "c0de",
+          },
+        ],
+        responses: [
+          { requestId: "req1req1req1req1", resultSnapshot: S2 },
+          { requestId: "req2req2req2req2", resultSnapshot: S3 },
+        ],
+        placeIdsByRevision: new Map(),
+        committedChangeSetIds: new Set(["c0de"]),
+      }),
+    ).toMatchObject([{ id: "c0de", from: S1, to: S3 }]);
+  });
+
   it("keeps threads apart when they changed the plan in turn", () => {
     expect(
       changeSetsFromExchange({
