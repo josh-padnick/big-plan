@@ -14,7 +14,7 @@ Report privately through GitHub — not in a public issue, pull request, or disc
 [**Open a private security advisory**](https://github.com/josh-padnick/big-plan/security/advisories/new)
 
 Include what an attacker can do, the version you tested, and the smallest reproduction you have.
-You can expect an acknowledgement within 3 business days.
+Reports are answered on a best-effort basis; the advisory thread is where updates land.
 
 Big Plan is pre-1.0: only the latest published version on npm receives security fixes.
 

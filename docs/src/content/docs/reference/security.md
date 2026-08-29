@@ -21,9 +21,12 @@ Big Plan's local runtime is explicitly not a boundary against that; see [Local r
 
 ## Response process
 
-- **Acknowledgement:** within 3 business days of the report.
-- **Assessment:** an initial severity judgement and a fix plan, or an explanation of why the report is not a vulnerability, within 10 business days.
-- **Fix and disclosure:** fixes are released as soon as they are ready, and coordinated public disclosure is targeted within 90 days of the report. The reporter is credited in the advisory unless they ask otherwise.
+Big Plan is a small project, so it makes no service-level promise about response times.
+Reports are answered on a best-effort basis:
+
+- **Acknowledgement.** We reply to confirm we have the report.
+- **Assessment.** We come back with an initial severity judgement and a fix plan, or an explanation of why we do not consider the report a vulnerability.
+- **Fix and disclosure.** Fixes ship as soon as they are ready, and public disclosure is coordinated with the reporter. The reporter is credited in the advisory unless they ask otherwise.
 
 Reports are handled through GitHub Security Advisories, so the advisory thread is where updates land.
 
