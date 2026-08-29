@@ -314,8 +314,12 @@ const DecidedRecord = () => (
     data-decision-decided=""
     role="status"
   >
+    {/* A bare glyph, not the filled disc the answered strip's check wears. The
+        disc is what marks a thing this reader just did; a settled decision is
+        a standing fact, and the lock is the same one the in-force approval
+        notice already uses. */}
     <span
-      className="decision-answer-mark mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--decision-pro-c)] text-paper [&_svg]:size-3"
+      className="mt-0.5 inline-flex size-4 shrink-0 text-[var(--decision-pro-c)] [&>svg]:size-4"
       aria-hidden="true"
     >
       {lucideIconToReact({ icon: LOCK_ICON, hidden: false })}
