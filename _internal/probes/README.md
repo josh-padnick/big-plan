@@ -30,16 +30,12 @@ Method:
 1. Capture the real connector prompt. `capture-connector-prompt.mjs` starts a
    live review over a throwaway plan and runs the real `big-plan agent <plan>`
    command, so the probe measures the shipped text rather than a copy of it.
-   It produces three arms: `after` is the working tree's prompt; `before`
-   reconstructs the prompt as it stood before the change under test, by reading
-   the prompt block from the merge base with `origin/main` (falling back to
-   local `main`, or using `--baseline-rev <rev>`) and restoring its former
-   position; and
-   `control` removes the push guidance entirely.
-   The control arm is what makes the other two readable. A probe on which every
-   arm passes has not shown that the prompt works, only that the question was
-   easy, so one arm has to describe a prompt that never taught the mode - and
-   the probe has to catch it.
+   It produces two default arms: `after` is the working tree's prompt, and
+   `control` removes the push guidance entirely. The earlier prompt scored
+   identically to `after` and carried no evidential weight, while making the
+   default probe depend on a pre-feature revision after merge. Control versus
+   after is what makes the numbers readable: the probe has to catch the arm
+   that never taught the mode.
 2. Put distance between the prompt and the question. Each arm appends a short
    account of a session already in progress, ending with the agent blocked on
    `agent next --wait` - the situation the original failure happened in. A probe
@@ -53,22 +49,24 @@ Method:
    the change has to come from the UI - the wording the original wrong answer
    came back to.
 4. Ask every harness the same thing under both arms, several trials each, and
-   score each reply: `push` when it names the push command, `deferred` when it
-   defers to the reviewer or the UI, `other` otherwise.
+   require its reply to end with `NEXT_COMMAND: <the exact command you would run
+   next, or NONE>`. Score only the last such line: `push` when it names the push
+   command, `other` for `NONE` or another command, and `harness_error` when the
+   reply omits the field. Parsing free English proved unreliable across three
+   review rounds; the final line is a deterministic contract the harness can
+   be asked to honor.
 
 ```sh
 node _internal/probes/push-mode-probe.mjs --trials 3 --transcripts <dir>
-node _internal/probes/push-mode-probe.mjs --baseline-rev <pre-change-rev>
 node _internal/probes/push-mode-probe.mjs --trials 5 --harness claude --arm after
 node _internal/probes/push-mode-probe.mjs --arm control --question doubted
 ```
 
 The summary is a count per arm, question, and harness, not a pass or fail. Read
-it as a distribution: the change is good when `deferred` and `other` go to zero
-on the `after` arm across every harness and both wordings, and stay there - and
-it is only evidence at all when the `control` arm shows some of them.
+it as a distribution: the change is good when `other` and `harness_error` go to
+zero on the `after` arm across every harness and both wordings, and stay there -
+and it is only evidence at all when the `control` arm stays non-push.
 
-The before arm uses the merge base with `origin/main` by default, falling back
-to local `main` when that remote-tracking branch is absent. Pass
-`--baseline-rev <rev>` when the pre-change prompt lives at another revision.
-Baseline capture refuses revisions that already contain the new two-mode prompt.
+For ad-hoc baseline work, `capture-connector-prompt.mjs --baseline
+--baseline-rev <rev>` reconstructs an earlier prompt. It refuses revisions that
+already contain the new two-mode prompt.

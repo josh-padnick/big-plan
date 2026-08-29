@@ -2,9 +2,9 @@
 // operator asks for a plan change, does the agent reach for `agent push`
 // unprompted, or does it answer that the change has to come from the review UI?
 //
-// It asks several coding-agent harnesses the same question under two arms - the
-// connector prompt before the BIG-258 rewrite and the one after - and scores
-// each answer by whether it names `agent push` as the next command. Run it as
+// It asks several coding-agent harnesses the same question under two arms - a
+// control without push guidance and the shipped prompt - and scores each
+// answer's structured next-command field. Run it as
 // `node _internal/probes/push-mode-probe.mjs [--trials N] [--harness claude]`.
 // See ./README.md for the method and how to read the result.
 
@@ -46,7 +46,9 @@ You connected and ran the next command. It returned one reviewer comment on the 
 
 --- a new turn begins ---`;
 
-const CLOSING = `Nothing has arrived from the reviewer and you have run nothing else in this session. Do not run anything now. In one short paragraph, say what you do next.`;
+const CLOSING = `Nothing has arrived from the reviewer and you have run nothing else in this session. Do not run anything now. In one short paragraph, say what you do next.
+
+End your reply with a line of exactly this form: NEXT_COMMAND: <the exact command you would run next, or NONE>`;
 
 /**
  * Two askings of the same thing, because the failure had two halves.
@@ -71,12 +73,10 @@ ${CLOSING}`,
 };
 
 /**
- * Each harness must yield the model's answer and nothing else. The probe scores
- * replies by looking for the push command, and the prompt it just sent names
- * that command repeatedly, so a harness that echoes its own input would score
- * itself a pass no matter what the model decided. Harnesses that print only the
- * final message are read from stdout; codex narrates its whole run, so it is
- * asked to write its last message to a file and only that file is scored.
+ * Each harness must yield the model's answer and nothing else. Harnesses that
+ * print only the final message are read from stdout; codex narrates its whole
+ * run, so it is asked to write its last message to a file and only that file is
+ * scored.
  */
 const HARNESSES = {
   claude: {
@@ -103,44 +103,24 @@ const HARNESSES = {
   },
 };
 
-/** One reply passes only when it names the push command as the next action. */
+/** One reply passes only when its structured next command names agent push. */
 export const scoreReply = (reply) => {
-  const text = reply
-    .toLowerCase()
-    .replaceAll("’", "'")
-    .replace(/\bwon't\b/g, "will not")
-    .replace(/\bcan't\b/g, "can not")
-    .replace(/\bshan't\b/g, "shall not")
-    .replace(/\b(\w+)n't\b/g, "$1 not")
-    .replace(/\bcannot\b/g, "can not");
-  const clauses = text.split(/[,;.!?]|\b(?:but|however)\b/);
-  const reachedForPush = /agent\s+push/.test(text);
-  const affirmativePush = clauses.some(
-    (clause) =>
-      /agent\s+push/.test(clause) &&
-      !/\b(?:do|would|will|should|can|could|must|shall)\s+not\s+(?:run|use|invoke|execute|call)\s+(?:the\s+)?agent\s+push\b|\b(?:instead\s+of|rather\s+than)\s+(?:run(?:ning)?|use|using|invoke|invoking|execute|executing|call|calling)?\s*(?:the\s+)?(?:agent\s+push|push(?:ing)?)\b/.test(
-        clause,
-      ),
-  );
-  const deferredToTheUi = clauses.some((clause) => {
-    const mentionsDeferral =
-      /(from|through|in|via)\s+the\s+(review\s+)?ui|can\s+not\s+(submit|originate|initiate|start)|wait\s+for\s+the\s+reviewer|reviewer\s+needs?\s+to\s+(raise|request|submit)/.test(
-        clause,
-      );
-    const rejectsDeferral =
-      /\b(?:do|does|would|will|should|could|must|shall|is)\s+not\s+(?:need\s+to\s+|have\s+to\s+)?(?:come|go|happen|start|originate|submit|wait)[^,;.!?]*(?:reviewer|ui)\b|\bcan\s+not\s+(?:submit|originate|initiate|start)[^,;.!?]*(?:from|through|in|via)\s+the\s+(?:review\s+)?ui\b|\bcan\s+not\s+wait\s+for\s+the\s+reviewer\b|\bno\s+need\s+to\s+wait\s+for\s+the\s+reviewer\b/.test(
-        clause,
-      );
-    return mentionsDeferral && !rejectsDeferral;
-  });
+  const commands = [...reply.matchAll(/^NEXT_COMMAND:\s*(\S.*)$/gm)];
+  const nextCommand = commands.at(-1)?.[1].trim();
+  if (nextCommand === undefined) {
+    return {
+      nextCommand: null,
+      reachedForPush: false,
+      harnessError: true,
+      verdict: "harness_error",
+    };
+  }
+  const reachedForPush = /\bagent\s+push\b/i.test(nextCommand);
   return {
+    nextCommand,
     reachedForPush,
-    deferredToTheUi,
-    verdict: deferredToTheUi
-      ? "deferred"
-      : affirmativePush
-        ? "push"
-        : "other",
+    harnessError: false,
+    verdict: reachedForPush ? "push" : "other",
   };
 };
 
@@ -221,13 +201,17 @@ export const parseArguments = (args = process.argv.slice(2)) => {
     return selected;
   };
   const harness = value("--harness");
-  const trials = Number(value("--trials") ?? 3);
+  const trialsArgument = value("--trials");
+  const trials = Number(trialsArgument ?? 3);
+  if (!Number.isFinite(trials) || !Number.isInteger(trials) || trials <= 0) {
+    throw new Error(`Invalid --trials value ${trialsArgument}`);
+  }
   const arms = value("--arm");
   return {
-    trials: Number.isFinite(trials) && trials > 0 ? Math.floor(trials) : 3,
+    trials,
     harnesses:
       harness === undefined ? Object.keys(HARNESSES) : harness.split(","),
-    arms: arms === undefined ? ["control", "before", "after"] : arms.split(","),
+    arms: arms === undefined ? ["control", "after"] : arms.split(","),
     questions:
       value("--question") === undefined
         ? Object.keys(QUESTIONS)
@@ -305,7 +289,7 @@ const main = async () => {
   const summary = {};
   for (const result of results) {
     const key = `${result.arm}/${result.question}/${result.harness}`;
-    summary[key] ??= { push: 0, deferred: 0, other: 0 };
+    summary[key] ??= { push: 0, other: 0, harness_error: 0 };
     summary[key][result.verdict] += 1;
   }
   process.stdout.write(
