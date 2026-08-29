@@ -465,12 +465,8 @@ const CurrentActivityCard = ({
     ...(sessionId === undefined ? {} : { sessionId }),
   });
   /* The handle the fact row states. A declared session is the answer; an agent
-     that declared none is named by its roster id, the only name it has. A
-     declared URL is not repeated here, because it is already a link above. */
-  const sessionHandle =
-    sessionAffordance.kind === "identifier"
-      ? sessionAffordance.value
-      : writerId;
+     that declared none is named by its roster id, the only name it has. */
+  const sessionHandle = sessionId ?? writerId;
   // Since and Events describe a connection at rest; the session identifies the
   // agent whatever it is doing. The working card carries the second without the
   // first, and every other state carries both.
@@ -612,7 +608,7 @@ const CurrentActivityCard = ({
                what lets the identity line above it carry no session at all. */
             <AgentSessionFact
               handle={sessionHandle}
-              isCopyable={sessionAffordance.kind === "identifier"}
+              isCopyable={sessionId !== undefined}
             />
           )}
           {showsSinceAndEvents ? (

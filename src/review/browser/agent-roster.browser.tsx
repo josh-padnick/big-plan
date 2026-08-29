@@ -229,22 +229,6 @@ const AgentCardHeader = ({
   </div>
 );
 
-const AttachedSince = ({
-  agent,
-  nowMs,
-}: {
-  readonly agent: RosterAgent;
-  readonly nowMs: number;
-}) => {
-  const since = compactDurationLabel({
-    start: agent.attachedAtMs,
-    end: Math.max(nowMs, agent.attachedAtMs),
-  });
-  return since === null ? null : (
-    <p className="m-0 text-2xs text-muted">Attached {since} ago</p>
-  );
-};
-
 /**
  * The standing facts under a roster card's identity line: which session, and
  * how long it has been here.
@@ -283,6 +267,19 @@ const AgentSessionFacts = ({
   );
 };
 
+const UnavailableDisconnectControl = () => (
+  <Tooltip label={DISCONNECT_UNAVAILABLE_REASON} placement="above" asChild>
+    <Button
+      variant="outline"
+      size="sm"
+      aria-disabled="true"
+      className="cursor-not-allowed border-edge bg-surface text-subtle shadow-none hover:brightness-100"
+    >
+      Disconnect
+    </Button>
+  </Tooltip>
+);
+
 /**
  * The card for an agent that has just arrived and is asking to take over.
  *
@@ -316,11 +313,16 @@ const PrimacyRequestCard = ({
       A second agent wants to answer you
     </h3>
     <AgentIdentity agent={agent} />
-    <AttachedSince agent={agent} nowMs={nowMs} />
+    <AgentSessionFacts agent={agent} nowMs={nowMs} />
     {isReadOnly ? (
-      <p className="m-0 text-xs text-muted">
-        This session is read-only, so it cannot answer for the plan.
-      </p>
+      <>
+        <p className="m-0 text-xs text-muted">
+          This session is read-only, so it cannot answer for the plan.
+        </p>
+        <div className="flex flex-wrap gap-2 pt-0.5">
+          <UnavailableDisconnectControl />
+        </div>
+      </>
     ) : (
       <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5 pt-0.5">
         {/*
@@ -450,20 +452,7 @@ const AgentCard = ({
         focusable, is announced as unavailable, and carries no handler, so it
         is inert in the only sense that matters.
         */
-        <Tooltip
-          label={DISCONNECT_UNAVAILABLE_REASON}
-          placement="above"
-          asChild
-        >
-          <Button
-            variant="outline"
-            size="sm"
-            aria-disabled="true"
-            className="cursor-not-allowed border-edge bg-surface text-subtle shadow-none hover:brightness-100"
-          >
-            Disconnect
-          </Button>
-        </Tooltip>
+        <UnavailableDisconnectControl />
       )}
     </div>
   </article>
