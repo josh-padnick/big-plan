@@ -796,7 +796,12 @@ The follow-through is not extra product scope. It only gives the stamp a long pa
       "data-decision-status",
       "decided",
     );
-    await expect(releaseDecision(page)).toContainText("Decided");
+    await expect(releaseDecision(page)).toContainText("Answer decided");
+    // The approval sentence is the one part a settled decision only says while
+    // an approval is actually in force.
+    await expect(releaseDecision(page)).toContainText(
+      "This plan is approved. Revoke the approval to change the answer.",
+    );
     await expect(
       releaseDecision(page).getByRole("button", { name: "Confirm choice" }),
     ).toHaveCount(0);

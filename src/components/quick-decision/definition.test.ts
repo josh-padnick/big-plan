@@ -43,7 +43,9 @@ describe("QuickDecision", () => {
     );
 
     expect(html).toContain('data-decision-status="decided"');
-    expect(html).toContain("Decided");
+    expect(html).toContain("data-decision-decided");
+    expect(html).toContain("Answer decided");
+    expect(html).not.toContain("decision-status-pill");
     expect(html).toContain("data-option-chosen");
     expect(html).not.toContain("data-decision-selector");
   });

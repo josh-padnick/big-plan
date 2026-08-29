@@ -300,6 +300,50 @@ const ApprovedNotice = () => (
   </div>
 );
 
+// A settled decision closes with the same recorded strip an answered one does.
+// It is not a status pill at the top of the card: the reader has just read the
+// options, and what they need at the end is the outcome and why it cannot be
+// changed here, in the place the confirm step used to sit.
+//
+// It is server-rendered visible rather than revealed by the island, because
+// the record lives in the plan source rather than in this reader's session: it
+// is true on first paint, with scripts disabled, and in a standalone document.
+const DecidedRecord = () => (
+  <div
+    className="decision-decided gap-3 px-6 py-4"
+    data-decision-decided=""
+    role="status"
+  >
+    <span
+      className="decision-answer-mark mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--decision-pro-c)] text-paper [&_svg]:size-3"
+      aria-hidden="true"
+    >
+      {lucideIconToReact({ icon: LOCK_ICON, hidden: false })}
+    </span>
+    <div className="min-w-0 flex-1">
+      <p className="m-0 text-base font-semibold text-[var(--decision-pro-ink)]">
+        <span data-decision-decided-lead="">{"Answer decided"}</span>
+      </p>
+      <p
+        className="m-0 mt-0.5 text-xs text-[var(--decision-pro-c)]"
+        data-decision-decided-caption=""
+      >
+        {"Recorded in the plan source, so this question is settled."}
+      </p>
+      {/* The one sentence that is not true of every settled decision: an author
+          can settle one before any review exists. The root's approval state
+          decides whether it shows, which is why it is a CSS reveal rather than
+          an authored choice. */}
+      <p
+        className="decision-decided-approval m-0 mt-0.5 text-xs text-[var(--decision-pro-c)]"
+        data-decision-decided-approval=""
+      >
+        {"This plan is approved. Revoke the approval to change the answer."}
+      </p>
+    </div>
+  </div>
+);
+
 const SupersededNotice = () => (
   <p
     className="decision-superseded flex items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)]"
@@ -558,7 +602,7 @@ export const DecisionCard = ({
               {"Decision"}
             </p>
           ) : null}
-          {answerable ? null : (
+          {answerable || model.status === "decided" ? null : (
             <BadgePill
               label={statusLabel(model)}
               classNames={[
@@ -651,6 +695,7 @@ export const DecisionCard = ({
           confirmHelpId={`${model.id}-change-confirm-help`}
         />
       ) : null}
+      {model.status === "decided" ? <DecidedRecord /> : null}
     </figure>
   );
 };

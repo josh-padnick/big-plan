@@ -74,7 +74,14 @@ Every region sees the change together.
 </Decision>`);
 
     expect(html).toContain('data-decision-status="decided"');
-    expect(html).toContain("Decided");
+    // The outcome closes the card where the confirm step used to sit, rather
+    // than as a status pill above the options the reader has not read yet.
+    expect(html).toContain("data-decision-decided");
+    expect(html).toContain("Answer decided");
+    expect(html).toContain(
+      "Recorded in the plan source, so this question is settled.",
+    );
+    expect(html).not.toContain("decision-status-pill");
     expect(html).toContain("data-option-chosen");
     // A settled question keeps interaction="choose" and simply stops being
     // answerable, which is the one fact the card and the review runtime both
