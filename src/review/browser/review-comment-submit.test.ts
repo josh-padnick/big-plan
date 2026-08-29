@@ -27,6 +27,7 @@ describe("review comment submit availability", () => {
   it("should identify review-runtime unavailability without blaming the agent", () => {
     const availability = deriveReviewCommentSubmitAvailability({
       canSubmit: false,
+      runtimeIsUnreachable: false,
       writeAvailability: OFFLINE,
     });
 
@@ -42,6 +43,7 @@ describe("review comment submit availability", () => {
   it("should preserve agent-disconnected behavior when the runtime can write", () => {
     const availability = deriveReviewCommentSubmitAvailability({
       canSubmit: false,
+      runtimeIsUnreachable: false,
       writeAvailability: REVIEW_WRITES_AVAILABLE,
     });
 
@@ -58,6 +60,7 @@ describe("review comment submit availability", () => {
     expect(
       deriveReviewCommentSubmitAvailability({
         canSubmit: true,
+        runtimeIsUnreachable: false,
         writeAvailability: OFFLINE,
       }),
     ).toEqual({ state: "available" });
@@ -66,6 +69,7 @@ describe("review comment submit availability", () => {
   it("should tell a reviewer to restart when the runtime stopped accepting changes", () => {
     const availability = deriveReviewCommentSubmitAvailability({
       canSubmit: false,
+      runtimeIsUnreachable: false,
       writeAvailability: STALLED,
     });
 
@@ -82,8 +86,25 @@ describe("review comment submit availability", () => {
     expect(
       deriveReviewCommentSubmitAvailability({
         canSubmit: true,
+        runtimeIsUnreachable: false,
         writeAvailability: STALLED,
       }),
     ).toEqual({ state: "available" });
+  });
+
+  it("should name the review session when polling fails before a write block", () => {
+    const availability = deriveReviewCommentSubmitAvailability({
+      canSubmit: false,
+      runtimeIsUnreachable: true,
+      writeAvailability: REVIEW_WRITES_AVAILABLE,
+    });
+
+    expect(availability).toEqual({
+      state: "unavailable",
+      reason: "review-runtime",
+      label: "Review session unreachable",
+      status:
+        "Review session unreachable. Your comment is saved. Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
+    });
   });
 });

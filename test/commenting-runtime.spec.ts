@@ -5196,7 +5196,9 @@ test("should restore and submit staged comments through the local review runtime
     offlineComposer.getByRole("button", { name: "Submit Now" }),
   ).toBeDisabled();
   await expect(
-    offlineComposer.getByRole("button", { name: "Agent disconnected" }),
+    offlineComposer.getByRole("button", {
+      name: "Review session unreachable",
+    }),
   ).toBeVisible();
   await offlineComposer.getByRole("button", { name: "Cancel" }).click();
   await expect(rail).not.toContainText(
