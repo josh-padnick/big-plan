@@ -519,26 +519,27 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       { timeout: 15_000 },
     );
 
-    const historicalChange = thread
+    // The follow-up push joins the thread's own change set rather than opening
+    // a second review of its own, so the earlier reply keeps its message and
+    // hands its changes to the set below it.
+    const foldedChange = thread
       .locator('[data-review-message="agent"]')
       .filter({ hasText: "Clarified the safe publication flow." });
+    await expect(foldedChange).toContainText(
+      "Folded into this thread’s change set below.",
+    );
     await expect(
-      historicalChange.getByText("Accepted", { exact: true }),
-    ).toBeVisible();
-    await historicalChange
-      .getByRole("button", {
-        name: /2 changes across 2 slides Accepted/u,
-      })
-      .click();
-    await expect(
-      stepper.getByRole("button", { name: "Resolve thread" }),
+      foldedChange.getByRole("button", { name: /Review change/u }),
     ).toHaveCount(0);
-    await page.keyboard.press("Escape");
 
     const latestChange = thread
       .locator('[data-review-message="agent"]')
       .filter({ hasText: "Clarified the follow-up publication flow." });
-    await latestChange.getByRole("button", { name: "Review change" }).click();
+    await latestChange
+      .getByRole("button", { name: /Review changes \(2\)/u })
+      .click();
+    await expect(stepper).toContainText("1 of 2");
+    await stepper.getByRole("button", { name: "Accept this change" }).click();
     await stepper.getByRole("button", { name: "Accept this change" }).click();
     await expect(stepper).toContainText("All changes accepted (1 of 1)");
     await page.keyboard.press("Escape");

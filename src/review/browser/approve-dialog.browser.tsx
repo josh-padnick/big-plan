@@ -68,6 +68,7 @@ import {
   requestJson,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
+import { useChangeSets } from "./use-change-sets.browser.js";
 import { useChangeVerdicts } from "./use-change-verdicts.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
@@ -1033,14 +1034,20 @@ export const ApproveControl = ({
   const verdicts = useChangeVerdicts();
   const { openTour } = useDiffTour();
   const message = useApprovalMessage(dialogOpen);
+  const { changeSets: committed } = useChangeSets();
+  const committedChangeSetIds = useMemo(
+    () => new Set(committed.map((changeSet) => changeSet.changeSetId)),
+    [committed],
+  );
   const skeletonSets = useMemo(
     () =>
       changeSetsFromExchange({
         requests: agent.requests,
         responses: agent.responses,
         placeIdsByRevision: new Map(),
+        committedChangeSetIds,
       }),
-    [agent.requests, agent.responses],
+    [agent.requests, agent.responses, committedChangeSetIds],
   );
   const diffs = useChangeSetDiffs({ identity, changeSets: skeletonSets });
   const changeSets = useMemo(
@@ -1054,8 +1061,9 @@ export const ApproveControl = ({
             diff.places.map((place) => place.placeId),
           ]),
         ),
+        committedChangeSetIds,
       }),
-    [agent.requests, agent.responses, diffs],
+    [agent.requests, agent.responses, committedChangeSetIds, diffs],
   );
   const items = useMemo(
     () =>

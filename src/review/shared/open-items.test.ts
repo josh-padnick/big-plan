@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  changeSetsFromExchange,
   approveChangeSetCaveat,
   approveDecisionCaveat,
   approveIsPrimary,
@@ -165,5 +166,114 @@ describe("openRequestsFromExchange", () => {
         },
       ]),
     ).toEqual([{ requestId: "aaaaaaaaaaaaaaaa", label: "Please start." }]);
+  });
+});
+
+describe("changeSetsFromExchange", () => {
+  const S1 = "1".repeat(16);
+  const S2 = "2".repeat(16);
+  const S3 = "3".repeat(16);
+
+  it("counts a multi-round thread once, spanning its whole span", () => {
+    expect(
+      changeSetsFromExchange({
+        requests: [
+          {
+            requestId: "req1req1req1req1",
+            premiseSnapshot: S1,
+            baselineSnapshot: S1,
+            commentId: "c0de",
+            targetLabel: "Retry backoff",
+          },
+          {
+            requestId: "req2req2req2req2",
+            premiseSnapshot: S2,
+            baselineSnapshot: S2,
+            commentId: "c0de",
+            targetLabel: "Retry backoff",
+          },
+        ],
+        responses: [
+          { requestId: "req1req1req1req1", resultSnapshot: S2 },
+          { requestId: "req2req2req2req2", resultSnapshot: S3 },
+        ],
+        placeIdsByRevision: new Map([[`${S1}:${S3}`, ["p1"]]]),
+        committedChangeSetIds: new Set(["c0de"]),
+      }),
+    ).toEqual([
+      {
+        id: "c0de",
+        label: "Retry backoff",
+        from: S1,
+        to: S3,
+        placeIds: ["p1"],
+      },
+    ]);
+  });
+
+  it("keeps threads apart when they changed the plan in turn", () => {
+    expect(
+      changeSetsFromExchange({
+        requests: [
+          {
+            requestId: "req1req1req1req1",
+            premiseSnapshot: S1,
+            commentId: "c0de",
+          },
+          {
+            requestId: "req2req2req2req2",
+            premiseSnapshot: S2,
+            commentId: "d1ce",
+          },
+        ],
+        responses: [
+          { requestId: "req1req1req1req1", resultSnapshot: S2 },
+          { requestId: "req2req2req2req2", resultSnapshot: S3 },
+        ],
+        placeIdsByRevision: new Map(),
+        committedChangeSetIds: new Set(["c0de", "d1ce"]),
+      }).map((changeSet) => changeSet.id),
+    ).toEqual(["c0de", "d1ce"]);
+  });
+
+  it("falls back to the request when the fold has not named the thread yet", () => {
+    expect(
+      changeSetsFromExchange({
+        requests: [
+          {
+            requestId: "req1req1req1req1",
+            premiseSnapshot: S1,
+            commentId: "c0de",
+          },
+        ],
+        responses: [{ requestId: "req1req1req1req1", resultSnapshot: S2 }],
+        placeIdsByRevision: new Map(),
+      }).map((changeSet) => changeSet.id),
+    ).toEqual(["req1req1req1req1"]);
+  });
+
+  it("drops a thread whose rounds cancelled out back to its baseline", () => {
+    expect(
+      changeSetsFromExchange({
+        requests: [
+          {
+            requestId: "req1req1req1req1",
+            premiseSnapshot: S1,
+            commentId: "c0de",
+          },
+          {
+            requestId: "req2req2req2req2",
+            premiseSnapshot: S2,
+            commentId: "c0de",
+          },
+        ],
+        responses: [
+          { requestId: "req1req1req1req1", resultSnapshot: S2 },
+          { requestId: "req2req2req2req2", resultSnapshot: S1 },
+        ],
+        placeIdsByRevision: new Map(),
+        committedChangeSetIds: new Set(["c0de"]),
+      }),
+    ).toEqual([]);
   });
 });

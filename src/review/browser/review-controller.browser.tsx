@@ -59,7 +59,10 @@ import {
   agentPrimacyHealth,
   selectPrimaryAgent,
 } from "../shared/agent-primacy.js";
-import { selectAgentModelIdentity } from "../shared/agent-model.js";
+import {
+  selectAgentModelIdentity,
+  type AgentModelIdentity,
+} from "../shared/agent-model.js";
 import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
@@ -220,6 +223,8 @@ import {
   type StoredLiveReviewRecovery,
 } from "./review-recovery-storage.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
+import { useChangeSets } from "./use-change-sets.browser.js";
+import { threadChangeFor } from "../shared/thread-change-set.js";
 import {
   requestJson,
   runtimeIdentity,
@@ -3153,10 +3158,19 @@ const StagedCard = ({
   );
 };
 
+/**
+ * One change set, rendered where it was authored.
+ *
+ * The bounds are given rather than derived from the response that happens to
+ * be beside it: a comment thread's change set spans every reply it has
+ * committed, so the diff shown in the thread is the thread's baseline against
+ * the plan now, not the last reply's own before-and-after.
+ */
 const ChangeAttachment = ({
   identity,
-  request,
-  response,
+  from,
+  to,
+  agentIdentity,
   changeTargets,
   currentSnapshot,
   onStatus,
@@ -3167,8 +3181,9 @@ const ChangeAttachment = ({
   onKeepChatting,
 }: {
   readonly identity: RuntimeIdentity;
-  readonly request: AgentRequest;
-  readonly response: AgentResponse;
+  readonly from: string;
+  readonly to: string;
+  readonly agentIdentity?: AgentModelIdentity;
   readonly changeTargets?: ReadonlyArray<string>;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
@@ -3181,8 +3196,6 @@ const ChangeAttachment = ({
   };
   readonly onKeepChatting?: () => void;
 }) => {
-  const from = request.baselineSnapshot ?? request.premiseSnapshot;
-  const to = response.resultSnapshot;
   const [diff, setDiff] = useState<SnapshotDiff | null>(() =>
     readySnapshotDiff(identity, from, to),
   );
@@ -3208,12 +3221,10 @@ const ChangeAttachment = ({
   return (
     <AgentChangeDigest
       diff={diff}
-      agentIdentity={request.claimedModel}
+      agentIdentity={agentIdentity}
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
-      isSuperseded={
-        currentSnapshot !== "" && currentSnapshot !== response.resultSnapshot
-      }
+      isSuperseded={currentSnapshot !== "" && currentSnapshot !== to}
       isLoading={isLoading}
       onLoad={() => void load()}
       onResolve={onResolve}
@@ -3408,22 +3419,23 @@ const SentThread = ({
     deleteUnlockedByAbandonedClaim,
     group,
   } = thread;
+  const { changeSets } = useChangeSets();
+  const threadChange = useMemo(
+    () =>
+      threadChangeFor({
+        changeSets,
+        commentId: comment.id,
+        exchanges,
+        currentSnapshot,
+      }),
+    [changeSets, comment.id, currentSnapshot, exchanges],
+  );
   useEffect(() => {
-    if (
-      identity === null ||
-      latestChanged === undefined ||
-      latestChanged.response === undefined
-    )
-      return;
-    const from =
-      latestChanged.request.baselineSnapshot ??
-      latestChanged.request.premiseSnapshot;
-    void cachedSnapshotDiff(
-      identity,
-      from,
-      latestChanged.response.resultSnapshot,
-    ).catch(() => undefined);
-  }, [identity, latestChanged]);
+    if (identity === null || threadChange === undefined) return;
+    void cachedSnapshotDiff(identity, threadChange.from, threadChange.to).catch(
+      () => undefined,
+    );
+  }, [identity, threadChange]);
   const outcome = latestExchange?.outcome;
   const targetPresent = targetElement(comment.target) !== null;
   const cardClass = `mt-2 min-w-0 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
@@ -4018,32 +4030,39 @@ const SentThread = ({
                             </Button>
                           </div>
                         ) : null}
+                        {/* One thread proposes one change set, so the diff
+                            hangs off the reply that most recently advanced it
+                            and spans every round behind it. An earlier round
+                            says where its own work went rather than showing a
+                            superseded before-and-after of its own. */}
                         {requestOutcome.state === "changed" &&
-                        identity !== null ? (
+                        threadChange !== undefined &&
+                        threadChange.requestId !== request.requestId ? (
+                          <p className="mt-2 text-xs text-muted">
+                            Folded into this thread’s change set below.
+                          </p>
+                        ) : null}
+                        {requestOutcome.state === "changed" &&
+                        identity !== null &&
+                        threadChange?.requestId === request.requestId ? (
                           <ChangeAttachment
-                            key={`${request.requestId}:${response.resultSnapshot}`}
+                            key={`${comment.id}:${threadChange.from}:${threadChange.to}`}
                             identity={identity}
-                            request={request}
-                            response={response}
-                            changeTargets={requestOutcome.changeTargets}
+                            from={threadChange.from}
+                            to={threadChange.to}
+                            {...(threadChange.agentIdentity === undefined
+                              ? {}
+                              : { agentIdentity: threadChange.agentIdentity })}
+                            {...(threadChange.changeTargets === undefined
+                              ? {}
+                              : { changeTargets: threadChange.changeTargets })}
                             currentSnapshot={currentSnapshot}
                             onStatus={onReplySent}
-                            onResolve={
-                              latestChanged?.request.requestId ===
-                              request.requestId
-                                ? onResolve
-                                : undefined
+                            onResolve={onResolve}
+                            onRevert={() =>
+                              onRevert(request.requestId, comment.id)
                             }
-                            onRevert={
-                              latestChanged?.request.requestId ===
-                              request.requestId
-                                ? () => onRevert(request.requestId, comment.id)
-                                : undefined
-                            }
-                            canRevert={
-                              latestChanged?.request.requestId ===
-                                request.requestId && canRevertLatestChange
-                            }
+                            canRevert={canRevertLatestChange}
                             thread={{ label: comment.body, onOpen: onJump }}
                             onKeepChatting={() => {
                               onJump();
@@ -4226,8 +4245,11 @@ const ChatExchange = ({
             <ChangeAttachment
               key={`${request.requestId}:${response.resultSnapshot}`}
               identity={identity}
-              request={request}
-              response={response}
+              from={request.baselineSnapshot ?? request.premiseSnapshot}
+              to={response.resultSnapshot}
+              {...(request.claimedModel === undefined
+                ? {}
+                : { agentIdentity: request.claimedModel })}
               currentSnapshot={currentSnapshot}
               onStatus={onStatus}
             />

@@ -63,45 +63,99 @@ const APPROVE_CHANGE_SET_CAVEAT = "Approval will auto-accept all change sets.";
 const APPROVE_DECISION_CAVEAT =
   "Approval will report unanswered decisions as not answered.";
 
+/** The request shape a change set is counted from. */
+type ChangeSetRequest = {
+  readonly requestId: string;
+  readonly premiseSnapshot: string;
+  readonly baselineSnapshot?: string;
+  readonly targetLabel?: string;
+  readonly commentIds?: ReadonlyArray<string>;
+  readonly commentId?: string;
+  readonly threadId?: string;
+};
+
 /**
- * Change sets as the approve dialog counts them: one responded revision that
- * actually moved the plan, addressed by its request id.
+ * Which change set a request's revision belongs to.
+ *
+ * A thread's replies all commit into the set the thread owns, so the ids the
+ * request carries are tried against the committed fold before the request
+ * falls back to owning a set alone - which is what a chat turn or a revision
+ * committed before the fold knew about it actually does.
+ */
+const changeSetIdFor = ({
+  request,
+  changeSetIds,
+}: {
+  readonly request: ChangeSetRequest;
+  readonly changeSetIds: ReadonlySet<string>;
+}): string =>
+  [
+    ...(request.commentIds ?? []),
+    ...(request.commentId === undefined ? [] : [request.commentId]),
+    ...(request.threadId === undefined ? [] : [request.threadId]),
+  ].find((id) => changeSetIds.has(id)) ?? request.requestId;
+
+/**
+ * Change sets as the approve dialog counts them: one per set that actually
+ * moved the plan, spanning every revision committed into it.
+ *
+ * A thread that answered three times is one thing to review, not three, and
+ * the two earlier rounds are not separately acceptable - they no longer
+ * describe any before-and-after the plan still stands on. So the rounds fold:
+ * the set starts where its first revision did and ends where its last one left
+ * the plan.
  */
 export const changeSetsFromExchange = ({
   requests,
   responses,
   placeIdsByRevision,
+  committedChangeSetIds = new Set(),
 }: {
-  readonly requests: ReadonlyArray<{
-    readonly requestId: string;
-    readonly premiseSnapshot: string;
-    readonly baselineSnapshot?: string;
-    readonly targetLabel?: string;
-  }>;
+  readonly requests: ReadonlyArray<ChangeSetRequest>;
   readonly responses: ReadonlyArray<{
     readonly requestId: string;
     readonly resultSnapshot: string;
   }>;
   readonly placeIdsByRevision: ReadonlyMap<string, ReadonlyArray<string>>;
+  readonly committedChangeSetIds?: ReadonlySet<string>;
 }): ReadonlyArray<OpenChangeSet> => {
   const byId = new Map(requests.map((request) => [request.requestId, request]));
-  const sets: OpenChangeSet[] = [];
+  const folded = new Map<
+    string,
+    { readonly from: string; to: string; readonly label: string }
+  >();
   for (const response of responses) {
     const request = byId.get(response.requestId);
     if (request === undefined) continue;
     const from = request.baselineSnapshot ?? request.premiseSnapshot;
     if (from === response.resultSnapshot) continue;
-    const key = `${from}:${response.resultSnapshot}`;
-    const placeIds = placeIdsByRevision.get(key) ?? [];
-    const label =
-      request.targetLabel ?? `Version ${response.resultSnapshot.slice(0, 7)}`;
+    const id = changeSetIdFor({
+      request,
+      changeSetIds: committedChangeSetIds,
+    });
+    const started = folded.get(id);
+    if (started === undefined) {
+      folded.set(id, {
+        from,
+        to: response.resultSnapshot,
+        label:
+          request.targetLabel ??
+          `Version ${response.resultSnapshot.slice(0, 7)}`,
+      });
+      continue;
+    }
+    started.to = response.resultSnapshot;
+  }
+  const sets: OpenChangeSet[] = [];
+  for (const [id, { from, to, label }] of folded) {
+    if (from === to) continue;
     const sectionId = sectionIdFromLabel(label);
     sets.push({
-      id: response.requestId,
+      id,
       label,
       from,
-      to: response.resultSnapshot,
-      placeIds,
+      to,
+      placeIds: placeIdsByRevision.get(`${from}:${to}`) ?? [],
       ...(sectionId === undefined ? {} : { sectionId }),
     });
   }

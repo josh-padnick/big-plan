@@ -8534,7 +8534,7 @@ ${lowerContent}
   }
 });
 
-test("should refresh a thread digest when a later reply changes another block", async ({
+test("should fold a later reply into the thread's one change set", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -8762,14 +8762,25 @@ const verification = "first";
       { timeout: 15_000 },
     );
 
+    // The thread owns one change set, so the second reply does not open a
+    // review of its own: both rounds are reviewed together, against the plan
+    // the thread started from.
+    await expect(sentThread).toContainText(
+      "Folded into this thread’s change set below.",
+    );
     await expect(
-      sentThread.getByRole("button", { name: "Review change" }).last(),
-    ).toBeVisible();
+      sentThread.getByRole("button", { name: /Review changes \(2\)/u }),
+    ).toHaveCount(1);
     await sentThread
-      .getByRole("button", { name: "Review change" })
-      .last()
+      .getByRole("button", { name: /Review changes \(2\)/u })
       .click();
+    const stepper = page.locator("[data-review-diff-stepper]");
     const lens = page.locator("[data-review-diff-lens]");
+    await expect(stepper).toContainText("1 of 2");
+    await expect(lens).toContainText('const delivery = "first";');
+    await expect(lens).toContainText('const delivery = "revised";');
+    await stepper.getByRole("button", { name: "Next change" }).click();
+    await expect(stepper).toContainText("2 of 2");
     await expect(lens).toContainText('const verification = "revised";');
     await expect(lens).not.toContainText('const delivery = "revised";');
   } finally {
