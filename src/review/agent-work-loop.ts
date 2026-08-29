@@ -1535,7 +1535,7 @@ const nextWork = async ({
                 "Run the returned respond_command as given; it carries the agent_token that proves this session holds the request",
                 "Write the response_template shape to response_file before running respond_command",
                 "Re-read the file at work.planPath",
-                "Verify deriveSnapshotDigest of that file equals work.pinnedSnapshot",
+                "Verify the SHA-256 hex digest of the exact file bytes, truncated to its first 16 characters, equals work.pinnedSnapshot",
                 "A missing path, missing file, or digest mismatch is a hard stop reported through the response, never a fallback search",
                 'Report that stop by adding "hardStop" to the response: one line naming what you found. It tells the reviewer and does not acknowledge the approval',
                 "Acknowledge without editing the plan",
