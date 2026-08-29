@@ -8300,6 +8300,237 @@ test("should open a digest entry in the slide its section header names", async (
   }
 });
 
+test("should jump to the commented block itself while a lens shows its change", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Object.assign(window, { __bigPlanJumpTarget: null });
+    Element.prototype.scrollIntoView = function scrollIntoView(
+      options?: boolean | ScrollIntoViewOptions,
+    ): void {
+      if (
+        this instanceof HTMLElement &&
+        typeof options === "object" &&
+        options?.block === "center"
+      ) {
+        Object.assign(window, { __bigPlanJumpTarget: this });
+      }
+      originalScrollIntoView.call(this, options);
+    };
+  });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-hidden-jump-"));
+  const planPath = join(directory, "plan.mdx");
+  const lowerContent = Array.from(
+    { length: 24 },
+    (_, index) => `Checkpoint ${index + 1} keeps the page below the lens.`,
+  ).join("\n\n");
+  const initialSource = `# Hidden jump
+
+## Delivery
+
+~~~ts
+const deliveryBoundary = "original";
+~~~
+
+## Verification
+
+The verification section keeps the page tall enough to scroll.
+
+## Rollout
+
+The rollout section gives the reader more content below the commented block.
+
+## Operations
+
+The operations section remains below the review lens.
+
+${lowerContent}
+`;
+  const revisedSource = initialSource.replace(
+    'const deliveryBoundary = "original";',
+    'const deliveryBoundary = "revised";',
+  );
+  const commentBody = "Keep the delivery boundary precise.";
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const target = page.locator(".code-figure").first();
+    await target
+      .getByRole("button", {
+        name: "Comment on this code snippet",
+      })
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/ });
+    const submitRightAway = composer.getByRole("switch", {
+      name: "Submit right away",
+    });
+    if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+      await submitRightAway.click();
+    }
+    await composer.getByLabel("Add a comment").fill(commentBody);
+    await composer.getByRole("button", { name: "Add Comment" }).click();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange, agentViewer());
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+    const comment = request.comments.find(
+      (entry) => entry.body === commentBody,
+    );
+    if (comment === undefined || comment.target.type !== "block") {
+      throw new Error("The paragraph comment did not retain a block target");
+    }
+    const before = renderDocument({
+      markdown: initialSource,
+      fallbackTitle: "Hidden jump",
+      identity: {},
+    });
+    const after = renderDocument({
+      markdown: revisedSource,
+      fallbackTitle: "Hidden jump",
+      identity: {},
+    });
+    const locations = diffSnapshots({
+      before: before.blocks,
+      after: after.blocks,
+    });
+    const changedBlocks = new Set(
+      locations.flatMap((location) =>
+        location.newBlockId === undefined ? [] : [location.newBlockId],
+      ),
+    );
+    expect(changedBlocks).toContain(comment.target.blockId);
+    const resultSnapshot = deriveSnapshotDigest(revisedSource);
+    await writeSnapshot({
+      store,
+      snapshot: resultSnapshot,
+      source: revisedSource,
+    });
+    await writeFile(session.plan, revisedSource, "utf8");
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: session.sessionId,
+      requestId: request.requestId,
+      claimedBy: agentSessionId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((entry) => ({
+            commentId: entry.id,
+            state: "changed",
+            message: "Kept the delivery boundary precise.",
+            changeTargets: [comment.target.blockId],
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks,
+        currentSnapshot: resultSnapshot,
+        now: new Date().toISOString(),
+      }),
+      now: new Date().toISOString(),
+    });
+
+    await expect(page.locator("article")).toContainText(
+      'const deliveryBoundary = "revised";',
+      { timeout: 15_000 },
+    );
+    const sentThread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: commentBody });
+    await sentThread
+      .getByRole("button", { name: "Expand thread", exact: true })
+      .click();
+    await sentThread.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    await expect(lens).toBeVisible();
+    const targetBlock = page.locator(
+      `[data-block-id="${comment.target.blockId}"]`,
+    );
+    await expect(targetBlock).toBeHidden();
+    await page.evaluate(() =>
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: "instant",
+      }),
+    );
+    await expect
+      .poll(() =>
+        lens.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.bottom < 0 || rect.top > window.innerHeight;
+        }),
+      )
+      .toBe(true);
+    await page.evaluate(() =>
+      Object.assign(window, { __bigPlanJumpTarget: null }),
+    );
+    await sentThread.locator(".review-sent-target").click();
+    // The jump asks for the changed block itself. The block is the reader's
+    // own, not a container the lens named, and the page moves to where that
+    // block sits even while the lens is showing its change in its place.
+    await expect
+      .poll(() =>
+        page.evaluate((blockId) => {
+          const jumped = (
+            window as unknown as { __bigPlanJumpTarget: HTMLElement | null }
+          ).__bigPlanJumpTarget;
+          const block = document.querySelector(`[data-block-id="${blockId}"]`);
+          return jumped !== null && block !== null && jumped.contains(block);
+        }, comment.target.blockId),
+      )
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const element = document.querySelector<HTMLElement>(
+            "[data-review-diff-lens]",
+          );
+          if (element === null) return false;
+          const rect = element.getBoundingClientRect();
+          return rect.top >= 0 && rect.bottom <= window.innerHeight;
+        }),
+      )
+      .toBe(true);
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should refresh a thread digest when a later reply changes another block", async ({
   page,
 }) => {

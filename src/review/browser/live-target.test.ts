@@ -29,13 +29,13 @@ describe("pickLiveCandidate", () => {
     ).toEqual({ found: "light-variant" });
   });
 
-  it("should accept a hidden match when it is the only one", () => {
+  it("should accept a hidden match when it is the only live one", () => {
     expect(
       pickLiveCandidate([candidate("collapsed-slide", { isVisible: false })]),
     ).toEqual({ found: "collapsed-slide" });
   });
 
-  it("should keep input order when several matches are displayed", () => {
+  it("should keep input order when several live matches are displayed", () => {
     expect(
       pickLiveCandidate([candidate("first"), candidate("second")]),
     ).toEqual({ found: "first" });

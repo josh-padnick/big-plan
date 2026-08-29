@@ -1,14 +1,16 @@
 // Owns every "which live element is this semantic target?" question the review
 // island asks of plan DOM. A block id or diagram anchor is a name, not a node:
-// the same name can sit on the hidden theme variant of a diagram, or on a block
+// the same name can sit on the hidden theme variant of a diagram or on a block
 // whose content drifted since the id was minted. Resolving those names in one
 // place keeps the discipline mandatory - scoped to the live article, visible
-// copy preferred - and makes a miss say why it missed instead of degrading to a
-// plausible default. Replayed evidence carries no review address at all, so it
-// cannot answer a name; a compiler-addressed component diff root is live plan
-// DOM and rightly can. Where a lens belongs relative to the blocks it finds
-// stays pure in diff-anchor.ts; this module is the DOM half of that decision,
-// which is why it carries the browser-only suffix.
+// copy preferred - and makes a miss say why it missed instead of degrading to
+// a plausible default. Every rendering of a change is the plan itself: a
+// component renders its own diff in place of its root, and the one side that
+// is not the plan carries no plan identity at all, because the side-isolation
+// module kept it out before the markup reached the browser. Where a lens
+// belongs relative to the blocks it finds stays pure in diff-anchor.ts; this
+// module is the DOM half of that decision, which is why it carries the
+// browser-only suffix.
 
 import type { DiffLocation } from "../shared/review-wire.js";
 import {
@@ -49,19 +51,20 @@ export type LiveCandidate<TElement> = {
 };
 
 /**
- * Chooses the element a name refers to. A displayed copy wins over a hidden one
- * because a diagram ships one copy per theme variant with only one shown.
- * Hidden is still an answer when it is the only one: a block inside a collapsed
- * slide is the right element for containment, labelling, and existence
- * questions.
+ * Chooses the element a name refers to. A displayed match wins over a hidden
+ * one because a diagram ships one copy per theme variant with only one shown.
+ * Hidden is still an answer when it is the only one: a block inside a
+ * collapsed slide is the right element for containment, labelling, and
+ * existence questions.
  */
 export const pickLiveCandidate = <TElement>(
   candidates: ReadonlyArray<LiveCandidate<TElement>>,
 ): { readonly found: TElement } | { readonly missing: "unknown-id" } => {
   const preferred =
     candidates.find((candidate) => candidate.isVisible) ?? candidates.at(0);
-  if (preferred !== undefined) return { found: preferred.element };
-  return { missing: "unknown-id" };
+  return preferred === undefined
+    ? { missing: "unknown-id" }
+    : { found: preferred.element };
 };
 
 /**
@@ -105,9 +108,8 @@ const blockSelector = (blockId: string): string =>
   `[data-block-id="${CSS.escape(blockId)}"]`;
 
 /**
- * Lists the pictures the reader is reading. A lens replays a changed picture
- * as an isolated, identity-free rendering, so only the plan's own pictures
- * carry the block kind this matches.
+ * Lists the pictures the reader is reading. A replayed picture is rendered
+ * without plan identity, so it carries no block kind for this lookup to find.
  */
 export const livePictures = (): ReadonlyArray<HTMLElement> => {
   const article = liveArticle();
@@ -195,7 +197,7 @@ export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
 /**
  * The first decision the reader can be sent to when a control says "those
  * decisions" without naming one. Same live-article rule as a named lookup, so
- * a jump from the approval stamp resolves against the plan the reader holds.
+ * a jump from the approval stamp resolves against the plan the reader reads.
  */
 export const liveFirstDecision = (): LiveTargetResult => {
   const article = liveArticle();

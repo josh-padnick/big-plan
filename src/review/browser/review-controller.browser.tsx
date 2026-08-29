@@ -74,7 +74,11 @@ import {
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
-import { isRendered, measureThreadAnchor } from "./thread-anchor.browser.js";
+import {
+  isRendered,
+  measureThreadAnchor,
+  scrollToLiveElement,
+} from "./thread-anchor.browser.js";
 import {
   clearThreadOpenOverlay,
   isThreadOpen,
@@ -2146,9 +2150,9 @@ const useThreadHosts = (
         );
         // The offset places the thread level with the target inside the card,
         // so it only applies when the card itself is what got measured and the
-        // target still holds its place inside it. A collapsed anchor is
-        // represented by an ancestor row instead, and that row's top is the
-        // whole answer.
+        // target still holds its place inside it. A collapse leaves nothing
+        // behind: the card shrinks to its header, an ancestor row represents
+        // the anchor instead, and that row's top is the whole answer.
         const targetOffset =
           anchor.element === container && isRendered(target)
             ? (targetOffsets.get(comment.id) ?? 0)
@@ -6707,10 +6711,7 @@ export const ReviewController = () => {
       setStatus("This comment's target is no longer in the plan.");
       return;
     }
-    element.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
+    scrollToLiveElement(element, "center");
   };
   const updateDraft = (id: string, body: string) => {
     const current = latestReviewStateRef.current.state;
@@ -7338,10 +7339,7 @@ export const ReviewController = () => {
     // keeps it clear of the branding bar.
     const planBlock = targetElement(comment.target);
     if (planBlock !== null) {
-      planBlock.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      scrollToLiveElement(planBlock, "start");
     }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {

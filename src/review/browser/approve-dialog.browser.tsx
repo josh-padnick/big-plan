@@ -62,6 +62,7 @@ import {
   liveBlock,
   liveDecisionFigure,
 } from "./live-target.browser.js";
+import { scrollToLiveElement } from "./thread-anchor.browser.js";
 import {
   onAppliedReviewRecord,
   requestJson,
@@ -84,10 +85,7 @@ const APPROVE_ITEM_ROW_CLASS =
 const APPROVE_ITEM_ACTION_CLASS = "shrink-0 text-xs font-medium text-accent";
 
 const showLiveElement = (element: HTMLElement): void => {
-  element.scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-  });
+  scrollToLiveElement(element, "center");
 };
 
 const showDecision = (decisionId: string): void => {

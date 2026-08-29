@@ -62,6 +62,22 @@ export const renderedAncestor = (element: HTMLElement): HTMLElement | null => {
   return null;
 };
 
+/**
+ * Sends the reader to an element, or to the nearest ancestor with a box when
+ * the element itself has none. Scrolling to an unlaid-out element moves the
+ * page nowhere, which reads as a control that did nothing at all; the ancestor
+ * the reader can see is the nearest true answer to where that content sits.
+ */
+export const scrollToLiveElement = (
+  element: HTMLElement,
+  block: ScrollLogicalPosition,
+): void => {
+  (renderedAncestor(element) ?? element).scrollIntoView({
+    behavior: "smooth",
+    block,
+  });
+};
+
 /** Measures the rect a thread anchored to this element should sit beside. */
 export const measureThreadAnchor = (
   element: HTMLElement,
