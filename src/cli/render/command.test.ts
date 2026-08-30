@@ -6,6 +6,13 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { deriveSnapshotDigest } from "../../review/agent-exchange.js";
+import {
+  deriveReviewPlanId,
+  prepareStore,
+  reviewStoreFor,
+  writeApprovalRecord,
+} from "../../review/store.js";
 import { recordGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 import { renderCommand } from "./command.js";
 
@@ -62,6 +69,59 @@ describe("renderCommand", () => {
     const html = await readFile(outputPath, "utf8");
     expect(html).toContain("<title>Adapter plan</title>");
     expect(html).toMatch(/<html lang="en" data-plan-id="[a-f0-9]{32}">/);
+  });
+
+  it("should stamp an export of an approved plan and leave a stale one unmarked", async () => {
+    const inputPath = join(tempDirectory, "plan.md");
+    const source = "# Adapter plan\n\nOne lede sentence.\n\n## Rollout\n";
+    await writeFile(inputPath, source, "utf8");
+    const store = reviewStoreFor({
+      planPath: inputPath,
+      planId: deriveReviewPlanId({ planPath: inputPath }),
+    });
+    await prepareStore(store);
+    await writeApprovalRecord({
+      store,
+      record: {
+        version: 1,
+        entries: [
+          {
+            kind: "approval",
+            approvalId: "a1b2c3d4e5f60718",
+            at: "2026-08-19T17:41:00.000Z",
+            pinnedSnapshot: deriveSnapshotDigest(source),
+            agentConnected: true,
+            message: "Approved.",
+            recordedAnswers: [],
+            alreadyDecided: [],
+            unansweredDecisions: [],
+            openItemCounts: {
+              changeSetsAccepted: 0,
+              changeSetsTotal: 0,
+              decisionsAnswered: 0,
+              decisionsTotal: 0,
+              requestsCanceled: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    const { rendered } = await renderCommand([inputPath]);
+    const approved = await readFile(String(rendered), "utf8");
+    expect(approved).toContain(
+      '<span aria-hidden="true" data-review-approval-stamp title="Approved 2026-08-19T17:41:00.000Z',
+    );
+    expect(approved).not.toContain("data-review-approval-page-stamp hidden");
+
+    // The same plan, one sentence later, is no longer what was approved.
+    await writeFile(inputPath, `${source}\nA later edit.\n`, "utf8");
+    const { rendered: staleOutput } = await renderCommand([inputPath]);
+    const stale = await readFile(String(staleOutput), "utf8");
+    expect(stale).not.toContain("data-review-approval-stamp title=");
+    expect(stale).toContain(
+      '<span class="pointer-events-none absolute -top-10 left-0 z-10 -rotate-3" data-review-approval-page-stamp hidden></span>',
+    );
   });
 
   it("should refuse to render a plan that fails authoring lint and write nothing", async () => {

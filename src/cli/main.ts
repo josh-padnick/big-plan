@@ -12,6 +12,10 @@ import { skillCommand } from "./skill/command.js";
 import { reviewCommand } from "./review/command.js";
 import { serviceCommand } from "./service/command.js";
 import { validateCommand } from "./validate/command.js";
+import {
+  prepareUpdateNotice,
+  type PreparedUpdateNotice,
+} from "./_shared/update-notice.js";
 
 // The README tagline verbatim, so the CLI and the docs never drift apart.
 const DESCRIPTION =
@@ -71,23 +75,40 @@ const readOwnVersion = async (): Promise<string | undefined> => {
 /** Runs the big-plan CLI: dispatches argv to commands via runAxiCli(). */
 export const main = async (): Promise<void> => {
   const version = await readOwnVersion();
-  await runAxiCli({
-    description: DESCRIPTION,
-    ...(version === undefined ? {} : { version }),
-    topLevelHelp: TOP_LEVEL_HELP,
-    home: () => ({
-      "big-plan": DESCRIPTION,
-      next_step: "big-plan guidance",
-    }),
-    commands: {
-      guidance: (args) => guidanceCommand(args),
-      skill: (args) => skillCommand(args),
-      render: (args) => renderCommand(args),
-      compile: (args) => compileCommand(args),
-      validate: (args) => validateCommand(args),
-      review: (args) => reviewCommand(args),
-      service: (args) => serviceCommand(args),
-      agent: (args) => agentCommand(args),
-    },
-  });
+  const argv = process.argv.slice(2);
+  let updateNotice: PreparedUpdateNotice = {};
+  if (
+    argv[0] === "guidance" &&
+    version !== undefined &&
+    process.argv[1] !== undefined
+  ) {
+    updateNotice = await prepareUpdateNotice({
+      currentVersion: version,
+      invokedAs: process.argv[1],
+    });
+  }
+  try {
+    await runAxiCli({
+      argv,
+      description: DESCRIPTION,
+      ...(version === undefined ? {} : { version }),
+      topLevelHelp: TOP_LEVEL_HELP,
+      home: () => ({
+        "big-plan": DESCRIPTION,
+        next_step: "big-plan guidance",
+      }),
+      commands: {
+        guidance: (args) => guidanceCommand(args, updateNotice.line),
+        skill: (args) => skillCommand(args),
+        render: (args) => renderCommand(args),
+        compile: (args) => compileCommand(args),
+        validate: (args) => validateCommand(args),
+        review: (args) => reviewCommand(args),
+        service: (args) => serviceCommand(args),
+        agent: (args) => agentCommand(args),
+      },
+    });
+  } finally {
+    updateNotice.refreshAfterOutput?.();
+  }
 };

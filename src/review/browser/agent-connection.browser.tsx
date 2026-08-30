@@ -3,23 +3,12 @@
 // projection and local disclosure/copy interactions.
 
 import type { ReactNode } from "react";
-import { Fragment, useEffect, useState } from "react";
-import type { BrandIcon } from "../../icons/brand-icon.js";
-import { CLAUDE_ICON } from "../../icons/brands/claude.js";
-import { GROK_ICON } from "../../icons/brands/grok.js";
-import { MISTRAL_ICON } from "../../icons/brands/mistral.js";
-import { OPENAI_ICON } from "../../icons/brands/openai.js";
+import { useEffect, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
-import {
-  agentClientDisplayName,
-  agentModelDisplayName,
-  agentModelVendor,
-  type AgentModelVendor,
-} from "../shared/agent-identity-catalog.js";
 import { agentSessionAffordance } from "../shared/agent-session-link.js";
 import {
   AGENT_SESSION_ENDED_REASON,
@@ -38,7 +27,11 @@ import {
   compactDurationLabel,
   relativeSignalLabel,
 } from "../shared/time-label.js";
-import { BrandIconView, Icon } from "./icon.browser.js";
+import { Icon } from "./icon.browser.js";
+import {
+  AgentIdentityLine,
+  AgentSessionFact,
+} from "./agent-identity.browser.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { AgentRoleBadge } from "./agent-roster.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
@@ -48,28 +41,9 @@ import {
   Button,
   Tooltip,
   WorkingMark,
+  copyControlLabel,
+  useCopyToClipboard,
 } from "./ui.browser.js";
-
-const VENDOR_ICONS: Record<AgentModelVendor, BrandIcon> = {
-  openai: OPENAI_ICON,
-  claude: CLAUDE_ICON,
-  grok: GROK_ICON,
-  mistral: MISTRAL_ICON,
-};
-
-/**
- * Draws the reported model's own mark, or nothing at all.
- *
- * A model the catalog has no faithful mark for shows its name alone. The
- * generic robot that used to stand in was a placeholder in the literal sense:
- * it occupied the space a mark would occupy while identifying nobody.
- */
-const ModelIcon = ({ modelName }: { readonly modelName: string }) => {
-  const vendor = agentModelVendor(modelName);
-  return vendor === undefined ? null : (
-    <BrandIconView icon={VENDOR_ICONS[vendor]} />
-  );
-};
 
 // The comment glyph that heads the subject block; it names what the block is
 // about, so it travels with the label rather than being set at each call.
@@ -134,69 +108,6 @@ const ReadOnlySessionCard = ({
     </div>
   </article>
 );
-
-/*
-Copying one string, with the outcome shown on the control that did it.
-
-Three surfaces need this now - the recovery payload, a session identifier that
-cannot be linked, and the session id in the details - and each needs the same
-three states and the same failure wording. The behaviour lives here; the shape
-of the control is the caller's.
-*/
-const useCopyToClipboard = (value: string) => {
-  const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const copy = async () => {
-    setCopied(false);
-    setFailed(false);
-    try {
-      if (navigator.clipboard === undefined) throw new Error("Unavailable");
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-    } catch {
-      setFailed(true);
-      return;
-    }
-    window.setTimeout(() => setCopied(false), 1_500);
-  };
-  return { copied, failed, copy };
-};
-
-/** Names a copy control by what it does and what just happened. */
-const copyControlLabel = ({
-  label,
-  copied,
-  failed,
-}: {
-  readonly label: string;
-  readonly copied: boolean;
-  readonly failed: boolean;
-}): string =>
-  failed
-    ? "Copy failed — select and copy manually"
-    : copied
-      ? `${label} copied`
-      : `Copy ${label}`;
-
-/** A bare copy control, for a value already shown beside it. */
-const CopyIdentifierControl = ({ value }: { readonly value: string }) => {
-  const { copied, failed, copy } = useCopyToClipboard(value);
-  return (
-    <button
-      type="button"
-      className="inline-flex shrink-0 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
-      aria-label={copyControlLabel({
-        label: "agent session identifier",
-        copied,
-        failed,
-      })}
-      data-review-agent-session-copy={value}
-      onClick={() => void copy()}
-    >
-      <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
-    </button>
-  );
-};
 
 const CopyBlock = ({
   value,
@@ -449,6 +360,8 @@ const CurrentActivityCard = ({
   modelClient,
   sessionUrl,
   sessionId,
+  writerId,
+  carriesRosterAgent,
   connection,
   nowMs,
   isPrimary,
@@ -464,6 +377,16 @@ const CurrentActivityCard = ({
   readonly modelClient?: string;
   readonly sessionUrl?: string;
   readonly sessionId?: string;
+  /**
+   * The roster id of the agent this card is drawing, which names its session
+   * when the connector declared no handle of its own.
+   */
+  readonly writerId?: string;
+  /**
+   * Whether this card has absorbed the roster's own card for the same agent,
+   * which is what makes this the one place its role and its disconnect live.
+   */
+  readonly carriesRosterAgent: boolean;
   readonly connection: ReturnType<typeof summarizeAgentConnection>;
   readonly nowMs: number;
   /**
@@ -537,28 +460,13 @@ const CurrentActivityCard = ({
       : activity.state === "offline"
         ? "Unreachable since"
         : "Connected since";
-  /*
-  What the connector said about itself, in the order a reader asks it: which
-  tool, which model, how hard it was told to think. Each segment is independent,
-  because each is declared independently, and the catalog decides how a declared
-  id is written - never this component, and never by re-casing what it was
-  handed.
-  */
-  const identitySegments = [
-    modelClient === undefined
-      ? undefined
-      : { key: "client", text: agentClientDisplayName(modelClient) },
-    modelName === undefined
-      ? undefined
-      : { key: "model", text: agentModelDisplayName(modelName) },
-    modelEffort === undefined
-      ? undefined
-      : { key: "effort", text: modelEffort },
-  ].filter((segment) => segment !== undefined);
   const sessionAffordance = agentSessionAffordance({
     ...(sessionUrl === undefined ? {} : { sessionUrl }),
     ...(sessionId === undefined ? {} : { sessionId }),
   });
+  /* The handle the fact row states. A declared session is the answer; an agent
+     that declared none is named by its roster id, the only name it has. */
+  const sessionHandle = sessionId ?? writerId;
   // Since and Events describe a connection at rest; the session identifies the
   // agent whatever it is doing. The working card carries the second without the
   // first, and every other state carries both.
@@ -567,13 +475,20 @@ const CurrentActivityCard = ({
     connection.sinceAtMs !== undefined &&
     connection.everConnected;
   const showsConnectionFacts =
-    showsSinceAndEvents || sessionAffordance.kind === "identifier";
+    showsSinceAndEvents || sessionHandle !== undefined;
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
-  // Offered wherever there is an agent to disconnect, and nowhere else. A
-  // control on a card that already says nobody is attached would invite the
-  // reviewer to act on a session that has no other end to it.
-  const canDisconnect = agentActivityIsAttached(activity);
+  /*
+  Offered wherever there is an agent to disconnect, and nowhere else.
+
+  "Nobody attached" is two questions, not one. The activity answers whether the
+  agent is answering; the roster answers whether a record - and the claim it
+  holds - is still there to release. A disconnected agent whose roster record is
+  still standing is exactly the case where the reviewer needs the control, and
+  it is the case that used to draw a SECOND card for the same agent underneath
+  this one just to carry it (BIG-273).
+  */
+  const canDisconnect = agentActivityIsAttached(activity) || carriesRosterAgent;
   const footerLabel =
     "updatedAtMs" in activity
       ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
@@ -600,48 +515,17 @@ const CurrentActivityCard = ({
         {isPrimary ? <AgentRoleBadge isPrimary /> : null}
       </div>
       {/*
-      Identity is shown only where it exists, segment by segment. A session that
-      declared nothing renders nothing here: a line saying so would occupy the
-      space an answer occupies while carrying none, and the reader who wants to
-      know which agent this is learns more from the absence than from being told
-      about it.
+      The same identity line the roster cards below carry, so the agent holding
+      the plan is named exactly as it is named everywhere else on this rail
+      (BIG-273). Identity is shown only where it exists: a session that declared
+      nothing and has no roster id renders nothing here, because a line saying
+      so would occupy the space an answer occupies while carrying none.
       */}
-      {identitySegments.length === 0 ? null : (
-        <span
-          className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
-          {...(modelName === undefined
-            ? {}
-            : { "data-review-agent-model": modelName })}
-          {...(modelEffort === undefined
-            ? {}
-            : { "data-review-agent-effort": modelEffort })}
-          {...(modelClient === undefined
-            ? {}
-            : { "data-review-agent-client": modelClient })}
-        >
-          {modelName === undefined ? null : <ModelIcon modelName={modelName} />}
-          {identitySegments.map((segment, index) => (
-            <Fragment key={segment.key}>
-              {index === 0 ? null : (
-                /* The separator carries its own even spacing rather than
-                   inheriting the row's gap on one side only. */
-                <span aria-hidden="true" className="shrink-0 opacity-50">
-                  ·
-                </span>
-              )}
-              <span
-                className={
-                  segment.key === "effort"
-                    ? "shrink-0 font-normal text-muted"
-                    : "min-w-0 truncate"
-                }
-              >
-                {segment.text}
-              </span>
-            </Fragment>
-          ))}
-        </span>
-      )}
+      <AgentIdentityLine
+        {...(modelName === undefined ? {} : { model: modelName })}
+        {...(modelEffort === undefined ? {} : { effort: modelEffort })}
+        {...(modelClient === undefined ? {} : { client: modelClient })}
+      />
       {/*
       A link only where one can actually be followed. Big Plan decides that from
       the interfaces it knows, not from the declaration: an address it cannot
@@ -717,26 +601,16 @@ const CurrentActivityCard = ({
               </dd>
             </div>
           ) : null}
-          {sessionAffordance.kind === "identifier" ? (
+          {sessionHandle === undefined ? null : (
             /* The one place a session identifier is offered. It cannot be
                followed, so it belongs with the facts a reader consults rather
                than beside the state they are reading - and having it here is
-               what lets the card above it carry no copy control at all. */
-            <div className="min-w-0">
-              <dt className="font-semibold">Agent session</dt>
-              <dd className="m-0 flex min-w-0 items-center gap-1 text-ink">
-                <span
-                  className="min-w-0 truncate"
-                  data-review-agent-session-id={sessionAffordance.value}
-                >
-                  {sessionAffordance.value}
-                </span>
-                {/* The row truncates because the identifier is long and not for
-                    reading; the control hands over the whole of it. */}
-                <CopyIdentifierControl value={sessionAffordance.value} />
-              </dd>
-            </div>
-          ) : null}
+               what lets the identity line above it carry no session at all. */
+            <AgentSessionFact
+              handle={sessionHandle}
+              isCopyable={sessionId !== undefined}
+            />
+          )}
           {showsSinceAndEvents ? (
             <div className="min-w-0">
               <dt className="font-semibold">Events</dt>
@@ -793,8 +667,10 @@ const AgentPresenceUnavailableCard = () => (
     data-review-connection-health="unobservable"
   >
     <strong className="text-sm text-ink">Agent status unavailable</strong>
+    {/* "Unreachable", the same word the offline card and the toolbar use, so
+        one condition is not reported in two vocabularies (BIG-273). */}
     <p className="m-0 [overflow-wrap:anywhere]">
-      The review session is offline, so agent presence cannot be checked.
+      The review session is unreachable, so agent presence cannot be checked.
     </p>
   </article>
 );
@@ -1102,6 +978,8 @@ export const AgentConnectionPanel = ({
   modelClient,
   sessionUrl,
   sessionId,
+  writerId,
+  carriesRosterAgent,
   connectionLog,
   recoveryPrompt,
   isReadOnly,
@@ -1122,6 +1000,10 @@ export const AgentConnectionPanel = ({
   readonly modelClient?: string;
   readonly sessionUrl?: string;
   readonly sessionId?: string;
+  /** The roster id of the agent the status card is drawing, when there is one. */
+  readonly writerId?: string;
+  /** Whether the roster's card for that agent has been merged into this one. */
+  readonly carriesRosterAgent: boolean;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
   readonly isReadOnly: boolean;
@@ -1201,6 +1083,8 @@ export const AgentConnectionPanel = ({
             modelClient={modelClient}
             sessionUrl={sessionUrl}
             sessionId={sessionId}
+            writerId={writerId}
+            carriesRosterAgent={carriesRosterAgent}
             connection={connection}
             nowMs={currentNowMs}
             isPrimary={isActivityPrimary}

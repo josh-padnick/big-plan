@@ -4,10 +4,9 @@
 // The surface carries no heading and no mark of its own: the toolbar control
 // that opened it is still on screen, still named, and still showing the state.
 
-import {
-  agentActivityIsAttached,
-  type AgentHealth,
-  type CurrentAgentActivity,
+import type {
+  AgentHealth,
+  CurrentAgentActivity,
 } from "../shared/agent-status.js";
 import type {
   BrowserConnectionEvent,
@@ -57,17 +56,24 @@ export const AgentSurface = ({
   Which agent the status card at the top of the rail is drawing.
 
   It is a real question rather than an assumption, and it has to be asked in
-  one place because two things downstream depend on the same answer: the badge
-  the card wears, and the card the roster below then leaves out. The status
-  card draws the review's presence record, the roster draws the roster, and
-  they can name different agents for a poll after a hand-off - so the answer is
-  "this writer, if the card is really showing it", and `undefined` otherwise.
+  one place because three things downstream depend on the same answer: the
+  badge the card wears, the controls it has to carry, and the card the roster
+  below then leaves out. The status card draws the review's presence record,
+  the roster draws the roster, and they can name different agents for a poll
+  after a hand-off - so the answer is "this writer, if the card is really
+  showing it", and `undefined` otherwise.
+
+  It is deliberately NOT gated on the agent still being attached. It was, and
+  the moment an agent disconnected the roster stopped leaving it out: the
+  reviewer got two cards for one agent, the top one reporting the disconnection
+  and the bottom one still calling it the primary and carrying the only
+  disconnect control (BIG-273). One agent is one card in every state, and the
+  controls the roster card used to carry moved up to it.
   */
   const drawnByStatusCard =
     !isReadOnly &&
     model.presenceState !== "loading" &&
-    model.presenceState !== "unobservable" &&
-    agentActivityIsAttached(model.activity)
+    model.presenceState !== "unobservable"
       ? model.presenceWriterId
       : undefined;
   const roster = readAgentRosterFor({
@@ -92,6 +98,14 @@ export const AgentSurface = ({
         modelClient={model.modelClient}
         sessionUrl={model.sessionUrl}
         sessionId={model.sessionId}
+        /* The card is drawn from the presence record, so it is named by that
+           record's writer - in every state, including the ones where nobody is
+           attached any more. `drawnByStatusCard` answers a different question:
+           which writer the roster below must stop repeating. The roster proves
+           attachment separately before treating that writer as carried. */
+        {...(model.presenceWriterId === undefined
+          ? {}
+          : { writerId: model.presenceWriterId })}
         connectionLog={model.connectionLog}
         recoveryPrompt={model.recoveryPrompt}
         replacementUrl={
@@ -101,9 +115,14 @@ export const AgentSurface = ({
         }
         isReadOnly={isReadOnly}
         /* The role is named only when there is another agent to tell this one
-           apart from, which is exactly when the roster below has a card to
-           draw. One agent answering alone needs no badge to say so. */
-        isActivityPrimary={roster.carried !== undefined && roster.isShown}
+           apart from. A lone agent is implicitly the primary, and a badge
+           saying so is a word the reader has to read and cannot use. */
+        isActivityPrimary={
+          roster.carried !== undefined &&
+          roster.carried === roster.primary?.writerId &&
+          roster.attached.length > 1
+        }
+        carriesRosterAgent={roster.carried !== undefined}
         hasAttachedAgent={roster.attached.length > 0}
         roster={
           roster.isShown ? (
@@ -111,6 +130,10 @@ export const AgentSurface = ({
               agents={model.agents}
               nowMs={model.nowMs}
               isReadOnly={isReadOnly}
+              /* Roles only exist while one agent can speak for the plan. A
+                 read-only tab cannot appoint anybody, so every agent on it is
+                 an observer and none of them is the primary. */
+              rolesApply={!isReadOnly}
               {...(drawnByStatusCard === undefined
                 ? {}
                 : { carriedByActivity: drawnByStatusCard })}
