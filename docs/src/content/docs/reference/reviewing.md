@@ -252,6 +252,7 @@ The approval is refused if the plan changes while the confirmation is open, so t
 
 After approval, the branding-bar control reads **Plan approved**, and a persistent approval stamp appears above the document title without moving the title or contents.
 Open **Plan approved** to inspect the recorded message and any decisions left unanswered.
+It also lists this plan's approval history, newest first: the time of each approval, the plan version it pinned, and a struck-through row with a **Revoked** marker for any approval that was revoked.
 The plan-wide Chat thread shows **Plan approved**, followed by **Approval acknowledged** after a successful acknowledgment or a warning when the agent reports a hard stop.
 When no agent is connected, the **Plan approved** entry instead says the approval was recorded but there was no agent to notify; the mailbox request remains waiting for the next agent.
 Choose **Revoke approval** there to return the plan to review; revocation does not undo anything already recorded in the plan source.
@@ -259,6 +260,8 @@ If the plan source changes while an approval remains in force, the bar reports *
 
 A review session that has become read-only continues to show an approval already in force, but does not offer approval or revocation actions.
 A standalone rendered document shows no approval control.
+It does carry the approval stamp when `big-plan render` finds an approval in force beside the plan that pins the exact source being rendered; hovering the stamp shows when it was approved and which version it pinned.
+An unapproved, revoked, or stale plan renders no stamp at all, so an export never claims an approval that does not cover it.
 
 ## Exporting Markdown
 
@@ -338,7 +341,7 @@ Nothing the current agent is working on is dropped unless you make the new agent
 When you do move it, the displaced agent's unfinished edits stay in its own copy and reach your plan only if you tick the box that hands them over, and even then they arrive as reference rather than as something that publishes itself.
 Your comments are safe whichever you choose.
 
-The agent status card carries **Disconnect agent** wherever an agent is attached, with a mark beside it that explains on hover or keyboard focus what disconnecting does: the agent is told to end its session so a different agent can attach, work it has in flight is dropped, and your comments stay.
+The agent status card carries **Disconnect agent** wherever the roster still holds that agent to release, even when its activity has already become disconnected or unreachable. A mark beside it explains on hover or keyboard focus what disconnecting does: the agent is told to end its session so a different agent can attach, work it has in flight is dropped, and your comments stay.
 Confirming is one dialog, and what it says depends on whether the agent is holding work rather than on how well it is doing.
 An agent that holds a turn - answering, gone quiet mid-turn, or reporting an error - is named as holding work on the review, and the dialog states that the answer it has in flight is dropped rather than delivered; an agent holding nothing is disconnected without that sentence.
 Either way your comments and questions stay exactly where they are, and a message the agent was holding goes back into the queue for the next agent instead of being canceled.
@@ -354,8 +357,11 @@ The review itself is free the moment you confirm, so a second agent can connect 
 A second agent that connects does not take the review by arriving.
 It attaches as an observer - able to read the plan, and nothing else: not your comments, not the state of your requests, and able to answer nothing - and asks you whether it should be the one answering you.
 **Agent Status** raises a hazard mark while that question is unanswered.
-The sidebar always leads with the agent status card, which carries a **Current primary** badge once a second agent is on the rail; under it sits the card that names the arriving agent by its declared harness and model plus an abbreviated writer id, falling back cleanly to the abbreviated id when it declared neither, and a **Current observer** card for anyone else attached.
+The sidebar always leads with the agent status card, which carries a **Primary** badge once a second agent is on the rail; under it sits the arriving agent's card and an **Observer** card for anyone else attached.
+Every card writes identity in the same order - model, effort, client - and puts the session separately in the fact row below it.
+The session is shown as its final four characters with a copy control for the complete handle; when an agent declared no session handle, the row falls back to its abbreviated internal writer id without offering to copy it.
 Each agent gets exactly one card: the primary's is the status card at the top, so nobody is drawn twice.
+In a replaced, read-only review every attached agent is presented as an observer without a role badge or **Make it primary** action. **Disconnect** remains visible but inert, and its tooltip directs you to the newest review where that change can be sent.
 The three answers stack under the asking agent's name with a mark beside each that says, on hover or keyboard focus, what it will do: **Make it primary** hands the review to that agent and makes the current one an observer, **Leave as observer** keeps the arrangement as it is and stops asking, and **Disconnect this agent** drops it from the review.
 Making an observer the primary asks you to confirm, and offers to hand the outgoing agent's unfinished draft to the new one as reference it may read rather than as work that publishes itself; left unticked, that draft stays where it is and never reaches your plan.
 Whichever you choose, the agent you moved away from is told at its next command instead of discovering it when its answer is refused, and anything it had in flight is fenced rather than delivered.
@@ -363,7 +369,7 @@ A disconnected agent stays gone: the decision is recorded, so a connector sittin
 Disconnecting the agent that answers you leaves the review without one until you say who takes over: Big Plan does not promote a watching agent into a seat you emptied, because that would answer a question you were asked and chose not to answer.
 You say so in one of two ways, and **Agent Status** keeps showing its cards for as long as nobody is answering you so that both stay available.
 Either pick an agent that is already watching and choose **Make it primary**, or connect a new one - a connector you start after the seat is empty takes it and begins answering, since starting it is you saying who answers.
-The roster stays out of the way while one agent is answering you: a single attached agent with nothing to ask shows no cards at all.
+The roster stays out of the way while one agent is answering you: a single attached agent with nothing to ask adds no roster card below the status card.
 It comes back the moment nobody is answering you, so the decision is always in reach.
 When an arrival initially cannot be distinguished from the current agent returning between turns, Big Plan parks the question instead of showing a false second-agent card.
 It raises the question as soon as the incumbent's closed claim and lack of a later signal establish that the arrival is different, or once the incumbent's silence crosses the stall horizon.
@@ -383,10 +389,12 @@ its own conversation, each optional and independent of the others, by exporting
 the environment variables the [CLI reference](/reference/cli/) lists for
 `big-plan agent` in the session it was launched in.
 
-**Agent Status** shows what was declared, and only what was declared: client,
-model, and effort read as one line, each segment appearing only if the agent
-stated it, and a session with no declaration shows no identity at all rather
-than a note about its absence.
+**Agent Status** writes model, effort, and client as one identity line, each
+segment appearing only if the agent stated it. The session is a separate fact
+below that line: its final four characters are shown, and its copy control hands
+over the complete declared handle. When no handle was declared, the roster's
+internal writer id supplies the suffix without a copy control; it identifies the
+agent inside Big Plan but names nothing in the agent's own tool.
 Whether a declared session can be opened is Big Plan's judgment, not the
 agent's. A URL becomes an **Open the agent's chat** link only when it matches an
 interface known to serve conversations a browser can follow:
@@ -398,10 +406,11 @@ interface known to serve conversations a browser can follow:
 | Grok on the web                   | `https://grok.com/chat/<id>` or `https://grok.com/c/<id>`                |
 
 Anything else - a CLI serving its own session, a private host, a custom scheme,
-a bare id - is offered as **Copy agent session identifier** instead. A link that
-does not open costs the reader their attention and their trust, so Big Plan
-offers one only where it can stand behind it. Adding an interface is a change to
-that table rather than a change to what a connector may declare.
+a bare id - does not become a link. A declared session id remains copyable from
+the fact row whether or not a separate recognized URL opens the conversation.
+A link that does not open costs the reader their attention and their trust, so
+Big Plan offers one only where it can stand behind it. Adding an interface is a
+change to that table rather than a change to what a connector may declare.
 
 Model ids are looked up, never rewritten. A known id prints the name its vendor
 writes - `grok-4.6` shows as `Grok 4.6` - and uses that vendor's own logo. An id

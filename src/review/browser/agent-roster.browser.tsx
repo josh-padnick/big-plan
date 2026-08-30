@@ -23,25 +23,50 @@ import {
   selectPrimaryAgent,
   type RosterAgent,
 } from "../shared/agent-primacy.js";
-import {
-  agentClientDisplayName,
-  agentModelDisplayName,
-} from "../shared/agent-identity-catalog.js";
 import { compactDurationLabel } from "../shared/time-label.js";
 import {
-  AgentIdentityChip,
-  AgentIdentityText,
+  AgentIdentityLine,
+  AgentSessionFact,
 } from "./agent-identity.browser.js";
+import {
+  reviewWriteBlockReading,
+  reviewWriteBlockedStatus,
+  reviewWritePathOutcome,
+} from "./review-write-availability.js";
 import { Icon } from "./icon.browser.js";
 import { AlertDialog, Badge, Button, Tooltip } from "./ui.browser.js";
 
 /** What the reviewer can answer about one agent. */
 export type PrimacyAnswer = "primary" | "observer" | "disconnect";
 
+/*
+Why a read-only tab cannot disconnect anybody, in the words the refusal would
+have used.
+
+A read-only tab is a tab a newer runtime replaced, which is the one permanent
+write block there is: the control cannot be made to work by waiting, and
+leaving it live so the reviewer discovers that by pressing it spends a click to
+deliver a sentence that could have been there all along. It is shown inert with
+this sentence instead, and the sentence is read from the block rather than
+written out here so it cannot drift from the refusal it stands in for.
+*/
+const DISCONNECT_UNAVAILABLE_REASON = reviewWriteBlockedStatus({
+  block: reviewWriteBlockReading("session-replaced"),
+  outcome: reviewWritePathOutcome("disconnect-agent"),
+});
+
 export type AgentRosterProps = {
   readonly agents: ReadonlyArray<RosterAgent>;
   readonly nowMs: number;
   readonly isReadOnly: boolean;
+  /**
+   * Whether primacy means anything in this session.
+   *
+   * False on a read-only tab, where nothing can be appointed: every agent is
+   * presented as an observer, no badge claims otherwise, and the only answer
+   * left is to disconnect one.
+   */
+  readonly rolesApply?: boolean;
   /**
    * The agent the activity card above is already drawing, when it is drawing
    * one. This section leaves that agent out rather than repeating it.
@@ -65,10 +90,14 @@ export type AgentRosterProps = {
  * role. A badge reads as a property of the thing it sits on, and the tint
  * separates the two roles for a reader who is scanning rather than reading.
  *
- * "Current primary" and "Observer" are deliberately not parallel. "Current"
- * earns its place on the primary, where it says the role can move and this is
- * who holds it now; on the observer it said only that an observer is currently
- * an observer, which is a word spent on nothing.
+ * Two words, one each. "Current primary" spent a word on a distinction the
+ * badge already makes - a badge reports what is true now by being on the card -
+ * and it read as a longer, more important label than the role beside it
+ * (BIG-273).
+ *
+ * The badge is drawn only where a role is worth naming: more than one agent in
+ * play, in a session that can appoint one. A lone agent is implicitly the
+ * primary, and its caller withholds the badge rather than this deciding.
  */
 export const AgentRoleBadge = ({
   isPrimary,
@@ -80,7 +109,7 @@ export const AgentRoleBadge = ({
     tone={isPrimary ? "statusAccent" : "statusNeutral"}
     data-review-agent-role={isPrimary ? "primary" : "observer"}
   >
-    {isPrimary ? "Current primary" : "Observer"}
+    {isPrimary ? "Primary" : "Observer"}
   </Badge>
 );
 
@@ -159,45 +188,25 @@ const AnswerRow = ({
   </div>
 );
 
-/** The identity line every agent card carries. */
-const AgentIdentity = ({
-  agent,
-  label,
-}: {
-  readonly agent: RosterAgent;
-  readonly label: string;
-}) => (
-  <p
-    className="m-0 text-xs font-semibold text-ink [overflow-wrap:anywhere]"
-    data-review-agent-writer={agent.writerId}
-  >
-    <AgentIdentityText label={label} client={agent.model?.client} />
-  </p>
+/**
+ * The identity line every roster card carries, settled or arriving.
+ *
+ * It is the shared line and nothing local, because the reviewer meets the same
+ * agent on this card, on the status card above it, and in the question an
+ * arrival raises - and a name that changes shape between them reads as a
+ * different agent each time (BIG-273).
+ */
+const AgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => (
+  <AgentIdentityLine
+    {...(agent.model?.name === undefined ? {} : { model: agent.model.name })}
+    {...(agent.model?.effort === undefined
+      ? {}
+      : { effort: agent.model.effort })}
+    {...(agent.model?.client === undefined
+      ? {}
+      : { client: agent.model.client })}
+  />
 );
-
-/** Names an arriving agent with every identity fact it declared. */
-const ArrivalAgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
-  const sessionId = agent.model?.sessionId ?? agent.writerId;
-  const parts = [
-    agent.model?.client === undefined
-      ? undefined
-      : agentClientDisplayName(agent.model.client),
-    agent.model?.name === undefined
-      ? undefined
-      : agentModelDisplayName(agent.model.name),
-    `…${sessionId.slice(-4)}`,
-  ].filter((part): part is string => part !== undefined);
-  return (
-    <AgentIdentityChip>
-      <span
-        className="[overflow-wrap:anywhere]"
-        data-review-agent-writer={agent.writerId}
-      >
-        {parts.join(" - ")}
-      </span>
-    </AgentIdentityChip>
-  );
-};
 
 /**
  * The card's top line: who this is, and what it currently is.
@@ -207,36 +216,69 @@ const ArrivalAgentIdentity = ({ agent }: { readonly agent: RosterAgent }) => {
  */
 const AgentCardHeader = ({
   agent,
-  label,
   badge,
 }: {
   readonly agent: RosterAgent;
-  readonly label: string;
   readonly badge: ReactNode;
 }) => (
   <div className="flex min-w-0 items-start gap-2">
     <div className="min-w-0 flex-1">
-      <AgentIdentity agent={agent} label={label} />
+      <AgentIdentity agent={agent} />
     </div>
     {badge}
   </div>
 );
 
-const AttachedSince = ({
+/**
+ * The standing facts under a roster card's identity line: which session, and
+ * how long it has been here.
+ *
+ * The same shape and the same suffix form the status card states them in, so a
+ * reviewer telling two agents apart compares two rows written identically
+ * rather than one card's tail against another card's full handle (BIG-273). An
+ * agent that declared no session is named by its roster id, which is the only
+ * name it has and is not a handle anything outside Big Plan would recognize.
+ */
+const AgentSessionFacts = ({
   agent,
   nowMs,
 }: {
   readonly agent: RosterAgent;
   readonly nowMs: number;
 }) => {
-  const since = compactDurationLabel({
-    start: agent.attachedAtMs,
-    end: Math.max(nowMs, agent.attachedAtMs),
-  });
-  return since === null ? null : (
-    <p className="m-0 text-2xs text-muted">Attached {since} ago</p>
+  const declared = agent.model?.sessionId;
+  return (
+    <dl className="m-0 grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 text-2xs text-muted">
+      <AgentSessionFact
+        handle={declared ?? agent.writerId}
+        isCopyable={declared !== undefined}
+      />
+      <div className="min-w-0">
+        <dt className="font-semibold">Attached</dt>
+        <dd className="m-0 text-ink">
+          {compactDurationLabel({
+            start: agent.attachedAtMs,
+            end: Math.max(nowMs, agent.attachedAtMs),
+          }) ?? "just now"}{" "}
+          ago
+        </dd>
+      </div>
+    </dl>
   );
 };
+
+const UnavailableDisconnectControl = () => (
+  <Tooltip label={DISCONNECT_UNAVAILABLE_REASON} placement="above" asChild>
+    <Button
+      variant="outline"
+      size="sm"
+      aria-disabled="true"
+      className="cursor-not-allowed border-edge bg-surface text-subtle shadow-none hover:brightness-100"
+    >
+      Disconnect
+    </Button>
+  </Tooltip>
+);
 
 /**
  * The card for an agent that has just arrived and is asking to take over.
@@ -259,6 +301,7 @@ const PrimacyRequestCard = ({
   <article
     className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] p-3"
     data-review-agent-card="request"
+    data-review-agent-writer={agent.writerId}
   >
     <h3 className="m-0 flex min-w-0 items-center gap-1.5 text-sm text-ink [&>span>svg]:size-3.5">
       <span
@@ -269,12 +312,17 @@ const PrimacyRequestCard = ({
       </span>
       A second agent wants to answer you
     </h3>
-    <ArrivalAgentIdentity agent={agent} />
-    <AttachedSince agent={agent} nowMs={nowMs} />
+    <AgentIdentity agent={agent} />
+    <AgentSessionFacts agent={agent} nowMs={nowMs} />
     {isReadOnly ? (
-      <p className="m-0 text-xs text-muted">
-        This session is read-only, so it cannot answer for the plan.
-      </p>
+      <>
+        <p className="m-0 text-xs text-muted">
+          This session is read-only, so it cannot answer for the plan.
+        </p>
+        <div className="flex flex-wrap gap-2 pt-0.5">
+          <UnavailableDisconnectControl />
+        </div>
+      </>
     ) : (
       <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5 pt-0.5">
         {/*
@@ -329,55 +377,62 @@ const PrimacyRequestCard = ({
 /** A settled card: this agent owns the plan, or reads it. */
 const AgentCard = ({
   agent,
-  label,
   isPrimary,
+  showsRole,
+  canAppoint,
   nowMs,
-  isReadOnly,
   onAnswer,
 }: {
   readonly agent: RosterAgent;
-  readonly label: string;
   readonly isPrimary: boolean;
+  /** Whether a role is worth naming here at all. */
+  readonly showsRole: boolean;
+  /** Whether this session can move primacy, which a read-only tab cannot. */
+  readonly canAppoint: boolean;
   readonly nowMs: number;
-  readonly isReadOnly: boolean;
   readonly onAnswer: AgentRosterProps["onAnswer"];
 }) => (
   <article
     className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg border border-edge bg-raised p-3"
     data-review-agent-card={isPrimary ? "primary" : "observer"}
+    data-review-agent-writer={agent.writerId}
   >
     <AgentCardHeader
       agent={agent}
-      label={label}
-      badge={<AgentRoleBadge isPrimary={isPrimary} />}
+      badge={showsRole ? <AgentRoleBadge isPrimary={isPrimary} /> : null}
     />
-    {isPrimary ? (
-      <AttachedSince agent={agent} nowMs={nowMs} />
-    ) : (
+    <AgentSessionFacts agent={agent} nowMs={nowMs} />
+    {isPrimary ? null : canAppoint ? (
       /* The same fact the "Leave as observer" mark states, and for the same
          reason: an observer is handed the plan and nothing else. */
       <p className="m-0 text-2xs text-muted">
         Reads the plan. It cannot read your comments or answer them until you
         make it the primary.
       </p>
+    ) : (
+      /* On a read-only tab the second sentence would name a way out that does
+         not exist here: this tab cannot appoint anybody. */
+      <p className="m-0 text-2xs text-muted">
+        Reads the plan. It cannot read your comments or answer them.
+      </p>
     )}
-    {isReadOnly ? null : (
-      <div className="flex flex-wrap gap-2 pt-0.5">
-        {isPrimary ? null : (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              onAnswer({ writerId: agent.writerId, answer: "primary" })
-            }
-          >
-            Make it primary
-          </Button>
-        )}
-        {/* Bordered, because on its own it is the only control on the card and
-            a borderless one read as a line of text the reviewer could not tell
-            was clickable. Its rank comes from the ground it does not have, not
-            from the edge it does. */}
+    <div className="flex flex-wrap gap-2 pt-0.5">
+      {isPrimary || !canAppoint ? null : (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() =>
+            onAnswer({ writerId: agent.writerId, answer: "primary" })
+          }
+        >
+          Make it primary
+        </Button>
+      )}
+      {/* Bordered, because on its own it is the only control on the card and
+          a borderless one read as a line of text the reviewer could not tell
+          was clickable. Its rank comes from the ground it does not have, not
+          from the edge it does. */}
+      {canAppoint ? (
         <Button
           variant="outline"
           size="sm"
@@ -387,8 +442,19 @@ const AgentCard = ({
         >
           Disconnect
         </Button>
-      </div>
-    )}
+      ) : (
+        /*
+        `aria-disabled` rather than `disabled`, which is the whole point of
+        showing the reason here. A disabled button takes no pointer events and
+        no focus, so the tooltip explaining why it is off would be reachable
+        only by a reader using a mouse - and the reader who most needs the
+        sentence is the one who cannot see the greyed-out ground. This stays
+        focusable, is announced as unavailable, and carries no handler, so it
+        is inert in the only sense that matters.
+        */
+        <UnavailableDisconnectControl />
+      )}
+    </div>
   </article>
 );
 
@@ -448,18 +514,19 @@ export const readAgentRosterFor = ({
     agentIsAttached({ agent, nowMs }),
   );
   /*
-  The activity card carries the primary, and only ever the primary.
+  The activity card carries whichever attached agent the presence record names.
 
   It is checked rather than assumed, because the two surfaces answer from
   different records: the card draws the review's presence heartbeat and this
-  section draws the roster. When they name the same agent, one card is enough
-  and drawing it twice is the duplication the reviewer objected to. When they
-  do not - for the moment after a hand-off, before the incoming primary's first
-  heartbeat lands - this section draws everybody, which is a card too many for
-  one poll rather than a card that lies for as long as it is on screen.
+  section draws the roster. When presence trails a hand-off, the activity card
+  can still name the outgoing observer while the roster already names the
+  incoming primary. The roster leaves that outgoing agent out because the
+  activity card already represents it; role badges remain derived from the
+  roster rather than from this carry.
   */
   const carried =
-    carriedByActivity !== undefined && primary?.writerId === carriedByActivity
+    carriedByActivity !== undefined &&
+    attached.some((agent) => agent.writerId === carriedByActivity)
       ? carriedByActivity
       : undefined;
   const cards = attached.filter(
@@ -484,6 +551,7 @@ export const AgentRoster = ({
   agents,
   nowMs,
   isReadOnly,
+  rolesApply = !isReadOnly,
   carriedByActivity,
   onAnswer,
 }: AgentRosterProps) => {
@@ -492,11 +560,9 @@ export const AgentRoster = ({
     nowMs,
     ...(carriedByActivity === undefined ? {} : { carriedByActivity }),
   });
-  /* Ambiguity is judged over everyone attached, not over the cards this
-     section happens to draw. The agent the activity card carries is one of the
-     names the reviewer is telling these apart from, and leaving it out would
-     drop the id from a pair that genuinely collides. */
-  const labelFor = agentLabelResolver(attached);
+  /* No disambiguating label is resolved here any more: every card carries the
+     agent's own session tail, which tells two connectors running one model
+     apart without the reviewer having to be told they need telling apart. */
   if (!isShown) return null;
   return (
     <section
@@ -515,10 +581,10 @@ export const AgentRoster = ({
         <AgentCard
           key={agent.writerId}
           agent={agent}
-          label={labelFor(agent)}
-          isPrimary={agent.writerId === primary?.writerId}
+          isPrimary={rolesApply && agent.writerId === primary?.writerId}
+          showsRole={rolesApply && attached.length > 1}
+          canAppoint={rolesApply}
           nowMs={nowMs}
-          isReadOnly={isReadOnly}
           onAnswer={onAnswer}
         />
       ))}

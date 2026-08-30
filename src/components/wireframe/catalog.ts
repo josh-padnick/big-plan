@@ -517,7 +517,7 @@ const CATALOG = {
   Icon: {
     category: "content",
     acceptsChildren: false,
-    summary: `A glyph standing on its own as a mark - a tip marker, a lock beside a field, a chevron at the end of a row. label always says what it means and always reaches assistive technology; labelled also draws those words beside it. Anything a person clicks is a Button with the same icon, never this. A name outside the set draws a crossed placeholder carrying that name rather than a nearby glyph that would be wrong. Named glyphs: ${ICON_NAME_LIST}.`,
+    summary: `A glyph standing on its own as a mark - a tip marker, a lock beside a field, a chevron at the end of a row. label always says what it means and always reaches assistive technology; labelled also draws those words beside it. size picks a step only for a mark standing alone: a labelled icon's mark is sized against its own words, so writing both is refused. Anything a person clicks is a Button with the same icon, never this. A name outside the set draws a crossed placeholder carrying that name rather than a nearby glyph that would be wrong. Named glyphs: ${ICON_NAME_LIST}.`,
     example: '<Icon name="tip" label="Tip" size="sm" />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
@@ -527,12 +527,24 @@ const CATALOG = {
         diagnostics,
         schema: ICON_SCHEMA,
       });
+      // size is the standalone ramp, and a labelled icon is not on it: its
+      // mark is contained to the words drawn beside it. Accepting the
+      // attribute here and ignoring it would leave an author hand-tuning a
+      // step that changes nothing, which is exactly the compensating the
+      // containment rule exists to end.
+      const labelled = validated.labelled === true;
+      if (labelled && validated.size !== undefined) {
+        diagnostics.add({
+          message: `Icon "${validated.label ?? ""}" is labelled, so its mark is sized against the words beside it; remove size, which only picks a step for a mark standing alone`,
+          position,
+        });
+      }
       return {
         element: "Icon",
         name: validated.name ?? "",
         label: validated.label ?? "",
-        labelled: validated.labelled === true,
-        size: validated.size ?? "md",
+        labelled,
+        ...(labelled ? {} : { size: validated.size ?? "md" }),
       };
     },
   },

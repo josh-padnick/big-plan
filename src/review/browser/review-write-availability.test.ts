@@ -194,7 +194,7 @@ describe("review write refusal per mutation path", () => {
       });
 
       expect(refusal).toBe(
-        `The review session is offline. ${reviewWritePathOutcome(path)} It can accept changes again after reconnecting.`,
+        `Review session unreachable. ${reviewWritePathOutcome(path)} Restart \`big-plan review\`, then open the new URL it prints. All comments are safe.`,
       );
     },
   );

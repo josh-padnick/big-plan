@@ -5171,13 +5171,13 @@ test("should restore and submit staged comments through the local review runtime
   );
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(
-    rail.getByText("Agent is unreachable", { exact: true }),
+    rail.getByText("Review session unreachable", { exact: true }),
   ).toBeVisible({ timeout: 6_000 });
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
   await expect(
-    rail.getByRole("img", { name: "Agent is unreachable" }),
+    rail.getByRole("img", { name: "Review session unreachable" }),
   ).toBeVisible();
   await rail.getByRole("button", { name: "Delete staged comment" }).click();
   await page
@@ -5196,7 +5196,9 @@ test("should restore and submit staged comments through the local review runtime
     offlineComposer.getByRole("button", { name: "Submit Now" }),
   ).toBeDisabled();
   await expect(
-    offlineComposer.getByRole("button", { name: "Agent disconnected" }),
+    offlineComposer.getByRole("button", {
+      name: "Review session unreachable",
+    }),
   ).toBeVisible();
   await offlineComposer.getByRole("button", { name: "Cancel" }).click();
   await expect(rail).not.toContainText(
@@ -9484,7 +9486,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
 // that half is pinned by "should warn about a takeover before inviting one while
 // work is held" in commenting-agent-cli.spec.ts. A runtime that cannot be
 // reached is the other half: the connector command would be advice about a dead
-// endpoint, under a card that already says the review session is offline.
+// endpoint, under a card that already says the review session is unreachable.
 test.describe("recovery section visibility", () => {
   // Aborting every agent poll is how a dead `big-plan review` looks to the
   // page, and the browser logs the failed fetches it is meant to survive.

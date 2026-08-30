@@ -6,6 +6,10 @@
 // after the reviewer has already been told the action was under way.
 
 import {
+  REVIEW_SESSION_UNREACHABLE_HEADLINE,
+  REVIEW_SESSION_UNREACHABLE_SUPPORTING,
+} from "../shared/agent-status.js";
+import {
   reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
   type ReviewPollHealth,
@@ -47,10 +51,14 @@ const BLOCKS = {
     remedy: "Open the newest review to send changes.",
     label: "Review session replaced",
   },
+  /* "Unreachable" throughout, matching the agent surface. The reviewer meets
+     this block and the offline agent card in the same moment - the send button
+     refuses while the rail explains why - and "offline" against "unreachable"
+     read as two separate faults (BIG-273). */
   "runtime-offline": {
-    cause: "The review session is offline.",
-    remedy: "It can accept changes again after reconnecting.",
-    label: "Review session offline",
+    cause: `${REVIEW_SESSION_UNREACHABLE_HEADLINE}.`,
+    remedy: REVIEW_SESSION_UNREACHABLE_SUPPORTING,
+    label: REVIEW_SESSION_UNREACHABLE_HEADLINE,
   },
   "writes-stalled": {
     cause: "The review session has stopped accepting changes.",
@@ -103,6 +111,19 @@ export const reviewWriteBlock = (
   availability: ReviewWriteAvailability,
 ): ReviewWriteBlocked | undefined =>
   availability.state === "unavailable" ? availability : undefined;
+
+/**
+ * One block's standing reading, for a control that explains itself before it
+ * is pressed rather than after.
+ *
+ * A control that cannot work is better shown inert with its reason than live
+ * with a refusal waiting behind it, and the reason has to be the same sentence
+ * the refusal would have given - which means reading it from here rather than
+ * writing it out again at the control (BIG-273).
+ */
+export const reviewWriteBlockReading = (
+  block: ReviewWriteBlock,
+): ReviewWriteBlocked => blocked(block);
 
 /**
  * The message a blocked path shows instead of submitting. The path supplies

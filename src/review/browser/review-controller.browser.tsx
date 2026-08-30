@@ -4782,6 +4782,7 @@ export const ReviewController = () => {
     writeAvailability.state === "available";
   const commentSubmitAvailability = deriveReviewCommentSubmitAvailability({
     canSubmit: identity === null || canSendToAgent,
+    runtimeIsUnreachable: pollIsOffline,
     writeAvailability,
   });
   const unresolvedDrafts = useMemo(
@@ -6607,6 +6608,7 @@ export const ReviewController = () => {
       if (!canSendToAgent || identity === null) {
         const availability = deriveReviewCommentSubmitAvailability({
           canSubmit: false,
+          runtimeIsUnreachable: pollIsOffline,
           writeAvailability,
         });
         if (availability.state === "unavailable") {
@@ -6733,6 +6735,7 @@ export const ReviewController = () => {
     [
       canSendToAgent,
       identity,
+      pollIsOffline,
       reconcileAuthoritativeReviewSnapshot,
       serializeReviewerStateWrite,
       writeAvailability,
@@ -8691,7 +8694,7 @@ export const ReviewController = () => {
                   aria-live="polite"
                 >
                   Agent status is unavailable while the review session is
-                  offline.
+                  unreachable.
                 </p>
               ) : (
                 <div role="status" aria-live="polite">

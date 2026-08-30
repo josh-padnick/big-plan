@@ -105,7 +105,23 @@ const statusMarkFor = (status: WireframeStatus | undefined): ReactNode =>
 // A named glyph, or the crossed placeholder for a meaning the set does not
 // hold. Every icon in the drawing goes through here, so a standalone mark and
 // the same mark inside a button can never drift apart.
-const Glyph = ({ name }: { readonly name: string }): JSX.Element => {
+const Glyph = ({
+  name,
+  withText = false,
+}: {
+  readonly name: string;
+  /**
+   * Whether this mark stands with words on the same line.
+   *
+   * An owner that draws a mark beside text declares it here, and the inline
+   * icon-with-text rule in the stylesheet contains the mark to those words:
+   * their size, their line box, one gap step. It is an assertion rather than
+   * something the stylesheet reads back out of the surrounding markup, so a
+   * new owner opts in by saying so and a mark that stands alone keeps the
+   * standalone ramp without anyone having to exclude it.
+   */
+  readonly withText?: boolean;
+}): JSX.Element => {
   const glyph = wireframeGlyphFor(name);
   return (
     // The drawn mark hides itself from assistive technology, so this wrapper
@@ -115,6 +131,7 @@ const Glyph = ({ name }: { readonly name: string }): JSX.Element => {
     <span
       className="wireframe-glyph"
       data-wireframe-icon={name}
+      {...(withText ? { "data-wireframe-glyph-with-text": "" } : {})}
       {...(glyph === undefined ? { "data-wireframe-icon-unnamed": "" } : {})}
     >
       {lucideIconToReact({
@@ -325,7 +342,11 @@ const WireframeElement = ({
           {...navigation(node.navigateTo)}
           {...frozenControl}
         >
-          {node.icon === undefined ? null : <Glyph name={node.icon} />}
+          {node.icon === undefined ? null : (
+            // A control drawn as one mark is the mark; a control that also
+            // draws its label stands the mark with those words.
+            <Glyph name={node.icon} withText={!node.iconOnly} />
+          )}
           {node.iconOnly ? null : (
             <span className="wireframe-button-label">{node.label}</span>
           )}
@@ -529,10 +550,12 @@ const WireframeElement = ({
       return (
         <span
           className="wireframe-icon"
-          data-wireframe-size={node.size}
+          {...(node.size === undefined
+            ? {}
+            : { "data-wireframe-size": node.size })}
           {...(node.labelled ? { "data-wireframe-labelled": "" } : {})}
         >
-          <Glyph name={node.name} />
+          <Glyph name={node.name} withText={node.labelled} />
           {node.labelled ? (
             <span className="wireframe-icon-label">{node.label}</span>
           ) : (
@@ -548,7 +571,7 @@ const WireframeElement = ({
       // for what the mark applied to.
       return (
         <span className="wireframe-reference">
-          {node.icon === undefined ? null : <Glyph name={node.icon} />}
+          {node.icon === undefined ? null : <Glyph name={node.icon} withText />}
           <span className="wireframe-reference-text">{node.text}</span>
           {node.copyLabel === undefined ? null : (
             <button
@@ -557,7 +580,10 @@ const WireframeElement = ({
               aria-label={node.copyLabel}
               {...frozenControl}
             >
-              <Glyph name="copy" />
+              {/* Inside the border this mark belongs to the string beside
+                  it, not to the row the reference sits in, so it is contained
+                  to that string by the same rule as the leading mark. */}
+              <Glyph name="copy" withText />
             </button>
           )}
         </span>
@@ -663,7 +689,7 @@ const WireframeElement = ({
       const disclosure =
         node.navigateTo === undefined || selectsInPlace ? null : (
           <span className="wireframe-list-disclosure">
-            <Glyph name="chevron" />
+            <Glyph name="chevron" withText />
           </span>
         );
       const rowInner = (

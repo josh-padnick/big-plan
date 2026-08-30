@@ -58,79 +58,215 @@ export const WIREFRAME_EMPHASES: ReadonlyArray<WireframeEmphasis> = [
  */
 export type WireframeIconName =
   | "add"
+  | "alert"
+  | "archive"
+  | "attach"
   | "back"
+  | "blocked"
+  | "book"
+  | "branch"
+  | "bug"
+  | "calendar"
+  | "camera"
+  | "chart"
   | "chevron"
+  | "clock"
   | "close"
+  | "cloud"
+  | "code"
   | "collapse"
   | "comment"
   | "copy"
+  | "dashboard"
   | "database"
   | "delete"
   | "done"
   | "down"
+  | "download"
   | "drag"
+  | "dropdown"
   | "edit"
   | "error"
   | "expand"
+  | "external"
   | "file"
+  | "filter"
+  | "flag"
   | "folder"
+  | "forward"
+  | "grid"
   | "help"
+  | "hide"
+  | "history"
+  | "home"
+  | "image"
   | "inbox"
   | "info"
+  | "key"
+  | "like"
+  | "link"
+  | "list"
+  | "loading"
+  | "location"
   | "lock"
+  | "mail"
+  | "menu"
+  | "merge"
   | "more"
+  | "move"
+  | "pause"
+  | "phone"
+  | "pin"
+  | "play"
+  | "previous"
+  | "print"
+  | "redo"
   | "refresh"
   | "remove"
+  | "restore"
+  | "save"
+  | "scan"
   | "search"
+  | "send"
+  | "server"
   | "settings"
+  | "share"
+  | "shield"
+  | "show"
+  | "sidebar"
+  | "sort"
   | "star"
+  | "stop"
+  | "success"
+  | "sync"
   | "table"
+  | "tag"
   | "terminal"
   | "tip"
+  | "toggle"
+  | "tune"
   | "undo"
+  | "unlock"
   | "up"
+  | "upload"
+  | "user"
+  | "users"
+  | "verified"
+  | "video"
+  | "volume"
   | "waiting"
-  | "warning";
+  | "warning"
+  | "zoom";
 
 export const WIREFRAME_ICON_NAMES: ReadonlyArray<WireframeIconName> = [
   "add",
+  "alert",
+  "archive",
+  "attach",
   "back",
+  "blocked",
+  "book",
+  "branch",
+  "bug",
+  "calendar",
+  "camera",
+  "chart",
   "chevron",
+  "clock",
   "close",
+  "cloud",
+  "code",
   "collapse",
   "comment",
   "copy",
+  "dashboard",
   "database",
   "delete",
   "done",
   "down",
+  "download",
   "drag",
+  "dropdown",
   "edit",
   "error",
   "expand",
+  "external",
   "file",
+  "filter",
+  "flag",
   "folder",
+  "forward",
+  "grid",
   "help",
+  "hide",
+  "history",
+  "home",
+  "image",
   "inbox",
   "info",
+  "key",
+  "like",
+  "link",
+  "list",
+  "loading",
+  "location",
   "lock",
+  "mail",
+  "menu",
+  "merge",
   "more",
+  "move",
+  "pause",
+  "phone",
+  "pin",
+  "play",
+  "previous",
+  "print",
+  "redo",
   "refresh",
   "remove",
+  "restore",
+  "save",
+  "scan",
   "search",
+  "send",
+  "server",
   "settings",
+  "share",
+  "shield",
+  "show",
+  "sidebar",
+  "sort",
   "star",
+  "stop",
+  "success",
+  "sync",
   "table",
+  "tag",
   "terminal",
   "tip",
+  "toggle",
+  "tune",
   "undo",
+  "unlock",
   "up",
+  "upload",
+  "user",
+  "users",
+  "verified",
+  "video",
+  "volume",
   "waiting",
   "warning",
+  "zoom",
 ];
 
 /**
- * How big a standalone icon is drawn.
+ * How big a mark standing on its own is drawn.
+ *
+ * This ramp is for a mark with no words beside it. A mark that stands with
+ * words is contained to those words instead, by the one inline icon-with-text
+ * rule the stylesheet owns, so a labelled `Icon` takes no step from here.
  *
  * The steps borrow the space scale's own words, so an author who already knows
  * `gap="sm"` knows `size="sm"`, and each one is a multiple of the artboard's
@@ -550,7 +686,10 @@ export type WireframeNode =
       readonly label: string;
       // Whether the meaning is also drawn as words beside the mark.
       readonly labelled: boolean;
-      readonly size: WireframeIconSize;
+      // Which step of the standalone ramp the mark is drawn at. Absent on a
+      // labelled icon, whose mark is contained to the words beside it by the
+      // inline icon-with-text rule rather than picked off this ramp.
+      readonly size?: WireframeIconSize;
     }
   | { readonly element: "Divider"; readonly label?: string }
   | {

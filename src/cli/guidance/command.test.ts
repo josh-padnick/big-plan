@@ -44,6 +44,15 @@ describe("guidanceCommand", () => {
     expect(await readdir(stateDirectory)).toHaveLength(1);
   });
 
+  it("should append a passive update notice to the guidance output", async () => {
+    const notice =
+      "Update available: Big Plan 1.2.0 (running 1.1.0); run `big-plan update` to upgrade.";
+
+    const output = await guidanceCommand([], notice);
+
+    expect(output.trimEnd().split("\n").at(-1)).toBe(notice);
+  });
+
   it("should reject a second argument", async () => {
     await expect(
       guidanceCommand(["QuickSummary", "extra"]),

@@ -54,23 +54,19 @@ describe("readAgentRosterFor", () => {
     expect(reading.cards.map(({ writerId }) => writerId)).toEqual(["bbbbbbbb"]);
   });
 
-  it("should refuse to carry a writer that is not the primary", () => {
+  it("should draw each agent once when presence trails a primary handoff", () => {
     /*
     The two surfaces read different records and can name different agents for
-    a poll after a hand-off. Trusting the claim would blank the incoming
-    primary's card and badge the outgoing one as primary; disbelieving it draws
-    one card too many for one poll instead.
+    a poll after a hand-off. The status card still draws the outgoing agent, so
+    the roster must omit that same agent while drawing the incoming primary.
     */
     const reading = readAgentRosterFor({
       agents: [agent(), agent({ writerId: "bbbbbbbb", role: "observer" })],
       nowMs: NOW,
       carriedByActivity: "bbbbbbbb",
     });
-    expect(reading.carried).toBeUndefined();
-    expect(reading.cards.map(({ writerId }) => writerId)).toEqual([
-      "aaaaaaaa",
-      "bbbbbbbb",
-    ]);
+    expect(reading.carried).toBe("bbbbbbbb");
+    expect(reading.cards.map(({ writerId }) => writerId)).toEqual(["aaaaaaaa"]);
   });
 
   it("should appear as soon as there is more than one agent to tell apart", () => {

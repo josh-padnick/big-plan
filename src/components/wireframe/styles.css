@@ -52,6 +52,23 @@ marks and a plan diff never jitters.
     --wf-text-lead: 1.375rem;
     --wf-text-heading: 1.625rem;
     --wf-text-display: 1.875rem;
+    /* The inline icon-with-text containment rule, as two values every owner
+       that draws a mark beside words reads by name.
+
+       A mark standing with words belongs to those words: it is sized and
+       spaced against them rather than against the box it happens to sit in.
+       Both are `em`, so the containment is stated once and holds at every
+       artboard scale and every type step without an author or an owner
+       thinking about it.
+
+       1.15em puts the mark's box a little above the cap height of the letters
+       beside it - large enough to read as a mark, small enough that the words
+       stay the thing being read. The standalone ramp's own body step is 1.5em,
+       half again the height of those letters, which is what a mark drawn
+       beside text at the standalone size looks like: the loudest thing in the
+       row it was meant to annotate. */
+    --wf-glyph-inline: 1.15em;
+    --wf-glyph-gap: 0.35em;
   }
   /* Isolation from the reading column's element selectors. */
   .wireframe h3,
@@ -673,11 +690,12 @@ marks and a plan diff never jitters.
   /* A control that carries a mark keeps the mark and the words on one line,
      with the glyph slightly tighter to the label than the label is to the
      control's edge, so the pair reads as one action rather than as two
-     things sharing a box. */
+     things sharing a box. The mark itself is contained to the label by the
+     inline icon-with-text rule, which is also where that spacing is set. */
   .wireframe-button[data-wireframe-has-icon] {
     display: inline-flex;
     align-items: center;
-    gap: 0.4em;
+    gap: var(--wf-glyph-gap);
   }
   /* An icon-only control is square, because a wide box around one mark reads as
      a button whose label failed to render. It keeps the same 44px floor every
@@ -2087,7 +2105,7 @@ marks and a plan diff never jitters.
     display: inline-flex;
     flex: none;
     align-items: center;
-    gap: 0.35em;
+    gap: var(--wf-glyph-gap);
     /* The stroke is a shade lighter than the copy beside it: a mark drawn at
        full ink weight beside 14px letterforms reads as the loudest thing on
        the screen, which is almost never what an icon is for. */
@@ -2096,6 +2114,32 @@ marks and a plan diff never jitters.
   .wireframe-glyph > svg {
     width: 1.5em;
     height: 1.5em;
+  }
+  /* A mark standing with words, wherever it stands with them.
+
+     This is the whole containment rule for an inline mark, in one place: the
+     size and the vertical alignment here, and the space between mark and words
+     as --wf-glyph-gap, which every owner that puts the two on one line reads
+     by name. Without it each owner - a control carrying a label, a labelled
+     Icon, a reference and the control that copies it, a list row's push mark -
+     re-decides the same three facts, and the owner that forgets falls back to
+     the standalone mark's 1.5em and draws a glyph half again the height of the
+     letterforms beside it.
+
+     Which marks stand with words is the view's assertion rather than something
+     read back out of the markup: a mark drawn beside text says so, and this
+     rule only draws what it was told, so a new owner opts in by declaring it
+     rather than by matching a selector.
+
+     Centred on the text's line box, because a mark aligned to a baseline it
+     does not share sits low against the words and reads as having fallen out
+     of the line. */
+  .wireframe-glyph[data-wireframe-glyph-with-text] {
+    align-self: center;
+  }
+  .wireframe-glyph[data-wireframe-glyph-with-text] > svg {
+    width: var(--wf-glyph-inline);
+    height: var(--wf-glyph-inline);
   }
   /* A meaning the set does not draw. The crossed box is the same language
      ImagePlaceholder uses one size up, and the requested name rides beside it,
@@ -2113,9 +2157,11 @@ marks and a plan diff never jitters.
     flex: none;
     align-self: center;
     align-items: center;
-    gap: 0.4em;
+    gap: var(--wf-glyph-gap);
     font-size: var(--wf-text-body);
   }
+  /* The standalone ramp. A labelled Icon draws no size, because its mark is
+     contained to the words beside it rather than picked off this ramp. */
   .wireframe-icon[data-wireframe-size="sm"] > .wireframe-glyph > svg {
     width: 1.15em;
     height: 1.15em;
@@ -2142,7 +2188,7 @@ marks and a plan diff never jitters.
   .wireframe-reference {
     display: inline-flex;
     align-items: center;
-    gap: 0.45em;
+    gap: var(--wf-glyph-gap);
     max-width: 100%;
     min-width: 0;
     padding: 0.25rem 0.3rem 0.25rem 0.5rem;
@@ -2150,14 +2196,6 @@ marks and a plan diff never jitters.
     border-radius: var(--wf-sketch);
     background: var(--wf-fill);
     font-size: var(--wf-text-meta);
-  }
-  /* Both marks in one object are drawn at one size. The copy glyph is nested
-     inside its control, so it needs saying separately or it falls back to the
-     default and outweighs the mark naming the reference. */
-  .wireframe-reference > .wireframe-glyph > svg,
-  .wireframe-reference-copy > .wireframe-glyph > svg {
-    width: 1.15em;
-    height: 1.15em;
   }
   .wireframe-reference-text {
     min-width: 0;
@@ -2419,18 +2457,15 @@ marks and a plan diff never jitters.
   }
   /* A row that pushes to another screen carries the mark a product puts at its
      trailing edge: quieter than the label it follows, riding the primary line
-     rather than the metadata beneath it, and sized on the metadata step of the
-     icon scale so it never competes with the trailing value beside it. */
+     rather than the metadata beneath it, and contained to the label it follows
+     by the inline icon-with-text rule so it never competes with the trailing
+     value beside it. */
   .wireframe-list-disclosure {
     display: inline-flex;
     flex: none;
     align-self: center;
     margin-left: 0.15rem;
     color: var(--color-muted);
-  }
-  .wireframe-list-disclosure > .wireframe-glyph > svg {
-    width: 1.15em;
-    height: 1.15em;
   }
 
   /* Whole-row tappable list entries (mobile inbox). */

@@ -118,7 +118,14 @@ export type CurrentAgentActivity =
   | {
       readonly state: "offline";
       readonly tone: "danger";
-      readonly headline: "Agent is unreachable";
+      /* Never "Agent is unreachable". This state is the page losing contact
+         with the review session, which is the only thing Big Plan can observe
+         from here: the agent may be working away in its own terminal, and
+         saying it is unreachable asserts something nobody checked. The remedy
+         has always named the session - "Restart `big-plan review`" - so the
+         headline naming the agent was the half of this state that did not
+         match the other half (BIG-273). */
+      readonly headline: "Review session unreachable";
       readonly supporting: string;
     }
   | {
@@ -164,6 +171,25 @@ export type AgentHealth = {
 };
 
 /**
+ * What every surface says when this page cannot reach the review session.
+ *
+ * One string, because four surfaces report this one condition - the agent
+ * card, the toolbar's accessible name, the feedback rail, and a thread's own
+ * status strip - and a reviewer meets several of them at once. Written out at
+ * each of them, they drifted into three claims about two different subjects:
+ * the agent was unreachable, the agent had disconnected, and the runtime was
+ * offline (BIG-273).
+ *
+ * The subject is the review session throughout, because that is the only thing
+ * this page lost contact with, and it is what the remedy has always named.
+ */
+export const REVIEW_SESSION_UNREACHABLE_HEADLINE = "Review session unreachable";
+
+/** The way back, and the promise that nothing typed was lost by getting here. */
+export const REVIEW_SESSION_UNREACHABLE_SUPPORTING =
+  "Restart `big-plan review`, then open the new URL it prints. All comments are safe.";
+
+/**
  * Maps runtime facts to the single agent status shown in viewer chrome and at
  * the head of the agent sidebar. It is one derivation because the chrome and
  * the sidebar must never disagree about what state the agent is in.
@@ -200,7 +226,15 @@ export const deriveAgentHealth = ({
   if (activity.state === "never-connected") {
     return { indicator: "unavailable", label: "No agent connected yet" };
   }
-  if (activity.state === "offline" || activity.state === "disconnected") {
+  /* Two faults, two sentences. An agent that stopped answering and a review
+     session this page cannot reach are different facts with different remedies,
+     and calling both of them "Agent disconnected" told a reviewer whose runtime
+     had gone that their agent had left (BIG-273). The mark stays the same,
+     because both are the same severity. */
+  if (activity.state === "offline") {
+    return { indicator: "error", label: REVIEW_SESSION_UNREACHABLE_HEADLINE };
+  }
+  if (activity.state === "disconnected") {
     return { indicator: "error", label: "Agent disconnected" };
   }
   if (activity.state === "errored") {
@@ -737,9 +771,8 @@ export const deriveCurrentAgentActivity = ({
     return {
       state: "offline",
       tone: "danger",
-      headline: "Agent is unreachable",
-      supporting:
-        "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
+      headline: REVIEW_SESSION_UNREACHABLE_HEADLINE,
+      supporting: REVIEW_SESSION_UNREACHABLE_SUPPORTING,
     };
   }
   // Work that has been picked up is judged by its own narration, and never
@@ -950,10 +983,13 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
   if (input.runtime === "offline") {
     return {
       stage: "offline",
-      label: "Runtime offline",
-      headline: "Agent is unreachable",
-      detail:
-        "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
+      /* The same words the sidebar and the toolbar use for this state. A
+         thread strip reading "Runtime offline" beside a rail reading "Agent is
+         unreachable" left the reviewer to work out that one condition was
+         being reported twice in two vocabularies (BIG-273). */
+      label: REVIEW_SESSION_UNREACHABLE_HEADLINE,
+      headline: REVIEW_SESSION_UNREACHABLE_HEADLINE,
+      detail: REVIEW_SESSION_UNREACHABLE_SUPPORTING,
       tone: "danger",
     };
   }
