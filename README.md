@@ -146,8 +146,12 @@ bun run build
 Every push to `main` builds the root package and documentation site, then deploys
 `docs/dist` to GitHub Pages through [the docs workflow](.github/workflows/docs.yml).
 The one-time custom-domain setup requires repository and DNS-provider access;
-the captain should run [`scripts/docs-domain-wizard.sh`](scripts/docs-domain-wizard.sh)
-for the exact records, guided setup, and DNS/TLS verification.
+the captain must approve the outward-facing launch and run the repository wizard
+for the exact records, guided setup, and DNS/TLS verification:
+
+```sh
+./scripts/docs-domain-wizard.sh
+```
 
 After building the root package, regenerate the docs' light/dark component screenshot pairs from `docs/` with `bun run screenshots`.
 
