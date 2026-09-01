@@ -5933,6 +5933,103 @@ The release gets a full soak.
   }
 });
 
+test("should show a component change in one container a pointer can reach", async ({
+  page,
+}) => {
+  // A change shown where its block stands is one card the reader can use.
+  // Standing a replayed copy in front of the hidden block instead costs both:
+  // two nested "what changed" frames, and a card held inert. `inert` is
+  // inherited and silent - the controls keep their handlers and their
+  // pointer-events, and only hit testing and focus stop reaching them - so
+  // this asserts where a real pointer lands rather than whether a dispatched
+  // click still works, which is the assertion that would have passed anyway.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-superseded-live-"));
+  const planPath = join(directory, "plan.mdx");
+  const before = `# Review queue
+
+One screen carries the queue, so its shape is worth settling before it is built.
+
+## The queue screen
+
+Triage lives on one screen.
+
+<Wireframe id="review-queue" title="Review queue" initialScreen="queue">
+  <Screen id="queue" name="Queue" device="desktop">
+    <AppShell>
+      <AppContent>
+        <PageHeader title="Plan review" />
+        <Text text="Answer the oldest thread first." />
+      </AppContent>
+    </AppShell>
+  </Screen>
+  <Screen id="triage" name="Triage" device="desktop">
+    <AppShell>
+      <AppContent>
+        <PageHeader title="Triage" />
+        <Text text="Urgent plans are answered first." />
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>`;
+  const after = before.replace(
+    "Answer the oldest thread first.",
+    "Answer the oldest thread first, then name the rollback owner.",
+  );
+  await writeFile(planPath, after);
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    await rail
+      .getByRole("button", { name: /changes? across/u })
+      .first()
+      .click();
+    await rail
+      .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
+      .last()
+      .click();
+
+    const diff = page.locator("[data-component-diff]");
+    await expect(diff).toBeVisible();
+    // One container: the component's own card is the only "what changed" frame.
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(1);
+    await expect(page.locator("[data-review-historical-changes]")).toHaveCount(
+      0,
+    );
+
+    const proposed = diff.locator('[data-component-diff-side="proposed"]');
+    const tab = proposed.locator('[data-wireframe-navigate="triage"]');
+    await expect(tab).toBeVisible();
+    // Where a real pointer lands, which is the only thing `inert` changes.
+    expect(
+      await tab.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        );
+        return hit === node || node.contains(hit);
+      }),
+    ).toBe(true);
+    await tab.click();
+    await expect(
+      proposed.locator('[data-wireframe-screen="triage"]'),
+    ).toHaveAttribute("data-wireframe-current", "");
+  } finally {
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should fit a component diff the archive replays, not draw it at its authored size", async ({
   page,
 }) => {
@@ -6112,21 +6209,35 @@ test("should replay each side's callout kind and changed list ordering from its 
 }, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.emulateMedia({ reducedMotion: "reduce" });
+  // Both ways the review moves the page are recorded, because the contract is
+  // about motion rather than about which call makes it: a lens positions the
+  // page with window.scrollTo, and other surfaces still bring an element into
+  // view. Either one animating under reduced motion is the defect.
   await page.addInitScript(() => {
+    const record = (behavior: string): void => {
+      (
+        window as unknown as { __bigPlanScrollBehaviors: Array<string> }
+      ).__bigPlanScrollBehaviors.push(behavior);
+    };
+    const behaviorOf = (
+      options?: boolean | ScrollIntoViewOptions | ScrollToOptions,
+    ): string =>
+      typeof options === "object" && options !== null
+        ? (options.behavior ?? "auto")
+        : "auto";
     const originalScrollIntoView = Element.prototype.scrollIntoView;
+    const originalScrollTo = window.scrollTo.bind(window);
     Object.assign(window, { __bigPlanScrollBehaviors: [] });
     Element.prototype.scrollIntoView = function scrollIntoView(
       options?: boolean | ScrollIntoViewOptions,
     ): void {
-      const behavior =
-        typeof options === "object" && options !== null
-          ? (options.behavior ?? "auto")
-          : "auto";
-      (
-        window as unknown as { __bigPlanScrollBehaviors: Array<string> }
-      ).__bigPlanScrollBehaviors.push(behavior);
+      record(behaviorOf(options));
       originalScrollIntoView.call(this, options);
     };
+    window.scrollTo = ((...args: ReadonlyArray<unknown>): void => {
+      if (args.length === 1) record(behaviorOf(args[0] as ScrollToOptions));
+      (originalScrollTo as (...rest: ReadonlyArray<unknown>) => void)(...args);
+    }) as typeof window.scrollTo;
   });
   const directory = await mkdtemp(
     join(tmpdir(), "big-plan-presentation-diff-"),

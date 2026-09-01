@@ -28,6 +28,7 @@ import {
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import { announcePlanDom, replacePlanDom } from "./plan-dom.browser.js";
+import { diffScrollTarget } from "./diff-scroll.js";
 
 const placeLocations = ({
   diff,
@@ -539,17 +540,24 @@ const SnapshotSideContent = ({
 };
 
 /**
- * Replays a component's own diff view where the lens shows a change beside the
- * plan rather than in place of it. Two paths reach here: the historical
- * archive, where the block is gone, and a superseded change, where the block
- * survives but the lens hides it and stands in front of it, because a revision
- * the plan has already moved past is evidence rather than a live question.
+ * Replays a component's own diff view in the historical archive, where the
+ * block the change named is gone from the plan and the card has nowhere of its
+ * own to stand. A change whose block survives is shown by replacing that
+ * block instead, so this is the one path that stands a second copy beside the
+ * plan rather than in place of it.
  *
- * Both paths need the same thing. The view carries the root and any proposed
- * field addresses the renderer copied into it. Remove all of them here: an
- * address the plan still holds - which the superseded path proves is not
- * hypothetical - must never appear twice in one document. Held inert for the
- * same reason, since neither path is answerable.
+ * That is what the two transforms here are for. The view carries the root and
+ * any proposed field addresses the renderer copied into it; remove all of them,
+ * because a copy standing beside the plan would otherwise publish an address a
+ * second time. Held inert for the matching reason: a change the plan no longer
+ * holds is a record, and a record with working controls invites the reader to
+ * answer a question that is no longer being asked.
+ *
+ * Neither transform may travel with the card into the plan proper. `inert` is
+ * inherited and silent - the subtree keeps its handlers, its `pointer-events`,
+ * and its enabled controls, and only hit testing and focus quietly stop
+ * reaching it - so a card held inert anywhere a reader expects to use it reads
+ * as a dead component rather than as history.
  *
  * Installing the markup is a plan-DOM replacement like any other, and it is
  * announced as one. A component that sizes itself in the browser - a wireframe
@@ -711,6 +719,89 @@ const lensScrollBehavior = (): ScrollBehavior =>
     : "smooth";
 
 /**
+ * Puts one change where `diffScrollTarget` says it belongs.
+ *
+ * The frame is measured here rather than passed in, because every caller is
+ * asking the same question about a card it has just put into the document, and
+ * the two edges that bound the answer - the sticky header and the stepper -
+ * belong to the page rather than to any one lens. Both are read live: a change
+ * opened from a thread has no stepper under it, and the header's height is a
+ * style decision this must not carry a copy of.
+ */
+const positionChange = (card: HTMLElement): void => {
+  const header = document.querySelector<HTMLElement>("header");
+  const stepper = document.querySelector<HTMLElement>(
+    "[data-review-diff-stepper]",
+  );
+  const rect = card.getBoundingClientRect();
+  window.scrollTo({
+    top: diffScrollTarget({
+      cardTop: rect.top + window.scrollY,
+      cardHeight: rect.height,
+      readingTop: header?.getBoundingClientRect().height ?? 0,
+      floorTop:
+        stepper?.getBoundingClientRect().top ??
+        document.documentElement.clientHeight,
+      maxScroll: Math.max(
+        0,
+        document.documentElement.scrollHeight -
+          document.documentElement.clientHeight,
+      ),
+    }),
+    behavior: lensScrollBehavior(),
+  });
+};
+
+/**
+ * Opens one change, and keeps opening it until it stops changing size.
+ *
+ * A card's height is not settled when it is inserted. A component that sizes
+ * itself in the browser - a wireframe scaling a drawing into the measure it
+ * was given - reaches its real height a frame or more later, over a fit that
+ * runs several passes. Positioning once against the height at insertion lands
+ * the reader tens of pixels off, and off in the direction that hides the end
+ * of the change behind the stepper, which is the one edge the position exists
+ * to respect.
+ *
+ * So the position is re-taken while the card is still resizing, and given up
+ * the moment either the size settles or the reader takes over: scrolling is
+ * theirs from their first gesture, and a lens that kept pulling the page back
+ * would be worse than one that landed badly.
+ */
+const openChangeAtReadingPosition = (card: HTMLElement): void => {
+  let settledHeight = -1;
+  let passes = 0;
+  const stop = (): void => {
+    observer.disconnect();
+    for (const event of RESETTLE_YIELD_EVENTS) {
+      window.removeEventListener(event, stop);
+    }
+  };
+  const observer = new ResizeObserver(() => {
+    const height = card.getBoundingClientRect().height;
+    passes += 1;
+    // The fit is a fixed point with a pass cap of its own; this only has to
+    // outlast it, and stop whether or not it converges.
+    if (height === settledHeight || passes > SETTLE_PASS_LIMIT) {
+      stop();
+      return;
+    }
+    settledHeight = height;
+    positionChange(card);
+  });
+  for (const event of RESETTLE_YIELD_EVENTS) {
+    window.addEventListener(event, stop, { passive: true, once: true });
+  }
+  observer.observe(card);
+  positionChange(card);
+};
+
+/** What tells us the reader has taken the scroll position over. */
+const RESETTLE_YIELD_EVENTS = ["wheel", "touchstart", "keydown"] as const;
+/** Enough passes to outlast the wireframe fit, which caps itself at eight. */
+const SETTLE_PASS_LIMIT = 12;
+
+/**
  * Finds the first of a place's locations that still has somewhere to land. A
  * place can describe several locations, and one unresolvable location does not
  * make the place historical while another can still show the change in place.
@@ -788,12 +879,7 @@ const LegacyDiffLensPortal = ({
       }
       archive.append(container);
       setHost(container);
-      requestAnimationFrame(() =>
-        container.scrollIntoView({
-          behavior: lensScrollBehavior(),
-          block: "center",
-        }),
-      );
+      requestAnimationFrame(() => openChangeAtReadingPosition(container));
       return () => {
         container.remove();
         if (ownsArchive && archive?.childElementCount === 0) archive.remove();
@@ -853,12 +939,7 @@ const LegacyDiffLensPortal = ({
       target.before(container);
     }
     setHost(container);
-    requestAnimationFrame(() =>
-      container.scrollIntoView({
-        behavior: lensScrollBehavior(),
-        block: "center",
-      }),
-    );
+    requestAnimationFrame(() => openChangeAtReadingPosition(container));
     return () => {
       hiddenElements.forEach((element, index) => {
         element.style.display = displayValues[index] ?? "";
@@ -947,7 +1028,7 @@ const ComponentDiffReplacement = ({
         announcePlanDom();
       }
       document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
-      next.scrollIntoView({ behavior: lensScrollBehavior(), block: "center" });
+      requestAnimationFrame(() => openChangeAtReadingPosition(next));
     };
 
     const reinstallAfterArticleRefresh = (): void => {
@@ -1033,11 +1114,19 @@ export const DiffLensPortal = ({
       "found" in liveLensAnchor(componentLocation, { isSuperseded: false }),
     );
   }, [articleVersion, componentLocation]);
-  // A superseded or unanchored change can land only in the historical archive,
-  // whose one surviving copy must carry no plan identity. That copy is now the
-  // component's own diff view replayed without its root address, so the archive
-  // shows the same card the plan does rather than a scrubbed stand-in.
-  if (componentLocation === undefined || !isVisible || isSuperseded) {
+  // A component change whose block still stands is shown by replacing that
+  // block, whether or not the plan has since moved past it. Being superseded
+  // changes what the change means, not what it is: the card is the same
+  // rendering, it stands in the same place, and its drawings and tables answer
+  // the reader the same way.
+  //
+  // The alternative - standing a replayed copy in front of the hidden block -
+  // is what the archive does, and it is only honest where the block is gone.
+  // In place it costs the reader the whole card: two nested "what changed"
+  // frames, and an inert copy whose screen tabs and column menus cannot be
+  // clicked at all. Replacing keeps the plan's one copy of every address,
+  // which is the reason the archive's copy has to strip them.
+  if (componentLocation === undefined || !isVisible) {
     return (
       <LegacyDiffLensPortal
         diff={diff}

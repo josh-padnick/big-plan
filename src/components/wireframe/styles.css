@@ -198,6 +198,40 @@ marks and a plan diff never jitters.
   [data-wireframe-interactive] .wireframe-switcher {
     display: flex;
   }
+  /* The switcher names the screen it selected, and the caption sits directly
+     under it, so painting the name again puts the same word twice in two
+     lines. It is only ever hidden where something else is already saying it:
+     a lone screen has no switcher, and a document whose script never ran
+     shows every screen with no switcher either. The name stays in the
+     accessibility tree in both cases, because a figure whose caption names
+     nothing is a figure a screen reader cannot announce. */
+  /* The caption is a row of facts about the screen, not a stack: the viewport
+     note and the control for commenting on this screen belong on one line, the
+     way the figure's own title and its controls do above them. The name, where
+     it is painted at all, is the screen's heading and takes the whole first
+     line for itself. */
+  .wireframe-screen-caption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.5rem;
+  }
+  .wireframe-screen-caption > .wireframe-screen-name {
+    flex-basis: 100%;
+  }
+  [data-wireframe-interactive]
+    .wireframe-switcher
+    ~ .wireframe-screens
+    .wireframe-screen-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   /* A conventional rectangle, not the hand-drawn sketch radius: the switcher
      is big-plan review chrome, the same call already made for its keyboard
      focus treatment. Every entry carries a subtle resting border so it reads

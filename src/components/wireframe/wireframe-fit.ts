@@ -83,11 +83,11 @@ export const fitWireframeScreen = (screen: HTMLElement): void => {
   const widthScale =
     (screen.clientWidth - screenHorizontalPadding - horizontalInset) /
     frameWidth;
-  // The card wraps the painted frame and the caption sits under it, so both
+  // The card wraps the painted frame and the caption sits beside it, so both
   // are held to exactly the width the frame paints at. Without that the card
   // would keep its true-size footprint and the caption would run the full
-  // width of the screen box, leaving a long name overhanging the drawing it
-  // names.
+  // width of the screen box, leaving a long viewport note overhanging the
+  // drawing it names.
   const paint = (scale: number): void => {
     frame.style.zoom = String(scale);
     const paintedWidth = `${String(frameWidth * scale + horizontalInset)}px`;
@@ -109,30 +109,23 @@ export const fitWireframeScreen = (screen: HTMLElement): void => {
     paint(scale);
     return;
   }
-  const verticalInset =
-    Number.parseFloat(cardStyle.paddingTop) +
-    Number.parseFloat(cardStyle.paddingBottom) +
-    Number.parseFloat(cardStyle.borderTopWidth) +
-    Number.parseFloat(cardStyle.borderBottomWidth);
-  const screenVerticalPadding =
-    Number.parseFloat(screenStyle.paddingTop) +
-    Number.parseFloat(screenStyle.paddingBottom);
+  // Everything in the screen box that is not the painted frame: the caption
+  // and its margins, the card's padding and border, the screen's own padding,
+  // and whatever else a later layout puts beside the drawing. Measuring the
+  // difference is what keeps this correct rather than listing the parts:
+  // a list is a copy of the layout, it goes stale the moment the caption moves
+  // or gains a neighbour, and it goes stale silently - the frame is fitted to
+  // a budget a pixel or two too generous, and the panel it was supposed to fit
+  // inside scrolls.
+  //
+  // scrollHeight is the whole content box including the overflow this exists
+  // to remove, so subtracting the frame's painted height leaves exactly the
+  // overhead, whatever it is made of and wherever it sits.
   for (let pass = 0; pass < maximumFitPasses; pass += 1) {
     paint(scale);
-    let captionHeight = 0;
-    if (caption !== null) {
-      const captionStyle = getComputedStyle(caption);
-      captionHeight =
-        caption.getBoundingClientRect().height +
-        Number.parseFloat(captionStyle.marginTop) +
-        Number.parseFloat(captionStyle.marginBottom);
-    }
-    const heightScale =
-      (screen.clientHeight -
-        screenVerticalPadding -
-        captionHeight -
-        verticalInset) /
-      frameHeight;
+    const overhead =
+      screen.scrollHeight - frame.getBoundingClientRect().height;
+    const heightScale = (screen.clientHeight - overhead) / frameHeight;
     const next = clampScale(Math.min(widthScale, heightScale));
     const settled = Math.abs(next - scale) < fitSettled;
     scale = next;
