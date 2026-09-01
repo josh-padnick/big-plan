@@ -46,6 +46,12 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import { changeVerdictKey } from "../shared/change-verdict.js";
 import {
+  projectRevertLoss,
+  REVERT_CONTENT_KIND_GENERIC,
+  startSentence,
+  type RevertLoss,
+} from "../shared/revert-copy.js";
+import {
   AGENT_STALL_MS,
   agentDisconnectDropsWork,
   agentHasEverConnected,
@@ -1036,6 +1042,108 @@ const readySnapshotDiff = (
   const cached = snapshotDiffCache.get(snapshotDiffKey(identity, from, to));
   return cached?.state === "ready" ? cached.value : null;
 };
+
+/** How many changed places the revert dialog names before it counts the rest. */
+const REVERT_LOSS_LIMIT = 6;
+
+/**
+ * What a revert takes back, resolved for the dialog that confirms it.
+ *
+ * The control is only offered while the response being reverted is still the
+ * plan's current revision, so what is at risk is exactly the diff from that
+ * response's baseline to the plan as it reads now. Naming the content in it is
+ * `projectRevertLoss`; this hook only gets that diff in front of it, and holds
+ * the kind-generic answer while the diff is in flight or unreadable, because
+ * the consequence is certain even when its inventory is not.
+ */
+const useRevertLoss = ({
+  identity,
+  baselineSnapshot,
+  currentSnapshot,
+  changeTargets,
+  active,
+}: {
+  readonly identity: RuntimeIdentity | null;
+  readonly baselineSnapshot: string | undefined;
+  readonly currentSnapshot: string;
+  readonly changeTargets: ReadonlyArray<string> | undefined;
+  readonly active: boolean;
+}): RevertLoss | undefined => {
+  const from = baselineSnapshot;
+  const [diff, setDiff] = useState<SnapshotDiff | null>(null);
+  useEffect(() => {
+    if (!active || identity === null || from === undefined) return;
+    const ready = readySnapshotDiff(identity, from, currentSnapshot);
+    if (ready !== null) {
+      setDiff(ready);
+      return;
+    }
+    let current = true;
+    cachedSnapshotDiff(identity, from, currentSnapshot)
+      .then((value) => {
+        if (current) setDiff(value);
+      })
+      .catch(() => {
+        if (current) setDiff(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [active, currentSnapshot, from, identity]);
+  return useMemo(
+    () =>
+      diff === null ? undefined : projectRevertLoss({ diff, changeTargets }),
+    [changeTargets, diff],
+  );
+};
+
+/** The evidence under the revert dialog: every place the loss lands. */
+const RevertLossEvidence = ({
+  loss,
+}: {
+  readonly loss: RevertLoss | undefined;
+}) => (
+  <div
+    className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border border-edge bg-surface p-3"
+    data-review-revert-loss=""
+  >
+    <p className="m-0 text-2xs font-semibold uppercase tracking-caps text-subtle">
+      What you will lose
+    </p>
+    <p className="m-0 text-sm text-ink">
+      {loss === undefined
+        ? "Reading what this response wrote…"
+        : loss.places.length === 0
+          ? "This response left nothing in the plan."
+          : `${startSentence(loss.lost)}, in ${loss.places.length === 1 ? "one place" : `${loss.places.length} places`}:`}
+    </p>
+    {loss === undefined || loss.places.length === 0 ? null : (
+      <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1 p-0">
+        {loss.places.slice(0, REVERT_LOSS_LIMIT).map((place) => (
+          <li
+            key={place.placeId}
+            className="flex min-w-0 items-baseline gap-2 text-xs"
+          >
+            <span className="min-w-0 flex-1 text-ink [overflow-wrap:anywhere]">
+              {place.section === ""
+                ? place.label
+                : `${place.section} · ${place.label}`}
+            </span>
+            <em className="shrink-0 text-2xs text-muted">{place.note}</em>
+          </li>
+        ))}
+        {loss.places.length > REVERT_LOSS_LIMIT ? (
+          <li className="text-xs text-muted">{`and ${loss.places.length - REVERT_LOSS_LIMIT} more`}</li>
+        ) : null}
+      </ul>
+    )}
+    <p className="m-0 text-xs text-muted">
+      The plan then reads exactly as it did just before this response. Earlier
+      changes stay in place - this is not a reset to the original plan - and
+      your comment and its thread stay until you delete them.
+    </p>
+  </div>
+);
 
 const randomId = (): string => {
   const bytes = new Uint8Array(8);
@@ -4503,6 +4611,32 @@ export const ReviewController = () => {
     }
   }, [archivedChatRequestIds, planId]);
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
+  // The revert dialog names what it deletes, so the outcome that wrote it is
+  // resolved here rather than in the dialog: the request carries the baseline
+  // the revert restores, and the outcome carries the blocks this response
+  // actually wrote, which is what narrows the diff to this response's work.
+  const revertOutcome =
+    pendingRevert === null
+      ? undefined
+      : agent.responses
+          .find((response) => response.requestId === pendingRevert.requestId)
+          ?.outcomes.find(
+            (outcome) =>
+              outcome.commentId === pendingRevert.commentId &&
+              outcome.state === "changed",
+          );
+  const revertLoss = useRevertLoss({
+    identity,
+    baselineSnapshot:
+      pendingRevert === null
+        ? undefined
+        : agent.requests.find(
+            (request) => request.requestId === pendingRevert.requestId,
+          )?.baselineSnapshot,
+    currentSnapshot,
+    changeTargets: revertOutcome?.changeTargets,
+    active: pendingRevert !== null,
+  });
   useEffect(() => {
     setApproval(runtimeSession?.approval);
   }, [runtimeSession?.approval]);
@@ -8774,11 +8908,13 @@ export const ReviewController = () => {
       <AlertDialog
         open={pendingRevert !== null}
         title="Revert response?"
-        description="This restores the plan to its state just before this response. Earlier changes stay in place - this is not a reset to the original plan. The comment and thread will remain until you delete them."
+        description={`You will lose ${revertLoss?.lost ?? REVERT_CONTENT_KIND_GENERIC}. Reverting deletes that content from the plan for good, and only the agent can write it again.`}
         actionLabel="Revert response"
         onCancel={() => setPendingRevert(null)}
         onAction={() => void revertAgentChanges()}
-      />
+      >
+        <RevertLossEvidence loss={revertLoss} />
+      </AlertDialog>
       <AlertDialog
         open={pendingDelete !== null}
         title={

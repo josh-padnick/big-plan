@@ -5216,11 +5216,16 @@ test("should restore and submit staged comments through the local review runtime
   const revertDialog = page.getByRole("alertdialog", {
     name: "Revert response?",
   });
+  // The dialog leads with what the reviewer loses, names that content by kind
+  // rather than as "changes", and only then explains the mechanics.
+  await expect(revertDialog).toContainText("You will lose");
+  await expect(revertDialog).toContainText("generated");
+  await expect(revertDialog.locator("[data-review-revert-loss]")).toBeVisible();
   await expect(revertDialog).toContainText(
-    "Earlier changes stay in place - this is not a reset to the original plan.",
+    "Earlier changes stay in place - this is not a reset to the original plan -",
   );
   await expect(revertDialog).toContainText(
-    "The comment and thread will remain until you delete them.",
+    "your comment and its thread stay until you delete them.",
   );
   await revertDialog.getByRole("button", { name: "Revert response" }).click();
   expect((await revertResponse).status()).toBe(200);
