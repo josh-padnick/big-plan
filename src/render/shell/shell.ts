@@ -565,8 +565,8 @@ export const renderShell = ({
   const standalone = chrome === "standalone";
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  // The review feedback rail is z-40; keep sticky shell chrome above it while
-  // leaving the higher overlay layers undisturbed.
+  // Keep sticky shell chrome above the review rail while leaving overlay
+  // layers undisturbed.
   const html = `<header class="sticky top-0 z-50 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
 <div class="relative grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
 <div class="relative z-10 flex min-w-0 items-center gap-0.5">
