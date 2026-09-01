@@ -82,14 +82,14 @@ run_checks() {
   printf '\nOwnership-verification TXT record (keep this after verification):\n'
   dig +short TXT "_github-pages-challenge-${GITHUB_OWNER}.${DOMAIN}" || true
 
-  if curl --fail --silent --show-error --head "https://${DOMAIN}/" >/dev/null; then
+  if curl --fail --silent --head "https://${DOMAIN}/" >/dev/null 2>&1; then
     printf 'PASS  HTTPS responds at https://%s/\n' "$DOMAIN"
   else
     printf 'WAIT  HTTPS is not ready at https://%s/\n' "$DOMAIN"
     failures=$((failures + 1))
   fi
 
-  final_url="$(curl --fail --silent --show-error --location --head --output /dev/null --write-out '%{url_effective}' "https://${WWW_DOMAIN}/" || true)"
+  final_url="$(curl --fail --silent --location --head --output /dev/null --write-out '%{url_effective}' "https://${WWW_DOMAIN}/" 2>/dev/null || true)"
   if [[ "$final_url" == "https://${DOMAIN}/" ]]; then
     printf 'PASS  https://%s/ redirects to https://%s/\n' "$WWW_DOMAIN" "$DOMAIN"
   else
