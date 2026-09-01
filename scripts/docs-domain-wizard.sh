@@ -9,6 +9,7 @@ readonly WWW_DOMAIN="www.bigplan.dev"
 readonly GITHUB_OWNER="josh-padnick"
 readonly PAGES_HOST="josh-padnick.github.io"
 readonly REPOSITORY_URL="https://github.com/josh-padnick/big-plan"
+readonly CURL_TIMEOUT_SECONDS=15
 readonly EXPECTED_A=$'185.199.108.153\n185.199.109.153\n185.199.110.153\n185.199.111.153'
 readonly EXPECTED_AAAA=$'2606:50c0:8000::153\n2606:50c0:8001::153\n2606:50c0:8002::153\n2606:50c0:8003::153'
 
@@ -82,14 +83,14 @@ run_checks() {
   printf '\nOwnership-verification TXT record (keep this after verification):\n'
   dig +short TXT "_github-pages-challenge-${GITHUB_OWNER}.${DOMAIN}" || true
 
-  if curl --fail --silent --head "https://${DOMAIN}/" >/dev/null 2>&1; then
+  if curl --fail --silent --head --max-time "$CURL_TIMEOUT_SECONDS" "https://${DOMAIN}/" >/dev/null 2>&1; then
     printf 'PASS  HTTPS responds at https://%s/\n' "$DOMAIN"
   else
     printf 'WAIT  HTTPS is not ready at https://%s/\n' "$DOMAIN"
     failures=$((failures + 1))
   fi
 
-  final_url="$(curl --fail --silent --location --head --output /dev/null --write-out '%{url_effective}' "https://${WWW_DOMAIN}/" 2>/dev/null || true)"
+  final_url="$(curl --fail --silent --location --head --max-time "$CURL_TIMEOUT_SECONDS" --output /dev/null --write-out '%{url_effective}' "https://${WWW_DOMAIN}/" 2>/dev/null || true)"
   if [[ "$final_url" == "https://${DOMAIN}/" ]]; then
     printf 'PASS  https://%s/ redirects to https://%s/\n' "$WWW_DOMAIN" "$DOMAIN"
   else
