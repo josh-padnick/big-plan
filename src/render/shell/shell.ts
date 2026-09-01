@@ -565,7 +565,7 @@ export const renderShell = ({
   const standalone = chrome === "standalone";
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
+  const html = `<header class="sticky top-0 z-50 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
 <div class="relative grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
 <div class="relative z-10 flex min-w-0 items-center gap-0.5">
 <a class="shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://bigplan.dev" target="_blank" rel="noreferrer">
