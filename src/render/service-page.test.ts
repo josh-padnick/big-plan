@@ -65,7 +65,7 @@ const welcomeIn = (
   );
 
 describe("the service's pages", () => {
-  it("should render the same toolbar a review document renders", () => {
+  it("should render the sticky toolbar above the feedback rail", () => {
     // Not a lookalike: the shell's own branding bar, from renderShell.
     const html = welcome();
     expect(html).toContain(
