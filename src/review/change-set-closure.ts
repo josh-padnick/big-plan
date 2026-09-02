@@ -15,6 +15,7 @@ import {
   acceptedChangeKeys,
   changeVerdictBatches,
   changeVerdictKey,
+  rejectedChangeKeys,
 } from "./shared/change-verdict.js";
 
 export type ChangeSetTransaction = {
@@ -97,17 +98,16 @@ export const autoAcceptChangeSets = async ({
     change: (current) => {
       let next = current;
       const accepted = new Set(acceptedChangeKeys(current));
+      const rejected = rejectedChangeKeys(current);
       for (const closure of closures) {
-        const open = closure.placeIds.filter(
-          (placeId) =>
-            !accepted.has(
-              changeVerdictKey({
-                from: closure.from,
-                to: closure.to,
-                placeId,
-              }),
-            ),
-        );
+        const open = closure.placeIds.filter((placeId) => {
+          const key = changeVerdictKey({
+            from: closure.from,
+            to: closure.to,
+            placeId,
+          });
+          return !accepted.has(key) && !rejected.has(key);
+        });
         for (const batch of changeVerdictBatches(open)) {
           next = applyChangeVerdictMutation({
             verdicts: next,

@@ -250,6 +250,32 @@ const inverseOf = (
   };
 };
 
+const mutationResultIsCurrent = ({
+  current,
+  result,
+  mutation,
+}: {
+  readonly current: StoredChangeVerdicts;
+  readonly result: StoredChangeVerdicts;
+  readonly mutation: ChangeVerdictMutation;
+}): boolean =>
+  mutation.placeIds.every((placeId) => {
+    const atPlace = (verdicts: StoredChangeVerdicts) =>
+      verdicts.decided.find(
+        (entry) =>
+          entry.from === mutation.from &&
+          entry.to === mutation.to &&
+          entry.placeId === placeId,
+      );
+    const expected = atPlace(result);
+    const actual = atPlace(current);
+    return (
+      actual?.verdict === expected?.verdict &&
+      actual?.decidedAt === expected?.decidedAt &&
+      actual?.actor === expected?.actor
+    );
+  });
+
 /**
  * Applies one mutation to the verdict record. Registration in the route
  * table gives this the write gate and the session-authority check, so the whole
@@ -271,6 +297,7 @@ export const recordChangeVerdicts = async (
   let captured:
     | {
         readonly previous: StoredChangeVerdicts;
+        readonly result: StoredChangeVerdicts;
         readonly rejected: ReadonlyArray<string>;
       }
     | undefined;
@@ -280,15 +307,20 @@ export const recordChangeVerdicts = async (
       now: new Date().toISOString(),
     });
     verdicts = await changeVerdicts.update((current) => {
+      const result = applyChangeVerdictMutation({
+        verdicts: current,
+        mutation,
+      });
       captured = {
         previous: current,
+        result,
         rejected: rejectedPlaceIdsFor({
           verdicts: current,
           from: mutation.from,
           to: mutation.to,
         }),
       };
-      return applyChangeVerdictMutation({ verdicts: current, mutation });
+      return result;
     });
   } catch (error: unknown) {
     if (error instanceof ChangeVerdictsRejected) {
@@ -326,10 +358,12 @@ export const recordChangeVerdicts = async (
     const compensation = inverseOf(mutation, previous);
     if (compensation !== undefined) {
       await changeVerdicts.update((current) =>
-        applyChangeVerdictMutation({
-          verdicts: current,
-          mutation: compensation,
-        }),
+        mutationResultIsCurrent({ current, result: captured.result, mutation })
+          ? applyChangeVerdictMutation({
+              verdicts: current,
+              mutation: compensation,
+            })
+          : current,
       );
     }
     if (error instanceof ChangeRestoreRejected) {
