@@ -135,11 +135,12 @@ export VERSION="$(node -p "require('./package.json').version")"
 8. Only once `latest` reports `$VERSION`, publish the GitHub release for `v${VERSION}` with that version's `CHANGELOG.md` entry as its body. The announcement comes last on purpose: a release note published before promotion tells readers to install a version that `npm install big-plan` still cannot reach.
 
    ```sh
-   export NOTES="$(mktemp -d)/notes.md"
+   export NOTES="$(mktemp)"
    awk -v v="## ${VERSION} " 'index($0,v)==1{f=1;print;next} f&&/^## /{exit} f' \
      CHANGELOG.md > "$NOTES"
    test -s "$NOTES"
    gh release create "v${VERSION}" --title "big-plan ${VERSION}" --notes-file "$NOTES"
+   rm -f "$NOTES"
    ```
 
 Do not promote if CI, generated drift, the publish workflow, provenance, or the canary smoke test is missing or red.
