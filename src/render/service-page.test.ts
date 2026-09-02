@@ -4,6 +4,8 @@
 // uses. A bespoke visual vocabulary here would drift the moment the design
 // system moved.
 
+import type { Element, Root } from "hast";
+import { fromHtml } from "hast-util-from-html";
 import { describe, expect, it, vi } from "vitest";
 import { GLOBAL_CSS } from "./global.generated.js";
 import {
@@ -21,6 +23,20 @@ const atMs = Date.parse("2026-08-17T14:41:00.000Z");
 
 const welcome = (): string =>
   renderServiceWelcomePage({ port: 8790, startedAtMs: atMs, now: atMs });
+
+// Finds a rendered element without coupling assertions to serializer ordering.
+const firstElement = (
+  root: Root | Element,
+  tagName: string,
+): Element | undefined => {
+  for (const child of root.children) {
+    if (child.type !== "element") continue;
+    if (child.tagName === tagName) return child;
+    const nested = firstElement(child, tagName);
+    if (nested !== undefined) return nested;
+  }
+  return undefined;
+};
 
 // A page is formatted with whatever locale the machine running it has, so a
 // rule about how a moment reads can only be checked against a locale the test
@@ -65,12 +81,14 @@ const welcomeIn = (
   );
 
 describe("the service's pages", () => {
-  it("should render the same toolbar a review document renders", () => {
+  it("should render the shell toolbar with its fixed stacking contract", () => {
     // Not a lookalike: the shell's own branding bar, from renderShell.
     const html = welcome();
-    expect(html).toContain(
-      '<header class="sticky top-0 z-40 h-11 border-b border-edge bg-toolbar" data-shell-chrome>',
+    const header = firstElement(fromHtml(html), "header");
+    expect(header?.properties.className).toEqual(
+      expect.arrayContaining(["fixed", "inset-x-0", "top-0", "z-50"]),
     );
+    expect(header?.properties.className).not.toContain("z-40");
     expect(html).toContain("data-logo-light");
     expect(html).toContain("data-logo-dark");
     expect(html).toContain("https://bigplan.dev");

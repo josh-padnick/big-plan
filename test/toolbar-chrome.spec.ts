@@ -71,6 +71,28 @@ const applyTheme = async (
   await page.waitForSelector("header[data-shell-chrome]");
 };
 
+// BIG-257: the page must not be able to pull its toolbar away from the
+// viewport, including at the document's rubber-band boundary.
+test("should keep the toolbar fixed when the reader scrolls or overscrolls", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const toolbar = page.locator("header[data-shell-chrome]");
+  await expect(toolbar).toHaveCSS("position", "fixed");
+  await expect(page.locator("html")).toHaveCSS("overscroll-behavior-y", "none");
+
+  const initialBox = await toolbar.boundingBox();
+  if (initialBox === null) throw new Error("the toolbar was not laid out");
+  await page.mouse.wheel(0, 800);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(0);
+  const scrolledBox = await toolbar.boundingBox();
+  if (scrolledBox === null) throw new Error("the toolbar left the layout");
+  expect(scrolledBox.y).toBe(initialBox.y);
+});
+
 // The regression BIG-177 records: `truncate` clips at the line box, so a
 // container that also tightens its leading below the type step's own value
 // hands the font a box shorter than the inline box it asked to draw, and every
