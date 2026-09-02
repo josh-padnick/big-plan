@@ -372,6 +372,8 @@ here; all values use the document theme's closed token vocabulary.
    rise clear of it: the page runs out of scroll first. The reserve matches the
    bar's own height plus the offset it floats at, so the change that ends the
    set reaches the same reading position as the one that opens it. */
-:root[data-review-tour-open] main {
-  padding-bottom: 9rem;
+@layer components {
+  :root[data-review-tour-open] main {
+    padding-bottom: 9rem;
+  }
 }

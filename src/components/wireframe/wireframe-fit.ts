@@ -123,8 +123,7 @@ export const fitWireframeScreen = (screen: HTMLElement): void => {
   // overhead, whatever it is made of and wherever it sits.
   for (let pass = 0; pass < maximumFitPasses; pass += 1) {
     paint(scale);
-    const overhead =
-      screen.scrollHeight - frame.getBoundingClientRect().height;
+    const overhead = screen.scrollHeight - frame.getBoundingClientRect().height;
     const heightScale = (screen.clientHeight - overhead) / frameHeight;
     const next = clampScale(Math.min(widthScale, heightScale));
     const settled = Math.abs(next - scale) < fitSettled;

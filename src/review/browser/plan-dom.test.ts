@@ -9,7 +9,9 @@ import { announcementMovedPlanIdentity } from "./plan-dom.browser.js";
 describe("announcementMovedPlanIdentity", () => {
   it("should treat an ordinary replacement as moving plan identity", () => {
     expect(
-      announcementMovedPlanIdentity(new CustomEvent("bigplan:article-replaced")),
+      announcementMovedPlanIdentity(
+        new CustomEvent("bigplan:article-replaced"),
+      ),
     ).toBe(true);
     expect(
       announcementMovedPlanIdentity(

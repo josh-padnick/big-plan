@@ -32,8 +32,8 @@ describe("diffScrollTarget", () => {
 
   it("should not scroll above the document or past its end", () => {
     expect(diffScrollTarget({ ...frame, cardTop: 0, cardHeight: 40 })).toBe(0);
-    expect(
-      diffScrollTarget({ ...frame, cardTop: 9000, maxScroll: 5000 }),
-    ).toBe(5000);
+    expect(diffScrollTarget({ ...frame, cardTop: 9000, maxScroll: 5000 })).toBe(
+      5000,
+    );
   });
 });
