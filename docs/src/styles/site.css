@@ -23,6 +23,9 @@ a.site-title img {
   margin-inline: 0;
 }
 
+/* The samples grid is reused on the Sample plans page, which is an ordinary
+   docs page rather than the splash landing, so the tokens it needs are
+   declared for any `.landing` wrapper rather than only for the landing page. */
 .landing {
   --band-quiet: color-mix(in srgb, var(--sl-color-gray-6) 55%, transparent);
   --band-deep: color-mix(in srgb, var(--sl-color-gray-6) 100%, transparent);

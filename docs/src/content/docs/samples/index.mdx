@@ -1,0 +1,114 @@
+---
+title: Sample plans
+description: Four real Big Plan documents you can open and read in your browser, rendered from the repository's own example plans.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import rateLimitingLight from "../../../assets/samples/rate-limiting-light.png";
+import rateLimitingDark from "../../../assets/samples/rate-limiting-dark.png";
+import retryQueueLight from "../../../assets/samples/retry-queue-light.png";
+import retryQueueDark from "../../../assets/samples/retry-queue-dark.png";
+import workflowLight from "../../../assets/samples/workflow-builder-light.png";
+import workflowDark from "../../../assets/samples/workflow-builder-dark.png";
+import allComponentsLight from "../../../assets/samples/all-components-light.png";
+import allComponentsDark from "../../../assets/samples/all-components-dark.png";
+
+The fastest way to understand Big Plan is to read one. These are real documents, rendered by the
+current CLI from plans that live in the repository — not screenshots, and not mockups.
+
+Open one and try it: the section navigation, the collapse controls, the copy and maximize buttons
+on code and tables. Everything except commenting works in a standalone document, because
+commenting needs a live review behind it.
+
+<div class="landing">
+
+<div class="samples">
+  <a class="sample" href="/plans/rate-limiting/">
+    <span class="shot">
+      <ThemeImage
+        light={rateLimitingLight}
+        dark={rateLimitingDark}
+        alt="The rate limiting plan open in the Big Plan viewer"
+      />
+    </span>
+    <span class="meta">
+      <strong>Rate limiting for a public API</strong>
+      <span>
+        A short, ordinary plan, and the size a real one usually is. Look for the quick summary
+        that opens it, the comparison table under Options considered, and the code diff with its
+        line-anchored annotation. Start here.
+      </span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/retry-queue/">
+    <span class="shot">
+      <ThemeImage
+        light={retryQueueLight}
+        dark={retryQueueDark}
+        alt="The payments retry queue plan, structured as a deck of numbered acts"
+      />
+    </span>
+    <span class="meta">
+      <strong>A payments retry queue</strong>
+      <span>
+        The same shape, organised as a deck. Look for the numbered act bands, the kicker above
+        each slide title, and how the table of contents groups its rows under those acts by
+        itself.
+      </span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/workflow-builder/">
+    <span class="shot">
+      <ThemeImage
+        light={workflowLight}
+        dark={workflowDark}
+        alt="The workflow builder plan, showing a wireframe prototype of eleven screens"
+      />
+    </span>
+    <span class="meta">
+      <strong>A workflow builder surface</strong>
+      <span>
+        A plan about an interface, so it shows the interface. Eleven true-size screens you can
+        click through, with a switcher above each wireframe and a maximize control on it.
+      </span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/all-components/">
+    <span class="shot">
+      <ThemeImage
+        light={allComponentsLight}
+        dark={allComponentsDark}
+        alt="A plan that renders every Big Plan component in one document"
+      />
+    </span>
+    <span class="meta">
+      <strong>Every component at once</strong>
+      <span>
+        Not a plan you would write — a gallery. Look for the sortable data table, the database
+        schema, the three API contract cards, and the decision matrix with its score calculation.
+      </span>
+    </span>
+  </a>
+</div>
+
+</div>
+
+## Where these come from
+
+Each sample is one MDX file rendered with `big-plan render`, which produces a single
+self-contained HTML document: embedded styles, fonts, and images, no external requests, and a
+complete reading experience with JavaScript disabled.
+
+`docs/scripts/gen-samples.mjs` renders them from the repository's own examples every time this
+site is built, so a sample can never show a document the current CLI would not produce.
+
+| Sample | Rendered from | Markdown source |
+| --- | --- | --- |
+| Rate limiting for a public API | `docs/src/demo/example-plan.md` | [plan.md](/plans/rate-limiting/plan.md) |
+| A payments retry queue | `examples/deck.mdx` | [plan.md](/plans/retry-queue/plan.md) |
+| A workflow builder surface | `examples/workflow-engine-builder.mdx` | [plan.md](/plans/workflow-builder/plan.md) |
+| Every component at once | `examples/all-components.mdx` | [plan.md](/plans/all-components/plan.md) |
+
+## Next
+
+[Components](/components/) — what each of the pieces in those documents is for.
