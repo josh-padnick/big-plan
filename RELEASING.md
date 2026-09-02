@@ -1,5 +1,6 @@
 <!--
-Owns the executable npm release, promotion, and rollback procedure for Big Plan.
+Owns the executable npm release, promotion, and rollback procedure for Big Plan,
+and the changelog discipline that release follows.
 -->
 
 # Releasing Big Plan
@@ -22,6 +23,35 @@ Complete these settings before cutting the first tag. They are part of the relea
 
 The workflow needs npm CLI 11.5.1 or newer and runs its publish job on a GitHub-hosted runner. Its `id-token: write` permission lets npm exchange GitHub's short-lived OIDC identity; `--provenance` links the public package to the tag commit and this workflow.
 
+## Changelog
+
+[CHANGELOG.md](CHANGELOG.md) is the release history a reader sees. It has one entry per published npm version, newest first.
+
+**Who writes it.** The release engineer, once per release, as part of cutting it. Nobody adds an entry in a feature pull request: a per-pull-request changelog conflicts on every merge and produces a list of commits instead of a description of the release.
+
+**How an entry is generated.** Start from the machine-generated raw material, then write the entry a first-time reader needs.
+
+```sh
+export PREVIOUS_TAG="v0.0.0"   # the previous release tag, or the first commit for the first release
+git log --no-merges --format='%s' "${PREVIOUS_TAG}..main"
+gh api "repos/josh-padnick/big-plan/releases/generate-notes" \
+  -f tag_name="v${VERSION}" -f previous_tag_name="${PREVIOUS_TAG}" --jq .body
+```
+
+`.github/release.yml` groups that generated list by pull-request label. Use it as the source of facts, not as the entry. The entry itself groups those changes by **theme and capability**, in the order a new reader meets them, and says what each one lets a person do. A raw commit or pull-request list is not an acceptable entry.
+
+**Where the prose lives.** The changelog entry and the GitHub release body are the same text. Write it in `CHANGELOG.md`, then paste it into the release; do not maintain two narratives.
+
+**Unreleased work.** The entry being assembled sits at the top under `## <version> — unreleased`. Cutting the release replaces `unreleased` with the release date.
+
+### Generated files are never hand-edited
+
+This is a house rule for the whole repository, and it applies to release artifacts too.
+
+A file whose name carries `.generated.` is an output. Edit its authored input, run its generator (`bun run gen`), and commit both together; CI fails on drift. Hand-editing a generated file works exactly until the next generator run silently erases it.
+
+`CHANGELOG.md` is not one of those files. It is authored prose written from generated raw material, which is why it lives outside the `.generated.` convention and why the generated notes above are input rather than output.
+
 ## Release checklist
 
 Set the release version once and use it throughout these commands:
@@ -30,7 +60,7 @@ Set the release version once and use it throughout these commands:
 export VERSION="$(node -p "require('./package.json').version")"
 ```
 
-1. Merge the version change through the normal protected-`main` pull-request process. Confirm `package.json` contains exactly `$VERSION`.
+1. Merge the version change and the release's [changelog entry](#changelog) through the normal protected-`main` pull-request process. Confirm `package.json` contains exactly `$VERSION`, and that `CHANGELOG.md` heads with `## $VERSION` dated today rather than `unreleased`.
 2. Confirm CI is green on that `main` commit, including lint, build, unit tests, and e2e tests.
 3. Confirm generated-source drift is clean:
 
@@ -63,6 +93,8 @@ export VERSION="$(node -p "require('./package.json').version")"
    ```
 
    The audit must report a verified provenance attestation. The npm version page must link that attestation to the expected GitHub commit and `publish.yml` run.
+
+   Publish the GitHub release for `v${VERSION}` with the `CHANGELOG.md` entry for that version as its body.
 
 7. From a trusted maintainer terminal authenticated to npm with 2FA, promote the already-published bytes. This moves a dist-tag; it does not publish again:
 
