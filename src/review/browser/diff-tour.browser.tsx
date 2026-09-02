@@ -52,15 +52,23 @@ type DiffTourValue = {
   readonly activeChangeSetId: string | null;
   readonly activePlaceId: string | null;
   readonly isPlaceAccepted: (diff: SnapshotDiff, placeId: string) => boolean;
+  /** True while the reviewer's rejection of this place stands. */
+  readonly isPlaceRejected: (diff: SnapshotDiff, placeId: string) => boolean;
   /** How much of one change set is closed, from the one selector that decides. */
   readonly standingOf: (
     diff: SnapshotDiff,
     placeIds: ReadonlyArray<string>,
   ) => ChangeSetStanding;
-  readonly setPlacesAccepted: (
+  /**
+   * Records one verdict over the named places, or takes back whatever verdict
+   * they hold. `undefined` is undo rather than a third verdict, because the
+   * record stores no such row: a change nobody has decided is a change with no
+   * entry in it.
+   */
+  readonly setPlacesDecided: (
     diff: SnapshotDiff,
     placeIds: ReadonlyArray<string>,
-    accepted: boolean,
+    verdict: "accepted" | "rejected" | undefined,
   ) => void;
   /** False while this page may not record anything, so no control offers to. */
   readonly canRecordAcceptance: boolean;
@@ -102,8 +110,14 @@ export const DiffTourProvider = ({
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [showCompletionSummary, setShowCompletionSummary] = useState(false);
-  const { accepted, autoAccepted, canRecord, recordChangeVerdicts, refresh } =
-    useChangeVerdicts();
+  const {
+    accepted,
+    rejected,
+    autoAccepted,
+    canRecord,
+    recordChangeVerdicts,
+    refresh,
+  } = useChangeVerdicts();
   const places = useMemo(() => {
     if (tour === null) return [];
     const allowed = new Set(tour.placeIds);
@@ -126,10 +140,20 @@ export const DiffTourProvider = ({
     };
   }, [tour]);
   const tourValue = useMemo(() => {
+    const dispositionOf = (
+      diff: SnapshotDiff,
+      placeId: string,
+    ): "accepted" | "rejected" | undefined => {
+      const key = changeVerdictKey({ from: diff.from, to: diff.to, placeId });
+      if (accepted.has(key)) return "accepted";
+      return rejected.has(key) ? "rejected" : undefined;
+    };
     const isPlaceAccepted = (diff: SnapshotDiff, placeId: string): boolean =>
-      accepted.has(changeVerdictKey({ from: diff.from, to: diff.to, placeId }));
+      dispositionOf(diff, placeId) === "accepted";
     return {
       isPlaceAccepted,
+      isPlaceRejected: (diff: SnapshotDiff, placeId: string): boolean =>
+        dispositionOf(diff, placeId) === "rejected",
       standingOf: (
         diff: SnapshotDiff,
         placeIds: ReadonlyArray<string>,
@@ -139,27 +163,33 @@ export const DiffTourProvider = ({
           to: diff.to,
           placeIds,
           accepted,
+          rejected,
         }),
-      setPlacesAccepted: (
+      setPlacesDecided: (
         diff: SnapshotDiff,
         placeIds: ReadonlyArray<string>,
-        isAccepted: boolean,
+        verdict: "accepted" | "rejected" | undefined,
       ): void => {
         // A gesture that would record what the store already holds is not a
         // write; sending one would advance the revision for nothing.
         const changing = placeIds.filter(
-          (placeId) => isPlaceAccepted(diff, placeId) !== isAccepted,
+          (placeId) => dispositionOf(diff, placeId) !== verdict,
         );
         recordChangeVerdicts({
-          op: isAccepted ? "accept" : "withdraw",
+          op:
+            verdict === "accepted"
+              ? "accept"
+              : verdict === "rejected"
+                ? "reject"
+                : "undo",
           from: diff.from,
           to: diff.to,
           placeIds: changing,
         });
       },
     };
-  }, [accepted, recordChangeVerdicts]);
-  const { isPlaceAccepted, standingOf, setPlacesAccepted } = tourValue;
+  }, [accepted, recordChangeVerdicts, rejected]);
+  const { isPlaceAccepted, standingOf, setPlacesDecided } = tourValue;
   const openTour = (next: OpenTour): void => {
     setTour(next);
     setIndex(tourStartIndex(next));
@@ -219,10 +249,10 @@ export const DiffTourProvider = ({
   const acceptActivePlace = (): void => {
     if (tour === null || active === undefined) return;
     if (isActiveAccepted) {
-      setPlacesAccepted(tour.diff, [active.placeId], false);
+      setPlacesDecided(tour.diff, [active.placeId], undefined);
       return;
     }
-    setPlacesAccepted(tour.diff, [active.placeId], true);
+    setPlacesDecided(tour.diff, [active.placeId], "accepted");
     const nextIndex = places.findIndex(
       (place, placeIndex) =>
         placeIndex > index && !isPlaceAccepted(tour.diff, place.placeId),
@@ -369,10 +399,10 @@ export const DiffTourProvider = ({
                           : UNRECORDABLE_ACCEPTANCE_LABEL
                       }
                       onClick={() =>
-                        setPlacesAccepted(
+                        setPlacesDecided(
                           tour.diff,
                           places.map((place) => place.placeId),
-                          true,
+                          "accepted",
                         )
                       }
                     >

@@ -516,7 +516,7 @@ export const AgentChangeDigest = ({
     activePlaceId,
     canRecordAcceptance,
     isPlaceAccepted,
-    setPlacesAccepted,
+    setPlacesDecided,
     standingOf,
     closeTour,
     openTour,
@@ -768,10 +768,10 @@ export const AgentChangeDigest = ({
                 : UNRECORDABLE_ACCEPTANCE_LABEL
             }
             onClick={() =>
-              setPlacesAccepted(
+              setPlacesDecided(
                 diff,
                 available.map((place) => place.placeId),
-                true,
+                "accepted",
               )
             }
           >

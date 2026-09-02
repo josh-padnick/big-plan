@@ -597,13 +597,13 @@ export const ApproveDialog = ({
           <Disclosure
             id="approve-changesets"
             title="Change sets"
-            count={`${items.changeSets.accepted} of ${items.changeSets.total} accepted`}
+            count={`${items.changeSets.settled} of ${items.changeSets.total} decided`}
             complete={changeComplete}
             defaultOpen={!changeComplete}
           >
             {changeComplete ? (
               <p className="m-0 px-3 py-1 text-xs text-muted">
-                Every change set is accepted.
+                Every change set is decided.
               </p>
             ) : (
               <BoundedList
@@ -1133,10 +1133,17 @@ export const ApproveControl = ({
       deriveOpenItems({
         changeSets,
         accepted: verdicts.accepted,
+        rejected: verdicts.rejected,
         inputs: contract.inputs,
         requests: openRequestsFromExchange(agent.requests),
       }),
-    [agent.requests, changeSets, contract.inputs, verdicts.accepted],
+    [
+      agent.requests,
+      changeSets,
+      contract.inputs,
+      verdicts.accepted,
+      verdicts.rejected,
+    ],
   );
   const status = approval?.status;
 

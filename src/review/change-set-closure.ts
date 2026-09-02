@@ -81,12 +81,12 @@ export const autoAcceptChangeSets = async ({
   store,
   planPath,
   transactions,
-  acceptedAt,
+  decidedAt,
 }: {
   readonly store: ReviewStore;
   readonly planPath: string;
   readonly transactions: ReadonlyArray<ChangeSetTransaction>;
-  readonly acceptedAt: string;
+  readonly decidedAt: string;
 }): Promise<{
   readonly verdicts: StoredChangeVerdicts;
   readonly closures: ReadonlyArray<ChangeSetClosure>;
@@ -116,7 +116,7 @@ export const autoAcceptChangeSets = async ({
               from: closure.from,
               to: closure.to,
               placeIds: batch,
-              acceptedAt,
+              decidedAt,
               actor: "auto-accept",
             },
           });

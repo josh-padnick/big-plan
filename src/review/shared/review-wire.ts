@@ -456,12 +456,12 @@ export const encodeChangeVerdicts = (
  * can never displace state the page already applied.
  */
 export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
-  if (!isReviewWireRecord(value) || !Array.isArray(value.accepted)) {
-    return { accepted: [], revision: -1 };
+  if (!isReviewWireRecord(value) || !Array.isArray(value.decided)) {
+    return { decided: [], revision: -1 };
   }
   return {
     revision: storedRevision(value.revision),
-    accepted: value.accepted.flatMap((entry): ReadonlyArray<ChangeVerdict> =>
+    decided: value.decided.flatMap((entry): ReadonlyArray<ChangeVerdict> =>
       isReviewWireRecord(entry) &&
       typeof entry.from === "string" &&
       SNAPSHOT_DIGEST.test(entry.from) &&
@@ -470,7 +470,8 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
       typeof entry.placeId === "string" &&
       entry.placeId !== "" &&
       entry.placeId.length <= PLACE_ID_LIMIT &&
-      typeof entry.acceptedAt === "string" &&
+      (entry.verdict === "accepted" || entry.verdict === "rejected") &&
+      typeof entry.decidedAt === "string" &&
       (entry.actor === undefined ||
         entry.actor === "reviewer" ||
         entry.actor === "auto-accept")
@@ -479,7 +480,8 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
               from: entry.from,
               to: entry.to,
               placeId: entry.placeId,
-              acceptedAt: entry.acceptedAt,
+              verdict: entry.verdict,
+              decidedAt: entry.decidedAt,
               ...(entry.actor === undefined ? {} : { actor: entry.actor }),
             },
           ]

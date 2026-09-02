@@ -72,8 +72,10 @@ import {
   type StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
 import {
-  changeVerdictBatches,
+  acceptedChangeKeys,
   changeVerdictKey,
+  rejectedChangeKeys,
+  changeVerdictBatches,
 } from "./shared/change-verdict.js";
 import {
   changeSetsFromCommitted,
@@ -271,21 +273,36 @@ const acceptChangeSets = async ({
   ): ReturnType<typeof deriveOpenItems> =>
     deriveOpenItems({
       changeSets,
-      accepted: new Set(state.accepted.map(changeVerdictKey)),
+      accepted: acceptedChangeKeys(state),
+      rejected: rejectedChangeKeys(state),
       inputs,
       requests: requestIds.map((requestId) => ({
         requestId,
         label: requestId,
       })),
     });
-  const acceptedAt = new Date().toISOString();
+  const decidedAt = new Date().toISOString();
   for (const changeSet of standingOf(verdicts).changeSets.open) {
     if (changeSet.placeIds.length === 0) {
       throw new ApprovalRecordRejected(
         `Change set ${changeSet.id} could not be resolved for approval`,
       );
     }
-    for (const placeIds of changeVerdictBatches(changeSet.placeIds)) {
+    const accepted = acceptedChangeKeys(verdicts);
+    const rejected = rejectedChangeKeys(verdicts);
+    // Approval accepts what the reviewer left open, never what they already
+    // answered. Re-accepting a rejected place would overwrite the one verdict
+    // that owns bytes, and the plan would then hold restored content under a
+    // row that says the reviewer accepted the change it took out.
+    const undecided = changeSet.placeIds.filter((placeId) => {
+      const key = changeVerdictKey({
+        from: changeSet.from,
+        to: changeSet.to,
+        placeId,
+      });
+      return !accepted.has(key) && !rejected.has(key);
+    });
+    for (const placeIds of changeVerdictBatches(undecided)) {
       verdicts = applyChangeVerdictMutation({
         verdicts,
         mutation: {
@@ -293,7 +310,7 @@ const acceptChangeSets = async ({
           from: changeSet.from,
           to: changeSet.to,
           placeIds,
-          acceptedAt,
+          decidedAt,
           actor: "reviewer",
         },
       });

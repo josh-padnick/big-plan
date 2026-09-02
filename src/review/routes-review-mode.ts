@@ -117,7 +117,7 @@ export const updateReviewMode = async (
         store,
         planPath: context.resolvedPlanPath,
         transactions,
-        acceptedAt: new Date(armedAtMs).toISOString(),
+        decidedAt: new Date(armedAtMs).toISOString(),
       });
       await writeArmedReviewMode({
         store,

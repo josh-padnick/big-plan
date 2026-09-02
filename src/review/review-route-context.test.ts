@@ -347,13 +347,14 @@ describe("createSnapshotDiffs", () => {
     await verdicts.update((current) => ({
       version: 1,
       revision: current.revision + 1,
-      accepted: [
-        ...current.accepted,
+      decided: [
+        ...current.decided,
         {
           from: FROM_SNAPSHOT,
           to: TO_SNAPSHOT,
           placeId: "accepted-place",
-          acceptedAt: "2026-08-27T12:00:00.000Z",
+          verdict: "accepted",
+          decidedAt: "2026-08-27T12:00:00.000Z",
         },
       ],
     }));
@@ -361,7 +362,7 @@ describe("createSnapshotDiffs", () => {
 
     expect(afterAcceptance).toBe(beforeAcceptance);
     expect(builds).toBe(1);
-    expect((await verdicts.read()).accepted).toHaveLength(1);
+    expect((await verdicts.read()).decided).toHaveLength(1);
   });
 
   it("should bound entries by evicting the least recently used pair", async () => {

@@ -611,7 +611,7 @@ export const createChangeVerdicts = ({
   readonly store: ReviewStore;
 }): ChangeVerdicts => {
   const record = createRevisionedRecord<StoredChangeVerdicts>({
-    initial: { version: 1, revision: 0, accepted: [] },
+    initial: { version: 1, revision: 0, decided: [] },
     readStored: () =>
       readChangeVerdicts({
         store,

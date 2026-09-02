@@ -2,6 +2,12 @@
 // reading the record, applying the reviewer's gesture to it, and keeping what
 // the page shows equal to what the runtime stored.
 //
+// A gesture is one of three - accept, reject, undo - and they queue through one
+// path because they are one record. A reject also moves the plan source, so the
+// runtime answers it with the record that write produced; the page still learns
+// what happened the same way it learns about an acceptance, from the revision
+// on the response.
+//
 // Two rules make that equality honest rather than approximate. A gesture is
 // shown immediately and kept only while its write is still on its way, so what
 // the reviewer sees is either the record or a mutation still going to it - and
@@ -16,6 +22,7 @@ import {
   acceptedChangeKeys,
   changeVerdictBatches,
   changeVerdictKey,
+  rejectedChangeKeys,
   type ChangeVerdictState,
 } from "../shared/change-verdict.js";
 import { decodeChangeVerdicts } from "../shared/review-wire.js";
@@ -45,8 +52,8 @@ const VERDICT_REFUSED_TOAST_ID = "big-plan-change-verdict-refused";
 const VERDICT_READ_TOAST_ID = "big-plan-change-verdict-read";
 
 /** One gesture on its way to the record. */
-type PendingVerdict = {
-  readonly op: "accept" | "withdraw";
+export type PendingVerdict = {
+  readonly op: "accept" | "reject" | "undo";
   readonly from: string;
   readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
@@ -56,6 +63,8 @@ type PendingVerdict = {
 export type ChangeVerdictsValue = {
   /** The accepted change keys, including gestures still being written. */
   readonly accepted: ReadonlySet<string>;
+  /** The rejected change keys, read the same way the accepted ones are. */
+  readonly rejected: ReadonlySet<string>;
   /** Stored acceptances made by the session's auto-accept mode. */
   readonly autoAccepted: ReadonlySet<string>;
   /** False while the runtime has told this page it may not record anything. */
@@ -65,14 +74,21 @@ export type ChangeVerdictsValue = {
   readonly refresh: () => void;
 };
 
+// Every gesture clears the address it names before recording its own answer,
+// exactly as the record does, so re-deciding a change never leaves the page
+// showing both verdicts at once while the write is still on its way.
 const overlay = ({
   stored,
   pending,
+  op,
 }: {
   readonly stored: ChangeVerdictState;
   readonly pending: ReadonlyArray<PendingVerdict>;
+  readonly op: "accept" | "reject";
 }): ReadonlySet<string> => {
-  const keys = new Set(acceptedChangeKeys(stored));
+  const keys = new Set(
+    op === "accept" ? acceptedChangeKeys(stored) : rejectedChangeKeys(stored),
+  );
   for (const mutation of pending) {
     for (const placeId of mutation.placeIds) {
       const key = changeVerdictKey({
@@ -80,7 +96,7 @@ const overlay = ({
         to: mutation.to,
         placeId,
       });
-      if (mutation.op === "accept") keys.add(key);
+      if (mutation.op === op) keys.add(key);
       else keys.delete(key);
     }
   }
@@ -104,7 +120,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
   const articleVersion = useArticleVersion();
   const [identity] = useState<RuntimeIdentity | null>(runtimeIdentity);
   const [stored, setStored] = useState<ChangeVerdictState>({
-    accepted: [],
+    decided: [],
     revision: -1,
   });
   const [pending, setPending] = useState<ReadonlyArray<PendingVerdict>>([]);
@@ -180,7 +196,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
             setPending([...queue.current]);
             failures = 0;
             toast.dismiss(VERDICT_RETRY_TOAST_ID);
-            toast.error("Change acceptance not saved", {
+            toast.error("Change verdict not saved", {
               id: VERDICT_REFUSED_TOAST_ID,
               description:
                 error instanceof Error
@@ -192,7 +208,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           }
           failures += 1;
           if (failures === FAILURES_BEFORE_NOTICE) {
-            toast.error("Change acceptance not saved yet", {
+            toast.error("Change verdict not saved yet", {
               id: VERDICT_RETRY_TOAST_ID,
               description:
                 "Big Plan will keep retrying. Keep this review open until the change set says it is accepted.",
@@ -247,7 +263,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           // A refused read is the runtime's answer, not a lost one, so it is
           // reported once instead of collected forever.
           if (isTerminalReviewRuntimeRefusal(error)) {
-            toast.error("Recorded change acceptances could not be read", {
+            toast.error("Recorded change verdicts could not be read", {
               id: VERDICT_READ_TOAST_ID,
               description:
                 error instanceof Error
@@ -259,7 +275,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           }
           failures += 1;
           if (failures === FAILURES_BEFORE_NOTICE) {
-            toast.error("Recorded change acceptances not read yet", {
+            toast.error("Recorded change verdicts not read yet", {
               id: VERDICT_READ_TOAST_ID,
               description:
                 "Big Plan will keep retrying. What this page shows as accepted may be incomplete until it succeeds.",
@@ -276,14 +292,21 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
   }, [applyResponse, articleVersion, identity, refreshVersion]);
 
   const accepted = useMemo(
-    () => overlay({ stored, pending }),
+    () => overlay({ stored, pending, op: "accept" }),
+    [pending, stored],
+  );
+  const rejected = useMemo(
+    () => overlay({ stored, pending, op: "reject" }),
     [pending, stored],
   );
   const autoAccepted = useMemo(
     () =>
       new Set(
-        stored.accepted
-          .filter((entry) => entry.actor === "auto-accept")
+        stored.decided
+          .filter(
+            (entry) =>
+              entry.verdict === "accepted" && entry.actor === "auto-accept",
+          )
           .map((entry) => changeVerdictKey(entry)),
       ),
     [stored],
@@ -295,11 +318,19 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
   return useMemo(
     () => ({
       accepted,
+      rejected,
       autoAccepted,
       canRecord,
       recordChangeVerdicts,
       refresh,
     }),
-    [accepted, autoAccepted, canRecord, recordChangeVerdicts, refresh],
+    [
+      accepted,
+      autoAccepted,
+      canRecord,
+      recordChangeVerdicts,
+      refresh,
+      rejected,
+    ],
   );
 };
