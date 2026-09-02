@@ -81,12 +81,12 @@ const welcomeIn = (
   );
 
 describe("the service's pages", () => {
-  it("should render the shell toolbar with its sticky stacking contract", () => {
+  it("should render the shell toolbar with its fixed stacking contract", () => {
     // Not a lookalike: the shell's own branding bar, from renderShell.
     const html = welcome();
     const header = firstElement(fromHtml(html), "header");
     expect(header?.properties.className).toEqual(
-      expect.arrayContaining(["sticky", "top-0", "z-50"]),
+      expect.arrayContaining(["fixed", "inset-x-0", "top-0", "z-50"]),
     );
     expect(header?.properties.className).not.toContain("z-40");
     expect(html).toContain("data-logo-light");

@@ -303,7 +303,9 @@ describe("renderDocument shell", () => {
     expect(firstId).toBeDefined();
     expect(secondId).toBeDefined();
     expect(firstId).not.toBe(secondId);
-    expect(renderDocument(input).html).toContain('<html lang="en">');
+    expect(renderDocument(input).html).toContain(
+      '<html lang="en" class="overscroll-y-none">',
+    );
   });
 
   it("should escape the title when it contains HTML special characters", () => {

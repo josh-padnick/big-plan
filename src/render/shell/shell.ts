@@ -565,9 +565,10 @@ export const renderShell = ({
   const standalone = chrome === "standalone";
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  // Keep sticky shell chrome above the review rail while leaving overlay
-  // layers undisturbed.
-  const html = `<header class="sticky top-0 z-50 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
+  // Keep fixed shell chrome above the review rail while leaving overlay
+  // layers undisturbed. The following spacer preserves the toolbar's place in
+  // the document flow for the mobile TOC and reading layout.
+  const html = `<header class="fixed inset-x-0 top-0 z-50 h-11 border-b border-edge bg-toolbar" data-shell-chrome>
 <div class="relative grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 wide:gap-4 wide:px-6">
 <div class="relative z-10 flex min-w-0 items-center gap-0.5">
 <a class="shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://bigplan.dev" target="_blank" rel="noreferrer">
@@ -579,6 +580,7 @@ ${renderHeaderActions({ feedback: !standalone })}
 ${standalone ? "" : `<p class="pointer-events-none absolute inset-x-0 top-0 z-0 hidden h-11 items-center justify-center overflow-hidden wide:flex"><span class="max-w-[min(40rem,70%)] truncate italic text-sm text-muted" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>`}
 </div>
   </header>
+  <div class="h-11" aria-hidden="true"></div>
   ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
 ${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
