@@ -6095,6 +6095,11 @@ export const ReviewController = () => {
         prepared = latestReviewStateRef.current;
         preparedBase = recoveryReconciliationRef.current.base;
       }
+      // Resolving a thread answers the changes it left undecided, so a write
+      // that closes one has moved the ledger the digests and the stepper read.
+      const resolvesThread = [...prepared.state.resolvedCommentIds].some(
+        (commentId) => !preparedBase.resolvedCommentIds.has(commentId),
+      );
       try {
         const written = await requestJson({
           path: "/api/drafts",
@@ -6112,6 +6117,7 @@ export const ReviewController = () => {
           base: reviewRecoveryBase(prepared.state),
           local: latestReviewStateRef.current.state,
         });
+        if (resolvesThread) refreshVerdicts();
       } catch (error) {
         // Both refusals below are a 409, so the code the runtime named this
         // one by is what tells them apart.
@@ -6161,6 +6167,7 @@ export const ReviewController = () => {
     persistedReviewState,
     recoveryConflicts,
     reconcileAuthoritativeReviewSnapshot,
+    refreshVerdicts,
     resolvedCommentIds,
     runtimeAcceptsWrites,
     runtimeSession?.authoritative,

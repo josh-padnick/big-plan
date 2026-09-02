@@ -46,6 +46,8 @@ import {
   revertPlanSource,
   settleInterruptedCommitsFor,
 } from "./staged-plan-mutation.js";
+import { acceptOpenPlaces } from "./change-set-closure.js";
+import { closuresForResolvedThreads } from "./resolved-thread-acceptance.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import {
   anchorReviewStore,
@@ -306,7 +308,7 @@ export const updateReviewState = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planId, sessionId, planRenderer } = context;
+  const { store, planId, sessionId, resolvedPlanPath, planRenderer } = context;
   const payload = payloadOf(body);
   const versionRefusal = await conditionalReviewStateRefusal({
     context,
@@ -332,6 +334,7 @@ export const updateReviewState = async (
             validate: validateResolvedCommentIds,
           }),
         );
+        const newlyResolved: Array<string> = [];
         for (const commentId of resolvedCommentIds) {
           if (alreadyResolved.has(commentId)) continue;
           await assertResolvableComment({
@@ -339,6 +342,25 @@ export const updateReviewState = async (
             sessionId,
             planId,
             commentId,
+          });
+          newlyResolved.push(commentId);
+        }
+        // Resolving answers the changes the thread left open, and it does so
+        // before the thread is recorded as resolved: a reviewer never sees a
+        // closed thread that still owes an answer, and a repeat of this write
+        // re-selects nothing because the places are decided by then.
+        const closures = await closuresForResolvedThreads({
+          store: lockedStore,
+          planPath: resolvedPlanPath,
+          sessionId,
+          planId,
+          commentIds: newlyResolved,
+        });
+        if (closures.length > 0) {
+          await acceptOpenPlaces({
+            store: lockedStore,
+            closures,
+            decidedAt: new Date().toISOString(),
           });
         }
         const sentIds = new Set(
