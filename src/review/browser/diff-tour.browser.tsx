@@ -279,13 +279,23 @@ export const DiffTourProvider = ({
       {children}
       {tour === null || active === undefined ? null : (
         <>
-          <DiffLensPortal
-            diff={tour.diff}
-            place={active}
-            isVisible
-            isSuperseded={tour.isSuperseded === true}
-            isAccepted={isActiveAccepted}
-          />
+          {/* A rejected change has no lens. What it proposed is gone from the
+              plan, so nothing anchors it, and the archive that catches an
+              unanchored lens would put the rejected wording back on the page -
+              at the bottom, outside the section it came from, asserting the
+              very text the reviewer took out. The restored baseline standing
+              in its place is the whole answer, exactly as an accepted change
+              reads as plain content. The lens is left out of the tree rather
+              than asked to render nothing, so no part of it mounts. */}
+          {isActiveRejected ? null : (
+            <DiffLensPortal
+              diff={tour.diff}
+              place={active}
+              isVisible
+              isSuperseded={tour.isSuperseded === true}
+              isAccepted={isActiveAccepted}
+            />
+          )}
           <div
             // The bar floats clear of the viewport edge rather than hugging
             // it, and holds a wide enough measure that the change it is

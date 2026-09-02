@@ -328,11 +328,25 @@ test("should show a rejected change and let the reviewer undo it", async ({
       rail(page).locator("[data-review-changes-decided]"),
     ).toContainText("0 accepted, 2 rejected");
 
+    // The plan shows the baseline where the change was, and nothing else
+    // anywhere: an unanchored lens used to fall back to an archive at the foot
+    // of the page, which put the rejected wording back on screen.
+    await expect(page.locator("article")).toContainText(
+      "The worker retries a failed job once before it gives up.",
+    );
+    await expect(
+      page.locator("article").getByText("three times before it gives up"),
+    ).toHaveCount(0);
+
     await rail(page)
       .getByRole("button", { name: /Review changes \(2\)/u })
       .click();
     await expect(stepper(page)).toContainText(
       "All changes decided (0 accepted, 2 rejected)",
+    );
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+    await expect(page.locator("[data-review-historical-changes]")).toHaveCount(
+      0,
     );
     const undone = page.waitForResponse(
       (response) =>

@@ -8,6 +8,13 @@
 // what happened the same way it learns about an acceptance, from the revision
 // on the response.
 //
+// The record is also polled, because this page is not the only writer. Auto-
+// accept records from the agent process, approval closes what is still open,
+// and a second window decides changes of its own - and an acceptance moves no
+// bytes at all, so nothing about the plan changes to announce it. Waiting for
+// a replaced article would leave every one of those invisible until something
+// unrelated happened to redraw the page.
+//
 // Two rules make that equality honest rather than approximate. A gesture is
 // shown immediately and kept only while its write is still on its way, so what
 // the reviewer sees is either the record or a mutation still going to it - and
@@ -26,6 +33,7 @@ import {
   type ChangeVerdictState,
 } from "../shared/change-verdict.js";
 import { decodeChangeVerdicts } from "../shared/review-wire.js";
+import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import {
   isReadOnlyReview,
   requestJson,
@@ -247,10 +255,11 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
 
   useEffect(() => {
     if (identity === null) return;
-    // The read is retried for the same reason the write is: this effect refires
-    // only when the identity or the article changes, so one swallowed failure
-    // would leave every surface reporting nothing accepted for the life of the
-    // page while the record holds acceptances.
+    // The read is retried for the same reason the write is: a swallowed failure
+    // would leave every surface reporting nothing decided for the life of the
+    // page while the record holds verdicts. Once it succeeds the same read
+    // keeps running on the shared cadence, which is what makes a verdict this
+    // page did not make appear without anything else having to happen.
     let reading = true;
     void (async () => {
       let failures = 0;
@@ -258,7 +267,9 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
         try {
           applyResponse(await requestJson({ path: VERDICTS_PATH, identity }));
           toast.dismiss(VERDICT_READ_TOAST_ID);
-          return;
+          failures = 0;
+          await sleep(REVIEW_POLL_INTERVAL_MS);
+          continue;
         } catch (error: unknown) {
           // A refused read is the runtime's answer, not a lost one, so it is
           // reported once instead of collected forever.
