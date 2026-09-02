@@ -84,7 +84,7 @@ const PROSE = ' data-authored-prose=""';
 
 /** The frozen handoff every public setup surface gives to a coding agent. */
 export const AGENT_SETUP_PROMPT =
-  "Set up Big Plan for me: read https://big-plan.ai/setup.md and follow it.";
+  "Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.";
 
 const callout = ({
   type,

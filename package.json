@@ -8,7 +8,7 @@
     "type": "git",
     "url": "git+https://github.com/josh-padnick/big-plan.git"
   },
-  "homepage": "https://github.com/josh-padnick/big-plan#readme",
+  "homepage": "https://bigplan.dev",
   "bugs": "https://github.com/josh-padnick/big-plan/issues",
   "type": "module",
   "bin": {

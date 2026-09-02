@@ -50,7 +50,7 @@ describe("prepareUpdateNotice", () => {
         resolveEntry: async (path) => path,
       }),
     ).resolves.toEqual({
-      line: "Update available: Big Plan 1.2.0 (running 1.1.0); update with your package manager (https://big-plan.ai/intro/installation/).",
+      line: "Update available: Big Plan 1.2.0 (running 1.1.0); update with your package manager (https://bigplan.dev/intro/installation/).",
     });
   });
 

@@ -30,9 +30,9 @@ Do not scrape the HTML pages; fetch the Markdown endpoints instead.
 Replace a page's trailing slash with `.md`:
 
 ```text
-https://big-plan.ai/intro/installation/       ->  https://big-plan.ai/intro/installation.md
-https://big-plan.ai/reference/cli/            ->  https://big-plan.ai/reference/cli.md
-https://big-plan.ai/for-agents/render-a-plan/ ->  https://big-plan.ai/for-agents/render-a-plan.md
+https://bigplan.dev/intro/installation/       ->  https://bigplan.dev/intro/installation.md
+https://bigplan.dev/reference/cli/            ->  https://bigplan.dev/reference/cli.md
+https://bigplan.dev/for-agents/render-a-plan/ ->  https://bigplan.dev/for-agents/render-a-plan.md
 ```
 
 Each `.md` response starts with frontmatter carrying `title`, `description`, and `canonical` (the page's HTML URL), followed by a clean Markdown projection of the page that removes presentation-only MDX.

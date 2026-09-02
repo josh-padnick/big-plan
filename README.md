@@ -21,7 +21,7 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 Give this stable prompt to your coding agent; the linked setup document stays current as the product evolves:
 
 ```text
-Set up Big Plan for me: read https://big-plan.ai/setup.md and follow it.
+Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.
 ```
 
 Prefer to do it yourself? Run the current release without installing it globally:
@@ -143,12 +143,22 @@ From `docs/`, build the static site with:
 bun run build
 ```
 
+Every push to `main` builds the root package and documentation site, then deploys
+`docs/dist` to GitHub Pages through [the docs workflow](.github/workflows/docs.yml).
+The one-time custom-domain setup requires repository and DNS-provider access;
+the captain must approve the outward-facing launch and run the repository wizard
+for the exact records, guided setup, and DNS/TLS verification:
+
+```sh
+./scripts/docs-domain-wizard.sh
+```
+
 After building the root package, regenerate the docs' light/dark component screenshot pairs from `docs/` with `bun run screenshots`.
 
 ## Security
 
 To report a vulnerability, follow [SECURITY.md](SECURITY.md).
-The full policy and Big Plan's security model are on the [security page](https://big-plan.ai/reference/security/).
+The full policy and Big Plan's security model are on the [security page](https://bigplan.dev/reference/security/).
 
 ## License
 

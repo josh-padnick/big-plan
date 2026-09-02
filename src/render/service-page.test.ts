@@ -73,7 +73,7 @@ describe("the service's pages", () => {
     );
     expect(html).toContain("data-logo-light");
     expect(html).toContain("data-logo-dark");
-    expect(html).toContain("https://big-plan.ai");
+    expect(html).toContain("https://bigplan.dev");
   });
 
   it("should carry the product's own stylesheet, not one of its own", () => {
