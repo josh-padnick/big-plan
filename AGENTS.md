@@ -190,6 +190,7 @@ Route by the kind of fact:
 - How the product looks, and the scales and rules a visual decision picks from, live in [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md); token values stay in `src/render/global.css`.
 - Setup, build, run, and shortest-path usage procedures live in the root [README.md](README.md).
 - DCO, branches, pull requests, CI expectations, and other contribution workflow live in [CONTRIBUTING.md](CONTRIBUTING.md).
+- The npm release, promotion, and rollback procedure, and the changelog discipline that release follows, live in [RELEASING.md](RELEASING.md); the release history a reader sees lives in [CHANGELOG.md](CHANGELOG.md).
 - The vulnerability-reporting policy and Big Plan's security posture live on the docs site's Security page; the repo-root [SECURITY.md](SECURITY.md) points there and never restates it, because GitHub reads that file to offer its reporting affordance.
 - A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
 - An architectural decision and its rationale live in an ADR when the decision needs a durable record.
