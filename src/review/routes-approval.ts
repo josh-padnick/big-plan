@@ -69,7 +69,6 @@ import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import {
   applyChangeVerdictMutation,
-  ChangeVerdictsRejected,
   type StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
 import {
@@ -569,12 +568,6 @@ export const approvePlan = async (
         reason: `The answers could not be recorded in the plan: ${error.message}`,
         code: "plan-changed",
       });
-    }
-    if (
-      error instanceof ApprovalRecordRejected ||
-      error instanceof ChangeVerdictsRejected
-    ) {
-      return refusal({ status: 409, reason: error.message });
     }
     throw error;
   }
