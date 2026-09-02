@@ -5910,11 +5910,11 @@ The release gets a full soak.
       await page.getByRole("button", { name: "View changes" }).click();
       const shownDiff = page.locator("[data-component-diff]");
       await expect(shownDiff).toBeVisible();
-      await shownDiff.getByText("Was", { exact: true }).click();
+      await shownDiff.getByRole("radio", { name: "Was" }).check();
       await expect(
         shownDiff.locator('[data-component-diff-side="baseline"]'),
       ).toBeVisible();
-      await shownDiff.getByText("Now", { exact: true }).click();
+      await shownDiff.getByRole("radio", { name: "Now" }).check();
       await expect(
         shownDiff.locator('[data-component-diff-side="proposed"]'),
       ).toBeVisible();

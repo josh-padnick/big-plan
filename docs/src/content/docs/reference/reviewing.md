@@ -474,6 +474,8 @@ The change navigator tours several places without losing reading context.
 
 Choose **Accept change** to mark the current place accepted and advance to the next unaccepted place, or **Accept all** to accept the remaining set.
 Acceptance is a review checklist rather than an edit: it does not change the plan or resolve the comment thread.
+An accepted place leaves the **What changed** presentation and returns to the plan's ordinary content. Use **View changes** to bring its comparison back temporarily, **Hide changes** to return to the plan, or **Unaccept** to reopen the place in its pre-accept state.
+When the changed content no longer exists in the current plan, or the plan has moved beyond the reviewed revision, Big Plan keeps the archived comparison as the only surviving evidence.
 It is recorded with the review, so it survives a reload and a runtime restart, and every place it is counted - the change digest on the agent's message and the navigator touring that same set - reports the same number.
 Acceptance is recorded against the two snapshots the change set compares, so a later revision arrives as its own set to review rather than inheriting what you already accepted.
 A page that cannot record review state, such as a read-only review session or a standalone rendered document, disables its accept controls and says why.
