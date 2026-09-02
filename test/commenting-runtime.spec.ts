@@ -5474,12 +5474,12 @@ test("should preview stale, historical, and multi-place causal diffs through the
       .getByRole("button", { name: "Back to review" })
       .click();
     await singletonStepper
-      .getByRole("button", { name: "Undo acceptance for this change" })
+      .getByRole("button", { name: "Unaccept this change" })
       .click();
     await expect(acceptedChange).toHaveCount(0);
-    await singletonStepper
-      .getByRole("button", { name: "Accept this change" })
-      .click();
+    // Unaccepting returns the change to the state it was proposed in, which is
+    // the state the presentation fidelity below is about: the lens is back, so
+    // the reader is reading the same evidence they were asked to decide on.
     const diffLens = page.locator("[data-review-diff-lens]");
     await expect(diffLens.locator("ins")).toHaveCSS(
       "background-color",
@@ -5552,6 +5552,15 @@ test("should preview stale, historical, and multi-place causal diffs through the
         }),
       )
       .toBe(true);
+    // A superseded change keeps its evidence whatever its verdict: the plan has
+    // already moved past this revision, so there is no current plan content for
+    // an acceptance to read as, and the archived copy stays the only record.
+    await singletonStepper
+      .getByRole("button", { name: "Accept this change" })
+      .click();
+    await expect(page.locator("[data-review-diff-lens]")).toContainText(
+      "What changed - plan revised again",
+    );
     await singletonStepper
       .getByRole("button", { name: "Resolve thread" })
       .click();
@@ -5610,7 +5619,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", {
-        name: "Undo acceptance for this change",
+        name: "Unaccept this change",
       }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Next change" }).click();
@@ -5621,7 +5630,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await page.getByRole("button", { name: "Previous change" }).click();
     await expect(
       page.getByRole("button", {
-        name: "Undo acceptance for this change",
+        name: "Unaccept this change",
       }),
     ).toBeVisible();
     await deliverySection
@@ -5868,27 +5877,47 @@ The release gets a full soak.
         .getByRole("radio", { name: /Ship after a one-day canary/u })
         .check();
 
+      // BIG-14. Accepting answers the question the proposed card was asking, so
+      // the card leaves and the reader is handed the plan's own Decision back:
+      // addressed, answerable, and carrying none of the change note.
       await page.getByRole("button", { name: "Accept this change" }).click();
+      await expect(page.locator("[data-component-diff]")).toHaveCount(0);
+      const acceptedDecision = page.locator(
+        '[data-block-kind="decision"][data-review-accepted-place]',
+      );
+      await expect(acceptedDecision).toHaveCount(1);
+      await expect(acceptedDecision).toContainText(
+        "Ship after a one-day canary",
+      );
       await expect(
-        reinstalled.getByRole("button", { name: "Confirm choice" }),
-      ).toBeEnabled();
-      await expect(
-        reinstalled.getByText(
+        acceptedDecision.getByText(
           "Accept this change before answering this decision.",
           { exact: true },
         ),
-      ).toBeHidden();
+      ).toHaveCount(0);
+      await acceptedDecision
+        .getByRole("radio", { name: /Ship after a one-day canary/u })
+        .check();
       await expect(
-        reinstalled.locator("[data-decision-confirm-gate]"),
-      ).toHaveAttribute("tabindex", "-1");
-      await expect(reinstalled.getByRole("tooltip")).toBeHidden();
+        acceptedDecision.getByRole("button", { name: "Confirm choice" }),
+      ).toBeEnabled();
 
-      await diff.locator('[data-component-diff-label="baseline"]').click();
+      // The evidence is one control away rather than gone, and the copy the
+      // reviewer asks back is the same comparison they decided on. This set
+      // holds one change, so accepting it also closed the set; stepping back
+      // into the set is what puts the reviewer on that change again.
+      await page.getByRole("button", { name: "Back to review" }).click();
+      await page.getByRole("button", { name: "View changes" }).click();
+      const shownDiff = page.locator("[data-component-diff]");
+      await expect(shownDiff).toBeVisible();
+      await shownDiff.getByRole("radio", { name: "Was" }).check();
       await expect(
-        diff.locator('[data-component-diff-side="baseline"]'),
+        shownDiff.locator('[data-component-diff-side="baseline"]'),
       ).toBeVisible();
-      await diff.locator('[data-component-diff-label="proposed"]').click();
-      await expect(proposed).toBeVisible();
+      await shownDiff.getByRole("radio", { name: "Now" }).check();
+      await expect(
+        shownDiff.locator('[data-component-diff-side="proposed"]'),
+      ).toBeVisible();
     });
 
     await test.step("restore the refreshed article root when review exits", async () => {

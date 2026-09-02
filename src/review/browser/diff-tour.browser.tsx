@@ -14,13 +14,18 @@ import {
 } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
+import { EYE_ICON } from "../../icons/lucide/eye.js";
+import { EYE_OFF_ICON } from "../../icons/lucide/eye-off.js";
+import { UNDO_2_ICON } from "../../icons/lucide/undo-2.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import type { SnapshotDiff } from "../shared/review-wire.js";
 import {
-  changeVerdictKey,
+  changeDispositionOf,
   changeSetStanding,
+  changeVerdictKey,
+  type ChangeDisposition,
   type ChangeSetStanding,
 } from "../shared/change-verdict.js";
 import { useChangeVerdicts } from "./use-change-verdicts.browser.js";
@@ -52,6 +57,15 @@ type DiffTourValue = {
   readonly activeChangeSetId: string | null;
   readonly activePlaceId: string | null;
   readonly isPlaceAccepted: (diff: SnapshotDiff, placeId: string) => boolean;
+  /**
+   * What the review has decided about one place. Every surface that presents a
+   * change asks this rather than reading the record itself, so a verdict added
+   * later reaches all of them through one selector.
+   */
+  readonly dispositionOf: (
+    diff: SnapshotDiff,
+    placeId: string,
+  ) => ChangeDisposition;
   /** How much of one change set is closed, from the one selector that decides. */
   readonly standingOf: (
     diff: SnapshotDiff,
@@ -102,6 +116,13 @@ export const DiffTourProvider = ({
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [showCompletionSummary, setShowCompletionSummary] = useState(false);
+  // Which accepted place the reviewer has asked to see the evidence for. It is
+  // one place rather than a flag because the ask is about the change in front
+  // of them: carrying it to the next place would put the proposal treatment
+  // back on a change they never asked to reopen.
+  const [shownChangesPlaceId, setShownChangesPlaceId] = useState<string | null>(
+    null,
+  );
   const { accepted, autoAccepted, canRecord, recordChangeVerdicts, refresh } =
     useChangeVerdicts();
   const places = useMemo(() => {
@@ -110,7 +131,10 @@ export const DiffTourProvider = ({
     return tour.diff.places.filter((place) => allowed.has(place.placeId));
   }, [tour]);
   const active = places.at(index);
-  const closeTour = () => setTour(null);
+  const closeTour = () => {
+    setShownChangesPlaceId(null);
+    setTour(null);
+  };
   // The stepper floats over the end of the document, so the last change in a
   // set has nowhere to rise to: the page is already scrolled as far as it goes
   // and the change stays behind the bar, which is exactly where a reader
@@ -130,6 +154,11 @@ export const DiffTourProvider = ({
       accepted.has(changeVerdictKey({ from: diff.from, to: diff.to, placeId }));
     return {
       isPlaceAccepted,
+      dispositionOf: (diff: SnapshotDiff, placeId: string): ChangeDisposition =>
+        changeDispositionOf({
+          address: { from: diff.from, to: diff.to, placeId },
+          accepted,
+        }),
       standingOf: (
         diff: SnapshotDiff,
         placeIds: ReadonlyArray<string>,
@@ -159,8 +188,10 @@ export const DiffTourProvider = ({
       },
     };
   }, [accepted, recordChangeVerdicts]);
-  const { isPlaceAccepted, standingOf, setPlacesAccepted } = tourValue;
+  const { dispositionOf, isPlaceAccepted, standingOf, setPlacesAccepted } =
+    tourValue;
   const openTour = (next: OpenTour): void => {
+    setShownChangesPlaceId(null);
     setTour(next);
     setIndex(tourStartIndex(next));
     // The lens scrolls itself into view once it knows where it landed. A scroll
@@ -198,10 +229,13 @@ export const DiffTourProvider = ({
     }),
     [active?.placeId, autoAccepted, canRecord, refresh, tourValue, tour],
   );
-  const isActiveAccepted =
-    tour !== null &&
-    active !== undefined &&
-    isPlaceAccepted(tour.diff, active.placeId);
+  const activeDisposition =
+    tour === null || active === undefined
+      ? null
+      : dispositionOf(tour.diff, active.placeId);
+  const isActiveAccepted = activeDisposition === "accepted";
+  const isShowingActiveChanges =
+    active !== undefined && shownChangesPlaceId === active.placeId;
   const standing =
     tour === null
       ? null
@@ -218,6 +252,11 @@ export const DiffTourProvider = ({
   /** Accepts the current evidence and advances to the next open decision. */
   const acceptActivePlace = (): void => {
     if (tour === null || active === undefined) return;
+    // Either direction settles the question the evidence was open for, so the
+    // reviewer's ask to see it does not survive the answer: an unaccepted place
+    // shows its proposal again, and one accepted a second time is plan content
+    // again rather than the card the reviewer last had open.
+    setShownChangesPlaceId(null);
     if (isActiveAccepted) {
       setPlacesAccepted(tour.diff, [active.placeId], false);
       return;
@@ -242,6 +281,7 @@ export const DiffTourProvider = ({
             isVisible
             isSuperseded={tour.isSuperseded === true}
             isAccepted={isActiveAccepted}
+            isShowingChanges={shownChangesPlaceId === active.placeId}
           />
           <div
             // The bar floats clear of the viewport edge rather than hugging
@@ -401,18 +441,42 @@ export const DiffTourProvider = ({
                       <Badge tone="statusAccent" size="status">
                         Accepted
                       </Badge>
+                      {/* The evidence an accepted place no longer shows in the
+                          plan is one control away, so the reviewer can check
+                          what they accepted - and unaccept against the same
+                          view that produced the acceptance. */}
+                      <Button
+                        variant="outline"
+                        size="micro"
+                        aria-pressed={isShowingActiveChanges}
+                        onClick={() =>
+                          setShownChangesPlaceId(
+                            isShowingActiveChanges ? null : active.placeId,
+                          )
+                        }
+                      >
+                        <Icon
+                          icon={
+                            isShowingActiveChanges ? EYE_OFF_ICON : EYE_ICON
+                          }
+                        />
+                        {isShowingActiveChanges
+                          ? "Hide changes"
+                          : "View changes"}
+                      </Button>
                       <Button
                         variant="ghost"
                         size="micro"
                         disabled={!canRecord}
                         aria-label={
                           canRecord
-                            ? "Undo acceptance for this change"
+                            ? "Unaccept this change"
                             : UNRECORDABLE_ACCEPTANCE_LABEL
                         }
                         onClick={acceptActivePlace}
                       >
-                        Undo
+                        <Icon icon={UNDO_2_ICON} />
+                        Unaccept
                       </Button>
                     </>
                   ) : (
