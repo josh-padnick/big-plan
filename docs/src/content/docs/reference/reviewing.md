@@ -273,7 +273,7 @@ Export is available from live reviews, including a session that has become read-
 
 ## Persistence
 
-Runtime-backed staged comments, recorded decision answers, recorded change acceptances, and the append-only approval log live under `.big-plan/review/<plan-id>/` beside the plan.
+Runtime-backed staged comments, recorded decision answers, recorded change verdicts, and the append-only approval log live under `.big-plan/review/<plan-id>/` beside the plan.
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
 Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
 Each tab keeps exactly one record, written and cleared only by the tab that owns it, and read once when the page loads.
@@ -472,15 +472,16 @@ A `DataTable` configuration-only change keeps the full row evidence visible
 beside the changed table or column settings.
 The change navigator tours several places without losing reading context.
 
-Choose **Accept change** to mark the current place accepted and advance to the next unaccepted place, or **Accept all** to accept the remaining set.
+Choose **Accept change** to mark the current place accepted and advance to the next undecided place, or **Accept all** to accept the remaining set.
 Acceptance is a review checklist rather than an edit: it does not change the plan or resolve the comment thread.
-It is recorded with the review, so it survives a reload and a runtime restart, and every place it is counted - the change digest on the agent's message and the navigator touring that same set - reports the same number.
-Acceptance is recorded against the two snapshots the change set compares, so a later revision arrives as its own set to review rather than inheriting what you already accepted.
-A page that cannot record review state, such as a read-only review session or a standalone rendered document, disables its accept controls and says why.
-If Big Plan cannot reach the runtime while reading recorded acceptances, it warns that the page may show an incomplete count and keeps retrying.
-If recording an acceptance fails, Big Plan says it is not saved yet and keeps retrying; keep the review open until the change set reports itself accepted.
-If the runtime refuses the acceptance outright, the mark comes back off and the review says so, so the page never claims work that nothing recorded.
-After accepting the set, choose **Keep chatting**; a comment thread also offers **Resolve thread**.
+A rejected place instead restores that change to the thread's baseline bytes. The proposal and its diff disappear from that place, while the change digest marks it with a red X. **Undo** removes either verdict, returns the place to undecided, and allows it to be accepted or rejected next.
+Verdicts are recorded with the review, so they survive a reload and a runtime restart, and every place they are counted - the change digest on the agent's message and the navigator touring that same set - reports the same standing. The page polls the record so verdicts written elsewhere, including acceptances that do not move plan bytes, appear without waiting for another plan revision.
+Verdicts are recorded against the two snapshots the change set compares, so a later revision arrives as its own set to review rather than inheriting what you already decided.
+A page that cannot record review state, such as a read-only review session or a standalone rendered document, disables its verdict controls and says why.
+If Big Plan cannot reach the runtime while reading recorded verdicts, it warns that the page may show an incomplete count and keeps retrying.
+If recording a verdict fails, Big Plan says it is not saved yet and keeps retrying; keep the review open until the change set reports the decision.
+If the runtime refuses the verdict outright, the mark comes back off and the review says so, so the page never claims work that nothing recorded.
+After deciding the set, choose **Keep chatting**; a comment thread also offers **Resolve thread**.
 Resolving never cancels a message the thread is still waiting on: while the agent owes that thread an answer, the review runtime refuses the resolve and says so, so cancel the waiting message or wait for its answer first.
 A resolved thread will not accept a reply or new feedback until you unresolve it: a reply you have already typed is kept, and unresolving the thread clears the message so you can send it.
 **Revert response** restores only that response's claim-time baseline, leaves earlier changes in place, and becomes unavailable after the plan changes again.

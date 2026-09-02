@@ -14,7 +14,7 @@ The [agent guide](../AGENTS.md#subsystems) owns the workflow rule about naming a
 
 Comment threads and diffs are one subsystem, not two.
 The diff's content is computed, not stored: `src/review/snapshot-diff.ts` turns two snapshot endpoints into aligned change places on demand, and `/api/snapshot-diff` accepts those endpoints directly, independent of any thread.
-What does persist is change-set-scoped: committed revisions are recorded through `src/review/change-set-commit.ts` and folded into the stable baseline and current endpoint of the thread or request that owns them. Per-place review acceptance is recorded with the review, keyed by those same endpoints plus a place id (`src/review/change-verdicts-store.ts`).
+What does persist is change-set-scoped: committed revisions are recorded through `src/review/change-set-commit.ts` and folded into the stable baseline and current endpoint of the thread or request that owns them. Per-place review verdicts are recorded with the review, keyed by those same endpoints plus a place id (`src/review/change-verdicts-store.ts`).
 You cannot change diff semantics without changing thread semantics, so both live in the Change Engine.
 
 The session runtime is a different subsystem from either.
@@ -185,7 +185,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 Three conceptual refinements constrain how the subsystems above implement their work.
 
 **The change set is primary (Change Engine).**
-The change set, baseline plus current plus acceptance plus provenance plus an optional conversation, is the primary entity.
+The change set, baseline plus current plus per-place verdicts plus provenance plus an optional conversation, is the primary entity.
 The thread is one container for it, not the reverse.
 Provenance is modeled as an attribute of the change set (reviewer comment, plan-wide chat, or agent-push), so each origin fits without remodeling the set.
 
