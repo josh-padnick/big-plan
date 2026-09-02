@@ -1,12 +1,13 @@
-// Proves the revert dialog names the content it deletes by kind, and falls
-// back to the generic name only when the diff genuinely offers no kind.
+// Proves the revert dialog shows the content it deletes, grouped by the slide
+// it sits on, and previews that content without inventing a vocabulary for it.
 
 import { describe, expect, it } from "vitest";
 import type { DiffLocation, DiffPlace, SnapshotDiff } from "./review-wire.js";
 import {
+  boundPreviewText,
+  EXCERPT_LIMIT,
   projectRevertLoss,
-  REVERT_CONTENT_KIND_GENERIC,
-  startSentence,
+  revertChangeCount,
 } from "./revert-copy.js";
 
 const location = (
@@ -27,11 +28,12 @@ const location = (
 const place = (
   placeId: string,
   locationIndexes: ReadonlyArray<number>,
+  section = "One",
 ): DiffPlace => ({
   placeId,
   status: "changed",
   label: "One",
-  section: "One",
+  section,
   note: "reworded",
   locationIndexes,
 });
@@ -46,94 +48,173 @@ const diffOf = (
   places,
 });
 
-describe("projectRevertLoss", () => {
-  it("names one changed block as a thing rather than a count", () => {
-    const loss = projectRevertLoss({
-      diff: diffOf([location({ kind: "paragraph" })], [place("p1", [0])]),
+describe("boundPreviewText", () => {
+  it("collapses whitespace and leaves short text whole", () => {
+    expect(boundPreviewText("  a\n  b  ")).toEqual({
+      text: "a b",
+      isExcerpt: false,
     });
-    expect(loss.lost).toBe("a paragraph of generated text");
-    expect(loss.isConcrete).toBe(true);
   });
 
-  it("counts repeated kinds and joins several kinds readably", () => {
-    const loss = projectRevertLoss({
+  it("cuts at a word boundary and marks the excerpt", () => {
+    const bounded = boundPreviewText("alpha beta gamma delta", 12);
+    expect(bounded).toEqual({ text: "alpha beta…", isExcerpt: true });
+  });
+
+  it("cuts mid-word rather than throwing away most of the bound", () => {
+    const bounded = boundPreviewText("a supercalifragilistic word", 12);
+    expect(bounded.text).toBe("a supercalif…");
+    expect(bounded.isExcerpt).toBe(true);
+  });
+
+  it("defaults to the excerpt limit", () => {
+    const bounded = boundPreviewText("x".repeat(EXCERPT_LIMIT + 10));
+    expect(bounded.isExcerpt).toBe(true);
+    expect(bounded.text.length).toBe(EXCERPT_LIMIT + 1);
+  });
+});
+
+describe("projectRevertLoss", () => {
+  it("groups the content it deletes by the slide it sits on", () => {
+    const slides = projectRevertLoss({
       diff: diffOf(
         [
-          location({ kind: "paragraph" }),
-          location({ kind: "paragraph" }),
-          location({ kind: "list" }),
+          location({ kind: "paragraph", newText: "One changed." }),
+          location({
+            kind: "paragraph",
+            scope: "section/two",
+            newBlockId: "section/two/paragraph-1",
+            newText: "Two changed.",
+          }),
         ],
-        [place("p1", [0, 1, 2])],
+        [place("p1", [0], "One"), place("p2", [1], "Two")],
       ),
     });
-    expect(loss.lost).toBe(
-      "2 paragraphs of generated text and a generated list",
-    );
+    expect(slides.map((slide) => slide.scope)).toEqual([
+      "section/one",
+      "section/two",
+    ]);
+    expect(slides.map((slide) => slide.title)).toEqual(["One", "Two"]);
+    expect(revertChangeCount(slides)).toBe(2);
   });
 
-  it("calls a picture an image even though its block is a paragraph", () => {
-    const loss = projectRevertLoss({
+  it("counts every place on one slide as that slide's changes", () => {
+    const slides = projectRevertLoss({
+      diff: diffOf(
+        [
+          location({ kind: "paragraph", newText: "First." }),
+          location({
+            kind: "list",
+            newBlockId: "section/one/list-1",
+            newText: "Second.",
+          }),
+        ],
+        [place("p1", [0]), place("p2", [1])],
+      ),
+    });
+    expect(slides).toHaveLength(1);
+    expect(slides[0]?.changeCount).toBe(2);
+    expect(slides[0]?.previews).toHaveLength(2);
+  });
+
+  it("previews a picture as an image and everything else as its words", () => {
+    const slides = projectRevertLoss({
       diff: diffOf(
         [
           location({
             kind: "paragraph",
             newPresentation: { aspect: "image", source: "a.png", alt: "A" },
           }),
+          location({
+            kind: "paragraph",
+            newBlockId: "section/one/paragraph-2",
+            newText: "The words that go.",
+          }),
+        ],
+        [place("p1", [0, 1])],
+      ),
+    });
+    expect(slides[0]?.previews).toEqual([
+      { shape: "image", image: { source: "a.png", alt: "A" } },
+      {
+        shape: "text",
+        excerpt: { text: "The words that go.", isExcerpt: false },
+      },
+    ]);
+  });
+
+  it("shows one passage once when a component names it twice", () => {
+    const slides = projectRevertLoss({
+      diff: diffOf(
+        [
+          location({
+            kind: "decision",
+            isComponentRoot: true,
+            newText: "Same words.",
+          }),
+          location({
+            kind: "decision",
+            newBlockId: "section/one/decision-1",
+            ownerId: "section/one/decision-1",
+            newText: "Same words.",
+          }),
+        ],
+        [place("p1", [0, 1])],
+      ),
+    });
+    expect(slides[0]?.previews).toEqual([
+      { shape: "text", excerpt: { text: "Same words.", isExcerpt: false } },
+    ]);
+  });
+
+  it("says nothing for a block the revert brings back rather than deletes", () => {
+    const slides = projectRevertLoss({
+      diff: diffOf(
+        [
+          location({
+            kind: "paragraph",
+            status: "removed",
+            oldText: "Came back.",
+            newText: "",
+          }),
         ],
         [place("p1", [0])],
       ),
     });
-    expect(loss.lost).toBe("a generated image");
+    expect(slides[0]?.previews).toEqual([]);
+    expect(slides[0]?.changeCount).toBe(1);
   });
 
-  it("names a component root by the component it is", () => {
-    const loss = projectRevertLoss({
-      diff: diffOf(
-        [location({ kind: "quick-summary", isComponentRoot: true })],
-        [place("p1", [0])],
-      ),
-    });
-    expect(loss.lost).toBe("a generated quick summary block");
-  });
-
-  it("keeps only the places the outcome's change targets own", () => {
-    const loss = projectRevertLoss({
+  it("keeps only the slides the outcome's change targets own", () => {
+    const slides = projectRevertLoss({
       diff: diffOf(
         [
           location({ kind: "paragraph", newBlockId: "section/one/mine" }),
-          location({ kind: "list", newBlockId: "section/one/theirs" }),
+          location({
+            kind: "paragraph",
+            scope: "section/two",
+            newBlockId: "section/two/theirs",
+          }),
         ],
-        [place("mine", [0]), place("theirs", [1])],
+        [place("mine", [0], "One"), place("theirs", [1], "Two")],
       ),
       changeTargets: ["section/one/mine"],
     });
-    expect(loss.places.map((entry) => entry.placeId)).toEqual(["mine"]);
-    expect(loss.lost).toBe("a paragraph of generated text");
+    expect(slides.map((slide) => slide.scope)).toEqual(["section/one"]);
   });
 
   it("keeps the whole diff when attribution matches nothing", () => {
-    const loss = projectRevertLoss({
+    const slides = projectRevertLoss({
       diff: diffOf([location({ kind: "paragraph" })], [place("p1", [0])]),
       changeTargets: ["section/elsewhere/paragraph-1"],
     });
-    expect(loss.places.map((entry) => entry.placeId)).toEqual(["p1"]);
+    expect(slides.map((slide) => slide.scope)).toEqual(["section/one"]);
   });
 
-  it("falls back to the generic name when no kind is recognizable", () => {
-    const loss = projectRevertLoss({
-      diff: diffOf([location({ kind: "thematic-break" })], [place("p1", [0])]),
+  it("carries a block id so the dialog can find the live slide", () => {
+    const slides = projectRevertLoss({
+      diff: diffOf([location({ kind: "paragraph" })], [place("p1", [0])]),
     });
-    expect(loss.lost).toBe(REVERT_CONTENT_KIND_GENERIC);
-    expect(loss.isConcrete).toBe(false);
-  });
-});
-
-describe("startSentence", () => {
-  it("capitalizes a phrase written to sit mid-sentence", () => {
-    expect(startSentence("a generated image")).toBe("A generated image");
-  });
-
-  it("leaves an empty phrase alone", () => {
-    expect(startSentence("")).toBe("");
+    expect(slides[0]?.anchorBlockId).toBe("section/one/paragraph-1");
   });
 });

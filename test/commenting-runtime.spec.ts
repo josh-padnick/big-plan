@@ -5216,17 +5216,23 @@ test("should restore and submit staged comments through the local review runtime
   const revertDialog = page.getByRole("alertdialog", {
     name: "Revert response?",
   });
-  // The dialog leads with what the reviewer loses, names that content by kind
-  // rather than as "changes", and only then explains the mechanics.
-  await expect(revertDialog).toContainText("You will lose");
-  await expect(revertDialog).toContainText("generated");
-  await expect(revertDialog.locator("[data-review-revert-loss]")).toBeVisible();
+  // The dialog leads with the deletion, then shows the content it deletes as
+  // the slides that content sits on.
   await expect(revertDialog).toContainText(
-    "Earlier changes stay in place - this is not a reset to the original plan -",
+    "Reverting will permanently delete the following content from the plan.",
   );
-  await expect(revertDialog).toContainText(
-    "your comment and its thread stay until you delete them.",
-  );
+  const revertLoss = revertDialog.locator("[data-review-revert-loss]");
+  await expect(revertLoss).toBeVisible();
+  await expect(revertLoss).toContainText("What you will lose");
+  const revertSlide = revertLoss.locator("[data-review-revert-slide]").first();
+  await expect(revertSlide).toBeVisible();
+  // The row is the slide as the plan draws it minimized: its own kicker over
+  // its own title, and hovering it gives back that slide's own words.
+  await expect(revertSlide).toContainText(/\d+ \/ /u);
+  await expect(revertSlide).toContainText(/\d+ changes?/u);
+  await expect(revertSlide).toHaveAttribute("aria-describedby", /.+/u);
+  // The mechanics the dialog used to lead with are gone from it entirely.
+  await expect(revertDialog).not.toContainText("Earlier changes stay in place");
   await revertDialog.getByRole("button", { name: "Revert response" }).click();
   expect((await revertResponse).status()).toBe(200);
   expect(await readFile(session.plan, "utf8")).toBe(beforeSource);

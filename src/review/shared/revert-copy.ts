@@ -1,101 +1,108 @@
 // Owns what a revert dialog says the reviewer is about to lose. A revert takes
-// content the agent wrote back out of the plan, and it is not recoverable from
-// the review, so the copy names that content by kind - "a generated image", "2
-// paragraphs of generated text" - wherever the diff can say it. The
-// kind-generic fallback is deliberately last: it is the honest answer when no
-// kind survives, and a useless one when a kind was available.
+// content the agent wrote back out of the plan and the review cannot recover
+// it, so the dialog leads with that and then shows the content itself, grouped
+// by the slide it lives on. There is deliberately no vocabulary of content
+// kinds here: a reviewer thinks in slides and in what is written on them, and
+// a name invented for a category of block would be one more thing to learn
+// before understanding what a button is about to delete.
 
 import { attributeDiffPlaces } from "./change-attribution.js";
 import type { DiffLocation, DiffPlace, SnapshotDiff } from "./review-wire.js";
 
-/** What a revert removes when the diff names no kind Big Plan recognizes. */
-export const REVERT_CONTENT_KIND_GENERIC =
-  "content the agent wrote into the plan";
-
-/** Singular and plural names for the block kinds a plan can lose. */
-const CONTENT_KIND_NAMES: ReadonlyMap<string, readonly [string, string]> =
-  new Map([
-    [
-      "paragraph",
-      ["paragraph of generated text", "paragraphs of generated text"],
-    ],
-    ["heading", ["generated heading", "generated headings"]],
-    ["list", ["generated list", "generated lists"]],
-    ["quote", ["generated quote", "generated quotes"]],
-    ["code", ["generated code block", "generated code blocks"]],
-    ["image", ["generated image", "generated images"]],
-    ["table-row", ["generated table row", "generated table rows"]],
-    ["table-column", ["generated table column", "generated table columns"]],
-    ["table-cell", ["generated table cell", "generated table cells"]],
-  ]);
-
-/** How many distinct kinds the sentence names before it would stop scanning. */
-const NAMED_KIND_LIMIT = 3;
-
-const COMPONENT_PREFIX = "component:";
-
-/** The concrete kind one changed location is, or nothing when it has no name. */
-const contentKindOf = (location: DiffLocation): string | undefined => {
-  // A picture answers by presentation rather than by kind, because the block
-  // carrying it is still a paragraph as far as the document model is
-  // concerned, and "a paragraph" is the one thing it is not to a reader.
-  if (
-    location.newPresentation?.aspect === "image" ||
-    location.oldPresentation?.aspect === "image"
-  ) {
-    return "image";
-  }
-  if (location.isComponentRoot || location.ownerId !== undefined) {
-    return `${COMPONENT_PREFIX}${location.kind}`;
-  }
-  return CONTENT_KIND_NAMES.has(location.kind) ? location.kind : undefined;
-};
+/** The one sentence the confirm dialog leads with. */
+export const REVERT_LEAD_LINE =
+  "Reverting will permanently delete the following content from the plan.";
 
 /**
- * Names a counted kind, including the component kinds with no fixed name.
+ * How much of a block's text stands in for it in the list.
  *
- * One of a thing is "a paragraph", never "1 paragraph": a dialog read in a
- * hurry should read as a sentence, and a digit in front of every noun makes
- * the count the subject when the content is.
+ * Long enough to recognize the passage, short enough that a slide with several
+ * changes still reads as a list rather than as the plan reprinted inside a
+ * dialog. The slide's own hover text carries the fuller reading.
  */
-const contentKindPhrase = (kind: string, count: number): string => {
-  if (kind.startsWith(COMPONENT_PREFIX)) {
-    const component = kind.slice(COMPONENT_PREFIX.length).split("-").join(" ");
-    return count === 1
-      ? `a generated ${component} block`
-      : `${count} generated ${component} blocks`;
-  }
-  const names = CONTENT_KIND_NAMES.get(kind);
-  if (names === undefined) return REVERT_CONTENT_KIND_GENERIC;
-  return count === 1 ? `a ${names[0]}` : `${count} ${names[1]}`;
+export const EXCERPT_LIMIT = 140;
+
+/** How much of a slide's content its hover text carries. */
+export const SLIDE_HOVER_LIMIT = 400;
+
+export type BoundedText = {
+  readonly text: string;
+  /** Whether the text stops short of the content it stands for. */
+  readonly isExcerpt: boolean;
 };
 
-/** Joins named kinds the way a person would read them aloud. */
-const joinKindPhrases = (phrases: ReadonlyArray<string>): string =>
-  phrases.length <= 1
-    ? (phrases[0] ?? "")
-    : `${phrases.slice(0, -1).join(", ")} and ${phrases[phrases.length - 1]}`;
+/** Bounds text for a preview, marking it when it stops short. */
+export const boundPreviewText = (
+  raw: string,
+  limit: number = EXCERPT_LIMIT,
+): BoundedText => {
+  const collapsed = raw.replace(/\s+/gu, " ").trim();
+  if (collapsed.length <= limit) {
+    return { text: collapsed, isExcerpt: false };
+  }
+  // Cut at the last word boundary inside the bound, so a preview never ends
+  // mid-word and reads as a broken string rather than a shortened sentence.
+  const cut = collapsed.slice(0, limit);
+  const lastSpace = cut.lastIndexOf(" ");
+  return {
+    text: `${(lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`,
+    isExcerpt: true,
+  };
+};
 
-/** Starts a sentence with a phrase written to sit mid-sentence. */
-export const startSentence = (phrase: string): string =>
-  `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`;
+export type RevertImage = {
+  readonly source: string;
+  readonly alt: string;
+};
 
-export type RevertLoss = {
-  /** Every place in the plan the revert takes content back out of. */
-  readonly places: ReadonlyArray<DiffPlace>;
-  /** What the reviewer loses, named by kind whenever a kind is known. */
-  readonly lost: string;
-  /** Whether the name above is concrete rather than the generic fallback. */
-  readonly isConcrete: boolean;
+export type RevertBlockPreview =
+  | { readonly shape: "image"; readonly image: RevertImage }
+  | { readonly shape: "text"; readonly excerpt: BoundedText };
+
+export type RevertSlideLoss = {
+  /** The slide's scope, which is also this row's identity. */
+  readonly scope: string;
+  /** The slide's title, as the diff records it. */
+  readonly title: string;
+  /**
+   * A block id on this slide, so the dialog can find the live slide and read
+   * the chrome and content the reader is looking at right now.
+   */
+  readonly anchorBlockId: string | undefined;
+  /** How many places on this slide the revert takes back. */
+  readonly changeCount: number;
+  /** What the revert deletes here, in document order. */
+  readonly previews: ReadonlyArray<RevertBlockPreview>;
+};
+
+/** The image a location carries, on whichever side of the change has one. */
+const imageOf = (location: DiffLocation): RevertImage | undefined => {
+  const presentation = location.newPresentation ?? location.oldPresentation;
+  return presentation?.aspect === "image"
+    ? { source: presentation.source, alt: presentation.alt }
+    : undefined;
 };
 
 /**
- * What one response's revert removes, named for the reviewer.
+ * The words a location contributes to the list.
+ *
+ * A revert deletes what the plan holds now, so the new text is what the
+ * reviewer is about to lose. A removal has none, and its old text is what
+ * comes back rather than what goes, so it contributes nothing here.
+ */
+const textOf = (location: DiffLocation): string =>
+  location.status === "removed" ? "" : location.newText;
+
+const blockIdOf = (location: DiffLocation): string | undefined =>
+  location.newBlockId ?? location.oldBlockId;
+
+/**
+ * What one response's revert removes, grouped by the slide it sits on.
  *
  * The outcome's change targets narrow the whole-snapshot diff to the blocks
  * this response actually wrote. Attribution that matches nothing is a
  * projection gap rather than an empty response, so the whole diff stands in:
- * naming every place overstates nothing the revert will not in fact remove,
+ * showing every place overstates nothing the revert will not in fact remove,
  * while claiming the response wrote nothing would.
  */
 export const projectRevertLoss = ({
@@ -104,35 +111,78 @@ export const projectRevertLoss = ({
 }: {
   readonly diff: SnapshotDiff;
   readonly changeTargets?: ReadonlyArray<string>;
-}): RevertLoss => {
+}): ReadonlyArray<RevertSlideLoss> => {
   const owned =
     changeTargets === undefined
       ? undefined
       : new Set(attributeDiffPlaces({ diff, changeTargets }).placeIds);
-  const places =
+  const places: ReadonlyArray<DiffPlace> =
     owned === undefined || owned.size === 0
       ? diff.places
       : diff.places.filter((place) => owned.has(place.placeId));
-  const counts = new Map<string, number>();
+  const slides = new Map<
+    string,
+    {
+      scope: string;
+      title: string;
+      anchorBlockId: string | undefined;
+      changeCount: number;
+      previews: RevertBlockPreview[];
+      seenText: Set<string>;
+    }
+  >();
   for (const place of places) {
     for (const index of place.locationIndexes) {
       const location = diff.locations.at(index);
       if (location === undefined) continue;
-      const kind = contentKindOf(location);
-      if (kind === undefined) continue;
-      counts.set(kind, (counts.get(kind) ?? 0) + 1);
+      const scope = location.scope;
+      const slide = slides.get(scope) ?? {
+        scope,
+        title: place.section === "" ? location.section : place.section,
+        anchorBlockId: undefined,
+        changeCount: 0,
+        previews: [],
+        seenText: new Set<string>(),
+      };
+      slide.anchorBlockId ??= blockIdOf(location);
+      const image = imageOf(location);
+      if (image !== undefined) {
+        slide.previews.push({ shape: "image", image });
+      } else {
+        const excerpt = boundPreviewText(textOf(location));
+        // A component's root and its fields both name the same words, so the
+        // same passage can arrive several times over. Showing it once keeps
+        // the list a list of things being deleted rather than of diff rows.
+        if (excerpt.text !== "" && !slide.seenText.has(excerpt.text)) {
+          slide.seenText.add(excerpt.text);
+          slide.previews.push({ shape: "text", excerpt });
+        }
+      }
+      slides.set(scope, slide);
+    }
+    const scopes = new Set(
+      place.locationIndexes.flatMap((index) => {
+        const location = diff.locations.at(index);
+        return location === undefined ? [] : [location.scope];
+      }),
+    );
+    for (const scope of scopes) {
+      const slide = slides.get(scope);
+      if (slide !== undefined) slide.changeCount += 1;
     }
   }
-  const phrases = [...counts.entries()]
-    .sort(([, first], [, second]) => second - first)
-    .slice(0, NAMED_KIND_LIMIT)
-    .map(([kind, count]) => contentKindPhrase(kind, count));
-  return {
-    places,
-    lost:
-      phrases.length === 0
-        ? REVERT_CONTENT_KIND_GENERIC
-        : joinKindPhrases(phrases),
-    isConcrete: phrases.length > 0,
-  };
+  return [...slides.values()].map(
+    ({ scope, title, anchorBlockId, changeCount, previews }) => ({
+      scope,
+      title,
+      anchorBlockId,
+      changeCount,
+      previews,
+    }),
+  );
 };
+
+/** How many places the revert takes back, across every affected slide. */
+export const revertChangeCount = (
+  slides: ReadonlyArray<RevertSlideLoss>,
+): number => slides.reduce((total, slide) => total + slide.changeCount, 0);

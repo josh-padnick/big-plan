@@ -46,10 +46,12 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import { changeVerdictKey } from "../shared/change-verdict.js";
 import {
+  boundPreviewText,
   projectRevertLoss,
-  REVERT_CONTENT_KIND_GENERIC,
-  startSentence,
-  type RevertLoss,
+  REVERT_LEAD_LINE,
+  revertChangeCount,
+  SLIDE_HOVER_LIMIT,
+  type RevertSlideLoss,
 } from "../shared/revert-copy.js";
 import {
   AGENT_STALL_MS,
@@ -176,8 +178,10 @@ import {
   type ReviewCommentSubmitAvailability,
 } from "./review-comment-submit.js";
 import { useDiffTour } from "./diff-tour.browser.js";
+import { ReviewImage } from "./review-image.browser.js";
 import {
   foundElement,
+  liveArticle,
   liveBlock,
   liveDecisionFigure,
   liveFlowAnchor,
@@ -1043,18 +1047,15 @@ const readySnapshotDiff = (
   return cached?.state === "ready" ? cached.value : null;
 };
 
-/** How many changed places the revert dialog names before it counts the rest. */
-const REVERT_LOSS_LIMIT = 6;
+/** How many slides the dialog draws before it counts the rest. */
+const REVERT_SLIDE_LIMIT = 6;
 
 /**
  * What a revert takes back, resolved for the dialog that confirms it.
  *
  * The control is only offered while the response being reverted is still the
  * plan's current revision, so what is at risk is exactly the diff from that
- * response's baseline to the plan as it reads now. Naming the content in it is
- * `projectRevertLoss`; this hook only gets that diff in front of it, and holds
- * the kind-generic answer while the diff is in flight or unreadable, because
- * the consequence is certain even when its inventory is not.
+ * response's baseline to the plan as it reads now.
  */
 const useRevertLoss = ({
   identity,
@@ -1068,7 +1069,7 @@ const useRevertLoss = ({
   readonly currentSnapshot: string;
   readonly changeTargets: ReadonlyArray<string> | undefined;
   readonly active: boolean;
-}): RevertLoss | undefined => {
+}): ReadonlyArray<RevertSlideLoss> | undefined => {
   const from = baselineSnapshot;
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
   useEffect(() => {
@@ -1097,53 +1098,222 @@ const useRevertLoss = ({
   );
 };
 
-/** The evidence under the revert dialog: every place the loss lands. */
-const RevertLossEvidence = ({
-  loss,
+/** The live slide a scope names, preferring the block the diff pointed at. */
+const liveSlideOf = ({
+  scope,
+  anchorBlockId,
 }: {
-  readonly loss: RevertLoss | undefined;
-}) => (
-  <div
-    className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border border-edge bg-surface p-3"
-    data-review-revert-loss=""
-  >
-    <p className="m-0 text-2xs font-semibold uppercase tracking-caps text-subtle">
-      What you will lose
-    </p>
-    <p className="m-0 text-sm text-ink">
-      {loss === undefined
-        ? "Reading what this response wrote…"
-        : loss.places.length === 0
-          ? "This response left nothing in the plan."
-          : `${startSentence(loss.lost)}, in ${loss.places.length === 1 ? "one place" : `${loss.places.length} places`}:`}
-    </p>
-    {loss === undefined || loss.places.length === 0 ? null : (
-      <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1 p-0">
-        {loss.places.slice(0, REVERT_LOSS_LIMIT).map((place) => (
-          <li
-            key={place.placeId}
-            className="flex min-w-0 items-baseline gap-2 text-xs"
-          >
-            <span className="min-w-0 flex-1 text-ink [overflow-wrap:anywhere]">
-              {place.section === ""
-                ? place.label
-                : `${place.section} · ${place.label}`}
+  readonly scope: string;
+  readonly anchorBlockId: string | undefined;
+}): HTMLElement | null => {
+  const fromBlock =
+    anchorBlockId === undefined
+      ? null
+      : foundElement(liveBlock(anchorBlockId))?.closest<HTMLElement>(
+          "[data-slide]",
+        );
+  if (fromBlock != null) return fromBlock;
+  // A scope is the slide heading's own anchor id under a "section/" prefix,
+  // so a slide whose blocks all left the plan is still reachable by name.
+  const heading = liveArticle()?.querySelector<HTMLElement>(
+    `#${CSS.escape(scope.replace(/^section\//u, ""))}`,
+  );
+  return heading?.closest<HTMLElement>("[data-slide]") ?? null;
+};
+
+/**
+ * What a minimized slide says about itself, read from the slide the reader is
+ * looking at rather than from the diff.
+ *
+ * The ordinal in "2 / Goals and non-goals" exists only in the rendered kicker;
+ * nothing on the wire carries it. Reading the live slide is therefore not a
+ * shortcut but the only way to name the slide the way the document does, and
+ * it is the same walk every other surface that names a slide already makes.
+ */
+const readSlideChrome = (
+  slide: RevertSlideLoss,
+): { readonly kicker: string | undefined; readonly content: string } => {
+  const element = liveSlideOf(slide);
+  if (element === null) return { kicker: undefined, content: "" };
+  const kicker = element
+    .querySelector<HTMLElement>("[data-slide-kicker]")
+    ?.textContent?.trim();
+  // Leaf blocks only: a list and its items both answer textContent, and
+  // joining both prints every item twice. textContent rather than innerText
+  // because a collapsed slide is still the content this revert deletes, and
+  // an unrendered element has no innerText at all.
+  const parts: string[] = [];
+  for (const node of element.querySelectorAll<HTMLElement>(
+    "p, li, h2, h3, h4, blockquote, figcaption, td, th",
+  )) {
+    // The slide's own kicker and title are already the row's two lines, so
+    // repeating them would spend the hover text's bound on what the reader
+    // just read.
+    if (
+      node.hasAttribute("data-slide-kicker") ||
+      node.hasAttribute("data-collapse-name")
+    ) {
+      continue;
+    }
+    if (
+      node.querySelector(
+        "p, li, h2, h3, h4, blockquote, figcaption, td, th",
+      ) !== null
+    ) {
+      continue;
+    }
+    const text = node.textContent?.trim();
+    if (text !== undefined && text !== "") parts.push(text);
+  }
+  return {
+    kicker: kicker === "" ? undefined : kicker,
+    content: parts.join(" "),
+  };
+};
+
+/** The address the browser resolved for a picture the plan is showing. */
+const liveImageSource = ({
+  slide,
+  source,
+}: {
+  readonly slide: RevertSlideLoss;
+  readonly source: string;
+}): string => {
+  const element = liveSlideOf(slide);
+  const match = [
+    ...(element?.querySelectorAll<HTMLImageElement>("img") ?? []),
+  ].find(
+    (image) =>
+      image.getAttribute("src") === source || image.currentSrc.endsWith(source),
+  );
+  return match?.currentSrc ?? match?.src ?? source;
+};
+
+/**
+ * One affected slide, drawn the way the plan draws a minimized slide.
+ *
+ * A reviewer already knows what a collapsed slide looks like, so the list of
+ * what a revert deletes is a list of those, in the same card, with the same
+ * kicker over the same title. Hovering one gives back the slide's own words,
+ * bounded: enough to recognize what is on it without reprinting the plan
+ * inside a dialog.
+ */
+const RevertSlideRow = ({ slide }: { readonly slide: RevertSlideLoss }) => {
+  const chrome = useMemo(() => readSlideChrome(slide), [slide]);
+  const hover = boundPreviewText(chrome.content, SLIDE_HOVER_LIMIT);
+  const kicker = chrome.kicker ?? slide.title;
+  const changes = `${slide.changeCount} ${slide.changeCount === 1 ? "change" : "changes"}`;
+  return (
+    <li className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
+      <Tooltip
+        sections={[
+          {
+            term: slide.title,
+            detail:
+              hover.text === ""
+                ? "This slide is no longer in the plan."
+                : hover.text,
+          },
+        ]}
+        placement="below"
+        asChild
+        isInstant
+      >
+        <div
+          tabIndex={0}
+          className="grid min-w-0 cursor-default grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-edge bg-raised px-3 py-2 shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          data-review-revert-slide={slide.scope}
+        >
+          {/* The chevron a collapsed slide shows, pointing the way that slide
+              points: this row stands for a slide the reader could open. */}
+          <span className="text-subtle opacity-40 [&_svg]:size-4">
+            <Icon icon={CHEVRON_RIGHT_ICON} />
+          </span>
+          <span className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
+            <span className="truncate text-2xs font-semibold uppercase tracking-caps text-subtle">
+              {kicker}
             </span>
-            <em className="shrink-0 text-2xs text-muted">{place.note}</em>
-          </li>
-        ))}
-        {loss.places.length > REVERT_LOSS_LIMIT ? (
-          <li className="text-xs text-muted">{`and ${loss.places.length - REVERT_LOSS_LIMIT} more`}</li>
-        ) : null}
-      </ul>
-    )}
-    <p className="m-0 text-xs text-muted">
-      The plan then reads exactly as it did just before this response. Earlier
-      changes stay in place - this is not a reset to the original plan - and
-      your comment and its thread stay until you delete them.
-    </p>
-  </div>
-);
+            <span className="truncate text-sm font-semibold text-ink">
+              {slide.title}
+            </span>
+          </span>
+          <span className="shrink-0 text-2xs tabular-nums text-muted">
+            {changes}
+          </span>
+        </div>
+      </Tooltip>
+      {slide.previews.length === 0 ? null : (
+        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1.5 p-0 pl-8">
+          {slide.previews.map((preview, index) =>
+            preview.shape === "image" ? (
+              <li
+                key={`image-${index}`}
+                className="flex min-w-0 items-center gap-2"
+              >
+                <ReviewImage
+                  source={liveImageSource({
+                    slide,
+                    source: preview.image.source,
+                  })}
+                  alt={preview.image.alt}
+                />
+                <span className="min-w-0 flex-1 truncate text-xs text-muted">
+                  {preview.image.alt === "" ? "Picture" : preview.image.alt}
+                </span>
+              </li>
+            ) : (
+              <li
+                key={`text-${index}`}
+                className="min-w-0 border-l-2 border-edge pl-2 text-xs text-muted [overflow-wrap:anywhere]"
+              >
+                {preview.excerpt.text}
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+    </li>
+  );
+};
+
+/** The evidence under the lead line: the content the revert deletes. */
+const RevertLossEvidence = ({
+  slides,
+}: {
+  readonly slides: ReadonlyArray<RevertSlideLoss> | undefined;
+}) => {
+  const total = slides === undefined ? 0 : revertChangeCount(slides);
+  return (
+    <div
+      className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border border-edge bg-surface p-3"
+      data-review-revert-loss=""
+    >
+      <p className="m-0 text-2xs font-semibold uppercase tracking-caps text-subtle">
+        {slides === undefined || slides.length === 0
+          ? "What you will lose"
+          : `What you will lose · ${total} ${total === 1 ? "change" : "changes"} on ${slides.length === 1 ? "one slide" : `${slides.length} slides`}`}
+      </p>
+      {slides === undefined ? (
+        <p className="m-0 text-sm text-ink">
+          Reading what this response wrote…
+        </p>
+      ) : slides.length === 0 ? (
+        <p className="m-0 text-sm text-ink">
+          This response left nothing in the plan.
+        </p>
+      ) : (
+        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-3 p-0">
+          {slides.slice(0, REVERT_SLIDE_LIMIT).map((slide) => (
+            <RevertSlideRow key={slide.scope} slide={slide} />
+          ))}
+          {slides.length > REVERT_SLIDE_LIMIT ? (
+            <li className="text-xs text-muted">{`and ${slides.length - REVERT_SLIDE_LIMIT} more slides`}</li>
+          ) : null}
+        </ul>
+      )}
+    </div>
+  );
+};
 
 const randomId = (): string => {
   const bytes = new Uint8Array(8);
@@ -8908,12 +9078,13 @@ export const ReviewController = () => {
       <AlertDialog
         open={pendingRevert !== null}
         title="Revert response?"
-        description={`You will lose ${revertLoss?.lost ?? REVERT_CONTENT_KIND_GENERIC}. Reverting deletes that content from the plan for good, and only the agent can write it again.`}
+        description={REVERT_LEAD_LINE}
         actionLabel="Revert response"
+        width="wide"
         onCancel={() => setPendingRevert(null)}
         onAction={() => void revertAgentChanges()}
       >
-        <RevertLossEvidence loss={revertLoss} />
+        <RevertLossEvidence slides={revertLoss} />
       </AlertDialog>
       <AlertDialog
         open={pendingDelete !== null}
