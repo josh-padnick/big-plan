@@ -249,6 +249,16 @@ here; all values use the document theme's closed token vocabulary.
     content: "";
   }
 
+  /* The place a change-set stepper is on after the reviewer accepted it. The
+     block is ordinary plan content again, so this says only "this one" and
+     borrows the accent the stepper itself is drawn in - never the dashed
+     proposal frame, which is the question the acceptance already answered. */
+  [data-review-accepted-place] {
+    outline: 2px solid color-mix(in srgb, var(--accent-c) 40%, transparent);
+    outline-offset: 0.35rem;
+    border-radius: 0.25rem;
+  }
+
   [data-review-scope-selected] {
     outline: 3px solid color-mix(in srgb, var(--annotation-c) 45%, var(--bg));
     outline-offset: 0.25rem;

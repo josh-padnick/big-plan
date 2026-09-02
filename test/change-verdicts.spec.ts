@@ -102,6 +102,9 @@ test("should keep an accepted change accepted across a reload and a restart", as
         .getByRole("button", { name: /Review changes \(2\)/u })
         .click();
       await expect(stepper(page)).toContainText("1 of 2");
+      // The open change is presented as a proposal, which is the treatment the
+      // acceptance below has to retire.
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(1);
       await stepper(page)
         .getByRole("button", { name: "Accept this change" })
         .click();
@@ -110,6 +113,40 @@ test("should keep an accepted change accepted across a reload and a restart", as
         "1/2",
       );
       expect(await recordedChanges(verdictsPath)).toHaveLength(1);
+    });
+
+    // BIG-14. An acceptance is an answer, so the plan stops asking: the change
+    // reads as the plan's own content, and the evidence for it is one control
+    // away rather than permanently in front of the reader.
+    await test.step("an accepted change reads as plan content, with its evidence on request", async () => {
+      await stepper(page)
+        .getByRole("button", { name: "Previous change" })
+        .click();
+      await expect(stepper(page)).toContainText("1 of 2");
+      await expect(stepper(page)).toContainText("Accepted");
+      // Nothing of the proposal survives: no lens beside the block, no word
+      // runs inside it, and the plan's own paragraph is what the reader meets.
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+      const acceptedPlace = page.locator("[data-review-accepted-place]");
+      await expect(acceptedPlace).toHaveCount(1);
+      await expect(acceptedPlace.locator("ins, del")).toHaveCount(0);
+      await expect(acceptedPlace).toContainText(
+        "The worker retries a failed job three times before it gives up.",
+      );
+
+      await stepper(page).getByRole("button", { name: "View changes" }).click();
+      const lens = page.locator("[data-review-diff-lens]");
+      await expect(lens).toContainText("What changed");
+      await expect(lens.locator("del")).toContainText("once");
+      await expect(lens.locator("ins").first()).toContainText("three");
+      // Asking for the evidence does not reopen the change, and the record it
+      // was recorded in is untouched by looking at it.
+      await expect(stepper(page)).toContainText("Accepted");
+      expect(await recordedChanges(verdictsPath)).toHaveLength(1);
+
+      await stepper(page).getByRole("button", { name: "Hide changes" }).click();
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+      await expect(page.locator("[data-review-accepted-place]")).toHaveCount(1);
     });
 
     await test.step("the acceptance and the count survive a reload", async () => {
@@ -130,7 +167,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
       await expect(stepper(page)).toContainText("1 of 2");
       await expect(
         stepper(page).getByRole("button", {
-          name: "Undo acceptance for this change",
+          name: "Unaccept this change",
         }),
       ).toBeVisible();
     });
@@ -182,7 +219,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
         .getByRole("button", { name: "Back to review" })
         .click();
       await stepper(page)
-        .getByRole("button", { name: "Undo acceptance for this change" })
+        .getByRole("button", { name: "Unaccept this change" })
         .click();
       expect((await withdrawn).ok()).toBe(true);
       await expect(
