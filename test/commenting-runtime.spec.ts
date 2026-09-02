@@ -7368,9 +7368,15 @@ export const deliver = (): string => "package";
 Sending writes one real feedback package beside this plan.
 `;
 
-test("should keep shell interactions wired after an agent revision refreshes the plan in place", async ({
-  page,
-}) => {
+// The simulated out-of-process agent writes through the store while the live
+// browser polls it, so a retryable 503 is an expected part of this journey.
+const refreshTest = test.extend({
+  allowedConsoleErrors: [/Failed to load resource:.*503/u],
+});
+const REFRESH_TEST_NAME =
+  "should keep shell interactions wired after an agent revision refreshes the plan in place";
+
+refreshTest(REFRESH_TEST_NAME, async ({ page }) => {
   test.setTimeout(60_000);
   // The copy assertion needs a deterministic clipboard in headless Chromium.
   await page.addInitScript(() => {

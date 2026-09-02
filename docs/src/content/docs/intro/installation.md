@@ -10,10 +10,10 @@ The fastest install is the one you don't do yourself.
 Copy this prompt into your agent:
 
 ```text
-Set up Big Plan for me: read https://big-plan.ai/setup.md and follow it.
+Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.
 ```
 
-The agent reads the server-controlled setup guide at [https://big-plan.ai/setup.md](https://big-plan.ai/setup.md), uses the current CLI without installing it, can install the thin skill shell, adopts the plan-review workflow, and adds the rule to your project's agent instructions so every future session keeps it.
+The agent reads the server-controlled setup guide at [https://bigplan.dev/setup.md](https://bigplan.dev/setup.md), uses the current CLI without installing it, can install the thin skill shell, adopts the plan-review workflow, and adds the rule to your project's agent instructions so every future session keeps it.
 Authoring principles stay in `big-plan guidance`, so package upgrades refresh them without hand-editing skill files.
 
 ## Or install it yourself
@@ -49,7 +49,7 @@ Download the example plan, or use any plan your agent has written:
 
 ```sh
 # Download a complete example plan.
-curl -o plan.mdx https://big-plan.ai/demo/example-plan.md
+curl -o plan.mdx https://bigplan.dev/demo/example-plan.md
 # Read how to write a plan humans love to review.
 npx -y big-plan@latest guidance
 # Turn the example into a self-contained plan.html review document.

@@ -80,7 +80,7 @@ const updateLine = (
   ) {
     return undefined;
   }
-  return `Update available: Big Plan ${marker.latest} (running ${current}); update with your package manager (https://big-plan.ai/intro/installation/).`;
+  return `Update available: Big Plan ${marker.latest} (running ${current}); update with your package manager (https://bigplan.dev/intro/installation/).`;
 };
 
 const launchRefreshWorker = (): void => {

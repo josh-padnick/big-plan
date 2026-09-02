@@ -6,7 +6,7 @@ Big Plan renders an MDX plan file containing Markdown and built-in components in
 The prompt that sent you here is intentionally stable:
 
 ```text
-Set up Big Plan for me: read https://big-plan.ai/setup.md and follow it.
+Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.
 ```
 
 ## 1. Run the current CLI
@@ -44,7 +44,7 @@ npx -y big-plan@latest skill write ~/.agents/skills/big-plan/SKILL.md
 
 `skill write <path>` creates any missing parent directories, then writes the thin Big Plan skill shell to the exact file path you provide so your coding harness can load it. Because that explicit command accepts overwriting that one file, inspect an existing destination before replacing it; never invent a silent overwrite.
 The skill shell forces `big-plan guidance` as the live authoring authority each session.
-See https://big-plan.ai/for-agents/use-the-skill.md for update propagation.
+See https://bigplan.dev/for-agents/use-the-skill.md for update propagation.
 
 ## 3. Adopt the plan-review workflow
 
@@ -59,7 +59,7 @@ Before implementing any non-trivial task:
 6. Do not start implementing until your human agrees.
    When they ask for changes, revise the plan file, validate again, and continue the live review.
 
-See [Reviewing a plan](https://big-plan.ai/reference/reviewing/) for the complete live-review workflow.
+See [Reviewing a plan](https://bigplan.dev/reference/reviewing/) for the complete live-review workflow.
 
 For a portable artifact instead, `npx -y big-plan@latest render plan.mdx` writes a self-contained `plan.html` document next to the source. You can share that file by its absolute path or a `file://` URL, but it does not replace the live-review workflow above.
 
@@ -90,8 +90,8 @@ Report the CLI version, where you wrote the skill (if any), where you added the 
 
 ## More documentation
 
-- https://big-plan.ai/llms.txt - map of every docs page in clean markdown.
-- https://big-plan.ai/for-agents/use-the-skill.md - skill install and update strategy.
-- https://big-plan.ai/for-agents/render-a-plan.md - the operational rendering workflow.
-- https://big-plan.ai/for-agents/authoring-plans.md - the plan document format.
-- https://big-plan.ai/reference/lint-rules.md - every authoring rule the validator enforces.
+- https://bigplan.dev/llms.txt - map of every docs page in clean markdown.
+- https://bigplan.dev/for-agents/use-the-skill.md - skill install and update strategy.
+- https://bigplan.dev/for-agents/render-a-plan.md - the operational rendering workflow.
+- https://bigplan.dev/for-agents/authoring-plans.md - the plan document format.
+- https://bigplan.dev/reference/lint-rules.md - every authoring rule the validator enforces.

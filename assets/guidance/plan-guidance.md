@@ -184,12 +184,12 @@ Where no component fits the picture, embed a real image and caption what to noti
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
 Mark a decision `critical` when the reviewer must settle it before work begins, and leave the rest unmarked: the review lists every question it is waiting on, and a plan where everything is critical tells the reviewer nothing about where to start.
 Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance DecisionAnalysis`) for how to use it well.
-Every component's attributes and accepted shapes are at https://big-plan.ai/components/; look them up rather than guessing.
+Every component's attributes and accepted shapes are at https://bigplan.dev/components/; look them up rather than guessing.
 
 ## 11. Validate, render, and reread
 
 Run `big-plan validate <plan.mdx>` and fix every diagnostic until it passes; each one names its rule and its fix, which is why they are not repeated here.
-What the parser rejects is at https://big-plan.ai/for-agents/authoring-plans/, and every lint rule's exact boundaries are at https://big-plan.ai/reference/lint-rules/.
+What the parser rejects is at https://bigplan.dev/for-agents/authoring-plans/, and every lint rule's exact boundaries are at https://bigplan.dev/reference/lint-rules/.
 
 Passing lint means the plan is renderable and statically clean; it says nothing about whether the plan reads well, and that is the only bar that matters.
 Render the plan, then reread the rendered document exactly as the human will, top to bottom.
