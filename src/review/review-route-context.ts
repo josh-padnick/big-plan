@@ -24,6 +24,7 @@ import {
   readChangeVerdicts,
   readComments,
   readResolvedCommentIds,
+  readSnapshot,
   readStagedInputs,
   writeApprovalRecord,
   writeChangeVerdicts,
@@ -444,8 +445,30 @@ export const createPlanRenderer = ({
   ): Promise<ReadonlyArray<ReviewComment>> => {
     const snapshots = new Map<string, ReadonlyMap<string, BlockMapEntry>>();
     for (const snapshot of snapshotDigestsIn(value)) {
-      const blockMap = blocksForSnapshot?.(snapshot);
-      if (blockMap !== undefined) snapshots.set(snapshot, blockMap);
+      const cachedBlockMap = blocksForSnapshot?.(snapshot);
+      if (cachedBlockMap !== undefined) {
+        snapshots.set(snapshot, cachedBlockMap);
+        continue;
+      }
+      try {
+        const markdown = await readSnapshot({ store: readStore, snapshot });
+        const rendered = renderDocument({
+          markdown,
+          fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+        });
+        snapshots.set(
+          snapshot,
+          new Map(rendered.blocks.map((block) => [block.id, block])),
+        );
+      } catch (error: unknown) {
+        if (!(
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )) {
+          throw error;
+        }
+      }
     }
     return validateCommentUpdates({
       value,
