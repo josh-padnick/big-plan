@@ -31,6 +31,7 @@ export const GRPC_METHOD_COMPONENT_DEFINITION = defineComponent({
   markdown: grpcMethodMarkdown,
   diff: compileGrpcMethodDiff,
   diffView: GrpcMethodDiffView,
+  commentableAnchors: [{ kind: "grpc-method-field", sides: "both" }],
   scopedChildren: {
     Field: scopedChild("Field"),
     Error: scopedChild("Error"),

@@ -26,6 +26,11 @@ export const DIFF_SIDE_ATTRIBUTE = "data-diff-side";
 
 /** The side that is not the plan: isolated, not scrubbed. */
 export const DIFF_BASELINE_SIDE = "baseline";
+export const BASELINE_BLOCK_ID_ATTRIBUTE = "data-baseline-block-id";
+export const BASELINE_SNAPSHOT_ATTRIBUTE = "data-baseline-snapshot";
+export const BASELINE_BLOCK_KIND_ATTRIBUTE = "data-baseline-block-kind";
+export const BASELINE_BLOCK_LABEL_ATTRIBUTE = "data-baseline-block-label";
+export const BASELINE_BLOCK_SECTION_ATTRIBUTE = "data-baseline-block-section";
 
 const COPY_SOURCE_ATTRIBUTE = "data-copy-source";
 const COPY_CODE_ATTRIBUTE = "data-copy-code";
@@ -44,6 +49,11 @@ const REVIEW_IDENTITY_ATTRIBUTES = [
   "data-review-slide-selectable",
   "data-review-slide-selected",
   COMPONENT_INSTANCE_ATTRIBUTE,
+  BASELINE_BLOCK_ID_ATTRIBUTE,
+  BASELINE_SNAPSHOT_ATTRIBUTE,
+  BASELINE_BLOCK_KIND_ATTRIBUTE,
+  BASELINE_BLOCK_LABEL_ATTRIBUTE,
+  BASELINE_BLOCK_SECTION_ATTRIBUTE,
 ] as const;
 
 const ROOT_AFFORDANCE_ATTRIBUTES = [
@@ -278,34 +288,51 @@ const stripReviewIdentity = (subtree: Element): void => {
 // component's diff view marked live. `inert` is inherited and a descendant
 // cannot opt back out of an inert ancestor, so a marked subtree can only
 // stay live when no ancestor of it is marked inert.
-const livePathsWithin = (subtree: Element): ReadonlySet<Element> => {
+const pathsWithin = (
+  subtree: Element,
+  reaches: (node: Element) => boolean,
+): ReadonlySet<Element> => {
   const paths = new Set<Element>();
   const visit = (node: Element): boolean => {
-    let live = node.properties[DIFF_LIVE_ATTRIBUTE] !== undefined;
+    let reachable = reaches(node);
     for (const child of node.children) {
       if (isElement(child) && visit(child)) {
-        live = true;
+        reachable = true;
       }
     }
-    if (live) {
+    if (reachable) {
       paths.add(node);
     }
-    return live;
+    return reachable;
   };
   visit(subtree);
   return paths;
 };
 
-// Holds each maximal subtree that leads to no mark inert, so a baseline with
-// no mark at all is one inert root exactly as before.
-const markInertOutsideLiveSubtrees = ({
+const isLiveMark = (node: Element): boolean =>
+  node.properties[DIFF_LIVE_ATTRIBUTE] !== undefined;
+
+// An element the component declared commentable on this side. The address is
+// the component saying a reader may point at this element, and a reader can
+// only point at what is not inert, so isolation owes it the same path a live
+// mark gets. It is a weaker claim than a live mark: the element itself becomes
+// reachable, while everything inside it that leads nowhere stays inert.
+const isAddressed = (node: Element): boolean =>
+  node.properties[BASELINE_BLOCK_ID_ATTRIBUTE] !== undefined;
+
+// Holds each maximal subtree that reaches nothing inert, so a baseline that
+// declares neither a live mark nor an address is one inert root exactly as
+// before. A live mark ends the walk, because everything under it is the
+// evidence that mark exists to keep operable; an address does not, because
+// only the addressed element itself has to be pointed at.
+const markInertOutsideReachableSubtrees = ({
   node,
   paths,
 }: {
   readonly node: Element;
   readonly paths: ReadonlySet<Element>;
 }): void => {
-  if (node.properties[DIFF_LIVE_ATTRIBUTE] !== undefined) {
+  if (isLiveMark(node)) {
     return;
   }
   if (!paths.has(node)) {
@@ -314,7 +341,7 @@ const markInertOutsideLiveSubtrees = ({
   }
   for (const child of node.children) {
     if (isElement(child)) {
-      markInertOutsideLiveSubtrees({ node: child, paths });
+      markInertOutsideReachableSubtrees({ node: child, paths });
     }
   }
 };
@@ -323,39 +350,102 @@ const markInertOutsideLiveSubtrees = ({
 // script wires a second copy. Only an affordance outside every marked
 // subtree is additionally frozen: freezing one inside would re-create, one
 // element lower, the dead control the mark exists to prevent.
+//
+// Freezing is two facts, not one. A control is dead as soon as it has lost
+// the attribute a script wires, and `disabled` says so to a reader. Taking it
+// out of the tree with `inert` is the stronger step, and a container that
+// carries reachable evidence - a table figure whose rows the component made
+// addressable - may not take it, because `inert` is inherited and would take
+// that evidence with it.
 const stripRootAffordances = ({
   node,
-  paths,
+  livePaths,
+  reachablePaths,
   insideLive,
 }: {
   readonly node: Element;
-  readonly paths: ReadonlySet<Element>;
+  readonly livePaths: ReadonlySet<Element>;
+  readonly reachablePaths: ReadonlySet<Element>;
   readonly insideLive: boolean;
 }): void => {
-  const live = insideLive || node.properties[DIFF_LIVE_ATTRIBUTE] !== undefined;
+  const live = insideLive || isLiveMark(node);
   const hadLiveAffordance = ROOT_AFFORDANCE_ATTRIBUTES.some(
     (attribute) => node.properties[attribute] !== undefined,
   );
   for (const attribute of ROOT_AFFORDANCE_ATTRIBUTES) {
     delete node.properties[attribute];
   }
-  if (hadLiveAffordance && !live && !paths.has(node)) {
-    node.properties.inert = true;
+  if (hadLiveAffordance && !live && !livePaths.has(node)) {
+    if (!reachablePaths.has(node)) {
+      node.properties.inert = true;
+    }
     if (node.tagName === "button" || node.tagName === "input") {
       node.properties.disabled = true;
     }
   }
   for (const child of node.children) {
     if (isElement(child)) {
-      stripRootAffordances({ node: child, paths, insideLive: live });
+      stripRootAffordances({
+        node: child,
+        livePaths,
+        reachablePaths,
+        insideLive: live,
+      });
     }
   }
 };
 
 const holdRootAffordancesInert = (subtree: Element): void => {
-  const paths = livePathsWithin(subtree);
-  markInertOutsideLiveSubtrees({ node: subtree, paths });
-  stripRootAffordances({ node: subtree, paths, insideLive: false });
+  // Two questions, deliberately not one set. Reachability decides what may be
+  // read and pointed at; a control is frozen unless a live mark says the
+  // reader may operate it, so an address never revives a control it happens
+  // to contain.
+  const livePaths = pathsWithin(subtree, isLiveMark);
+  const reachablePaths = pathsWithin(
+    subtree,
+    (node) => isLiveMark(node) || isAddressed(node),
+  );
+  markInertOutsideReachableSubtrees({ node: subtree, paths: reachablePaths });
+  stripRootAffordances({
+    node: subtree,
+    livePaths,
+    reachablePaths,
+    insideLive: false,
+  });
+};
+
+export type BaselineBlockAddress = {
+  readonly blockId: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly section?: string;
+};
+
+const stampBaselineIdentity = ({
+  subtree,
+  snapshot,
+  addressFor,
+}: {
+  readonly subtree: Element;
+  readonly snapshot: string;
+  readonly addressFor: (node: Element) => BaselineBlockAddress | undefined;
+}): void => {
+  forEachElement({
+    node: subtree,
+    visit: (node) => {
+      const address = addressFor(node);
+      if (address === undefined) return;
+      node.properties[BASELINE_BLOCK_ID_ATTRIBUTE] = address.blockId;
+      node.properties[BASELINE_SNAPSHOT_ATTRIBUTE] = snapshot;
+      node.properties[BASELINE_BLOCK_KIND_ATTRIBUTE] = address.kind;
+      node.properties[BASELINE_BLOCK_LABEL_ATTRIBUTE] = address.label;
+      if (address.section === undefined) {
+        delete node.properties[BASELINE_BLOCK_SECTION_ATTRIBUTE];
+      } else {
+        node.properties[BASELINE_BLOCK_SECTION_ATTRIBUTE] = address.section;
+      }
+    },
+  });
 };
 
 /**
@@ -363,11 +453,14 @@ const holdRootAffordancesInert = (subtree: Element): void => {
  * identity out of it, namespace its ordinary DOM identity, and hold its root
  * affordances inert so the proposed side remains the one live owner.
  *
- * A subtree the view marked with `DIFF_LIVE_ATTRIBUTE` stays live, and only
- * the subtrees that lead nowhere near a mark are held inert. That exception
- * exists because a baseline can hold evidence the proposed side does not - a
- * screen the change removed - and a badge naming a screen no click can open
- * reads as a defect rather than as history.
+ * A subtree the view marked with `DIFF_LIVE_ATTRIBUTE` stays live, and so does
+ * every element this side gave a baseline address; only the subtrees that lead
+ * to neither are held inert. The mark exists because a baseline can hold
+ * evidence the proposed side does not - a screen the change removed - and a
+ * badge naming a screen no click can open reads as a defect rather than as
+ * history. The address exists for the same reason one step further out: an
+ * address the reader cannot point at, because `inert` took the element out of
+ * the accessibility tree and out of hit testing, is an address in name only.
  *
  * `key` is required so two baseline subtrees that carry the same original
  * ids cannot silently collide. It is folded into the prefix: the same
@@ -378,12 +471,23 @@ const holdRootAffordancesInert = (subtree: Element): void => {
 export const isolateBaselineSide = ({
   subtree,
   key,
+  snapshot,
+  addressFor,
 }: {
   readonly subtree: Element;
   readonly key: string;
+  readonly snapshot?: string;
+  readonly addressFor?: (node: Element) => BaselineBlockAddress | undefined;
 }): void => {
   subtree.properties[DIFF_SIDE_ATTRIBUTE] = DIFF_BASELINE_SIDE;
   stripReviewIdentity(subtree);
+  if (snapshot !== undefined && addressFor !== undefined) {
+    stampBaselineIdentity({
+      subtree,
+      snapshot,
+      addressFor,
+    });
+  }
   namespaceOrdinaryIdentity(subtree, key);
   holdRootAffordancesInert(subtree);
 };

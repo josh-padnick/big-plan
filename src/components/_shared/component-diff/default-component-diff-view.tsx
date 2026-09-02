@@ -4,11 +4,7 @@
 import type { ComponentType } from "react";
 import type { DefaultComponentDiffModel } from "../../_model/component-diff/contract.js";
 import { ComponentDiffSide } from "./component-diff-context.js";
-
-// The phone-sized touch target the repository requires of every control,
-// relaxed once the viewport is wide enough for a pointer.
-const TOGGLE_OPTION_CLASSES =
-  "relative z-10 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent px-4 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-8 wide:min-w-0";
+import { ComponentDiffToggle } from "./toggle.js";
 
 /** Renders the real component view on each side of the free comparison. */
 export const DefaultComponentDiffView = <TModel,>({
@@ -22,8 +18,6 @@ export const DefaultComponentDiffView = <TModel,>({
 }) => {
   const hasBaseline = model.status !== "added";
   const hasProposed = model.status !== "removed";
-  const baselineId = `${controlId}-baseline`;
-  const proposedId = `${controlId}-proposed`;
   return (
     <figure
       className="my-4 grid w-full min-w-0 max-w-[var(--measure)] grid-cols-[minmax(0,1fr)] gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
@@ -36,56 +30,12 @@ export const DefaultComponentDiffView = <TModel,>({
         </strong>
         <em className="text-2xs text-muted">{model.status}</em>
       </figcaption>
-      {hasBaseline && hasProposed ? (
-        <>
-          <input
-            className="sr-only"
-            id={baselineId}
-            name={controlId}
-            type="radio"
-            data-component-diff-choice="baseline"
-          />
-          <input
-            className="sr-only"
-            id={proposedId}
-            name={controlId}
-            type="radio"
-            data-component-diff-choice="proposed"
-            defaultChecked
-          />
-        </>
-      ) : null}
       <div
         className="flex min-w-0 flex-wrap items-center gap-3"
         data-component-diff-controls=""
       >
         {hasBaseline && hasProposed ? (
-          <div
-            className="relative inline-grid grid-cols-2 rounded-full border border-edge bg-surface p-0.5"
-            role="group"
-            aria-label="Choose Was or Now"
-            data-component-diff-toggle=""
-          >
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full bg-[var(--diff-add-bg)] transition-[translate] duration-150 ease-out"
-              data-component-diff-toggle-thumb=""
-            />
-            <label
-              htmlFor={baselineId}
-              className={`${TOGGLE_OPTION_CLASSES} text-muted`}
-              data-component-diff-label="baseline"
-            >
-              {"Was"}
-            </label>
-            <label
-              htmlFor={proposedId}
-              className={`${TOGGLE_OPTION_CLASSES} text-[var(--diff-add-c)]`}
-              data-component-diff-label="proposed"
-            >
-              {"Now"}
-            </label>
-          </div>
+          <ComponentDiffToggle controlId={controlId} />
         ) : (
           <span className="rounded-full border border-edge bg-surface px-4 py-1.5 text-xs font-semibold text-ink">
             {hasProposed ? "Now" : "Was"}

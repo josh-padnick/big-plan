@@ -52,7 +52,13 @@ here; all values use the document theme's closed token vocabulary.
     pointer-events: none;
     animation: review-push-settle 1.6s ease-out 1;
   }
+  /* A block that can host a comment affordance is the box that affordance is
+     placed against. An isolated baseline block is one of those: its host is
+     absolutely positioned, so without this it resolves against whatever
+     ancestor happens to be positioned and lands on top of another side's
+     control - visible, and impossible to hit. */
   [data-block-id]:not([data-block-kind="part"]),
+  [data-baseline-block-id],
   [data-slide][data-review-slide-selectable],
   [data-quick-summary][data-review-slide-selectable] {
     position: relative;
@@ -82,11 +88,15 @@ here; all values use the document theme's closed token vocabulary.
   }
 
   [data-block-id]:hover > [data-review-anchor-host],
+  [data-baseline-block-id]:hover > [data-review-anchor-host],
   [data-review-anchor-host]:focus-within {
     opacity: 1;
   }
 
   [data-block-id]:hover > [data-review-anchor-host] .review-block-button,
+  [data-baseline-block-id]:hover
+    > [data-review-anchor-host]
+    .review-block-button,
   [data-review-anchor-host]:focus-within .review-block-button {
     pointer-events: auto;
   }
@@ -99,9 +109,25 @@ here; all values use the document theme's closed token vocabulary.
     pointer-events: none;
   }
 
+  [data-baseline-block-id]:not([data-baseline-block-kind="table"]):not(
+      [data-baseline-block-kind="data-table"]
+    ):hover:has([data-baseline-block-id]:hover)
+    > [data-review-anchor-host] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
   [data-block-id]:not([data-block-kind="table"]):not(
       [data-block-kind="data-table"]
     ):hover:has([data-block-id]:hover)
+    > [data-review-anchor-host]
+    .review-block-button {
+    pointer-events: none;
+  }
+
+  [data-baseline-block-id]:not([data-baseline-block-kind="table"]):not(
+      [data-baseline-block-kind="data-table"]
+    ):hover:has([data-baseline-block-id]:hover)
     > [data-review-anchor-host]
     .review-block-button {
     pointer-events: none;
@@ -127,7 +153,11 @@ here; all values use the document theme's closed token vocabulary.
     box-shadow: 0 0 0 0.25rem var(--annotation-bg);
   }
 
-  :root[data-figure-maximized-open] [data-review-anchor-host] {
+  /* Maximized figures own the frame, so a screen-level comment toolbar must
+     not become a second control row inside the frame or change its fit box.
+     The screen remains commentable when it returns to the reading surface. */
+  :root[data-figure-maximized-open]
+    :is([data-review-anchor-host], [data-review-toolbar-host]) {
     display: none;
   }
 

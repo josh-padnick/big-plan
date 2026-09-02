@@ -3,6 +3,8 @@ import type { Element, ElementContent, Root, RootContent } from "hast";
 import { fromHtml } from "hast-util-from-html";
 import { compileMarkdown } from "./compile-markdown.js";
 import { rehypeBlockIdentity, type BlockDescriptor } from "./block-identity.js";
+import { COMPONENT_INSTANCE_ATTRIBUTE } from "./component-pipeline/component-instance.js";
+import type { CollectedComponentModels } from "./component-pipeline/deliver.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -11,6 +13,8 @@ import {
 import {
   DIFF_BASELINE_SIDE,
   DIFF_SIDE_ATTRIBUTE,
+  BASELINE_BLOCK_ID_ATTRIBUTE,
+  BASELINE_SNAPSHOT_ATTRIBUTE,
   isolateBaselineSide,
   isBaselineDiffSide,
 } from "./side-isolation.js";
@@ -198,6 +202,9 @@ const nestedBaselineCopy = (root: Element, key: string): Element => {
 
 const documentWithBothSides = () => {
   const compiled = compileMarkdown({ markdown: BOTH_SIDES_FIXTURE });
+  const componentModels: CollectedComponentModels = new Map(
+    compiled.components.map((component) => [component.instanceKey, component]),
+  );
   const decision = collect({
     node: compiled.root,
     match: (candidate) => candidate.properties["data-component"] === "Decision",
@@ -210,9 +217,23 @@ const documentWithBothSides = () => {
   if (decision === undefined || table === undefined) {
     throw new Error("expected a Decision and a DataTable");
   }
+  const usedComponentKeys = new Set<string>();
+  for (const root of [decision, table]) {
+    const component = compiled.components.find(
+      (candidate) =>
+        candidate.component === root.properties["data-component"] &&
+        !usedComponentKeys.has(candidate.instanceKey),
+    );
+    if (component === undefined) {
+      throw new Error("expected a component model");
+    }
+    usedComponentKeys.add(component.instanceKey);
+    root.properties[COMPONENT_INSTANCE_ATTRIBUTE] = component.instanceKey;
+  }
   return {
     root: compiled.root,
     blocks: compiled.blocks,
+    componentModels,
     decision,
     table,
     baselineDecision: nestedBaselineCopy(decision, "decision"),
@@ -221,6 +242,54 @@ const documentWithBothSides = () => {
 };
 
 describe("side isolation", () => {
+  it("should stamp inherited baseline identity in its own attribute space", () => {
+    const subtarget: Element = {
+      type: "element",
+      tagName: "span",
+      properties: { "data-block-id": "stale-proposed-id" },
+      children: [{ type: "text", value: "Field" }],
+    };
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: { "data-block-id": "stale-root-id" },
+      children: [subtarget],
+    };
+
+    isolateBaselineSide({
+      subtree,
+      key: "was-snapshot",
+      snapshot: "abc123",
+      addressFor: (node) =>
+        node === subtree
+          ? {
+              blockId: "section/contract/http-endpoint-1",
+              kind: "http-endpoint",
+              label: "Queue",
+              section: "contract",
+            }
+          : node === subtarget
+            ? {
+                blockId: "section/contract/http-endpoint-field-1",
+                kind: "http-endpoint-field",
+                label: "Description",
+                section: "contract",
+              }
+            : undefined,
+    });
+
+    expect(subtree.properties[BASELINE_BLOCK_ID_ATTRIBUTE]).toBe(
+      "section/contract/http-endpoint-1",
+    );
+    expect(subtree.properties[BASELINE_SNAPSHOT_ATTRIBUTE]).toBe("abc123");
+    expect(subtarget.properties[BASELINE_BLOCK_ID_ATTRIBUTE]).toBe(
+      "section/contract/http-endpoint-field-1",
+    );
+    expect(subtarget.properties[BASELINE_SNAPSHOT_ATTRIBUTE]).toBe("abc123");
+    expect(subtree.properties["data-block-id"]).toBeUndefined();
+    expect(subtarget.properties["data-block-id"]).toBeUndefined();
+  });
+
   it("should mark the subtree as the baseline side", () => {
     const subtree: Element = {
       type: "element",
@@ -640,6 +709,109 @@ describe("side isolation", () => {
     expect(trigger).toBeDefined();
   });
 
+  it("should keep an addressed baseline element reachable without reviving its controls", () => {
+    // An address is the component saying a reader may point at this element.
+    // `inert` takes it out of the accessibility tree and out of hit testing,
+    // so an addressed element held inert is an address in name only - the
+    // reader is offered a comment affordance no pointer can reach. The
+    // freeze is unchanged: the figure's own controls still do nothing.
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "strong",
+          properties: {},
+          children: [{ type: "text", value: "Was" }],
+        },
+        {
+          type: "element",
+          tagName: "figure",
+          properties: { [MAXIMIZABLE_ATTRIBUTE]: "table" },
+          children: [
+            {
+              type: "element",
+              tagName: "button",
+              properties: { [TRIGGER_ATTRIBUTE]: "" },
+              children: [],
+            },
+            {
+              type: "element",
+              tagName: "tr",
+              properties: { "data-commentable-kind": "table-row" },
+              children: [{ type: "text", value: "Stripe" }],
+            },
+          ],
+        },
+      ],
+    };
+    isolateBaselineSide({
+      subtree,
+      key: "addressed",
+      snapshot: "snapshot-1",
+      addressFor: (node) =>
+        node.properties["data-commentable-kind"] === "table-row"
+          ? { blockId: "table/row-1", kind: "table-row", label: "Stripe" }
+          : undefined,
+    });
+
+    const row = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "tr",
+    })[0];
+    if (row === undefined) throw new Error("Expected the addressed row");
+    expect(row.properties[BASELINE_BLOCK_ID_ATTRIBUTE]).toBe("table/row-1");
+    expect(row.properties.inert).toBeUndefined();
+    const figure = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "figure",
+    })[0];
+    if (figure === undefined) throw new Error("Expected the figure");
+    // The figure carries the addressed row, so it may not be taken out of the
+    // tree - but it loses the attribute a script wires either way.
+    expect(figure.properties.inert).toBeUndefined();
+    expect(figure.properties[MAXIMIZABLE_ATTRIBUTE]).toBeUndefined();
+    // Its own control leads nowhere a reader may point, so it stays frozen.
+    const trigger = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "button",
+    })[0];
+    if (trigger === undefined) throw new Error("Expected the maximize trigger");
+    expect(trigger.properties.inert).toBe(true);
+    expect(trigger.properties.disabled).toBe(true);
+    // Everything the address does not lead to keeps the isolation it had.
+    const heading = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "strong",
+    })[0];
+    expect(heading?.properties.inert).toBe(true);
+  });
+
+  it("should hold a baseline side with no address and no mark inert as one root", () => {
+    const subtree: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "p",
+          properties: {},
+          children: [{ type: "text", value: "Evidence" }],
+        },
+      ],
+    };
+    isolateBaselineSide({ subtree, key: "unaddressed" });
+    expect(subtree.properties.inert).toBe(true);
+    const paragraph = collect({
+      node: subtree,
+      match: (candidate) => candidate.tagName === "p",
+    })[0];
+    expect(paragraph?.properties.inert).toBeUndefined();
+  });
+
   it("should keep the evidence a marked control reveals out of the inert region", () => {
     // `inert` takes content out of the accessibility tree and out of
     // selection, so a control whose target stays inert still does nothing
@@ -745,9 +917,12 @@ describe("side isolation", () => {
 
   it("should mint the same proposed-side block ids as the same document without a baseline side", () => {
     const withoutBaseline = compileMarkdown({ markdown: BOTH_SIDES_FIXTURE });
-    const { root } = documentWithBothSides();
+    const { root, componentModels } = documentWithBothSides();
     const blocks: Array<BlockDescriptor> = [];
-    rehypeBlockIdentity({ blocks })(root);
+    rehypeBlockIdentity({
+      blocks,
+      componentModels,
+    })(root);
     expect(blocks.map((block) => block.id)).toEqual(
       withoutBaseline.blocks.map((block) => block.id),
     );

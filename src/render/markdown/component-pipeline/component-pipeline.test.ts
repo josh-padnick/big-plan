@@ -232,6 +232,7 @@ describe("scoped child dispatch", () => {
     expect([...collectModels.values()]).toEqual([
       {
         component: "Fixture",
+        commentableAnchors: [],
         line: 1,
         column: 1,
         instanceKey: expect.any(String),

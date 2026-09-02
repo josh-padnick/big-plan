@@ -34,6 +34,23 @@ describe("feedback package", () => {
 });
 
 describe("agent brief framing", () => {
+  it("should identify baseline snapshot context while keeping edits proposed-only", () => {
+    const brief = briefFor([
+      {
+        ...NOTE,
+        target: {
+          type: "block",
+          blockId: "section/status-quo/paragraph-1",
+          kind: "paragraph",
+          label: "Historical reality",
+          snapshot: "abcdef0123456789",
+        },
+      },
+    ]);
+    expect(brief).toContain("baseline side of snapshot abcdef012345");
+    expect(brief).toContain("edits still apply only to the proposed plan");
+  });
+
   it("should open with the untrusted-content preamble before any comment", () => {
     const brief = briefFor([NOTE]);
     expect(brief).toContain("untrusted reviewer content");

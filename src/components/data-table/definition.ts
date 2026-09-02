@@ -15,6 +15,11 @@ export const DATA_TABLE_COMPONENT_DEFINITION = defineComponent({
   markdown: dataTableMarkdown,
   diff: compileDataTableDiff,
   diffView: DataTableDiffView,
+  commentableAnchors: [
+    { kind: "table-column", sides: "both" },
+    { kind: "table-cell", sides: "both" },
+    { kind: "table-row", sides: "both" },
+  ],
   scopedChildren: {
     Column: { kind: "scoped-child" },
     SummaryRow: {

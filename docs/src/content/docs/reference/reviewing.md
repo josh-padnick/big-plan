@@ -445,9 +445,11 @@ absent. This applies equally to reviewer-started work and pushed threads.
 The in-place lens shows word-level edits for close rewrites and stacked **Was**/**Now** bands for larger rewrites, additions, removals, tables, and code.
 Component changes that use the component diff contract render the component's compiled presentation on both **Was** and **Now** sides.
 The change replaces the component in the plan instead of sitting beside a hidden copy.
-When a **Now** side exists, it is the live, commentable component.
-It keeps its comment entry and any controls, including maximize.
-The **Was** side is inert evidence and carries no live plan identity, apart from the controls that reach evidence only it holds: a wireframe's screen switcher stays navigable there, so a screen marked as removed or moved can be opened on the side that still has it.
+Both sides are commentable.
+A **Now** comment addresses the live plan block; a **Was** comment carries the snapshot its side was rendered from, so it stays a comment about what the plan used to say.
+The same affordance therefore appears on both sides, and again on the live plan once the change closes. While the change is open, its two controls name their sides - **Comment on Queue (Was)** beside **Comment on Queue (Now)** - and the composer keeps showing the side it was opened on even if the change closes underneath it. Outside a change, the live plan's control keeps its ordinary unqualified name.
+The **Now** side keeps any controls the component draws, including maximize.
+The **Was** side is inert evidence: its own controls do nothing, and it carries no live plan identity, addressing its content under its own snapshot instead. What a component declared commentable there stays reachable, so a Was comment can be aimed by pointer, keyboard, and screen reader alike; the exception for controls is narrower, and covers only the ones that reach evidence only it holds: a wireframe's screen switcher stays navigable there, so a screen marked as removed or moved can be opened on the side that still has it.
 The controls drawn inside a **Was** screen look exactly as the plan draws them and do nothing, so the screen it shows stays the one the reader chose from its switcher.
 That switcher moves the **Was** side alone, so the two sides can show different screens - which is how a screen the change removed stays reachable on the side that still has it.
 Until the reviewer accepts an answerable **Now** Decision, a banner at the top of its card asks them to accept the change before answering.
@@ -455,6 +457,7 @@ Its disabled **Confirm choice** control shows the same guidance in a hazard-icon
 Diagram, file tree, and wireframe changes use the component's own maximize control and name.
 Their controls work inside the change: diagram theme and flow controls, tree copy controls, and wireframe screen switchers.
 A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle.
+That toggle is an ordinary pair of radios drawn where they sit: the pointer, the keyboard, and a screen reader all reach the same box, and Tab enters it in reading order with the arrow keys moving between the two sides.
 For a changed wireframe, its own screen switcher marks screens that were added, removed, moved, or updated; wholly added or removed wireframes keep plain entries.
 A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer.
 A removed wireframe keeps its own screen switcher, so the screens the change took away stay readable.

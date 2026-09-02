@@ -107,6 +107,48 @@ describe("render diff view", () => {
     ).toHaveLength(4);
   });
 
+  it("should stamp the baseline snapshot without moving proposed identity", () => {
+    const baselineMarkdown = decision("Ship now");
+    const proposedMarkdown = decision("Ship safely");
+    const baselineDocument = compileMarkdown({
+      markdown: baselineMarkdown,
+    });
+    const proposedDocument = compileMarkdown({
+      markdown: proposedMarkdown,
+    });
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: decisionBlockId(baselineMarkdown),
+      proposedBlockId: decisionBlockId(proposedMarkdown),
+      status: "changed",
+      runs: [],
+      baselineSnapshot: "abc123",
+    });
+    const again = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: decisionBlockId(baselineMarkdown),
+      proposedBlockId: decisionBlockId(proposedMarkdown),
+      status: "changed",
+      runs: [],
+      baselineSnapshot: "abc123",
+    });
+    const nodes = elements(fromHtml(rendered?.view ?? "", { fragment: true }));
+    const baseline = nodes.find(
+      (node) => node.properties.dataDiffSide === "baseline",
+    );
+
+    expect(baseline?.properties.dataBaselineBlockId).toBe(
+      decisionBlockId(baselineMarkdown),
+    );
+    expect(baseline?.properties.dataBaselineSnapshot).toBe("abc123");
+    expect(again?.view).toBe(rendered?.view);
+    expect(
+      nodes.filter((node) => node.properties.dataBlockId !== undefined),
+    ).toHaveLength(1);
+  });
+
   it("should keep a proposed field's declared target id inside its diff", () => {
     const endpoint = (description: string): string => `# Plan
 
@@ -146,6 +188,109 @@ ${description}
     expect(
       nodes.filter((node) => node.properties.dataBlockId === declaredField?.id),
     ).toHaveLength(1);
+  });
+
+  it("should inherit the baseline field id and snapshot", () => {
+    const endpoint = (description: string): string => `# Plan
+
+## API
+
+<HttpEndpoint method="POST" path="/queue" summary="Queue a refresh">
+
+${description}
+
+</HttpEndpoint>`;
+    const baselineDocument = compileMarkdown({
+      markdown: endpoint("Queues a refresh."),
+    });
+    const proposedDocument = compileMarkdown({
+      markdown: endpoint("Queues one refresh."),
+    });
+    const baselineRoot = baselineDocument.blocks.find(
+      (block) => block.kind === "http-endpoint",
+    );
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "http-endpoint",
+    );
+    const baselineField = baselineDocument.blocks.find(
+      (block) =>
+        block.ownerId === baselineRoot?.id && block.label === "Description",
+    );
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineBlockId: baselineRoot?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+      baselineSnapshot: "baseline-digest",
+    });
+    const nodes = elements(fromHtml(rendered?.view ?? "", { fragment: true }));
+    const baseline = nodes.find(
+      (node) => node.properties.dataDiffSide === "baseline",
+    );
+
+    expect(baselineField).toBeDefined();
+    expect(baseline?.properties.dataBaselineSnapshot).toBe("baseline-digest");
+    expect(
+      nodes.filter(
+        (node) => node.properties.dataBaselineBlockId === baselineField?.id,
+      ),
+    ).toHaveLength(1);
+    expect(
+      nodes.every(
+        (node) =>
+          node.properties.dataBlockId === undefined ||
+          node.properties.dataDiffSide !== "baseline",
+      ),
+    ).toBe(true);
+  });
+
+  it("should inherit baseline addresses from the baseline snapshot", () => {
+    const source = (text: string): string => `# Plan
+
+## Flow
+
+<Wireframe id="wf" initialScreen="one">
+  <Screen id="one" name="One" device="desktop">
+    <Text text="${text}" />
+  </Screen>
+</Wireframe>`;
+    const baselineDocument = compileMarkdown({ markdown: source("Old") });
+    const proposedDocument = compileMarkdown({ markdown: source("New") });
+    const baselineRoot = baselineDocument.blocks.find(
+      (block) => block.kind === "wireframe",
+    );
+    const proposedRoot = proposedDocument.blocks.find(
+      (block) => block.kind === "wireframe",
+    );
+    const rendered = renderDiffView({
+      baselineDocument,
+      proposedDocument,
+      baselineSnapshot: "1111111111111111",
+      baselineBlockId: baselineRoot?.id,
+      proposedBlockId: proposedRoot?.id,
+      status: "changed",
+      runs: [],
+    });
+    const nodes = elements(fromHtml(rendered?.view ?? "", { fragment: true }));
+    const baselineScreen = baselineDocument.blocks.find(
+      (block) => block.kind === "wireframe-screen",
+    );
+    expect(
+      nodes.find(
+        (node) => node.properties.dataBaselineBlockId === baselineScreen?.id,
+      )?.properties.dataBaselineSnapshot,
+    ).toBe("1111111111111111");
+    expect(
+      nodes
+        .filter(
+          (node) =>
+            node.properties.dataDiffSide === "baseline" ||
+            node.properties.dataBaselineBlockId !== undefined,
+        )
+        .some((node) => node.properties.dataBlockId !== undefined),
+    ).toBe(false);
   });
 
   it("should omit unchanged Callout content from a one-field diff", () => {
@@ -347,6 +492,8 @@ describe("renderIsolatedBlockView", () => {
     ).toEqual([]);
     expect(nodes.at(0)?.properties.inert).toBe(true);
     expect(nodes.at(0)?.properties.dataDiffSide).toBe("baseline");
+    expect(nodes.at(0)?.properties.dataBaselineBlockId).toBeUndefined();
+    expect(nodes.at(0)?.properties.dataBaselineSnapshot).toBeUndefined();
   });
 
   it("should answer with nothing when the side has no such block", () => {

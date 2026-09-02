@@ -32,6 +32,7 @@ export const QUICK_SUMMARY_COMPONENT_DEFINITION = defineComponent({
   markdown: quickSummaryMarkdown,
   diff: compileQuickSummaryDiff,
   diffView: QuickSummaryDiffView,
+  commentableAnchors: [{ kind: "quick-summary-facet", sides: "both" }],
   scopedChildren: Object.fromEntries(
     QUICK_SUMMARY_FACETS.map((name) => [name, facet(name)]),
   ),

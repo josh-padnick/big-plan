@@ -67,6 +67,12 @@ import {
 import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
+import type { CommentTargetSide } from "../shared/comment-target-side.js";
+import {
+  commentTargetSideLabel,
+  isCommentTargetSide,
+  sideQualifiedControlLabel,
+} from "../shared/comment-target-side.js";
 import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
 import {
   announcedArrival,
@@ -84,6 +90,7 @@ import {
   measureThreadAnchor,
   scrollToLiveElement,
 } from "./thread-anchor.browser.js";
+import { canMountReviewBlockHost } from "./review-controller-hosts.browser.js";
 import {
   clearThreadOpenOverlay,
   isThreadOpen,
@@ -173,6 +180,7 @@ import { useDiffTour } from "./diff-tour.browser.js";
 import {
   foundElement,
   liveBlock,
+  liveBaselineBlock,
   liveDecisionFigure,
   liveFlowAnchor,
   livePictures,
@@ -406,6 +414,10 @@ type BigPlanFeedbackWindow = Window & {
 type ComposeState = {
   readonly target: CommentTarget;
   readonly premiseSnapshot: string;
+  // Bound when the composer opens, and shown on it, because the affordance the
+  // reviewer pressed can look identical to one addressing the other side or
+  // the live plan. Absent for a target that sits in no component diff.
+  readonly targetSide?: CommentTargetSide;
   readonly top: number;
   readonly left: number;
 };
@@ -1046,13 +1058,63 @@ const randomId = (): string => {
 };
 
 const blockIdentity = (block: HTMLElement) => ({
-  blockId: block.dataset.blockId ?? "",
-  kind: block.dataset.blockKind ?? "block",
-  label: block.dataset.blockLabel ?? "This block",
-  ...(block.dataset.blockSection === undefined
+  blockId: block.dataset.blockId ?? block.dataset.baselineBlockId ?? "",
+  kind: block.dataset.blockKind ?? block.dataset.baselineBlockKind ?? "block",
+  label:
+    block.dataset.blockLabel ??
+    block.dataset.baselineBlockLabel ??
+    "This block",
+  ...((block.dataset.blockSection ?? block.dataset.baselineBlockSection) ===
+  undefined
     ? {}
-    : { section: block.dataset.blockSection }),
+    : {
+        section:
+          block.dataset.blockSection ?? block.dataset.baselineBlockSection,
+      }),
+  ...(block.dataset.baselineSnapshot === undefined
+    ? {}
+    : { snapshot: block.dataset.baselineSnapshot }),
 });
+
+const blockKind = (block: HTMLElement): string =>
+  block.dataset.blockKind ?? block.dataset.baselineBlockKind ?? "";
+
+const blockAddressId = (block: HTMLElement): string =>
+  block.dataset.blockId ?? block.dataset.baselineBlockId ?? "";
+
+/**
+ * Which side of a component diff an element sits on, if any. The proposed
+ * component root is addressed on the diff card itself rather than inside the
+ * proposed side's wrapper, so an element under a card but under no side
+ * wrapper is still the proposed side.
+ */
+const diffSideOfElement = (
+  element: HTMLElement,
+): CommentTargetSide | undefined => {
+  const sideHost = element.closest<HTMLElement>("[data-component-diff-side]");
+  const side = sideHost?.dataset.componentDiffSide;
+  if (isCommentTargetSide(side)) return side;
+  return element.closest("[data-component-diff]") === null
+    ? undefined
+    : "proposed";
+};
+
+/**
+ * The side a composer is bound to at the moment it opens, so what it says it
+ * addresses cannot drift when the diff it was aimed at closes underneath it. A
+ * qualified baseline address proves the side on its own; otherwise only the
+ * element the reviewer aimed at can say, and a target outside every diff has no
+ * side to name.
+ */
+const boundTargetSide = (
+  target: CommentTarget,
+  origin?: HTMLElement,
+): CommentTargetSide | undefined => {
+  if (target.type !== "document" && target.snapshot !== undefined) {
+    return "baseline";
+  }
+  return origin === undefined ? undefined : diffSideOfElement(origin);
+};
 
 const targetForBlock = (
   block: HTMLElement,
@@ -1064,7 +1126,9 @@ const targetForBlock = (
 const targetForSlide = (
   slide: HTMLElement,
 ): Extract<CommentTarget, { readonly type: "block" }> | null => {
-  const firstBlock = slide.querySelector<HTMLElement>("[data-block-id]");
+  const firstBlock = slide.querySelector<HTMLElement>(
+    "[data-block-id], [data-baseline-block-id]",
+  );
   if (firstBlock === null) {
     return null;
   }
@@ -1151,7 +1215,7 @@ const parentElementFor = (node: Node): Element | null =>
   node instanceof Element ? node : node.parentElement;
 
 const SELECTION_BLOCK_SELECTOR =
-  '[data-block-id]:not([data-block-kind="part"])';
+  '[data-block-id]:not([data-block-kind="part"]), [data-baseline-block-id]';
 
 const selectionBoundaryBlock = ({
   container,
@@ -1275,7 +1339,7 @@ const selectionControlState = (): SelectionControlState | null => {
   const images = authoredImagesIntersecting(range);
   const text = selection.toString();
   const imageEvidence = images
-    .map((image) => `[Image: ${image.dataset.blockLabel ?? "Image"}]`)
+    .map((image) => `[Image: ${blockIdentity(image).label}]`)
     .join("\n");
   const selected = [text, imageEvidence]
     .filter((part) => part.trim() !== "")
@@ -1306,13 +1370,11 @@ const selectionControlState = (): SelectionControlState | null => {
       ...blockIdentity(startBlock),
       ...(startBlock === endBlock
         ? {}
-        : { endBlockId: endBlock.dataset.blockId ?? "" }),
+        : { endBlockId: blockAddressId(endBlock) }),
       ...(images.length === 0
         ? {}
         : {
-            imageBlockIds: images
-              .map((image) => image.dataset.blockId)
-              .filter((id): id is string => id !== undefined),
+            imageBlockIds: images.map(blockAddressId).filter((id) => id !== ""),
           }),
       start,
       end,
@@ -1325,10 +1387,28 @@ const selectionControlState = (): SelectionControlState | null => {
 };
 
 const blockCommentLabel = (block: HTMLElement): string =>
-  block.dataset.blockKind === "code" ||
-  block.dataset.blockKind?.startsWith("code-") === true
-    ? "Comment on this code snippet"
-    : `Comment on ${block.dataset.blockLabel ?? "this component"}`;
+  sideQualifiedControlLabel({
+    label:
+      blockKind(block) === "code" || blockKind(block).startsWith("code-")
+        ? "Comment on this code snippet"
+        : `Comment on ${blockIdentity(block).label}`,
+    side: diffSideOfElement(block),
+  });
+
+/**
+ * What the composer says it points at. A selection's label is the text it was
+ * taken from, and the compact composer deliberately never repeats the words
+ * the highlight is already showing, so a selection names itself and stops
+ * there.
+ */
+const composerTargetLabel = (target: CommentTarget): string =>
+  target.type === "selection"
+    ? `Selected text${
+        target.imageBlockIds === undefined || target.imageBlockIds.length === 0
+          ? ""
+          : " and image"
+      }`
+    : targetLabel(target);
 
 const selectionCommentLabel = (target: SelectionTarget): string =>
   `Comment on selected text${
@@ -1343,11 +1423,25 @@ const selectionCommentLabel = (target: SelectionTarget): string =>
 // themselves; jumpTo is the one that does.
 const targetElement = (target: CommentTarget): HTMLElement | null => {
   if (target.type === "document") return document.querySelector("main");
-  const block = foundElement(liveBlock(target.blockId));
+  const block = foundElement(
+    target.snapshot === undefined
+      ? liveBlock(target.blockId)
+      : liveBaselineBlock(target.blockId, target.snapshot),
+  );
   return target.type === "block" && target.kind === "slide"
     ? (block?.closest<HTMLElement>("[data-slide]") ?? block)
     : block;
 };
+
+const liveTargetBlock = (
+  blockId: string,
+  snapshot: string | undefined,
+): HTMLElement | null =>
+  foundElement(
+    snapshot === undefined
+      ? liveBlock(blockId)
+      : liveBaselineBlock(blockId, snapshot),
+  );
 
 const targetAssociationElements = (
   target: CommentTarget,
@@ -1378,7 +1472,7 @@ const targetAssociationElements = (
   }
   if (target.type === "selection") {
     for (const imageId of target.imageBlockIds ?? []) {
-      const image = foundElement(liveBlock(imageId));
+      const image = liveTargetBlock(imageId, target.snapshot);
       if (image !== null) elements.add(image);
     }
   }
@@ -1389,9 +1483,9 @@ const targetAssociationElements = (
 const targetAddress = (target: CommentTarget): string => {
   if (target.type === "document") return "document";
   if (target.type === "selection") {
-    return `selection:${target.blockId}:${target.start}:${target.endBlockId ?? target.blockId}:${target.end}`;
+    return `selection:${target.snapshot ?? "proposed"}:${target.blockId}:${target.start}:${target.endBlockId ?? target.blockId}:${target.end}`;
   }
-  return `block:${target.blockId}`;
+  return `block:${target.snapshot ?? "proposed"}:${target.blockId}`;
 };
 
 type HighlightRegistry = {
@@ -1406,7 +1500,7 @@ const selectionRange = (
   const endBlock =
     target.endBlockId === undefined
       ? startBlock
-      : foundElement(liveBlock(target.endBlockId));
+      : liveTargetBlock(target.endBlockId, target.snapshot);
   if (startBlock === null || endBlock === null) return null;
   const textPoint = (
     block: HTMLElement,
@@ -1448,10 +1542,10 @@ const selectionTargetResolves = (target: SelectionTarget): boolean => {
   if (range === null) return false;
   const images: Array<HTMLElement> = [];
   for (const imageId of target.imageBlockIds ?? []) {
-    const image = foundElement(liveBlock(imageId));
+    const image = liveTargetBlock(imageId, target.snapshot);
     if (
       image === null ||
-      image.dataset.blockKind !== "image" ||
+      blockKind(image) !== "image" ||
       !range.intersectsNode(image)
     ) {
       return false;
@@ -1459,7 +1553,7 @@ const selectionTargetResolves = (target: SelectionTarget): boolean => {
     images.push(image);
   }
   const imageEvidence = images
-    .map((image) => `[Image: ${image.dataset.blockLabel ?? "Image"}]`)
+    .map((image) => `[Image: ${blockIdentity(image).label}]`)
     .join("\n");
   const selected = [range.toString(), imageEvidence]
     .filter((part) => part.trim() !== "")
@@ -1578,8 +1672,27 @@ const ownedPresentationDescendant = (
   Array.from(
     commentPresentation(block).querySelectorAll<HTMLElement>(selector),
   ).find(
-    (element) => element.closest<HTMLElement>("[data-block-id]") === block,
+    (element) =>
+      element.closest<HTMLElement>(
+        "[data-block-id], [data-baseline-block-id]",
+      ) === block,
   ) ?? null;
+
+/**
+ * The same descendant, but only where a comment control mounted into it would
+ * still answer a pointer. An isolated baseline keeps its component's own
+ * control bar in the markup while holding it inert, so a host prepended there
+ * would look like the live side's control and do nothing at all. Falling back
+ * to the block's own anchor host is the honest answer: the block is reachable,
+ * which is the whole reason it carries an address.
+ */
+const mountableOwnedDescendant = (
+  block: HTMLElement,
+  selector: string,
+): HTMLElement | null => {
+  const element = ownedPresentationDescendant(block, selector);
+  return element !== null && canMountReviewBlockHost(element) ? element : null;
+};
 
 // A comment control that stands alone - floating beside a card, hovering over
 // a block, or sitting by itself in a component header - rests at the quieter
@@ -1607,14 +1720,15 @@ const useBlockHosts = () => {
       if (article === null) return [];
       return Array.from(
         article.querySelectorAll<HTMLElement>(
-          '[data-block-id]:not([data-block-kind="part"])',
+          '[data-block-id]:not([data-block-kind="part"]), [data-baseline-block-id]',
         ),
       ).filter(
         (block) =>
-          block.dataset.blockKind !== "image" &&
-          !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
-          !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
-          !DERIVED_KINDS.has(block.dataset.blockKind ?? "") &&
+          blockKind(block) !== "image" &&
+          !PROSE_KINDS.has(blockKind(block)) &&
+          !TABLE_PRECISION_KINDS.has(blockKind(block)) &&
+          !DERIVED_KINDS.has(blockKind(block)) &&
+          canMountReviewBlockHost(block) &&
           block.closest("[data-quick-summary]") === null &&
           // A figure that already offers its own whole-figure comment owns
           // that affordance, and its notes join the batch the reader submits
@@ -1628,11 +1742,8 @@ const useBlockHosts = () => {
     const mount = (blocks: ReadonlyArray<HTMLElement>) =>
       blocks.map((block) => {
         const host = document.createElement("span");
-        if (
-          block.dataset.blockKind === "data-table" ||
-          block.dataset.blockKind === "table"
-        ) {
-          const tableActions = ownedPresentationDescendant(
+        if (blockKind(block) === "data-table" || blockKind(block) === "table") {
+          const tableActions = mountableOwnedDescendant(
             block,
             ".figure-action-group",
           );
@@ -1652,28 +1763,33 @@ const useBlockHosts = () => {
           const plainCodeFigure = block.parentElement?.matches(".code-figure")
             ? block.parentElement
             : null;
-          const plainCodeActions = plainCodeFigure?.querySelector<HTMLElement>(
-            ".figure-control-bar",
-          );
+          const plainCodeControlBar =
+            plainCodeFigure?.querySelector<HTMLElement>(".figure-control-bar");
+          const plainCodeActions =
+            plainCodeControlBar !== undefined &&
+            plainCodeControlBar !== null &&
+            canMountReviewBlockHost(plainCodeControlBar)
+              ? plainCodeControlBar
+              : null;
           const plainCodeCopy =
             plainCodeActions?.querySelector<HTMLElement>("[data-copy-code]");
-          const copyControl = ownedPresentationDescendant(
+          const copyControl = mountableOwnedDescendant(
             block,
             "[data-copy-source], [data-copy-code]",
           );
-          const actionGroup = ownedPresentationDescendant(
+          const actionGroup = mountableOwnedDescendant(
             block,
             ".figure-action-group, .figure-control-bar",
           );
-          const inlineHeader = ownedPresentationDescendant(
+          const inlineHeader = mountableOwnedDescendant(
             block,
-            ".file-tree-header, .callout-header",
+            ".file-tree-header, .callout-header, .wireframe-screen-caption",
           );
-          const overlayHeader = ownedPresentationDescendant(
+          const overlayHeader = mountableOwnedDescendant(
             block,
             ".decision-zone-question",
           );
-          if (plainCodeActions !== undefined && plainCodeActions !== null) {
+          if (plainCodeActions !== null) {
             host.dataset.reviewToolbarHost = "";
             if (plainCodeCopy === undefined || plainCodeCopy === null) {
               plainCodeActions.prepend(host);
@@ -1806,7 +1922,9 @@ const useImageHosts = () => {
     });
     const mount = () => {
       const next = livePictures().filter(
-        (candidate) => candidate.dataset.reviewImageMounted === undefined,
+        (candidate) =>
+          candidate.dataset.reviewImageMounted === undefined &&
+          canMountReviewBlockHost(candidate),
       );
       for (const block of next) {
         const parent = block.parentElement;
@@ -2380,13 +2498,40 @@ const CommentComposer = ({
         }
         style={style}
         role="dialog"
-        aria-label={`Comment on ${targetLabel(compose.target)}`}
+        aria-label={sideQualifiedControlLabel({
+          label: `Comment on ${targetLabel(compose.target)}`,
+          side: compose.targetSide,
+        })}
+        // The address is on the card so what a comment will carry is
+        // inspectable from the composer itself rather than only from the
+        // request it eventually produces.
+        data-review-compose-target={targetAddress(compose.target)}
+        data-review-compose-side={compose.targetSide}
         data-review-associated={
           compose.target.type === "selection" ? "true" : undefined
         }
       >
-        <p className="review-compose-title m-0 mb-2 text-xs font-semibold text-muted">
-          Add a comment
+        {/*
+          The composer names what it is pointing at. A component diff shows the
+          same affordance on its Was side, on its Now side, and on the live
+          block the Now side copies, so "Add a comment" left the reviewer to
+          infer which of three addresses they had reached - and a diff that
+          closed under them made the wrong inference the likely one.
+        */}
+        <p className="review-compose-title m-0 mb-2 flex min-w-0 items-baseline gap-1.5 text-xs font-semibold text-muted">
+          <span className="min-w-0 truncate">{`Comment on ${composerTargetLabel(compose.target)}`}</span>
+          {compose.targetSide === undefined ? null : (
+            <span
+              className={`flex-none rounded-full px-1.5 text-2xs font-bold tracking-caps uppercase ${
+                compose.targetSide === "baseline"
+                  ? "bg-[var(--diff-remove-bg)] text-[var(--diff-remove-c)]"
+                  : "bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]"
+              }`}
+              data-review-compose-side-badge=""
+            >
+              {commentTargetSideLabel(compose.targetSide)}
+            </span>
+          )}
         </p>
         <ComposeImages
           identity={identity}
@@ -4791,9 +4936,11 @@ export const ReviewController = () => {
         return "detached";
       }
       setDetachedComposer(null);
+      const recoveredSide = boundTargetSide(recovered.target, element);
       setCompose({
         target: recovered.target,
         premiseSnapshot: recovered.premiseSnapshot,
+        ...(recoveredSide === undefined ? {} : { targetSide: recoveredSide }),
         ...composePlacement({
           target: recovered.target,
           top: element.getBoundingClientRect().top,
@@ -5645,7 +5792,7 @@ export const ReviewController = () => {
       selection === null
         ? []
         : (selection.imageBlockIds ?? [])
-            .map((imageId) => foundElement(liveBlock(imageId)))
+            .map((imageId) => liveTargetBlock(imageId, selection.snapshot))
             .filter((image): image is HTMLElement => image !== null);
     for (const image of images) {
       image.dataset.reviewSelectionAssociated = "";
@@ -6393,7 +6540,13 @@ export const ReviewController = () => {
   }, []);
 
   const beginTarget = useCallback(
-    (target: CommentTarget, rect: Pick<DOMRect, "top">) => {
+    (
+      target: CommentTarget,
+      rect: Pick<DOMRect, "top">,
+      // The element the reviewer aimed at, when there was one. It is the only
+      // witness to which of several identical affordances was pressed.
+      origin?: HTMLElement,
+    ) => {
       if (runtimeSession?.authoritative === false) {
         openAgentSidebar();
         return;
@@ -6408,9 +6561,11 @@ export const ReviewController = () => {
       ) {
         return;
       }
+      const side = boundTargetSide(target, origin);
       const next = {
         target,
         premiseSnapshot: displayedSnapshot,
+        ...(side === undefined ? {} : { targetSide: side }),
         ...composePlacement({ target, top: rect.top }),
       };
       if (compose === null || composeBody.trim() === "") {
@@ -7784,9 +7939,12 @@ export const ReviewController = () => {
         const pressed =
           compose?.target.type === "block" &&
           targetElement(compose.target) === container;
-        const label = container.matches("[data-quick-summary]")
-          ? "Comment on quick summary"
-          : "Comment on slide";
+        const label = sideQualifiedControlLabel({
+          label: container.matches("[data-quick-summary]")
+            ? "Comment on quick summary"
+            : "Comment on slide",
+          side: diffSideOfElement(container),
+        });
         return createPortal(
           <Tooltip label={label} placement="below" asChild>
             <button
@@ -7798,7 +7956,11 @@ export const ReviewController = () => {
               aria-label={label}
               aria-pressed={pressed}
               onClick={() =>
-                beginTarget(target, container.getBoundingClientRect())
+                beginTarget(
+                  target,
+                  container.getBoundingClientRect(),
+                  container,
+                )
               }
             >
               <Icon icon={MESSAGE_SQUARE_ICON} />
@@ -7810,13 +7972,22 @@ export const ReviewController = () => {
       })}
       {blockHosts.map(({ block, host }) =>
         createPortal(
-          block.dataset.blockKind === "data-table" ||
-            block.dataset.blockKind === "table" ? (
-            <Tooltip label="Comment on this table" placement="below" asChild>
+          blockKind(block) === "data-table" || blockKind(block) === "table" ? (
+            <Tooltip
+              label={sideQualifiedControlLabel({
+                label: "Comment on this table",
+                side: diffSideOfElement(block),
+              })}
+              placement="below"
+              asChild
+            >
               <button
                 type="button"
                 className={`review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 ${isStandaloneCommentHost(host) ? "text-comment-rest" : "text-muted"} hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5`}
-                aria-label="Comment on this table"
+                aria-label={sideQualifiedControlLabel({
+                  label: "Comment on this table",
+                  side: diffSideOfElement(block),
+                })}
                 aria-pressed={
                   compose?.target.type === "block" &&
                   targetElement(compose.target) === block
@@ -7825,6 +7996,7 @@ export const ReviewController = () => {
                   beginTarget(
                     targetForBlock(block),
                     block.getBoundingClientRect(),
+                    block,
                   )
                 }
               >
@@ -7846,6 +8018,7 @@ export const ReviewController = () => {
                 beginTarget(
                   targetForBlock(block),
                   block.getBoundingClientRect(),
+                  block,
                 )
               }
             >
@@ -7856,12 +8029,13 @@ export const ReviewController = () => {
               variant="secondary"
               size="sm"
               className="review-block-button"
-              aria-label={`Comment on ${block.dataset.blockLabel ?? "this component"}`}
+              aria-label={blockCommentLabel(block)}
               data-review-block-button=""
               onClick={() =>
                 beginTarget(
                   targetForBlock(block),
                   block.getBoundingClientRect(),
+                  block,
                 )
               }
             >
@@ -7869,7 +8043,7 @@ export const ReviewController = () => {
             </Button>
           ),
           host,
-          block.dataset.blockId,
+          blockAddressId(block),
         ),
       )}
       {imageHosts.map(({ block, host }) =>
@@ -7879,7 +8053,10 @@ export const ReviewController = () => {
               type="button"
               className="review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-comment-rest hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
               data-review-image-comment=""
-              aria-label={`Comment on ${block.dataset.blockLabel ?? "this image"}`}
+              aria-label={sideQualifiedControlLabel({
+                label: `Comment on ${block.dataset.blockLabel ?? "this image"}`,
+                side: diffSideOfElement(block),
+              })}
               aria-pressed={
                 compose?.target.type === "block" &&
                 targetElement(compose.target) === block
@@ -7888,6 +8065,7 @@ export const ReviewController = () => {
                 beginTarget(
                   targetForBlock(block),
                   block.getBoundingClientRect(),
+                  block,
                 )
               }
             >
@@ -7895,7 +8073,7 @@ export const ReviewController = () => {
             </button>
           </Tooltip>,
           host,
-          block.dataset.blockId,
+          blockAddressId(block),
         ),
       )}
       {selectionControl === null ? null : (

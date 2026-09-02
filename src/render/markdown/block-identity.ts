@@ -25,6 +25,7 @@
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import { componentInstanceKeyOf } from "./component-pipeline/component-instance.js";
 import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
+import { componentCommentableAnchorAllows } from "../../components/_model/component-diff/contract.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js";
 import { isBaselineDiffSide } from "./side-isolation.js";
 
@@ -287,7 +288,8 @@ const componentName = (node: Element): string | undefined => {
 
 const declaredCommentKind = (node: Element): string | undefined => {
   const kind = node.properties["data-commentable-kind"];
-  return typeof kind === "string" && kind.length > 0 ? kind : undefined;
+  if (typeof kind === "string" && kind.length > 0) return kind;
+  return undefined;
 };
 
 const hasTitleClass = (node: Element): boolean => {
@@ -697,6 +699,7 @@ const stampDeclaredTargets = ({
   section,
   blocks,
   counter,
+  commentableAnchors,
 }: {
   readonly component: Element;
   readonly componentId: string;
@@ -704,12 +707,25 @@ const stampDeclaredTargets = ({
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
   readonly counter: ScopeCounter;
+  readonly commentableAnchors: CollectedComponentModel["commentableAnchors"];
 }): void => {
   forEachDescendant({
     node: component,
     visit: (candidate) => {
       const kind = declaredCommentKind(candidate);
       if (kind === undefined) {
+        return;
+      }
+      if (
+        !commentableAnchors.some(
+          (anchor) =>
+            anchor.kind === kind &&
+            componentCommentableAnchorAllows({
+              anchor,
+              side: "proposed",
+            }),
+        )
+      ) {
         return;
       }
       const declaredLabel = candidate.properties["data-commentable-label"];
@@ -786,6 +802,7 @@ const stampScope = ({
     const instanceKey = componentInstanceKeyOf(child);
     const instance =
       instanceKey === undefined ? undefined : componentModels.get(instanceKey);
+    const declaredAnchors = instance?.commentableAnchors ?? [];
     const id = stampBlock({
       node: child,
       kind,
@@ -825,6 +842,7 @@ const stampScope = ({
         section,
         blocks,
         counter,
+        commentableAnchors: declaredAnchors,
       });
     }
   }

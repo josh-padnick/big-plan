@@ -3,7 +3,11 @@
 
 import { toHtml } from "hast-util-to-html";
 import type { Element, Root, RootContent } from "hast";
-import type { ComponentDiffInput } from "../components/_model/component-diff/contract.js";
+import {
+  componentCommentableAnchorAllows,
+  type ComponentCommentableAnchor,
+  type ComponentDiffInput,
+} from "../components/_model/component-diff/contract.js";
 import {
   COMPONENT_REGISTRY,
   definitionFor,
@@ -14,7 +18,10 @@ import {
   type CompiledMarkdown,
 } from "./markdown/compile-markdown.js";
 import { reactToHast } from "./markdown/component-pipeline/react-hast-adapter.js";
-import { isolateBaselineSide } from "./markdown/side-isolation.js";
+import {
+  isolateBaselineSide,
+  type BaselineBlockAddress,
+} from "./markdown/side-isolation.js";
 
 export type RenderedComponentDiff = {
   readonly model: unknown;
@@ -79,16 +86,37 @@ export const renderIsolatedBlockView = ({
   document,
   blockId,
   key,
+  baselineSnapshot,
 }: {
   readonly document: CompiledMarkdown;
   readonly blockId: string | undefined;
   readonly key: string;
+  readonly baselineSnapshot?: string;
 }): string | undefined => {
   if (blockId === undefined) return undefined;
   const block = elementByBlockId({ node: document.root, blockId });
   if (block === null) return undefined;
+  const descriptor = document.blocks.find(
+    (candidate) => candidate.id === blockId,
+  );
+  if (descriptor === undefined) return undefined;
   const isolated = structuredClone(block);
-  isolateBaselineSide({ subtree: isolated, key });
+  isolateBaselineSide({
+    subtree: isolated,
+    key,
+    ...(baselineSnapshot === undefined ? {} : { snapshot: baselineSnapshot }),
+    addressFor: (node) =>
+      node === isolated
+        ? {
+            blockId,
+            kind: descriptor.kind,
+            label: descriptor.label,
+            ...(descriptor.section === undefined
+              ? {}
+              : { section: descriptor.section }),
+          }
+        : undefined,
+  });
   return toHtml(isolated, { allowDangerousHtml: false });
 };
 
@@ -202,72 +230,124 @@ const inheritProposedRootIdentity = ({
   }
 };
 
-// A bespoke diff view renders the component's declared subtargets after the
-// document identity pass has already completed. Reattach the exact addresses
-// the proposed document minted by structural ownership and declaration, so a
-// field remains the same comment target when the diff replaces its card.
-const inheritProposedSubtargetIdentity = ({
-  diffRoot,
-  proposedRoot,
-  proposed,
+type AddressMatcher = (
+  node: Element,
+  claimed: ReadonlySet<string>,
+) => BaselineBlockAddress | undefined;
+
+const createAddressMatcher = ({
+  sideRoot,
+  sourceRoot,
+  owner,
   blocks,
+  side,
+  anchors,
 }: {
-  readonly diffRoot: Element;
-  readonly proposedRoot: Element | null;
-  readonly proposed: BlockDescriptor | undefined;
+  readonly sideRoot: Element;
+  readonly sourceRoot: Element | null;
+  readonly owner: BlockDescriptor;
   readonly blocks: ReadonlyArray<BlockDescriptor>;
-}): void => {
-  if (proposedRoot === null || proposed === undefined) return;
-  const proposedSide = elementByDataValue({
-    node: diffRoot,
-    attribute: "data-component-diff-side",
-    value: "proposed",
-  });
-  if (proposedSide === null) return;
-  const available = blocks.filter((block) => block.ownerId === proposed.id);
-  const proposedElements = identifiedElements(proposedRoot);
-  const claimed = new Set<string>();
-  const visit = (node: Element): void => {
+  readonly side: "baseline" | "proposed";
+  readonly anchors: ReadonlyArray<ComponentCommentableAnchor>;
+}): AddressMatcher => {
+  const available = blocks.filter((block) => block.ownerId === owner.id);
+  const sourceElements =
+    sourceRoot === null ? [] : identifiedElements(sourceRoot);
+  return (node, claimed): BaselineBlockAddress | undefined => {
+    if (node === sideRoot && side === "baseline") {
+      return {
+        blockId: owner.id,
+        kind: owner.kind,
+        label: owner.label,
+        section: owner.section,
+      };
+    }
+    if (sourceRoot === null) return undefined;
     const kind = node.properties["data-commentable-kind"];
     const label = node.properties["data-commentable-label"];
-    if (typeof kind === "string" && typeof label === "string") {
-      const normalizedLabel = label.replaceAll("`", "");
-      const sourceRowIndex = node.properties["data-table-row"];
-      const source = proposedElements.find(
-        (element) =>
-          element.properties["data-block-kind"] === kind &&
-          element.properties["data-block-label"] === normalizedLabel &&
-          (sourceRowIndex === undefined ||
-            element.properties["data-table-row"] === sourceRowIndex) &&
-          elementText(element) === elementText(node),
-      );
-      const sourceId = source?.properties["data-block-id"];
-      const target = available.find(
-        (block) =>
-          !claimed.has(block.id) &&
-          block.kind === kind &&
-          block.label === normalizedLabel &&
-          (typeof sourceId !== "string" || block.id === sourceId),
-      );
-      if (target !== undefined) {
-        claimed.add(target.id);
-        node.properties["data-block-id"] = target.id;
-        node.properties["data-block-kind"] = target.kind;
-        node.properties["data-block-label"] = target.label;
-        node.properties["data-block-section"] = target.section;
-      }
+    if (typeof kind !== "string" || typeof label !== "string") return undefined;
+    const anchor = anchors.find((candidate) => candidate.kind === kind);
+    if (
+      anchor === undefined ||
+      !componentCommentableAnchorAllows({ anchor, side })
+    ) {
+      return undefined;
+    }
+    const normalizedLabel = label.replaceAll("`", "");
+    const sourceRowIndex = node.properties["data-table-row"];
+    const source = sourceElements.find(
+      (element) =>
+        element.properties["data-block-kind"] === kind &&
+        element.properties["data-block-label"] === normalizedLabel &&
+        (sourceRowIndex === undefined ||
+          element.properties["data-table-row"] === sourceRowIndex) &&
+        elementText(element) === elementText(node),
+    );
+    const sourceId = source?.properties["data-block-id"];
+    const target = available.find(
+      (block) =>
+        !claimed.has(block.id) &&
+        block.kind === kind &&
+        block.label === normalizedLabel &&
+        (typeof sourceId !== "string" || block.id === sourceId),
+    );
+    return target === undefined
+      ? undefined
+      : {
+          blockId: target.id,
+          kind: target.kind,
+          label: target.label,
+          section: target.section,
+        };
+  };
+};
+
+const applySubtargetIdentity = ({
+  sideRoot,
+  sourceRoot,
+  owner,
+  blocks,
+  side,
+  anchors,
+}: {
+  readonly sideRoot: Element;
+  readonly sourceRoot: Element | null;
+  readonly owner: BlockDescriptor | undefined;
+  readonly blocks: ReadonlyArray<BlockDescriptor>;
+  readonly side: "baseline" | "proposed";
+  readonly anchors: ReadonlyArray<ComponentCommentableAnchor>;
+}): void => {
+  if (owner === undefined) return;
+  const used = new Set<string>();
+  const matchAddress = createAddressMatcher({
+    sideRoot,
+    sourceRoot,
+    owner,
+    blocks,
+    side,
+    anchors,
+  });
+  const visit = (node: Element): void => {
+    const address = matchAddress(node, used);
+    if (address !== undefined && !used.has(address.blockId)) {
+      used.add(address.blockId);
+      node.properties["data-block-id"] = address.blockId;
+      node.properties["data-block-kind"] = address.kind;
+      node.properties["data-block-label"] = address.label;
+      node.properties["data-block-section"] = address.section;
     }
     for (const child of node.children) {
       if (isElement(child)) visit(child);
     }
   };
-  visit(proposedSide);
+  visit(sideRoot);
 };
 
 /** Compiles and renders one component-root location through its diff contract. */
 export const renderDiffView = ({
   baselineDocument,
   proposedDocument,
+  baselineSnapshot,
   baselineBlockId,
   proposedBlockId,
   status,
@@ -275,6 +355,7 @@ export const renderDiffView = ({
 }: {
   readonly baselineDocument: CompiledMarkdown;
   readonly proposedDocument: CompiledMarkdown;
+  readonly baselineSnapshot?: string;
   readonly baselineBlockId: string | undefined;
   readonly proposedBlockId: string | undefined;
   readonly status: "added" | "removed" | "changed";
@@ -313,9 +394,37 @@ export const renderDiffView = ({
     value: "baseline",
   });
   if (baselineSide !== null) {
+    const claimed = new Set<string>();
+    const matchAddress =
+      baseline === undefined
+        ? undefined
+        : createAddressMatcher({
+            sideRoot: baselineSide,
+            sourceRoot:
+              baselineBlockId === undefined
+                ? null
+                : elementByBlockId({
+                    node: baselineDocument.root,
+                    blockId: baselineBlockId,
+                  }),
+            owner: baseline,
+            blocks: baselineDocument.blocks,
+            side: "baseline",
+            anchors: definition.commentableAnchors,
+          });
     isolateBaselineSide({
       subtree: baselineSide,
       key: `${baselineBlockId ?? "removed"}:${proposedBlockId ?? "historical"}`,
+      ...(baselineSnapshot === undefined ? {} : { snapshot: baselineSnapshot }),
+      ...(matchAddress === undefined
+        ? {}
+        : {
+            addressFor: (node) => {
+              const address = matchAddress(node, claimed);
+              if (address !== undefined) claimed.add(address.blockId);
+              return address;
+            },
+          }),
     });
   }
   inheritProposedRootIdentity({
@@ -328,18 +437,27 @@ export const renderDiffView = ({
             blockId: proposedBlockId,
           }),
   });
-  inheritProposedSubtargetIdentity({
-    diffRoot,
-    proposedRoot:
-      proposedBlockId === undefined
-        ? null
-        : elementByBlockId({
-            node: proposedDocument.root,
-            blockId: proposedBlockId,
-          }),
-    proposed,
-    blocks: proposedDocument.blocks,
+  const proposedSide = elementByDataValue({
+    node: diffRoot,
+    attribute: "data-component-diff-side",
+    value: "proposed",
   });
+  if (proposedSide !== null) {
+    applySubtargetIdentity({
+      sideRoot: proposedSide,
+      sourceRoot:
+        proposedBlockId === undefined
+          ? null
+          : elementByBlockId({
+              node: proposedDocument.root,
+              blockId: proposedBlockId,
+            }),
+      owner: proposed,
+      blocks: proposedDocument.blocks,
+      side: "proposed",
+      anchors: definition.commentableAnchors,
+    });
+  }
   return {
     model: compiled.model,
     view: toHtml(diffRoot, { allowDangerousHtml: false }),

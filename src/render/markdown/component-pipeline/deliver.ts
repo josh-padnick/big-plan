@@ -7,6 +7,7 @@ import type {
   ComponentAttributeValue,
   ScopedChild,
 } from "../../../components/_authoring/contract.js";
+import type { ComponentCommentableAnchor } from "../../../components/_model/component-diff/contract.js";
 import {
   createComponentIdAllocator,
   type ComponentIdAllocator,
@@ -57,6 +58,7 @@ export type CollectedComponentModel = {
   readonly instanceKey: string;
   readonly model: unknown;
   readonly semanticModel: unknown;
+  readonly commentableAnchors: ReadonlyArray<ComponentCommentableAnchor>;
 };
 
 /**
@@ -298,6 +300,7 @@ const renderFlowElement = ({
       instanceKey,
       model: compiled.model,
       semanticModel: semanticComponentModel(compiled.model),
+      commentableAnchors: definition.commentableAnchors,
     });
   }
   // Only a root the document will hold carries the key. A root rendered into
