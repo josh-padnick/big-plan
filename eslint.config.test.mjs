@@ -244,3 +244,13 @@ test("should still fence a plan-identity selector in an embedded shell script", 
   );
   assert.equal(messages.length, 1);
 });
+
+test("should fence a baseline plan-identity selector in an embedded shell script", async () => {
+  const messages = identityMessages(
+    await lint({
+      filePath: "src/render/shell/viewer-script.ts",
+      code: "export const VIEWER_SCRIPT = `document.querySelector('[data-baseline-block-id=\"x\"]')`;\n",
+    }),
+  );
+  assert.equal(messages.length, 1);
+});

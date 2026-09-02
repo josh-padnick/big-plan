@@ -312,6 +312,11 @@ const target = (value: unknown): CommentTarget => {
     blockId: value.blockId,
     kind: text({ value: value.kind, field: "target.kind", limit: 100 }),
     label: text({ value: value.label, field: "target.label", limit: 300 }),
+    ...(value.snapshot === undefined
+      ? {}
+      : {
+          snapshot: snapshotDigest(value.snapshot, "target.snapshot"),
+        }),
     ...(typeof value.section === "string" && value.section !== ""
       ? {
           section: text({

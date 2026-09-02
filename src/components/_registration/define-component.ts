@@ -18,6 +18,7 @@ import type {
 } from "../_model/markdown-export.js";
 import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 import type {
+  ComponentCommentableAnchor,
   ComponentDiffInput,
   ComponentDiffModel,
   DefaultComponentDiffModel,
@@ -70,6 +71,7 @@ export type ComponentDefinition = {
   readonly compileDiff: (
     input: ComponentDiffInput<unknown>,
   ) => CompiledComponentDiff;
+  readonly commentableAnchors: ReadonlyArray<ComponentCommentableAnchor>;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   // Present when the component is authorable only as a direct child of the
   // document root. The string is the author-facing diagnostic every command
@@ -103,6 +105,7 @@ type ComponentOptions<Model, DiffModel> = ComponentDiffOptions<
   readonly compile: ComponentModelCompiler<Model>;
   readonly view: ComponentType<{ readonly model: Model }>;
   readonly markdown: ComponentMarkdownRenderer<Model>;
+  readonly commentableAnchors?: ReadonlyArray<ComponentCommentableAnchor>;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
 };
@@ -117,6 +120,7 @@ export const defineComponent = <
   markdown,
   diff,
   diffView,
+  commentableAnchors = [],
   scopedChildren,
   topLevelOnly,
 }: ComponentOptions<Model, DiffModel>): ComponentDefinition => ({
@@ -146,6 +150,7 @@ export const defineComponent = <
             }),
     };
   },
+  commentableAnchors,
   ...(scopedChildren === undefined ? {} : { scopedChildren }),
   ...(topLevelOnly === undefined ? {} : { topLevelOnly }),
 });
@@ -165,6 +170,7 @@ export const defineOutlineComponent = <
   markdown,
   diff,
   diffView,
+  commentableAnchors = [],
   marker,
   scopedChildren,
   topLevelOnly,
@@ -175,6 +181,7 @@ export const defineOutlineComponent = <
     readonly outline: DocumentOutline;
   }>;
   readonly markdown: ComponentMarkdownRenderer<Model>;
+  readonly commentableAnchors?: ReadonlyArray<ComponentCommentableAnchor>;
   readonly marker: (model: Model) => OutlineMarker;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
   readonly topLevelOnly?: string;
@@ -220,6 +227,7 @@ export const defineOutlineComponent = <
         },
       };
     },
+    commentableAnchors,
     ...(scopedChildren === undefined ? {} : { scopedChildren }),
     ...(topLevelOnly === undefined ? {} : { topLevelOnly }),
   };

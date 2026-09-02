@@ -35,7 +35,9 @@ export type LiveTargetMissReason =
   // a block inside a collapsed slide is the honest answer to "which element is
   // this?" and no answer at all to "where on screen is it?". Only a caller
   // that must paint something asks for this distinction.
-  | "unlaid-out";
+  | "unlaid-out"
+  // A qualified baseline address has no retained baseline rendering.
+  | "snapshot-not-retained";
 
 export type LiveTargetResult =
   { readonly found: HTMLElement } | { readonly missing: LiveTargetMissReason };
@@ -107,6 +109,23 @@ const resolveWithin = (
 const blockSelector = (blockId: string): string =>
   `[data-block-id="${CSS.escape(blockId)}"]`;
 
+const baselineBlockSelector = (blockId: string, snapshot: string): string =>
+  `[data-baseline-block-id="${CSS.escape(blockId)}"][data-baseline-snapshot="${CSS.escape(snapshot)}"]`;
+
+const baselineSnapshotSelector = (snapshot: string): string =>
+  `[data-baseline-snapshot="${CSS.escape(snapshot)}"]`;
+
+export const baselineMissReason = ({
+  result,
+  snapshotPresent,
+}: {
+  readonly result: LiveTargetResult;
+  readonly snapshotPresent: boolean;
+}): LiveTargetResult =>
+  "missing" in result && result.missing === "unknown-id" && !snapshotPresent
+    ? { missing: "snapshot-not-retained" }
+    : result;
+
 /**
  * Lists the pictures the reader is reading. A replayed picture is rendered
  * without plan identity, so it carries no block kind for this lookup to find.
@@ -124,6 +143,29 @@ export const liveBlock = (blockId: string): LiveTargetResult => {
   const article = liveArticle();
   if (article === null) return { missing: "no-article" };
   return resolveWithin(article, blockSelector(blockId));
+};
+
+/**
+ * Resolves a block address minted by a retained baseline snapshot.
+ *
+ * This stays separate from liveBlock because it can distinguish a snapshot
+ * absent from the page from an id absent within a snapshot that is present.
+ */
+export const liveBaselineBlock = (
+  blockId: string,
+  snapshot: string,
+): LiveTargetResult => {
+  const article = liveArticle();
+  if (article === null) return { missing: "no-article" };
+  const snapshotSelector = baselineSnapshotSelector(snapshot);
+  const snapshotPresent =
+    article.matches(snapshotSelector) ||
+    article.querySelector(snapshotSelector) !== null;
+  const result = resolveWithin(
+    article,
+    baselineBlockSelector(blockId, snapshot),
+  );
+  return baselineMissReason({ result, snapshotPresent });
 };
 
 /**

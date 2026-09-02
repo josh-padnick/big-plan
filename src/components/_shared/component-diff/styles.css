@@ -1,11 +1,14 @@
-/* CSS escape hatch: this shared visual primitive uses sibling selector
-   relationships so authored radios keep both diff sides reachable without JS. */
+/* CSS escape hatch: this shared visual primitive reads the checked radio from
+   the ancestor that contains it, so both diff sides stay reachable without JS
+   while each radio remains inside the label it draws. Every rule is scoped by
+   an ancestor a toggle cannot nest inside, or by a child combinator from the
+   diff figure, so one diff never states another's side. */
 @layer bp-state {
   /* Override invariant: baseline selection beats the proposed thumb's resting
      position and add-colour utility. */
-  [data-component-diff-choice="baseline"]:checked
-    ~ [data-component-diff-controls]
-    [data-component-diff-toggle]
+  [data-component-diff-toggle]:has(
+      [data-component-diff-choice="baseline"]:checked
+    )
     [data-component-diff-toggle-thumb] {
     translate: 0;
     background: var(--diff-remove-bg);
@@ -13,36 +16,37 @@
 
   /* Override invariant: baseline selection beats the label's resting muted
      colour utility. */
-  [data-component-diff-choice="baseline"]:checked
-    ~ [data-component-diff-controls]
-    [data-component-diff-toggle]
+  [data-component-diff-toggle]:has(
+      [data-component-diff-choice="baseline"]:checked
+    )
     [data-component-diff-label="baseline"] {
     color: var(--diff-remove-c);
   }
 
   /* Override invariant: baseline selection beats the proposed label's resting
      add-colour utility. */
-  [data-component-diff-choice="baseline"]:checked
-    ~ [data-component-diff-controls]
-    [data-component-diff-toggle]
+  [data-component-diff-toggle]:has(
+      [data-component-diff-choice="baseline"]:checked
+    )
     [data-component-diff-label="proposed"] {
     color: var(--muted-c);
   }
 
   /* Override invariant: proposed selection beats the thumb's resting
      untranslated state. */
-  [data-component-diff-choice="proposed"]:checked
-    ~ [data-component-diff-controls]
-    [data-component-diff-toggle]
+  [data-component-diff-toggle]:has(
+      [data-component-diff-choice="proposed"]:checked
+    )
     [data-component-diff-toggle-thumb] {
     translate: calc(100% + 2px);
     background: var(--diff-add-bg);
   }
 
-  /* Override invariant: keyboard focus on either visually hidden radio beats
-     the toggle's resting border treatment. */
-  [data-component-diff]:has([data-component-diff-choice]:focus-visible)
-    [data-component-diff-toggle] {
+  /* Override invariant: keyboard focus on either radio beats the toggle's
+     resting border treatment. The radio fills its own label transparently, so
+     the ring belongs to the group the reader can see rather than to the node
+     the focus landed on. */
+  [data-component-diff-toggle]:has([data-component-diff-choice]:focus-visible) {
     outline: none;
     box-shadow: var(--elevation-focus);
   }
@@ -50,8 +54,9 @@
   @media (forced-colors: active) {
     /* Override invariant: the system focus outline replaces a halo that
        forced-colours mode may suppress. */
-    [data-component-diff]:has([data-component-diff-choice]:focus-visible)
-      [data-component-diff-toggle] {
+    [data-component-diff-toggle]:has(
+      [data-component-diff-choice]:focus-visible
+    ) {
       outline: medium solid Highlight;
       box-shadow: none;
     }
@@ -59,10 +64,16 @@
 
   /* Override invariant: the selected side beats both side panels' resting
      rendered state. */
-  [data-component-diff-choice="baseline"]:not(:checked)
-    ~ [data-component-diff-side="baseline"],
-  [data-component-diff-choice="baseline"]:checked
-    ~ [data-component-diff-side="proposed"] {
+  [data-component-diff]:has(
+      > [data-component-diff-controls]
+        [data-component-diff-choice="baseline"]:not(:checked)
+    )
+    > [data-component-diff-side="baseline"],
+  [data-component-diff]:has(
+      > [data-component-diff-controls]
+        [data-component-diff-choice="baseline"]:checked
+    )
+    > [data-component-diff-side="proposed"] {
     display: none;
   }
 }

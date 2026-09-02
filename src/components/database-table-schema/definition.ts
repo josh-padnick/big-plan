@@ -15,6 +15,7 @@ export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = defineComponent({
   markdown: databaseTableSchemaMarkdown,
   diff: compileDatabaseTableSchemaDiff,
   diffView: DatabaseTableSchemaDiffView,
+  commentableAnchors: [{ kind: "database-table-schema-field", sides: "both" }],
   scopedChildren: {
     Ddl: {
       kind: "scoped-child",

@@ -31,6 +31,7 @@ export const HTTP_ENDPOINT_COMPONENT_DEFINITION = defineComponent({
   markdown: httpEndpointMarkdown,
   diff: compileHttpEndpointDiff,
   diffView: HttpEndpointDiffView,
+  commentableAnchors: [{ kind: "http-endpoint-field", sides: "both" }],
   scopedChildren: {
     Param: scopedChild("Param"),
     Request: scopedChild("Request"),

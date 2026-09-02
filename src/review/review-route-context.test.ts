@@ -13,12 +13,15 @@ import {
   createActivityClock,
   createChangeVerdicts,
   createDecisionAnswers,
+  createPlanRenderer,
   createReaderProgress,
   createSnapshotDiffs,
   createWriteGate,
 } from "./review-route-context.js";
+import { renderDocument } from "../render/render-document.js";
 import type { SnapshotDiff } from "./shared/review-wire.js";
-import { prepareStore, reviewStoreFor } from "./store.js";
+import type { BlockMapEntry } from "./shared/comment.js";
+import { prepareStore, reviewStoreFor, writeSnapshot } from "./store.js";
 import {
   createMutationRegistry,
   ReviewWriteStalled,
@@ -251,6 +254,50 @@ describe("createSnapshotDiffs", () => {
     expect(builds).toBe(1);
   });
 
+  it("should retain both block maps with the cached snapshot pair", async () => {
+    const snapshotDiffs = createSnapshotDiffs();
+    const fromBlocks: ReadonlyArray<BlockMapEntry> = [
+      {
+        id: "from-block",
+        kind: "paragraph",
+        label: "From",
+        section: "Plan",
+      },
+    ];
+    const toBlocks: ReadonlyArray<BlockMapEntry> = [
+      {
+        id: "to-block",
+        kind: "paragraph",
+        label: "To",
+        section: "Plan",
+      },
+    ];
+
+    await snapshotDiffs.forPair({
+      from: FROM_SNAPSHOT,
+      to: TO_SNAPSHOT,
+      build: () =>
+        snapshotDiff({
+          from: FROM_SNAPSHOT,
+          to: TO_SNAPSHOT,
+          label: "retained",
+        }),
+    });
+    snapshotDiffs.retainPairBlocks({
+      from: FROM_SNAPSHOT,
+      to: TO_SNAPSHOT,
+      fromBlocks,
+      toBlocks,
+    });
+
+    expect([
+      ...(snapshotDiffs.blocksForSnapshot(FROM_SNAPSHOT)?.values() ?? []),
+    ]).toEqual(fromBlocks);
+    expect([
+      ...(snapshotDiffs.blocksForSnapshot(TO_SNAPSHOT)?.values() ?? []),
+    ]).toEqual(toBlocks);
+  });
+
   it("should compile a different payload after a new snapshot", async () => {
     const snapshotDiffs = createSnapshotDiffs();
     let builds = 0;
@@ -406,6 +453,155 @@ describe("createSnapshotDiffs", () => {
     await read();
 
     expect(builds).toBe(2);
+  });
+});
+
+describe("createPlanRenderer snapshot target maps", () => {
+  it("uses the retained snapshot map supplied by the diff cache", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
+    created.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    const markdown = "# Plan\n\nA retained paragraph.\n";
+    await writeFile(planPath, markdown);
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const snapshot = "1111111111111111";
+    const block = renderDocument({
+      markdown,
+      fallbackTitle: "plan",
+    }).blocks.find((candidate) => candidate.kind === "paragraph");
+    if (block === undefined)
+      throw new Error("Paragraph fixture did not compile");
+    const renderer = createPlanRenderer({
+      store,
+      planId: "0123456789abcdef",
+      sessionId: "fedcba9876543210",
+      token: "token",
+      resolvedPlanPath: planPath,
+      initialSnapshot: snapshot,
+      isDiffPreview: false,
+      blocksForSnapshot: (requestedSnapshot) =>
+        requestedSnapshot === snapshot
+          ? new Map([[block.id, block]])
+          : undefined,
+    });
+
+    await renderer.renderPlan();
+    const [comment] = await renderer.validateUpdates([
+      {
+        id: "aabbccdd",
+        body: "A retained note.",
+        createdAt: "2026-08-29T00:00:00.000Z",
+        premiseSnapshot: snapshot,
+        target: {
+          type: "block",
+          blockId: block.id,
+          snapshot,
+        },
+      },
+    ]);
+
+    expect(comment?.target).toMatchObject({
+      type: "block",
+      blockId: block.id,
+      snapshot,
+      label: block.label,
+    });
+  });
+
+  it("uses a durable retained snapshot when the diff cache misses", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
+    created.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    const markdown = "# Plan\n\nA retained paragraph.\n";
+    await writeFile(planPath, markdown);
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const snapshot = "2222222222222222";
+    await writeSnapshot({ store, snapshot, source: markdown });
+    const block = renderDocument({
+      markdown,
+      fallbackTitle: "plan",
+    }).blocks.find((candidate) => candidate.kind === "paragraph");
+    if (block === undefined)
+      throw new Error("Paragraph fixture did not compile");
+    const renderer = createPlanRenderer({
+      store,
+      planId: "0123456789abcdef",
+      sessionId: "fedcba9876543210",
+      token: "token",
+      resolvedPlanPath: planPath,
+      initialSnapshot: snapshot,
+      isDiffPreview: false,
+      blocksForSnapshot: () => undefined,
+    });
+
+    await renderer.renderPlan();
+    const [comment] = await renderer.validateUpdates([
+      {
+        id: "bbccddee",
+        body: "A retained note.",
+        createdAt: "2026-08-29T00:00:00.000Z",
+        premiseSnapshot: snapshot,
+        target: {
+          type: "block",
+          blockId: block.id,
+          snapshot,
+        },
+      },
+    ]);
+
+    expect(comment?.target).toMatchObject({
+      type: "block",
+      blockId: block.id,
+      snapshot,
+      label: block.label,
+    });
+  });
+
+  it("refuses a qualified target when its snapshot has been pruned", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
+    created.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    const markdown = "# Plan\n\nA current paragraph.\n";
+    await writeFile(planPath, markdown);
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const snapshot = "3333333333333333";
+    const block = renderDocument({
+      markdown,
+      fallbackTitle: "plan",
+    }).blocks.find((candidate) => candidate.kind === "paragraph");
+    if (block === undefined)
+      throw new Error("Paragraph fixture did not compile");
+    const renderer = createPlanRenderer({
+      store,
+      planId: "0123456789abcdef",
+      sessionId: "fedcba9876543210",
+      token: "token",
+      resolvedPlanPath: planPath,
+      initialSnapshot: snapshot,
+      isDiffPreview: false,
+    });
+
+    await renderer.renderPlan();
+    await expect(
+      renderer.validateUpdates([
+        {
+          id: "ccddeeaa",
+          body: "A stale note.",
+          createdAt: "2026-08-29T00:00:00.000Z",
+          premiseSnapshot: snapshot,
+          target: {
+            type: "block",
+            blockId: block.id,
+            snapshot,
+          },
+        },
+      ]),
+    ).rejects.toThrow(
+      "A comment points at a snapshot this review no longer retains",
+    );
   });
 });
 

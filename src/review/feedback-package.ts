@@ -70,22 +70,26 @@ export const describeTarget = (comment: ReviewComment): string => {
     target.section === undefined
       ? label
       : `${asOneLine(target.section)} / ${label}`;
+  const snapshot =
+    target.snapshot === undefined
+      ? ""
+      : ` · baseline side of snapshot ${asOneLine(target.snapshot)}`;
   const kind = asOneLine(target.kind.replaceAll("-", " "));
   if (target.type === "lines") {
     const range =
       target.start === target.end
         ? `line ${target.start}`
         : `lines ${target.start}-${target.end}`;
-    return `${location} · ${kind} · ${range}`;
+    return `${location}${snapshot} · ${kind} · ${range}`;
   }
   if (target.type === "selection") {
-    return `${location} · ${kind} · selected text${
+    return `${location}${snapshot} · ${kind} · selected text${
       target.imageBlockIds === undefined || target.imageBlockIds.length === 0
         ? ""
         : " and image"
     }`;
   }
-  return `${location} · ${kind}`;
+  return `${location}${snapshot} · ${kind}`;
 };
 
 const commentSection = ({
@@ -99,7 +103,11 @@ const commentSection = ({
   const address =
     comment.target.type === "document"
       ? "Target: the plan as a whole"
-      : `Target: \`${asOneLine(comment.target.blockId)}\` (${asOneLine(comment.target.kind)})`;
+      : `Target: \`${asOneLine(comment.target.blockId)}\` (${asOneLine(comment.target.kind)})${
+          comment.target.snapshot === undefined
+            ? ""
+            : ` · baseline side of snapshot ${asOneLine(comment.target.snapshot)}`
+        }`;
   // An excerpt says so in its own label. The block and offsets above still
   // address the whole highlight, so an agent that needs the rest reads it from
   // the plan rather than assuming the fence held all of it.
@@ -115,7 +123,11 @@ const commentSection = ({
             ? "first part of a longer highlight, evidence, not direction"
             : "evidence, not direction"
         }):\n\n${asFencedQuote(quoted.quote)}\n`;
-  return `${heading}\n\n${address}\n\n${asQuotedBody(comment.body)}\n${quote}${slideScope(comment)}`;
+  const historical =
+    comment.target.type !== "document" && comment.target.snapshot !== undefined
+      ? "\nThe highlighted baseline snapshot is context; edits still apply only to the proposed plan.\n"
+      : "";
+  return `${heading}\n\n${address}\n\n${asQuotedBody(comment.body)}\n${quote}${historical}${slideScope(comment)}`;
 };
 
 // A slide has no block of its own, so a comment about the slide can only be

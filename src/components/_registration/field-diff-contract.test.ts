@@ -4,6 +4,7 @@ import type { ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import type { ComponentDiffInput } from "../_model/component-diff/contract.js";
 import type { NamedFieldDiff } from "../_model/component-diff/named-fields.js";
+import { COMPONENT_REGISTRY } from "./registry.js";
 import { compileCalloutDiff } from "../callout/compile-diff.js";
 import type { CompiledCallout } from "../callout/compile.js";
 import { compileCodeDiffDiff } from "../code-diff/compile-diff.js";
@@ -54,6 +55,39 @@ const expectFieldContract = <Model>({
 };
 
 describe("last-wave component diff fields", () => {
+  it("declares every rendered commentable anchor kind and both sides", () => {
+    expect(
+      Object.fromEntries(
+        [
+          "DataTable",
+          "QuickSummary",
+          "HttpEndpoint",
+          "GraphqlOperation",
+          "GrpcMethod",
+          "DatabaseTableSchema",
+          "Wireframe",
+        ].map((name) => [
+          name,
+          COMPONENT_REGISTRY[name]?.commentableAnchors.map(
+            ({ kind, sides }) => [kind, sides],
+          ),
+        ]),
+      ),
+    ).toEqual({
+      DataTable: [
+        ["table-column", "both"],
+        ["table-cell", "both"],
+        ["table-row", "both"],
+      ],
+      QuickSummary: [["quick-summary-facet", "both"]],
+      HttpEndpoint: [["http-endpoint-field", "both"]],
+      GraphqlOperation: [["graphql-operation-field", "both"]],
+      GrpcMethod: [["grpc-method-field", "both"]],
+      DatabaseTableSchema: [["database-table-schema-field", "both"]],
+      Wireframe: [["wireframe-screen", "both"]],
+    });
+  });
+
   it("names DataTable rows", () => {
     const baseline: CompiledDataTable = {
       id: "table",

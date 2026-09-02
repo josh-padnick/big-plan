@@ -32,6 +32,7 @@ export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = defineComponent({
   markdown: graphqlOperationMarkdown,
   diff: compileGraphqlOperationDiff,
   diffView: GraphqlOperationDiffView,
+  commentableAnchors: [{ kind: "graphql-operation-field", sides: "both" }],
   scopedChildren: {
     Argument: scopedChild("Argument"),
     Field: scopedChild("Field"),

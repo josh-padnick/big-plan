@@ -281,7 +281,7 @@ describe("block identity kinds and labels", () => {
     expect(paragraphIds[1]).toMatch(/^section\/a{46}-2\/paragraph-1$/u);
   });
 
-  it("should count kinds by their rendered id segment", () => {
+  it("should ignore undeclared rendered comment targets", () => {
     const tree: Root = {
       type: "root",
       children: [
@@ -308,11 +308,7 @@ describe("block identity kinds and labels", () => {
     };
     const blocks: Array<BlockDescriptor> = [];
     rehypeBlockIdentity({ blocks })(tree);
-    expect(blocks.map((block) => block.id)).toEqual([
-      "document/custom-1",
-      "document/table-cell-1",
-      "document/table-cell-2",
-    ]);
+    expect(blocks.map((block) => block.id)).toEqual(["document/custom-1"]);
   });
 
   it("should address authored images inside prose as owned image blocks", () => {
