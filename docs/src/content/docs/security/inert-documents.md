@@ -35,4 +35,4 @@ Because arbitrary HTML is arbitrary script, `big-plan review` always renders the
 
 ## Next
 
-[Reporting a vulnerability](/concepts/security-policy/) — how to reach us privately.
+[Reporting a vulnerability](/security/reporting/) — how to reach us privately.

@@ -63,11 +63,11 @@ A defect in Node.js, npm, or a third-party dependency **is in scope when Big Pla
 
 ## Related
 
-- [Reporting a vulnerability](/concepts/security-policy/) — the private channel.
+- [Reporting a vulnerability](/security/reporting/) — the private channel.
 - [One writer owns the plan](/concepts/one-writer/) — the one local filesystem limit Big Plan
   accepts rather than fixes.
 
 ## Next
 
-[Rendered plans are inert](/concepts/inert-documents/) — why a plan cannot introduce script
+[Rendered plans are inert](/security/inert-documents/) — why a plan cannot introduce script
 into its own document.

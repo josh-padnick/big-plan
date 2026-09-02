@@ -96,5 +96,5 @@ respawns it before a link is printed.
 
 ## Related
 
-- [The link worth saving](/review/start-a-review/) — why the stable address is the one to keep.
+- [The link worth saving](/intro/first-review/) — why the stable address is the one to keep.
 - [Configuration and state](/reference/configuration/) — `BIG_PLAN_PORT` and `BIG_PLAN_PROXY`.

@@ -22,5 +22,5 @@ Big Plan makes no outbound network requests to remote services. It reads and wri
 
 ## Related
 
-- [Reporting a vulnerability](/concepts/security-policy/) — if you find a problem here.
+- [Reporting a vulnerability](/security/reporting/) — if you find a problem here.
 - [Install Big Plan](/intro/installation/) — the install paths this describes.

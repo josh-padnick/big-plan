@@ -23,7 +23,7 @@ If that happens, **do not describe the issue in a public issue, pull request, or
 :::
 
 **Do not report** issues that require an attacker who already runs code as you on your own machine.
-Big Plan's local runtime is explicitly not a boundary against that; see [Trust boundaries](/concepts/trust-boundaries/).
+Big Plan's local runtime is explicitly not a boundary against that; see [Trust boundaries](/security/trust-boundaries/).
 
 ## Response process
 
@@ -52,5 +52,5 @@ A defect in Node.js, npm, or a third-party dependency **is in scope when Big Pla
 
 ## Related
 
-- [Trust boundaries](/concepts/trust-boundaries/) — what the local runtime is and is not.
-- [Supply chain and releases](/concepts/supply-chain/) — how to verify a published tarball.
+- [Trust boundaries](/security/trust-boundaries/) — what the local runtime is and is not.
+- [Supply chain and releases](/security/supply-chain/) — how to verify a published tarball.

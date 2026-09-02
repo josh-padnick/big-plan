@@ -19,67 +19,30 @@ export const SIDEBAR: readonly SidebarGroup[] = [
     label: "Intro",
     items: [
       { label: "What is Big Plan?", slug: "intro/what-is-big-plan" },
-      { label: "Why plans deserve this", slug: "intro/why-big-plan" },
       { label: "Install Big Plan", slug: "intro/installation" },
       { label: "Your first review", slug: "intro/first-review" },
-      { label: "A tour of the review document", slug: "intro/tour" },
-      { label: "See a rendered plan", slug: "intro/demo" },
-      { label: "How Big Plan compares", slug: "intro/vs-other" },
+      { label: "UI review", slug: "intro/ui-review" },
+      { label: "Big Plan vs. other", slug: "intro/vs-other" },
+    ],
+  },
+  {
+    label: "Sample plans",
+    items: [
+      { label: "Overview", slug: "samples" },
+      {
+        label: "Rate limiting for a public API",
+        slug: "samples/rate-limiting",
+      },
+      { label: "A payments retry queue", slug: "samples/retry-queue" },
+      { label: "A workflow builder surface", slug: "samples/workflow-builder" },
+      { label: "Every component at once", slug: "samples/all-components" },
     ],
   },
   {
     label: "Review a plan",
     items: [
-      { label: "Overview", slug: "review" },
-      { label: "Start a review", slug: "review/start-a-review" },
-      { label: "Comment on a plan", slug: "review/comment-on-a-plan" },
-      { label: "Answer the plan's decisions", slug: "review/answer-decisions" },
-      { label: "Read the agent's changes", slug: "review/read-changes" },
-      { label: "Approve a plan", slug: "review/approve-a-plan" },
-      { label: "Export a plan as Markdown", slug: "review/export-markdown" },
-      { label: "Change how the viewer looks", slug: "review/viewer-settings" },
-      { label: "When a review goes wrong", slug: "review/troubleshooting" },
-    ],
-  },
-  {
-    label: "Write a plan",
-    items: [
-      { label: "Overview", slug: "authoring" },
-      { label: "Anatomy of a plan", slug: "authoring/anatomy-of-a-plan" },
-      { label: "Where each rule lives", slug: "authoring/where-rules-live" },
-      {
-        label: "Choose the right component",
-        slug: "authoring/choose-a-component",
-      },
-      { label: "Slide types", slug: "authoring/slide-types" },
-      {
-        label: "Fix a validation error",
-        slug: "authoring/fix-a-validation-error",
-      },
-    ],
-  },
-  {
-    label: "For agents",
-    items: [
-      { label: "Overview", slug: "for-agents" },
-      { label: "Set Big Plan up for your human", slug: "for-agents/setup" },
-      {
-        label: "Write and validate a plan",
-        slug: "for-agents/write-and-validate",
-      },
-      { label: "Answer reviewer feedback", slug: "for-agents/answer-feedback" },
-      { label: "Handle a handoff or disconnect", slug: "for-agents/handoff" },
-      { label: "Handle an approval", slug: "for-agents/approval" },
-      {
-        label: "Install and update the skill",
-        slug: "for-agents/use-the-skill",
-      },
-    ],
-  },
-  {
-    label: "Components",
-    items: [
-      { label: "Overview", slug: "components" },
+      { label: "How it works", slug: "review" },
+      { label: "Components", slug: "components" },
       { label: "Callout", slug: "components/callout" },
       { label: "CodeDiff", slug: "components/code-diff" },
       { label: "CodeSnippet", slug: "components/code-snippet" },
@@ -106,6 +69,27 @@ export const SIDEBAR: readonly SidebarGroup[] = [
     ],
   },
   {
+    label: "Write a plan",
+    items: [
+      { label: "Overview", slug: "authoring" },
+      { label: "Anatomy of a plan", slug: "authoring/anatomy-of-a-plan" },
+      { label: "Where each rule lives", slug: "authoring/where-rules-live" },
+      {
+        label: "Choose the right component",
+        slug: "authoring/choose-a-component",
+      },
+      { label: "Slide types", slug: "authoring/slide-types" },
+      {
+        label: "Fix a validation error",
+        slug: "authoring/fix-a-validation-error",
+      },
+    ],
+  },
+  {
+    label: "For agents",
+    items: [{ label: "For agents", slug: "for-agents" }],
+  },
+  {
     label: "Reference",
     items: [
       { label: "Overview", slug: "reference" },
@@ -125,15 +109,20 @@ export const SIDEBAR: readonly SidebarGroup[] = [
     ],
   },
   {
-    label: "Concepts and security",
+    label: "Concepts",
     items: [
-      { label: "Overview", slug: "concepts" },
-      { label: "How Big Plan works", slug: "concepts/how-it-works" },
+      { label: "How compilation works", slug: "concepts/how-it-works" },
       { label: "One writer owns the plan", slug: "concepts/one-writer" },
-      { label: "Trust boundaries", slug: "concepts/trust-boundaries" },
-      { label: "Rendered plans are inert", slug: "concepts/inert-documents" },
-      { label: "Reporting a vulnerability", slug: "concepts/security-policy" },
-      { label: "Supply chain and releases", slug: "concepts/supply-chain" },
+    ],
+  },
+  {
+    label: "Security",
+    items: [
+      { label: "Overview", slug: "security" },
+      { label: "Rendered plans are inert", slug: "security/inert-documents" },
+      { label: "Trust boundaries", slug: "security/trust-boundaries" },
+      { label: "Reporting a vulnerability", slug: "security/reporting" },
+      { label: "Supply chain and releases", slug: "security/supply-chain" },
     ],
   },
 ];

@@ -90,4 +90,4 @@ exactly one writer; see [One writer owns the plan](/concepts/one-writer/).
 ## Related
 
 - [Configuration and state](/reference/configuration/) — the variables that move these paths.
-- [Trust boundaries](/concepts/trust-boundaries/) — why the review directory is owner-only.
+- [Trust boundaries](/security/trust-boundaries/) — why the review directory is owner-only.

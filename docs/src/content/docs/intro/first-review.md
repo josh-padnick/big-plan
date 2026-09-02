@@ -103,12 +103,12 @@ that is the whole point of the workflow.
 
 ## If it goes wrong
 
-| What you see                     | What to do                                                                                                  |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `GUIDANCE_REQUIRED`              | Run `guidance` from the same directory                                                                      |
-| `custody: held`                  | A review is already serving this plan; open the address it printed                                          |
-| The page stops accepting changes | Stop the runtime with `Ctrl+C` and start it again; see [When a review goes wrong](/review/troubleshooting/) |
-| **Approve plan** is missing      | You opened a rendered `.html` file rather than the review address                                           |
+| What you see                     | What to do                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GUIDANCE_REQUIRED`              | Run `guidance` from the same directory                                                                         |
+| `custody: held`                  | A review is already serving this plan; open the address it printed                                             |
+| The page stops accepting changes | Stop the runtime with `Ctrl+C` and start it again; see [When a review goes wrong](/reference/commands/review/) |
+| **Approve plan** is missing      | You opened a rendered `.html` file rather than the review address                                              |
 
 ## Clean up
 
@@ -117,4 +117,4 @@ want them.
 
 ## Next
 
-[A tour of the review document](/intro/tour/) — what every control you just used actually does.
+[A tour of the review document](/intro/ui-review/) — what every control you just used actually does.

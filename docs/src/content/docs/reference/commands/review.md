@@ -64,6 +64,35 @@ Lint runs before the port opens, so a plan that fails lint never reaches a revie
 
 ## Troubleshooting
 
+Reading a plan almost never breaks. What fails is writing to it - sending a comment, saving a
+decision answer, recording an acceptance - and the review always says which of those it is
+refusing before it tries.
+
+| What you see                                          | What it means                                                                                                                | What to do                                                                                                                   |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **This review session has stopped accepting changes** | One change never finished; after 30 seconds the runtime refuses it and answers later writes rather than leaving them waiting | Keep the tab open, stop the runtime with `Ctrl+C`, and start it again on the same plan                                       |
+| The page reports it has lost contact with the runtime | A request timed out; the page cannot tell an idle expiry from a stopped runtime                                              | Use **Refresh** when it is offered; if you have unsaved input it stays disabled and the page asks you to keep the tab open   |
+| **Open latest review** appears                        | A newer review session for this plan was recorded before contact was lost                                                    | Follow it; that session holds write custody now                                                                              |
+| The stable address says the review is restarting      | A runtime stopped without recording an ending                                                                                | The address is held for the replacement; the page carries the command that starts the review again                           |
+| A deliberate stop page                                | Someone stopped the runtime with `Ctrl+C` or it hit its idle timeout                                                         | Start the review again on the same plan                                                                                      |
+| `custody: held` from `big-plan review`                | A live runtime already serves this plan                                                                                      | Open the address the command printed rather than starting a second runtime                                                   |
+| An action is refused before it sends                  | The runtime is unreachable, has stopped accepting changes, or a newer session replaced this one                              | Nothing you typed is discarded; the refusal names the condition the page actually observed                                   |
+| **Agent may be stalled**                              | The agent has reported nothing for 75 seconds                                                                                | This describes the silence, not the connection; the work is still picked up and the answer is still accepted when it arrives |
+| **Blocked - no agent connected**                      | No agent is attached to answer                                                                                               | The message sends itself when one reconnects                                                                                 |
+
+The page cannot tell an idle expiry from a runtime someone stopped, so it reports what it
+observed rather than guessing, and it never tells you to start a new runtime - this command is
+the only thing that decides whether starting or taking over is allowed.
+
+Before stopping an unresponsive runtime on macOS or Linux, ask it for a diagnostic dump:
+
+```sh
+kill -USR2 <review-process-pid>
+```
+
+The signal does not stop the review. It prints the session, plan path, in-flight and stalled
+writes, and current growth counts to the review command's standard error output.
+
 - **`custody: held`.** A live runtime already serves this plan. Open the address the command
   printed; starting a second runtime is not what you want.
 - **The default port is taken.** Big Plan never moves to a different port on its own. The
@@ -71,11 +100,11 @@ Lint runs before the port opens, so a plan that fails lint never reaches a revie
   the session's direct address. `BIG_PLAN_PORT` chooses a different port, remembering that
   links saved at the old one stop resolving.
 - **The page stopped accepting changes.** See
-  [When a review goes wrong](/review/troubleshooting/).
+  [When a review goes wrong](/reference/commands/review/).
 - **A saved link stopped opening.** The small local service answers those;
   [`big-plan service`](/reference/commands/service/) inspects and restarts it.
 
 ## Related
 
-- [Start a review](/review/start-a-review/) — the task page for this command.
-- [When a review goes wrong](/review/troubleshooting/) — every review failure.
+- [Start a review](/intro/first-review/) — the task page for this command.
+- [When a review goes wrong](/reference/commands/review/) — every review failure.

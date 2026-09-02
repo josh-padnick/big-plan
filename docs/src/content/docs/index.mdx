@@ -15,8 +15,8 @@ hero:
       icon: right-arrow
       attrs:
         data-install-prompt-trigger: ""
-    - text: See a rendered plan
-      link: /demo/
+    - text: See a sample plan
+      link: /samples/
       icon: document
 ---
 
@@ -45,11 +45,11 @@ and unlocks the rest of the workflow for that directory.
 ## Pick where to start
 
 <CardGrid>
-  <Card title="Review a plan your agent wrote" icon="comment">
-    Serve the plan locally, comment on any block, answer the decisions it asks, read what the
-    agent changed, and approve it.
+  <Card title="See how it works" icon="comment">
+    The whole loop in one page: your agent writes a plan, you read it as a document, comment on
+    it, answer its questions, and approve.
 
-    [Open Review a plan →](/review/)
+    [Open How it works →](/review/)
   </Card>
   <Card title="Write a plan a human wants to read" icon="pencil">
     What a plan file may contain, the twenty components, the five slide types, and the fix for
@@ -95,6 +95,14 @@ document shape. The agent spends its effort on the decisions rather than the pre
 
 [See all twenty components →](/components/)
 
+## Read a real one
+
+Four plans, rendered by the current CLI from the repository's own examples, open in your
+browser: [a short plan](/samples/rate-limiting/), [one shaped as a
+deck](/samples/retry-queue/), [a UI-heavy one with clickable
+wireframes](/samples/workflow-builder/), and [one that uses every
+component](/samples/all-components/).
+
 ## Before you start
 
 :::caution[Pre-alpha]
@@ -110,13 +118,13 @@ cleanest model.
     description="What it is, and what it deliberately is not."
   />
   <LinkCard
-    title="Your first review"
-    href="/intro/first-review/"
-    description="One plan from download to approval, in about five minutes."
+    title="UI review"
+    href="/intro/ui-review/"
+    description="What it actually looks like, in real screenshots."
   />
   <LinkCard
-    title="How Big Plan works"
-    href="/concepts/how-it-works/"
-    description="Why a plan is compiled before it is rendered."
+    title="Sample plans"
+    href="/samples/"
+    description="Four real plans you can open and read right now."
   />
 </CardGrid>

@@ -10,7 +10,7 @@ import type { APIRoute } from "astro";
 import { getCollection } from "astro:content";
 import { markdownDocument } from "../docs-delivery";
 
-const SETUP_SLUG = "for-agents/setup";
+const SETUP_SLUG = "for-agents";
 
 // Serves the canonical setup page's Markdown at the stable address.
 export const GET: APIRoute = async ({ site }) => {

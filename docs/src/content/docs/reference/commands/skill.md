@@ -31,7 +31,7 @@ Overwriting an existing file at that path is allowed only because `write` was ex
 
 After a package upgrade, new guidance is available immediately via `big-plan guidance`.
 Re-run `skill write` only when the thin shell itself changed.
-Prefer `npx -y big-plan@latest` for always-current one-off runs; see [Use the skill](/for-agents/use-the-skill/) for the full update-propagation story.
+Prefer `npx -y big-plan@latest` for always-current one-off runs; see [Use the skill](/for-agents/) for the full update-propagation story.
 
 ## Result
 
@@ -62,4 +62,4 @@ Prefer `npx -y big-plan@latest` for always-current one-off runs; see [Use the sk
 
 ## Related
 
-- [Install and update the skill](/for-agents/use-the-skill/) — the full update-propagation story.
+- [Install and update the skill](/for-agents/) — the full update-propagation story.

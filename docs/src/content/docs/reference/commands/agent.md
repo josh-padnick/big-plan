@@ -228,5 +228,5 @@ errors — `role: "observer"` and `role: "disconnected"` — so a harness must b
 
 ## Related
 
-- [Answer reviewer feedback](/for-agents/answer-feedback/) — the loop, as numbered steps.
-- [Handle a handoff or disconnect](/for-agents/handoff/) — what to do when the seat moves.
+- [Answer reviewer feedback](/for-agents/) — the loop, as numbered steps.
+- [Handle a handoff or disconnect](/for-agents/) — what to do when the seat moves.

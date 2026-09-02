@@ -41,9 +41,9 @@ Closing that race is not possible with the available primitives, and an attacker
 
 ## Related
 
-- [Handle an approval](/for-agents/approval/) — the digest check this model makes trustworthy.
+- [Handle an approval](/for-agents/) — the digest check this model makes trustworthy.
 - [Files Big Plan writes](/reference/files/) — what else appears beside your plan.
 
 ## Next
 
-[Trust boundaries](/concepts/trust-boundaries/) — what loopback does and does not protect.
+[Trust boundaries](/security/trust-boundaries/) — what loopback does and does not protect.
