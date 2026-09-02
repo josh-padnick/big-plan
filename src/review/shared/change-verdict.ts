@@ -39,8 +39,15 @@ export type ChangeVerdictActor = "reviewer" | "auto-accept";
 export type ChangeVerdictOutcome = "accepted" | "rejected";
 
 /**
- * What the record says about one change. `undecided` is the answer for every
- * address the record holds no row for, which is why nothing ever stores it.
+ * What a review has decided about one change place, as every surface that
+ * presents a change asks it.
+ *
+ * It is a named union rather than a boolean because the disposition is what
+ * presentation switches on, and the reject verdict is a third answer to this
+ * one selector rather than a second question beside it - which is what keeps
+ * the stored record a single shape instead of a fork. `undecided` is the
+ * answer for every address the record holds no row for, which is why nothing
+ * ever stores it.
  */
 export type ChangeDisposition = ChangeVerdictOutcome | "undecided";
 
@@ -130,15 +137,16 @@ export const rejectedChangeKeys = (
  * answer rather than one side of it reads this, so nothing has to spell out
  * that a change in neither set is undecided.
  */
-export const changeDispositionIn = ({
+export const changeDispositionOf = ({
+  address,
   accepted,
   rejected,
-  key,
 }: {
+  readonly address: ChangeVerdictAddress;
   readonly accepted: ReadonlySet<string>;
   readonly rejected: ReadonlySet<string>;
-  readonly key: string;
 }): ChangeDisposition => {
+  const key = changeVerdictKey(address);
   if (accepted.has(key)) return "accepted";
   return rejected.has(key) ? "rejected" : "undecided";
 };
@@ -179,10 +187,10 @@ export const changeSetStanding = ({
 }): ChangeSetStanding => {
   const total = placeIds.length;
   const dispositions = placeIds.map((placeId) =>
-    changeDispositionIn({
+    changeDispositionOf({
+      address: { from, to, placeId },
       accepted,
       rejected,
-      key: changeVerdictKey({ from, to, placeId }),
     }),
   );
   const acceptedCount = dispositions.filter(

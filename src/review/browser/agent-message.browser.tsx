@@ -517,7 +517,7 @@ export const AgentChangeDigest = ({
     activePlaceId,
     canRecordAcceptance,
     isPlaceAccepted,
-    isPlaceRejected,
+    dispositionOf,
     setPlacesDecided,
     standingOf,
     closeTour,
@@ -720,7 +720,7 @@ export const AgentChangeDigest = ({
                     >
                       <Icon icon={CHECK_ICON} />
                     </span>
-                  ) : isPlaceRejected(diff, entry.placeId) ? (
+                  ) : dispositionOf(diff, entry.placeId) === "rejected" ? (
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-danger [&>svg]:size-3.5"
                       aria-label="Rejected"

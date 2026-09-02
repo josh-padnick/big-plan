@@ -1,6 +1,14 @@
 // Owns the What-changed lens shared by comment threads and plan-wide chat. It
 // portals interaction chrome beside the server-rendered block without taking
 // ownership of plan content.
+//
+// A place the reviewer has accepted is deliberately not lensed. The proposal
+// treatment - the dashed What-changed card, the word-level insertions and
+// deletions, the component's Was/Now replacement - is the question being asked,
+// so leaving it up after the answer would keep asking it. An accepted place
+// therefore shows the plan's own blocks exactly as the document renders them,
+// marked only well enough for the stepper to say which one it is on, and the
+// evidence comes back on demand through the stepper's own control.
 
 import { createPortal } from "react-dom";
 import {
@@ -1111,6 +1119,68 @@ const ComponentDiffReplacement = ({
   return null;
 };
 
+/**
+ * The attribute the review stylesheet paints an accepted place's own blocks
+ * with, so the stepper can say which place it is on without reinstating any of
+ * the proposal treatment the acceptance retired.
+ */
+const ACCEPTED_PLACE_ATTRIBUTE = "data-review-accepted-place";
+
+/**
+ * Shows an accepted place as the plan itself: nothing is hidden and nothing is
+ * inserted, so the reader meets the accepted words in the document that owns
+ * them rather than inside a card still asking to be decided.
+ *
+ * The mark is claimed only where the plan still holds the block the place is
+ * about. A removal anchors on a neighbour instead, and ringing a neighbour
+ * would point the reader at content the change never touched, so that case
+ * scrolls and says nothing. A replaced article detaches whatever was marked, so
+ * the mark is resolved again on the article version like every other holder of
+ * a plan node.
+ *
+ * An accepted place the plan no longer holds anywhere keeps its archived copy.
+ * Reading as plan content is only possible where there is plan content to read,
+ * and answering with nothing at all would lose the record of what was accepted
+ * exactly where it is the only surviving evidence. Nothing renders until the
+ * anchor has been resolved, so the reader never sees the proposal flash back.
+ */
+const AcceptedPlanPlace = ({
+  diff,
+  place,
+  locations,
+}: {
+  readonly diff: SnapshotDiff;
+  readonly place: DiffPlace;
+  readonly locations: ReadonlyArray<DiffLocation>;
+}) => {
+  const articleVersion = useArticleVersion();
+  const [hasPlanPlace, setHasPlanPlace] = useState<boolean>();
+  useEffect(() => {
+    const anchor = firstLiveAnchor(locations, false);
+    setHasPlanPlace(anchor !== null);
+    if (anchor === null) return;
+    const { element, placement } = anchor;
+    requestAnimationFrame(() =>
+      element.scrollIntoView({
+        behavior: lensScrollBehavior(),
+        block: "center",
+      }),
+    );
+    if (placement !== "replace") return;
+    element.setAttribute(ACCEPTED_PLACE_ATTRIBUTE, "");
+    return () => element.removeAttribute(ACCEPTED_PLACE_ATTRIBUTE);
+  }, [articleVersion, locations]);
+  if (hasPlanPlace !== false) return null;
+  return (
+    <LegacyDiffLensPortal
+      diff={diff}
+      place={place}
+      isVisible
+      isSuperseded={false}
+    />
+  );
+};
+
 /** Chooses the component-owned replacement only for a migrated root. */
 export const DiffLensPortal = ({
   diff,
@@ -1118,19 +1188,23 @@ export const DiffLensPortal = ({
   isVisible,
   isSuperseded,
   isAccepted,
+  isShowingChanges,
 }: {
   readonly diff: SnapshotDiff;
   readonly place: DiffPlace;
   readonly isVisible: boolean;
   readonly isSuperseded: boolean;
   readonly isAccepted: boolean;
+  /** True while the reviewer has asked to see an accepted change's evidence. */
+  readonly isShowingChanges: boolean;
 }) => {
-  const componentLocation = useMemo(
-    () =>
-      placeLocations({ diff, place }).find(
-        (location) => location.view !== undefined,
-      ),
+  const locations = useMemo(
+    () => placeLocations({ diff, place }),
     [diff, place],
+  );
+  const componentLocation = useMemo(
+    () => locations.find((location) => location.view !== undefined),
+    [locations],
   );
   const articleVersion = useArticleVersion();
   const [componentAvailable, setComponentAvailable] = useState<boolean>();
@@ -1144,6 +1218,20 @@ export const DiffLensPortal = ({
       "found" in liveLensAnchor(componentLocation, { isSuperseded }),
     );
   }, [articleVersion, componentLocation, isSuperseded]);
+  // An accepted place is the plan, so it is shown as the plan. The evidence is
+  // one control away rather than gone: asking for it puts the reviewer back on
+  // the same lens an open place gets, which is what makes undoing the
+  // acceptance a decision made against the same view that produced it.
+  if (isVisible && isAccepted && !isShowingChanges && !isSuperseded) {
+    return (
+      <AcceptedPlanPlace
+        key={`${place.placeId}:${articleVersion}`}
+        diff={diff}
+        place={place}
+        locations={locations}
+      />
+    );
+  }
   // A component change whose block still stands is shown by replacing that
   // block, whether or not the plan has since moved past it. Being superseded
   // changes what the change means, not what it is: the card is the same

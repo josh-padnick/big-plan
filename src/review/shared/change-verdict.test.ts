@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   acceptedChangeKeys,
-  changeDispositionIn,
+  changeDispositionOf,
   changeVerdictBatches,
   changeVerdictKey,
   changeSetStanding,
@@ -213,32 +213,33 @@ describe("changeSetStanding", () => {
   });
 });
 
-describe("changeDispositionIn", () => {
-  const key = changeVerdictKey({ from: FROM, to: TO, placeId: "p1" });
+describe("changeDispositionOf", () => {
+  const address = { from: FROM, to: TO, placeId: "p1" } as const;
+  const key = changeVerdictKey(address);
 
   it("answers undecided for an address neither set holds", () => {
     expect(
-      changeDispositionIn({
+      changeDispositionOf({
+        address,
         accepted: new Set(),
         rejected: new Set(),
-        key,
       }),
     ).toBe("undecided");
   });
 
   it("answers with the verdict the record holds", () => {
     expect(
-      changeDispositionIn({
+      changeDispositionOf({
+        address,
         accepted: new Set([key]),
         rejected: new Set(),
-        key,
       }),
     ).toBe("accepted");
     expect(
-      changeDispositionIn({
+      changeDispositionOf({
+        address,
         accepted: new Set(),
         rejected: new Set([key]),
-        key,
       }),
     ).toBe("rejected");
   });
