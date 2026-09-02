@@ -7089,6 +7089,63 @@ describe("review runtime approval", () => {
     );
   });
 
+  it("should return a readable refusal when a committed change set has no address", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        const requestId = "abababababababac";
+        const request = messageAgentRequest({
+          sessionId: target.sessionId,
+          planId: target.planId,
+          requestId,
+          kind: "chat",
+          body: "Record an invisible source-only note.",
+          premiseSnapshot: digest,
+          createdAt: "2026-08-19T17:00:00.000Z",
+        });
+        await writeAgentRequest({ store: target.store, request });
+        const claimed = await claimAgentRequest({
+          store: target.store,
+          activeSessionId: target.sessionId,
+          requestId,
+          claimedBy: target.sessionId,
+          baselineSnapshot: digest,
+          now: "2026-08-19T17:00:01.000Z",
+        });
+        const published = `${DECISION_PLAN}\n`;
+        const publishedDigest = deriveSnapshotDigest(published);
+        await writeFile(planPath, published);
+        await writeSnapshot({
+          store: target.store,
+          snapshot: publishedDigest,
+          source: published,
+        });
+        await commitRequestTerminal({
+          store: target.store,
+          claimedBy: target.sessionId,
+          response: validateAgentResponseDraft({
+            value: { requestId, message: "Recorded the note." },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set(),
+            currentSnapshot: publishedDigest,
+            now: "2026-08-19T17:00:02.000Z",
+          }),
+          now: "2026-08-19T17:00:02.000Z",
+        });
+
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: publishedDigest,
+        });
+
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toMatchObject({
+          error: expect.stringContaining("could not be resolved for approval"),
+        });
+      },
+    );
+  });
+
   it("writes the approval brief beside the feedback briefs", async () => {
     await withApprovalRuntime(
       DECISION_PLAN,
