@@ -81,6 +81,7 @@ type DiffTourValue = {
     diff: SnapshotDiff,
     placeIds: ReadonlyArray<string>,
     verdict: "accepted" | "rejected" | undefined,
+    options?: { readonly onlyUndecided: boolean },
   ) => void;
   /** False while this page may not record anything, so no control offers to. */
   readonly canRecordAcceptance: boolean;
@@ -191,6 +192,7 @@ export const DiffTourProvider = ({
         diff: SnapshotDiff,
         placeIds: ReadonlyArray<string>,
         verdict: "accepted" | "rejected" | undefined,
+        options?: { readonly onlyUndecided: boolean },
       ): void => {
         // A gesture that would record what the store already holds is not a
         // write; sending one would advance the revision for nothing.
@@ -208,6 +210,7 @@ export const DiffTourProvider = ({
           from: diff.from,
           to: diff.to,
           placeIds: changing,
+          ...(options === undefined ? {} : options),
         });
       },
     };
@@ -467,7 +470,9 @@ export const DiffTourProvider = ({
                           )
                           .map((place) => place.placeId);
                         if (undecided.length > 0) {
-                          setPlacesDecided(tour.diff, undecided, "accepted");
+                          setPlacesDecided(tour.diff, undecided, "accepted", {
+                            onlyUndecided: true,
+                          });
                         }
                       }}
                     >

@@ -54,6 +54,8 @@ export type ChangeVerdictMutation = {
   readonly decidedAt: string;
   /** The trusted boundary that created this mutation, never browser input. */
   readonly actor: ChangeVerdictActor;
+  /** Bulk acceptance may decide only places that are still undecided. */
+  readonly onlyUndecided?: boolean;
 };
 
 /** The verdict an operation records, or `undefined` when it records none. */
@@ -247,6 +249,12 @@ export const validateChangeVerdictMutation = ({
   if (new Set(placeIds).size !== placeIds.length) {
     throw new ChangeVerdictsRejected('"placeIds" repeats a change');
   }
+  if (
+    candidate.onlyUndecided !== undefined &&
+    typeof candidate.onlyUndecided !== "boolean"
+  ) {
+    throw new ChangeVerdictsRejected('"onlyUndecided" must be true or false');
+  }
   return {
     op: candidate.op,
     from: digest({ value: candidate.from, field: "from" }),
@@ -254,6 +262,9 @@ export const validateChangeVerdictMutation = ({
     placeIds,
     decidedAt: now,
     actor: "reviewer",
+    ...(candidate.onlyUndecided === undefined
+      ? {}
+      : { onlyUndecided: candidate.onlyUndecided }),
   };
 };
 
@@ -272,13 +283,24 @@ export const applyChangeVerdictMutation = ({
 }): StoredChangeVerdicts => {
   const revision = verdicts.revision + 1;
   const touched = new Set(
-    mutation.placeIds.map((placeId) =>
-      changeVerdictKey({
-        from: mutation.from,
-        to: mutation.to,
-        placeId,
-      }),
-    ),
+    mutation.placeIds
+      .filter(
+        (placeId) =>
+          !mutation.onlyUndecided ||
+          !verdicts.decided.some(
+            (entry) =>
+              entry.from === mutation.from &&
+              entry.to === mutation.to &&
+              entry.placeId === placeId,
+          ),
+      )
+      .map((placeId) =>
+        changeVerdictKey({
+          from: mutation.from,
+          to: mutation.to,
+          placeId,
+        }),
+      ),
   );
   // Every operation clears the addresses it names first, so re-deciding a
   // change replaces its row rather than adding a second one, and undo is that
@@ -293,14 +315,20 @@ export const applyChangeVerdictMutation = ({
   }
   const decided = [
     ...kept,
-    ...mutation.placeIds.map((placeId) => ({
-      from: mutation.from,
-      to: mutation.to,
-      placeId,
-      verdict: recorded,
-      decidedAt: mutation.decidedAt,
-      actor: mutation.actor,
-    })),
+    ...mutation.placeIds
+      .filter((placeId) =>
+        touched.has(
+          changeVerdictKey({ from: mutation.from, to: mutation.to, placeId }),
+        ),
+      )
+      .map((placeId) => ({
+        from: mutation.from,
+        to: mutation.to,
+        placeId,
+        verdict: recorded,
+        decidedAt: mutation.decidedAt,
+        actor: mutation.actor,
+      })),
   ];
   if (decided.length > DECIDED_CHANGE_LIMIT) {
     throw new ChangeVerdictsRejected(

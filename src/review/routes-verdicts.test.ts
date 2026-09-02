@@ -183,4 +183,87 @@ describe("recordChangeVerdicts", () => {
     ]);
     await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
   });
+
+  it("restores each prior verdict when a mixed batch cannot publish", async () => {
+    const baseline =
+      "# Plan\n\n## Alpha\n\nAlpha stays old.\n\n## Beta\n\nBeta stays old.\n";
+    const proposed =
+      "# Plan\n\n## Alpha\n\nAlpha is new.\n\n## Beta\n\nBeta is new.\n";
+    const moved = `${proposed}\nA newer revision.\n`;
+    const from = deriveSnapshotDigest(baseline);
+    const to = deriveSnapshotDigest(proposed);
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-verdict-route-"));
+    directories.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, moved);
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await Promise.all([
+      writeSnapshot({ store, snapshot: from, source: baseline }),
+      writeSnapshot({ store, snapshot: to, source: proposed }),
+    ]);
+    const placeIds = changedPlaceIds({
+      baselineSource: baseline,
+      proposedSource: proposed,
+      from,
+      to,
+      fallbackTitle: "plan",
+    });
+    expect(placeIds).toHaveLength(2);
+    const [acceptedPlace, undecidedPlace] = placeIds;
+    if (acceptedPlace === undefined || undecidedPlace === undefined) {
+      throw new Error("The fixture has fewer than two changes");
+    }
+    const acceptedAt = "2026-09-02T12:00:00.000Z";
+    let stored: StoredChangeVerdicts = {
+      version: 1,
+      revision: 1,
+      decided: [
+        {
+          from,
+          to,
+          placeId: acceptedPlace,
+          verdict: "accepted",
+          decidedAt: acceptedAt,
+          actor: "auto-accept",
+        },
+      ],
+    };
+    const context = {
+      store,
+      resolvedPlanPath: planPath,
+      changeVerdicts: {
+        read: async () => stored,
+        update: async (
+          change: (current: StoredChangeVerdicts) => StoredChangeVerdicts,
+        ) => {
+          stored = change(stored);
+          return stored;
+        },
+      },
+      readerProgress: { accept: () => undefined },
+    } as unknown as ReviewRouteContext;
+
+    const response = await recordChangeVerdicts(context, {
+      query: new URLSearchParams(),
+      headers: {},
+      body: {
+        op: "reject",
+        from,
+        to,
+        placeIds: [acceptedPlace, undecidedPlace],
+      },
+    });
+
+    expect(response.status).toBe(409);
+    expect(stored.decided).toEqual([
+      expect.objectContaining({
+        placeId: acceptedPlace,
+        verdict: "accepted",
+        decidedAt: acceptedAt,
+        actor: "auto-accept",
+      }),
+    ]);
+    await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
+  });
 });

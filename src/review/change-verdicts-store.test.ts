@@ -247,6 +247,24 @@ describe("applyChangeVerdictMutation", () => {
     ]);
   });
 
+  it("accepts only still-undecided places when a bulk decision races a rejection", () => {
+    const rejected = applyChangeVerdictMutation({
+      verdicts: empty,
+      mutation: mutate("reject", ["p1"]),
+    });
+    const next = applyChangeVerdictMutation({
+      verdicts: rejected,
+      mutation: {
+        ...accept(["p1", "p2"]),
+        onlyUndecided: true,
+      },
+    });
+    expect(next.decided).toEqual([
+      row({ placeId: "p1", verdict: "rejected", actor: "reviewer" }),
+      row({ placeId: "p2", actor: "reviewer" }),
+    ]);
+  });
+
   it("records a rejection under the same address an acceptance uses", () => {
     const next = applyChangeVerdictMutation({
       verdicts: empty,

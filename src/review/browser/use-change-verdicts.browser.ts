@@ -65,6 +65,7 @@ export type PendingVerdict = {
   readonly from: string;
   readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
+  readonly onlyUndecided?: boolean;
 };
 
 /** What every surface that shows a change set's standing reads. */
@@ -245,6 +246,9 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           from: input.from,
           to: input.to,
           placeIds,
+          ...(input.onlyUndecided === undefined
+            ? {}
+            : { onlyUndecided: input.onlyUndecided }),
         })),
       ];
       setPending([...queue.current]);

@@ -808,7 +808,9 @@ export const AgentChangeDigest = ({
                 )
                 .map((place) => place.placeId);
               if (undecided.length > 0) {
-                setPlacesDecided(diff, undecided, "accepted");
+                setPlacesDecided(diff, undecided, "accepted", {
+                  onlyUndecided: true,
+                });
               }
             }}
           >

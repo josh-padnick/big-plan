@@ -218,63 +218,67 @@ export const readChangeVerdictState = async (
   return verdictState(verdicts);
 };
 
-const inverseOf = (
-  mutation: ChangeVerdictMutation,
-  previous: StoredChangeVerdicts,
-): ChangeVerdictMutation | undefined => {
-  const restored = previous.decided.filter((entry) =>
-    mutation.placeIds.some(
-      (placeId) =>
-        entry.from === mutation.from &&
-        entry.to === mutation.to &&
-        entry.placeId === placeId,
-    ),
-  );
-  // Compensation only has to answer the shapes a browser can send. A mutation
-  // whose places did not all share one previous verdict cannot be undone with
-  // a single operation, and is left to the caller to report.
-  if (restored.length === 0) {
-    return { ...mutation, op: "undo" };
-  }
-  if (restored.length !== mutation.placeIds.length) return undefined;
-  const [first] = restored;
-  if (first === undefined) return undefined;
-  if (restored.some((entry) => entry.verdict !== first.verdict)) {
-    return undefined;
-  }
-  return {
-    ...mutation,
-    op: first.verdict === "accepted" ? "accept" : "reject",
-    decidedAt: first.decidedAt,
-    actor: first.actor ?? "reviewer",
-  };
-};
-
-const mutationResultIsCurrent = ({
+const restorePreviousVerdicts = ({
   current,
+  previous,
   result,
   mutation,
 }: {
   readonly current: StoredChangeVerdicts;
+  readonly previous: StoredChangeVerdicts;
   readonly result: StoredChangeVerdicts;
   readonly mutation: ChangeVerdictMutation;
-}): boolean =>
-  mutation.placeIds.every((placeId) => {
-    const atPlace = (verdicts: StoredChangeVerdicts) =>
-      verdicts.decided.find(
-        (entry) =>
-          entry.from === mutation.from &&
-          entry.to === mutation.to &&
-          entry.placeId === placeId,
-      );
-    const expected = atPlace(result);
-    const actual = atPlace(current);
-    return (
-      actual?.verdict === expected?.verdict &&
-      actual?.decidedAt === expected?.decidedAt &&
-      actual?.actor === expected?.actor
-    );
-  });
+}): StoredChangeVerdicts => {
+  const previousByPlace = new Map(
+    previous.decided
+      .filter(
+        (entry) => entry.from === mutation.from && entry.to === mutation.to,
+      )
+      .map((entry) => [entry.placeId, entry]),
+  );
+  const resultByPlace = new Map(
+    result.decided
+      .filter(
+        (entry) => entry.from === mutation.from && entry.to === mutation.to,
+      )
+      .map((entry) => [entry.placeId, entry]),
+  );
+  const currentByPlace = new Map(
+    current.decided
+      .filter(
+        (entry) => entry.from === mutation.from && entry.to === mutation.to,
+      )
+      .map((entry) => [entry.placeId, entry]),
+  );
+  const same = (
+    left: (typeof current.decided)[number] | undefined,
+    right: (typeof current.decided)[number] | undefined,
+  ): boolean =>
+    left?.verdict === right?.verdict &&
+    left?.decidedAt === right?.decidedAt &&
+    left?.actor === right?.actor;
+  const eligible = new Set<string>();
+  for (const placeId of mutation.placeIds) {
+    const expected = resultByPlace.get(placeId);
+    if (same(currentByPlace.get(placeId), expected)) eligible.add(placeId);
+  }
+  if (eligible.size === 0) return current;
+  const restored = current.decided.filter(
+    (entry) =>
+      entry.from !== mutation.from ||
+      entry.to !== mutation.to ||
+      !eligible.has(entry.placeId),
+  );
+  for (const placeId of mutation.placeIds) {
+    if (!eligible.has(placeId)) continue;
+    const prior = previousByPlace.get(placeId);
+    if (prior !== undefined) restored.push(prior);
+  }
+  return restored.length !== current.decided.length ||
+    restored.some((entry, index) => entry !== current.decided[index])
+    ? { ...current, revision: current.revision + 1, decided: restored }
+    : current;
+};
 
 /**
  * Applies one mutation to the verdict record. Registration in the route
@@ -355,17 +359,9 @@ export const recordChangeVerdicts = async (
       after,
     });
   } catch (error: unknown) {
-    const compensation = inverseOf(mutation, previous);
-    if (compensation !== undefined) {
-      await changeVerdicts.update((current) =>
-        mutationResultIsCurrent({ current, result, mutation })
-          ? applyChangeVerdictMutation({
-              verdicts: current,
-              mutation: compensation,
-            })
-          : current,
-      );
-    }
+    await changeVerdicts.update((current) =>
+      restorePreviousVerdicts({ current, previous, result, mutation }),
+    );
     if (error instanceof ChangeRestoreRejected) {
       return refusal({
         status: error.message === PLAN_MOVED_REASON ? 409 : 422,
