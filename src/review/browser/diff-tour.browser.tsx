@@ -188,7 +188,8 @@ export const DiffTourProvider = ({
       },
     };
   }, [accepted, recordChangeVerdicts]);
-  const { isPlaceAccepted, standingOf, setPlacesAccepted } = tourValue;
+  const { dispositionOf, isPlaceAccepted, standingOf, setPlacesAccepted } =
+    tourValue;
   const openTour = (next: OpenTour): void => {
     setShownChangesPlaceId(null);
     setTour(next);
@@ -228,10 +229,11 @@ export const DiffTourProvider = ({
     }),
     [active?.placeId, autoAccepted, canRecord, refresh, tourValue, tour],
   );
-  const isActiveAccepted =
-    tour !== null &&
-    active !== undefined &&
-    isPlaceAccepted(tour.diff, active.placeId);
+  const activeDisposition =
+    tour === null || active === undefined
+      ? null
+      : dispositionOf(tour.diff, active.placeId);
+  const isActiveAccepted = activeDisposition === "accepted";
   const isShowingActiveChanges =
     active !== undefined && shownChangesPlaceId === active.placeId;
   const standing =
