@@ -125,3 +125,26 @@ export const changeSetStanding = ({
     isAccepted: total > 0 && closed === total,
   };
 };
+
+/**
+ * What a review has decided about one change place, as every surface that
+ * presents a change asks it.
+ *
+ * The record itself holds only acceptances, so membership is the whole fact and
+ * this union carries exactly what the record can answer: a place is open until
+ * a verdict closes it. It is a named union rather than a boolean because the
+ * disposition is what presentation switches on, and the reject verdict adds a
+ * third answer to this one selector instead of a second question beside it -
+ * which is what keeps the stored record a single shape rather than a fork.
+ */
+export type ChangeDisposition = "open" | "accepted";
+
+/** The disposition of one place, from the accepted key set. */
+export const changeDispositionOf = ({
+  address,
+  accepted,
+}: {
+  readonly address: ChangeVerdictAddress;
+  readonly accepted: ReadonlySet<string>;
+}): ChangeDisposition =>
+  accepted.has(changeVerdictKey(address)) ? "accepted" : "open";
