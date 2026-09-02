@@ -58,6 +58,19 @@ A file whose name carries `.generated.` is an output. Edit its authored input, r
 
 `CHANGELOG.md` is not one of those files. It is authored prose written from generated raw material, which is why it lives outside the `.generated.` convention and why the generated notes above are input rather than output.
 
+## Prereleases
+
+A prerelease version such as `0.1.0-alpha.1` is published by exactly the same procedure. Only one thing about it needs stating, because getting it wrong is silent:
+
+**A prerelease still has to be promoted to `latest`, or first-time users cannot install it.** `npx -y big-plan@latest` and `npm install -g big-plan` both resolve the `latest` dist-tag. That tag moves only in step 7 of the checklist below, never as a side effect of publishing: `publish.yml` always publishes with `--tag next`. Skip the promotion and `latest` stays on the previous release, so every documented install command keeps serving the old version while the release notes announce the new one. There is no warning; installs simply keep working and keep being wrong.
+
+Two consequences of promoting a prerelease to `latest` are deliberate and worth knowing:
+
+- `next` and `latest` then point at the same version. That is fine, and the next canary moves `next` off it again.
+- A consumer who writes a semver **range** such as `^0.1.0` in a `package.json` will not match `0.1.0-alpha.1`, because ranges exclude prerelease versions unless the range itself names one. This does not affect Big Plan's documented paths, which use the `latest` dist-tag rather than a range.
+
+Nothing else changes. Tags named `v0.1.0-alpha.1` match the `v*.*.*` filter that triggers `publish.yml` and that the `npm-release` environment allows, the workflow's tag-equals-package-version check is a string comparison, and the CLI's update notice compares prerelease identifiers by semver precedence rather than lexically.
+
 ## Release checklist
 
 Set the release version once and use it throughout these commands:
@@ -100,11 +113,14 @@ export VERSION="$(node -p "require('./package.json').version")"
 
    The audit must report a verified provenance attestation. The npm version page must link that attestation to the expected GitHub commit and `publish.yml` run.
 
-7. From a trusted maintainer terminal authenticated to npm with 2FA, promote the already-published bytes. This moves a dist-tag; it does not publish again:
+7. From a trusted maintainer terminal authenticated to npm with 2FA, promote the already-published bytes. This moves a dist-tag; it does not publish again. It is required for every release, [prereleases included](#prereleases): until it runs, `npx -y big-plan@latest` still serves the previous version.
 
    ```sh
    npm dist-tag add "big-plan@${VERSION}" latest
    test "$(npm view big-plan@latest version)" = "$VERSION"
+
+   # Prove the first-time-user path resolves this version, not the old one.
+   npx -y big-plan@latest --version
    ```
 
 8. Only once `latest` reports `$VERSION`, publish the GitHub release for `v${VERSION}` with that version's `CHANGELOG.md` entry as its body. The announcement comes last on purpose: a release note published before promotion tells readers to install a version that `npm install big-plan` still cannot reach.
