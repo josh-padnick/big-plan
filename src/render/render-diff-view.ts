@@ -275,14 +275,24 @@ const createAddressMatcher = ({
     }
     const normalizedLabel = label.replaceAll("`", "");
     const sourceRowIndex = node.properties["data-table-row"];
-    const source = sourceElements.find(
-      (element) =>
+    // Sibling anchors routinely share every fact this lookup can compare: two
+    // rows of a table can repeat an owner, two fields can repeat a name. The
+    // walk visits them in document order and each match is consumed, so an
+    // anchor may only claim a source no earlier anchor already took. Without
+    // that, every duplicate resolves to the first one, and the second anchor
+    // is left with an id already spoken for - which is not a near miss but a
+    // silent loss of the address the reviewer is about to point at.
+    const source = sourceElements.find((element) => {
+      const elementId = element.properties["data-block-id"];
+      return (
+        !(typeof elementId === "string" && claimed.has(elementId)) &&
         element.properties["data-block-kind"] === kind &&
         element.properties["data-block-label"] === normalizedLabel &&
         (sourceRowIndex === undefined ||
           element.properties["data-table-row"] === sourceRowIndex) &&
-        elementText(element) === elementText(node),
-    );
+        elementText(element) === elementText(node)
+      );
+    });
     const sourceId = source?.properties["data-block-id"];
     const target = available.find(
       (block) =>

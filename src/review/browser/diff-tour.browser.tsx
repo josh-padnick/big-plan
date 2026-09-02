@@ -111,6 +111,20 @@ export const DiffTourProvider = ({
   }, [tour]);
   const active = places.at(index);
   const closeTour = () => setTour(null);
+  // The stepper floats over the end of the document, so the last change in a
+  // set has nowhere to rise to: the page is already scrolled as far as it goes
+  // and the change stays behind the bar, which is exactly where a reader
+  // cannot read it. Room is reserved under the plan for as long as a tour is
+  // open, and given back when it closes, so every change in the set can reach
+  // the same reading position as the first.
+  useEffect(() => {
+    if (tour === null) return;
+    const root = document.documentElement;
+    root.dataset.reviewTourOpen = "";
+    return () => {
+      delete root.dataset.reviewTourOpen;
+    };
+  }, [tour]);
   const tourValue = useMemo(() => {
     const isPlaceAccepted = (diff: SnapshotDiff, placeId: string): boolean =>
       accepted.has(changeVerdictKey({ from: diff.from, to: diff.to, placeId }));

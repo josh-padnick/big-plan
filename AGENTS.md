@@ -103,6 +103,7 @@ Three runtime contracts hold that browser layer together, and each exists
 because breaking it fails silently rather than loudly.
 The review island may replace plan DOM only through `src/review/browser/plan-dom.browser.ts`, which announces the swap as `bigplan:article-replaced`.
 Every shell script and every island effect that holds a node re-resolves on that event, because a replaced article or component root detaches everything wired beneath it and a dead handler throws nothing.
+Installing markup that carries no plan identity - a component's own diff view replayed into a lens host, stripped of every address - is announced the same way and says so, because presentation wiring still has to run over it while everything that resolves plan identity has nothing to re-resolve and would tear the markup back down.
 `src/review/browser/live-target.browser.ts` resolves plan identity in one place.
 It scopes lookups to the live article and prefers the copy a reader can see when a name sits on more than one rendering, such as a diagram's theme variants.
 A component renders its own diff in place of its root, and the side that is not the plan reaches the browser without plan identity at all, so there is no replayed copy to exclude.

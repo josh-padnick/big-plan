@@ -45,10 +45,15 @@ const buildScreen = ({
     borderTopWidth: "0px",
     borderBottomWidth: "0px",
   };
+  // The frame paints at its own height times whatever zoom the fit just wrote,
+  // which is the height the screen box then has to hold.
   const frame = {
     style: { zoom: "1" },
     offsetWidth: FRAME_WIDTH,
     offsetHeight: FRAME_HEIGHT,
+    getBoundingClientRect: () => ({
+      height: FRAME_HEIGHT * (Number.parseFloat(frame.style.zoom) || 1),
+    }),
   };
   const card = {
     style: { width: "" },
@@ -66,9 +71,22 @@ const buildScreen = ({
       return { height: lines * 20 + 20 };
     },
   };
+  // The card's own padding and border, from the styles registered below.
+  const cardVerticalInset = 8 + 8 + 1 + 1;
   const screen = {
     clientWidth: SCREEN_WIDTH,
     clientHeight: screenHeight,
+    // What the screen box is actually holding after the last paint: the
+    // caption, the card's inset, and the frame at the zoom it was given. The
+    // fit reads this back to learn how much of the box is not the drawing, so
+    // the stub has to answer it the way a laid-out screen would.
+    get scrollHeight() {
+      return (
+        caption.getBoundingClientRect().height +
+        cardVerticalInset +
+        frame.getBoundingClientRect().height
+      );
+    },
     querySelector: (selector: string) =>
       selector.includes("frame-card") ? card : caption,
     closest: () => (maximized ? {} : null),

@@ -103,7 +103,7 @@ const captionContractOf = async (wireframe: TestLocator) =>
     return {
       directChild: caption.parentElement === screen,
       nameLineCount: nameBox.height / nameLineHeight,
-      captionTopGap: captionBox.top - cardBox.bottom,
+      captionBottomGap: cardBox.top - captionBox.bottom,
       leftDelta: Math.abs(captionBox.left - cardBox.left),
       rightDelta: Math.abs(captionBox.right - cardBox.right),
       metadataGap: viewportBox.top - nameBox.bottom,
@@ -117,10 +117,10 @@ const captionContractOf = async (wireframe: TestLocator) =>
       metadataColor: viewportStyle.color,
       metadataDisplay: viewportStyle.display,
       metadataFontSize: Number.parseFloat(viewportStyle.fontSize),
-      stackHeight: captionBox.bottom - cardBox.top,
+      stackHeight: cardBox.bottom - captionBox.top,
       availableHeight: bodyBox.height,
-      stackTopInset: cardBox.top - bodyBox.top,
-      stackBottomInset: bodyBox.bottom - captionBox.bottom,
+      stackTopInset: captionBox.top - bodyBox.top,
+      stackBottomInset: bodyBox.bottom - cardBox.bottom,
       horizontalOverflow: body.scrollWidth - body.clientWidth,
       verticalOverflow: body.scrollHeight - body.clientHeight,
     };
@@ -130,10 +130,13 @@ const expectCaptionContract = (
   contract: Awaited<ReturnType<typeof captionContractOf>>,
   { alignmentTolerance }: { readonly alignmentTolerance: number },
 ): void => {
-  // Semantics: the caption belongs to the screen's own figure, beneath it.
+  // Semantics: the caption belongs to the screen's own figure, and leads it -
+  // the device it is drawn at and the control for commenting on it sit under
+  // the switcher that selected the screen, not stacked under the drawing
+  // against the switcher's own name for it.
   expect(contract.directChild).toBe(true);
-  expect(contract.captionTopGap).toBeGreaterThanOrEqual(10);
-  expect(contract.captionTopGap).toBeLessThanOrEqual(14);
+  expect(contract.captionBottomGap).toBeGreaterThanOrEqual(10);
+  expect(contract.captionBottomGap).toBeLessThanOrEqual(14);
   // Typography: the reading sans at the caption step, not the sketch hand,
   // and no tracking of its own.
   expect(contract.captionFont).toBe(contract.readingFont);
