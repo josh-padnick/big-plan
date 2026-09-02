@@ -14,6 +14,7 @@ examples/*.html
 
 data/**/*.html
 docs/public/demo/
+docs/public/plans/
 playwright-report/
 test-results/
 bun.lock
