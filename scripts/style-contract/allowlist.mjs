@@ -94,7 +94,9 @@ export const STYLESHEET_BUDGETS = {
     // one selector that sizes and aligns a mark against the words it stands
     // with, paid for in part by retiring the per-owner sizing overrides the
     // reference, its copy control, and a list row's push mark each carried.
-    declarations: 1123,
+    // Raised for the Wireframe caption's leading metadata row and its
+    // screen-level comment control at both inline and maximized sizes.
+    declarations: 1136,
   },
   "src/render/global.css": {
     // Bought for the toolbar band: its own ground, the lift a control on it,

@@ -14,6 +14,7 @@
 
 import type { DiffLocation } from "../shared/review-wire.js";
 import {
+  candidateMatchesLiveKind,
   candidateMatchesLiveText,
   lensAnchorCandidates,
   type LensAnchorCandidate,
@@ -289,6 +290,10 @@ export const liveLensAnchor = (
       !candidateMatchesLiveText({
         candidate,
         liveText: liveBlockText(resolved.found),
+      }) ||
+      !candidateMatchesLiveKind({
+        candidate,
+        liveKind: resolved.found.dataset.blockKind,
       }) ||
       !candidateMatchesLivePicture({
         candidate,
