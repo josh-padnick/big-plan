@@ -1224,7 +1224,12 @@ export const DiffLensPortal = ({
   // acceptance a decision made against the same view that produced it.
   if (isVisible && isAccepted && !isShowingChanges && !isSuperseded) {
     return (
-      <AcceptedPlanPlace diff={diff} place={place} locations={locations} />
+      <AcceptedPlanPlace
+        key={place.placeId}
+        diff={diff}
+        place={place}
+        locations={locations}
+      />
     );
   }
   // A component change whose block still stands is shown by replacing that
