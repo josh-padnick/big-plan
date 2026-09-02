@@ -1225,7 +1225,7 @@ export const DiffLensPortal = ({
   if (isVisible && isAccepted && !isShowingChanges && !isSuperseded) {
     return (
       <AcceptedPlanPlace
-        key={place.placeId}
+        key={`${place.placeId}:${articleVersion}`}
         diff={diff}
         place={place}
         locations={locations}
