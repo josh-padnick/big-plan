@@ -768,32 +768,50 @@ const positionChange = (card: HTMLElement): void => {
  * theirs from their first gesture, and a lens that kept pulling the page back
  * would be worse than one that landed badly.
  */
-const openChangeAtReadingPosition = (card: HTMLElement): void => {
+const openChangeAtReadingPosition = (card: HTMLElement): (() => void) => {
   let settledHeight = -1;
   let passes = 0;
+  let observer: ResizeObserver | null = null;
+  let openingFrame: number | null = null;
+  let settlingFrame: number | null = null;
+  let isStopped = false;
   const stop = (): void => {
-    observer.disconnect();
+    if (isStopped) return;
+    isStopped = true;
+    observer?.disconnect();
+    if (openingFrame !== null) cancelAnimationFrame(openingFrame);
+    if (settlingFrame !== null) cancelAnimationFrame(settlingFrame);
     for (const event of RESETTLE_YIELD_EVENTS) {
       window.removeEventListener(event, stop);
     }
   };
-  const observer = new ResizeObserver(() => {
-    const height = card.getBoundingClientRect().height;
-    passes += 1;
-    // The fit is a fixed point with a pass cap of its own; this only has to
-    // outlast it, and stop whether or not it converges.
-    if (height === settledHeight || passes > SETTLE_PASS_LIMIT) {
-      stop();
-      return;
+  openingFrame = requestAnimationFrame(() => {
+    openingFrame = null;
+    if (isStopped) return;
+    observer = new ResizeObserver(() => {
+      const height = card.getBoundingClientRect().height;
+      passes += 1;
+      // The fit is a fixed point with a pass cap of its own; this only has to
+      // outlast it, and stop whether or not it converges.
+      if (passes > SETTLE_PASS_LIMIT) {
+        stop();
+        return;
+      }
+      settledHeight = height;
+      positionChange(card);
+      if (settlingFrame !== null) cancelAnimationFrame(settlingFrame);
+      settlingFrame = requestAnimationFrame(() => {
+        settlingFrame = null;
+        if (card.getBoundingClientRect().height === settledHeight) stop();
+      });
+    });
+    for (const event of RESETTLE_YIELD_EVENTS) {
+      window.addEventListener(event, stop, { passive: true, once: true });
     }
-    settledHeight = height;
+    observer.observe(card);
     positionChange(card);
   });
-  for (const event of RESETTLE_YIELD_EVENTS) {
-    window.addEventListener(event, stop, { passive: true, once: true });
-  }
-  observer.observe(card);
-  positionChange(card);
+  return stop;
 };
 
 /** What tells us the reader has taken the scroll position over. */
@@ -879,8 +897,9 @@ const LegacyDiffLensPortal = ({
       }
       archive.append(container);
       setHost(container);
-      requestAnimationFrame(() => openChangeAtReadingPosition(container));
+      const stopPositioning = openChangeAtReadingPosition(container);
       return () => {
+        stopPositioning();
         container.remove();
         if (ownsArchive && archive?.childElementCount === 0) archive.remove();
       };
@@ -939,8 +958,9 @@ const LegacyDiffLensPortal = ({
       target.before(container);
     }
     setHost(container);
-    requestAnimationFrame(() => openChangeAtReadingPosition(container));
+    const stopPositioning = openChangeAtReadingPosition(container);
     return () => {
+      stopPositioning();
       hiddenElements.forEach((element, index) => {
         element.style.display = displayValues[index] ?? "";
       });
@@ -1007,8 +1027,10 @@ const ComponentDiffReplacement = ({
     if (location.view === undefined) return;
     let original: HTMLElement | null = null;
     let replacement: HTMLElement | null = null;
+    let stopPositioning: (() => void) | null = null;
 
     const install = (): void => {
+      stopPositioning?.();
       const next = componentDiffRoot(location.view ?? "");
       if (next === null) return;
       const anchor = liveLensAnchor(locationRef.current, { isSuperseded });
@@ -1028,11 +1050,13 @@ const ComponentDiffReplacement = ({
         announcePlanDom();
       }
       document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
-      requestAnimationFrame(() => openChangeAtReadingPosition(next));
+      stopPositioning = openChangeAtReadingPosition(next);
     };
 
     const reinstallAfterArticleRefresh = (): void => {
       if (replacement?.isConnected === true) return;
+      stopPositioning?.();
+      stopPositioning = null;
       const refreshed = liveComponentDiff(locationRef.current);
       if (refreshed !== null) {
         replacement = refreshed;
@@ -1052,6 +1076,7 @@ const ComponentDiffReplacement = ({
       reinstallAfterArticleRefresh,
     );
     return () => {
+      stopPositioning?.();
       document.removeEventListener(
         "bigplan:article-replaced",
         reinstallAfterArticleRefresh,
