@@ -32,6 +32,12 @@ export type LensAnchorCandidate = {
   // that. Expectations are absent when the id and document share a snapshot.
   readonly expectedText?: string;
   readonly expectedPicture?: PicturePresentation;
+  // The block kind the id named when the change was recorded. Carried instead
+  // of the text for a location that brought its own rendering, because those
+  // two questions are not the same one: text asks whether the block still says
+  // what it said, and a component revised again honestly answers no while
+  // still being the component the change is about.
+  readonly expectedKind?: string;
 };
 
 /**
@@ -43,14 +49,22 @@ export type LensAnchorCandidate = {
  * document was rendered from a later snapshot and the id alone cannot prove
  * the block still holds the content the diff is about.
  *
- * A location that brought its own complete rendering is the exception, and it
- * is a narrow one. The expectation exists because a lens built from recorded
+ * A location that brought its own complete rendering asks a different question
+ * of the same id, and gets a different expectation. A lens built from recorded
  * text is only honest beside a block that still holds that text; a component
  * that carries `view` shows both of its own sides and reads the live block for
  * nothing, so the id is asking where to stand rather than what to say. Holding
  * such a location to the old text sends a change the plan still has a place for
  * into the historical archive at the foot of the document - a stop the stepper
  * still counts, with nothing to see where the reader is looking.
+ *
+ * It is still held to something, because a structural path is not an identity:
+ * the same address can come to name an entirely different component, and
+ * standing a historical card over one of those hides a live component behind a
+ * record of something else. The kind is what the two questions have in common -
+ * a component revised again is still the component the change was about, and a
+ * component replaced by another is not - so that is what the id must still
+ * name.
  */
 export const lensAnchorCandidates = (
   location: DiffLocation,
@@ -64,7 +78,9 @@ export const lensAnchorCandidates = (
           {
             blockId: location.newBlockId,
             placement: "replace",
-            ...(carriesOwnRendering ? {} : { expectedText: location.newText }),
+            ...(carriesOwnRendering
+              ? { expectedKind: location.kind }
+              : { expectedText: location.newText }),
             ...(!carriesOwnRendering &&
             location.newPresentation?.aspect === "image"
               ? { expectedPicture: location.newPresentation }
@@ -111,6 +127,25 @@ export const candidateMatchesLiveText = ({
   identityText(candidate.expectedText) === identityText(liveText) ||
   withoutCompilerSeparators(candidate.expectedText) ===
     withoutCompilerSeparators(liveText);
+
+/**
+ * Whether a live block is still the kind of thing its candidate's id named.
+ *
+ * This is deliberately weaker than the text expectation beside it. It cannot
+ * tell one table from another table at the same address, and it is not trying
+ * to: it separates "the component this change was about, revised again" from
+ * "some other component that inherited this structural path", which is the
+ * distinction that decides whether a historical card may stand over a live
+ * block at all.
+ */
+export const candidateMatchesLiveKind = ({
+  candidate,
+  liveKind,
+}: {
+  readonly candidate: LensAnchorCandidate;
+  readonly liveKind: string | undefined;
+}): boolean =>
+  candidate.expectedKind === undefined || candidate.expectedKind === liveKind;
 
 /**
  * Resolves the place a tour should open on. The stepper walks the diff's own

@@ -990,9 +990,11 @@ const applyDecisionReviewAuthority = ({
 const ComponentDiffReplacement = ({
   location,
   isAccepted,
+  isSuperseded,
 }: {
   readonly location: DiffLocation;
   readonly isAccepted: boolean;
+  readonly isSuperseded: boolean;
 }) => {
   const replacementRef = useRef<HTMLElement | null>(null);
   const locationRef = useRef(location);
@@ -1009,9 +1011,7 @@ const ComponentDiffReplacement = ({
     const install = (): void => {
       const next = componentDiffRoot(location.view ?? "");
       if (next === null) return;
-      const anchor = liveLensAnchor(locationRef.current, {
-        isSuperseded: false,
-      });
+      const anchor = liveLensAnchor(locationRef.current, { isSuperseded });
       if ("missing" in anchor) return;
       replacement = next;
       replacementRef.current = next;
@@ -1068,6 +1068,7 @@ const ComponentDiffReplacement = ({
       }
     };
   }, [
+    isSuperseded,
     location.afterBlockId,
     location.beforeBlockId,
     location.newBlockId,
@@ -1108,12 +1109,16 @@ export const DiffLensPortal = ({
   );
   const articleVersion = useArticleVersion();
   const [componentAvailable, setComponentAvailable] = useState<boolean>();
+  // Asked exactly as the replacement will ask it, superseded and all. A cheaper
+  // question here than the install performs would route a change to a
+  // replacement that then declines to install, leaving the stepper on a stop
+  // with nothing shown.
   useEffect(() => {
     if (componentLocation === undefined) return;
     setComponentAvailable(
-      "found" in liveLensAnchor(componentLocation, { isSuperseded: false }),
+      "found" in liveLensAnchor(componentLocation, { isSuperseded }),
     );
-  }, [articleVersion, componentLocation]);
+  }, [articleVersion, componentLocation, isSuperseded]);
   // A component change whose block still stands is shown by replacing that
   // block, whether or not the plan has since moved past it. Being superseded
   // changes what the change means, not what it is: the card is the same
@@ -1126,6 +1131,12 @@ export const DiffLensPortal = ({
   // frames, and an inert copy whose screen tabs and column menus cannot be
   // clicked at all. Replacing keeps the plan's one copy of every address,
   // which is the reason the archive's copy has to strip them.
+  //
+  // "Still stands" is a question about the block, not just about the id. A
+  // structural path can come to name a different component entirely, and a
+  // historical card standing over one of those hides a live component behind a
+  // record of something else; `lensAnchorCandidates` holds a superseded
+  // location to the kind it named, so that case reaches the archive instead.
   if (componentLocation === undefined || !isVisible) {
     return (
       <LegacyDiffLensPortal
@@ -1148,6 +1159,7 @@ export const DiffLensPortal = ({
     <ComponentDiffReplacement
       location={componentLocation}
       isAccepted={isAccepted}
+      isSuperseded={isSuperseded}
     />
   );
 };
