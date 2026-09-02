@@ -1507,6 +1507,17 @@ Two workers drain the queue every two seconds.
     await writeFile(planPath, PROPOSED);
     const target = await startReviewRuntime({ planPath });
     try {
+      await recordCommittedRevision({
+        store: target.store,
+        revision: {
+          requestId: "a".repeat(16),
+          changeSetIds: ["b".repeat(16)],
+          baseSnapshot: FROM,
+          resultSnapshot: TO,
+          provenance: "feedback",
+          committedAt: "2026-09-02T11:00:00.000Z",
+        },
+      });
       await writeSnapshot({
         store: target.store,
         snapshot: FROM,
@@ -1655,6 +1666,74 @@ Two workers drain the queue every two seconds.
 
       expect(response.status).toBe(200);
       await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
+    });
+  });
+
+  it("should reconcile an interrupted undo when another rejection survives", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const durable = placeFor(places, "durable");
+      const workers = placeFor(places, "workers");
+      await decide({
+        target,
+        sessionToken,
+        op: "reject",
+        placeIds: [durable, workers],
+      });
+      await writeChangeVerdicts({
+        store: target.store,
+        verdicts: {
+          version: 1,
+          revision: 2,
+          decided: [
+            {
+              from: FROM,
+              to: TO,
+              placeId: durable,
+              verdict: "rejected",
+              decidedAt: "2026-09-02T12:00:00.000Z",
+              actor: "reviewer",
+            },
+          ],
+        },
+      });
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+
+      expect(response.status).toBe(200);
+      const source = await readFile(planPath, "utf8");
+      expect(source).toContain("wait in a durable queue.");
+      expect(source).toContain(
+        "Two workers drain the queue every two seconds.",
+      );
+    });
+  });
+
+  it("should reconcile an interrupted undo of the sole rejection", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const durable = placeFor(places, "durable");
+      await decide({
+        target,
+        sessionToken,
+        op: "reject",
+        placeIds: [durable],
+      });
+      await writeChangeVerdicts({
+        store: target.store,
+        verdicts: { version: 1, revision: 2, decided: [] },
+      });
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(PROPOSED);
     });
   });
 

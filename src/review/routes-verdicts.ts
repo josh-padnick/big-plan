@@ -35,9 +35,11 @@ import type {
   StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
 import {
+  changedPlaceIds,
   ChangeRestoreRejected,
   restoreRejectedPlaces,
 } from "./change-restore.js";
+import { readCommittedChangeSets } from "./change-set-commit.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
 import { revertPlanSource } from "./staged-plan-mutation.js";
@@ -60,7 +62,6 @@ const verdictState = (verdicts: StoredChangeVerdicts): ReviewRouteResponse =>
     }),
   });
 
-/** Reads the recorded verdicts with the revision that produced them. */
 /**
  * Brings the plan source into agreement with a revision's rejected places.
  *
@@ -131,39 +132,81 @@ const reconcileRecordedRejections = async ({
   readonly verdicts: StoredChangeVerdicts;
 }): Promise<void> => {
   const revisions = new Map<string, { from: string; to: string }>();
+  for (const changeSet of await readCommittedChangeSets({
+    store: context.store,
+  })) {
+    revisions.set(`${changeSet.baseSnapshot}:${changeSet.resultSnapshot}`, {
+      from: changeSet.baseSnapshot,
+      to: changeSet.resultSnapshot,
+    });
+  }
   for (const entry of verdicts.decided) {
-    if (entry.verdict !== "rejected") continue;
     revisions.set(`${entry.from}:${entry.to}`, {
       from: entry.from,
       to: entry.to,
     });
   }
+  const { store, resolvedPlanPath, readerProgress } = context;
+  const currentSource = await readFile(resolvedPlanPath, "utf8");
+  const matches: Array<string> = [];
   for (const { from, to } of revisions.values()) {
-    const after = rejectedPlaceIdsFor({ verdicts, from, to });
-    const rejected = verdicts.decided.filter(
-      (entry) =>
-        entry.verdict === "rejected" && entry.from === from && entry.to === to,
-    );
-    const latestDecision = rejected.reduce(
-      (latest, entry) =>
-        entry.decidedAt > latest ? entry.decidedAt : latest,
-      "",
-    );
-    const before = rejected
-      .filter((entry) => entry.decidedAt !== latestDecision)
-      .map((entry) => entry.placeId);
-    try {
-      await reconcilePlanSource({ context, from, to, before, after });
-    } catch (error: unknown) {
-      if (
-        error instanceof ChangeRestoreRejected &&
-        error.message === PLAN_MOVED_REASON
-      ) {
-        continue;
+    const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
+    const [baselineSource, proposedSource] = await Promise.all([
+      readSnapshot({ store, snapshot: from }),
+      readSnapshot({ store, snapshot: to }),
+    ]);
+    const rejected = rejectedPlaceIdsFor({ verdicts, from, to });
+    const restored = (placeIds: ReadonlyArray<string>): string =>
+      restoreRejectedPlaces({
+        baselineSource,
+        proposedSource,
+        from,
+        to,
+        placeIds,
+        fallbackTitle,
+      });
+    const intendedSource = restored(rejected);
+    if (currentSource === intendedSource) return;
+    const rejectedSet = new Set(rejected);
+    const places = changedPlaceIds({
+      baselineSource,
+      proposedSource,
+      from,
+      to,
+      fallbackTitle,
+    });
+    let matchingNeighbors = 0;
+    for (const placeId of places) {
+      const neighbor = rejectedSet.has(placeId)
+        ? rejected.filter((candidate) => candidate !== placeId)
+        : [...rejected, placeId];
+      try {
+        if (restored(neighbor) === currentSource) {
+          matchingNeighbors += 1;
+        }
+      } catch (error: unknown) {
+        if (!(error instanceof ChangeRestoreRejected)) throw error;
       }
-      throw error;
     }
+    if (matchingNeighbors === 1) matches.push(intendedSource);
   }
+  if (matches.length !== 1) return;
+  const intendedSource = matches[0];
+  if (intendedSource === undefined) return;
+  const expectedSnapshot = deriveSnapshotDigest(currentSource);
+  const nextSnapshot = deriveSnapshotDigest(intendedSource);
+  await writeSnapshot({
+    store,
+    snapshot: nextSnapshot,
+    source: intendedSource,
+  });
+  await revertPlanSource({
+    store,
+    planPath: resolvedPlanPath,
+    expectedSnapshot,
+    source: intendedSource,
+  });
+  readerProgress.accept(nextSnapshot);
 };
 
 /** Reads the recorded verdicts and repairs an interrupted rejection publish. */

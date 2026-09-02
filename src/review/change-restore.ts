@@ -43,6 +43,26 @@ export class ChangeRestoreRejected extends Error {
   }
 }
 
+export const changedPlaceIds = ({
+  baselineSource,
+  proposedSource,
+  from,
+  to,
+  fallbackTitle,
+}: {
+  readonly baselineSource: string;
+  readonly proposedSource: string;
+  readonly from: string;
+  readonly to: string;
+  readonly fallbackTitle: string;
+}): ReadonlyArray<string> => {
+  const before = blocksOf({ markdown: baselineSource, fallbackTitle });
+  const after = blocksOf({ markdown: proposedSource, fallbackTitle });
+  return buildSnapshotDiff({ from, to, before, after }).places.map(
+    (place) => place.placeId,
+  );
+};
+
 /** One splice: proposed bytes to remove, baseline bytes to put in their place. */
 type SourceEdit = {
   readonly cutStart: number;
