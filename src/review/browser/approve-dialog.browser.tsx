@@ -39,7 +39,7 @@ import type {
 import {
   approveChangeSetCaveat,
   approveDecisionCaveat,
-  changeSetsFromExchange,
+  changeSetsFromCommitted,
   deriveOpenItems,
   openRequestsFromExchange,
   sectionIdFromLabel,
@@ -1104,35 +1104,29 @@ export const ApproveControl = ({
   const { openTour } = useDiffTour();
   const message = useApprovalMessage(dialogOpen);
   const { changeSets: committed } = useChangeSets();
-  const committedChangeSetIds = useMemo(
-    () => new Set(committed.map((changeSet) => changeSet.changeSetId)),
-    [committed],
-  );
   const skeletonSets = useMemo(
     () =>
-      changeSetsFromExchange({
+      changeSetsFromCommitted({
+        committed,
         requests: agent.requests,
-        responses: agent.responses,
         placeIdsByRevision: new Map(),
-        committedChangeSetIds,
       }),
-    [agent.requests, agent.responses, committedChangeSetIds],
+    [agent.requests, committed],
   );
   const diffs = useChangeSetDiffs({ identity, changeSets: skeletonSets });
   const changeSets = useMemo(
     () =>
-      changeSetsFromExchange({
+      changeSetsFromCommitted({
+        committed,
         requests: agent.requests,
-        responses: agent.responses,
         placeIdsByRevision: new Map(
           [...diffs.entries()].map(([key, diff]) => [
             key,
             diff.places.map((place) => place.placeId),
           ]),
         ),
-        committedChangeSetIds,
       }),
-    [agent.requests, agent.responses, committedChangeSetIds, diffs],
+    [agent.requests, committed, diffs],
   );
   const items = useMemo(
     () =>

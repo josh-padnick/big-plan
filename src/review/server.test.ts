@@ -7832,4 +7832,82 @@ describe("review runtime approval", () => {
       },
     );
   });
+
+  it("accepts a change set the agent exchange no longer carries", async () => {
+    await withApprovalRuntime(
+      DECISION_PLAN,
+      async ({ target, sessionToken, digest, planPath }) => {
+        const requestId = "eeeeeeeeeeeeeeee";
+        const request = messageAgentRequest({
+          sessionId: target.sessionId,
+          planId: target.planId,
+          requestId,
+          kind: "chat",
+          body: "Clarify the rollback owner.",
+          premiseSnapshot: digest,
+          createdAt: "2026-08-19T17:00:00.000Z",
+        });
+        await writeAgentRequest({ store: target.store, request });
+        const claimed = await claimAgentRequest({
+          store: target.store,
+          activeSessionId: target.sessionId,
+          requestId,
+          claimedBy: target.sessionId,
+          baselineSnapshot: digest,
+          now: "2026-08-19T17:00:01.000Z",
+        });
+        const published = `${DECISION_PLAN}\nThe rollback owner is the release captain.\n`;
+        const publishedDigest = deriveSnapshotDigest(published);
+        await writeFile(planPath, published);
+        await writeSnapshot({
+          store: target.store,
+          snapshot: publishedDigest,
+          source: published,
+        });
+        await commitRequestTerminal({
+          store: target.store,
+          claimedBy: target.sessionId,
+          response: validateAgentResponseDraft({
+            value: { requestId, message: "Named the rollback owner." },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set(),
+            currentSnapshot: publishedDigest,
+            now: "2026-08-19T17:00:02.000Z",
+          }),
+          now: "2026-08-19T17:00:02.000Z",
+        });
+        // The exchange is a bounded window over a log that is never pruned, so
+        // an older round stops being readable there while its committed
+        // revision stays. Approval must still close the change set that
+        // revision published rather than report it accepted without a verdict.
+        await rm(
+          join(target.store.agentResponseDirectory, `${requestId}.json`),
+        );
+
+        const response = await approve(target, sessionToken, {
+          expectedSnapshot: publishedDigest,
+        });
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          approval: {
+            openItemCounts: {
+              changeSetsAccepted: 1,
+              changeSetsTotal: 1,
+            },
+          },
+        });
+        const verdicts = await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/change-verdicts",
+        });
+        await expect(verdicts.json()).resolves.toMatchObject({
+          accepted: [
+            expect.objectContaining({ from: digest, to: publishedDigest }),
+          ],
+        });
+      },
+    );
+  });
 });
