@@ -9,15 +9,15 @@ use `1`.
 
 ## The codes
 
-| Code | Raised by | What it means | What to do |
-| --- | --- | --- | --- |
-| `GUIDANCE_REQUIRED` | `validate`, `render`, `review` | No current guidance acknowledgment for this working directory | Run [`big-plan guidance`](/reference/commands/guidance/) in that directory |
-| `VALIDATION_ERROR` | `validate`, `render`, `compile`, `review`, `skill` | A missing or extra argument, an unknown option, an output that would overwrite the input, invalid MDX, or failed authoring lint | Read the `help` entries; they carry every diagnostic as `line:column message`, and lint entries add `[rule-id]` |
-| `INVALID_INPUT` | `review`, `agent`, `service` | A malformed option value, an unknown action, or invalid action arguments | The message carries the usage text for that command |
-| `INPUT_NOT_FOUND` | `validate`, `render`, `compile`, `review` | The input file cannot be read | Check the resolved absolute path in the message |
-| `NOT_PRIMARY` | `agent note`, `agent respond` | The reviewer made another attached agent the primary for this review | Stop claiming; the message names the agent that holds the plan now |
-| `AGENT_DISCONNECTED` | `agent push`, `agent note`, `agent respond` | The reviewer disconnected this agent | Terminal — end the session rather than retrying |
-| `SOURCE_MOVED` | `agent respond` | The plan no longer carries the revision the candidate started from | Take the work again from the current plan with `agent next` |
+| Code                 | Raised by                                          | What it means                                                                                                                   | What to do                                                                                                      |
+| -------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `GUIDANCE_REQUIRED`  | `validate`, `render`, `review`                     | No current guidance acknowledgment for this working directory                                                                   | Run [`big-plan guidance`](/reference/commands/guidance/) in that directory                                      |
+| `VALIDATION_ERROR`   | `validate`, `render`, `compile`, `review`, `skill` | A missing or extra argument, an unknown option, an output that would overwrite the input, invalid MDX, or failed authoring lint | Read the `help` entries; they carry every diagnostic as `line:column message`, and lint entries add `[rule-id]` |
+| `INVALID_INPUT`      | `review`, `agent`, `service`                       | A malformed option value, an unknown action, or invalid action arguments                                                        | The message carries the usage text for that command                                                             |
+| `INPUT_NOT_FOUND`    | `validate`, `render`, `compile`, `review`          | The input file cannot be read                                                                                                   | Check the resolved absolute path in the message                                                                 |
+| `NOT_PRIMARY`        | `agent note`, `agent respond`                      | The reviewer made another attached agent the primary for this review                                                            | Stop claiming; the message names the agent that holds the plan now                                              |
+| `AGENT_DISCONNECTED` | `agent push`, `agent note`, `agent respond`        | The reviewer disconnected this agent                                                                                            | Terminal — end the session rather than retrying                                                                 |
+| `SOURCE_MOVED`       | `agent respond`                                    | The plan no longer carries the revision the candidate started from                                                              | Take the work again from the current plan with `agent next`                                                     |
 
 ## Two situations that are not errors
 

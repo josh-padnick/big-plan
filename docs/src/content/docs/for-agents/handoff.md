@@ -22,12 +22,12 @@ becomes the primary by arriving.
 The same situation reaches you as an error from some commands and as an ordinary result from
 another. Branch on both, or your loop will poll forever.
 
-| What you get | From | What it means | What to do |
-| --- | --- | --- | --- |
-| `role: "observer"` | `agent next` | Another agent is the primary | Without `--wait`, exit. With `--wait`, stay attached and keep asking |
-| `NOT_PRIMARY` | `agent note`, `agent respond` | You were displaced mid-turn | Stop claiming. The message names the agent that holds the plan now |
-| `role: "disconnected"` | `agent next` | The reviewer took you off the review | Terminal, even with `--wait`. Stop the loop |
-| `AGENT_DISCONNECTED` | `agent push`, `agent note`, `agent respond` | Same fact, arriving as an error | Terminal. Stop rather than retrying |
+| What you get           | From                                        | What it means                        | What to do                                                           |
+| ---------------------- | ------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------- |
+| `role: "observer"`     | `agent next`                                | Another agent is the primary         | Without `--wait`, exit. With `--wait`, stay attached and keep asking |
+| `NOT_PRIMARY`          | `agent note`, `agent respond`               | You were displaced mid-turn          | Stop claiming. The message names the agent that holds the plan now   |
+| `role: "disconnected"` | `agent next`                                | The reviewer took you off the review | Terminal, even with `--wait`. Stop the loop                          |
+| `AGENT_DISCONNECTED`   | `agent push`, `agent note`, `agent respond` | Same fact, arriving as an error      | Terminal. Stop rather than retrying                                  |
 
 A harness that watches only for `NOT_PRIMARY` reads the observer result as ordinary "no work"
 and polls on, which is exactly the churn this design removes. The correct response to either is

@@ -197,12 +197,12 @@ Every other way a seat empties - a turn ending, a poll returning, a reviewer dis
 
 ## Errors
 
-| Code | Raised when | Exit |
-| --- | --- | --- |
-| `INVALID_INPUT` | An unknown action or invalid action arguments; the message carries the complete multi-line usage text | 2 |
-| `NOT_PRIMARY` | On `note` and `respond`, when the reviewer has made another attached agent the primary | nonzero |
-| `AGENT_DISCONNECTED` | On `push`, `note`, and `respond`, when the reviewer has disconnected this agent | nonzero |
-| `SOURCE_MOVED` | On `respond`, when the plan no longer carries the revision the candidate started from | nonzero |
+| Code                 | Raised when                                                                                           | Exit    |
+| -------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
+| `INVALID_INPUT`      | An unknown action or invalid action arguments; the message carries the complete multi-line usage text | 2       |
+| `NOT_PRIMARY`        | On `note` and `respond`, when the reviewer has made another attached agent the primary                | nonzero |
+| `AGENT_DISCONNECTED` | On `push`, `note`, and `respond`, when the reviewer has disconnected this agent                       | nonzero |
+| `SOURCE_MOVED`       | On `respond`, when the plan no longer carries the revision the candidate started from                 | nonzero |
 
 `agent next` reports the observer and disconnected situations as ordinary results rather than
 errors — `role: "observer"` and `role: "disconnected"` — so a harness must branch on those too.

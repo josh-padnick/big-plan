@@ -32,9 +32,9 @@ describe("Slide catalog documentation", () => {
     );
     const catalogSection =
       reference.split("## The catalog\n")[1]?.split("\n## ")[0] ?? "";
-    const documentedNames = [
-      ...catalogSection.matchAll(/^### (.+)$/gm),
-    ].map(([, name]) => name);
+    const documentedNames = [...catalogSection.matchAll(/^### (.+)$/gm)].map(
+      ([, name]) => name,
+    );
 
     expect(documentedNames).toEqual(SLIDE_TYPES.map(({ name }) => name));
 

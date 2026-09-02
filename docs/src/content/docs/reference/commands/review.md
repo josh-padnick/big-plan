@@ -11,17 +11,17 @@ big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeo
 
 ## Arguments
 
-| Argument | Required | Behaviour |
-| --- | --- | --- |
-| `input.mdx` | Yes | The plan to serve. A second positional argument is rejected |
+| Argument    | Required | Behaviour                                                   |
+| ----------- | -------- | ----------------------------------------------------------- |
+| `input.mdx` | Yes      | The plan to serve. A second positional argument is rejected |
 
 ## Options
 
-| Option | Behaviour |
-| --- | --- |
+| Option                     | Behaviour                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--idle-timeout <minutes>` | Close an abandoned session after that much inactivity. Defaults to no timeout; `--idle-timeout 0` says the same thing explicitly, and a nonzero value must be at least 1 minute |
-| `--takeover` | Replace a live runtime deliberately. The replaced runtime keeps listening but loses write custody, so its page and its agent become read-only until each reloads |
-| `--diff-preview` | Temporary development-only flag that seeds a synthetic gallery answer and marks the browser with a visible preview banner |
+| `--takeover`               | Replace a live runtime deliberately. The replaced runtime keeps listening but loses write custody, so its page and its agent become read-only until each reloads                |
+| `--diff-preview`           | Temporary development-only flag that seeds a synthetic gallery answer and marks the browser with a visible preview banner                                                       |
 
 ## Result
 
@@ -53,12 +53,12 @@ makes its open page and its connected agent read-only until each reloads.
 
 ## Errors
 
-| Code | Raised when | Exit |
-| --- | --- | --- |
-| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours | 2 |
-| `VALIDATION_ERROR` | The input argument is missing, a second positional argument is present, an option is unknown, the MDX is invalid, or the plan fails authoring lint | 2 |
-| `INVALID_INPUT` | `--idle-timeout` is empty, non-numeric, negative, a nonzero sub-minute value, or overflowing | 2 |
-| `INPUT_NOT_FOUND` | The plan cannot be read | 1 |
+| Code                | Raised when                                                                                                                                        | Exit |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours                                                                         | 2    |
+| `VALIDATION_ERROR`  | The input argument is missing, a second positional argument is present, an option is unknown, the MDX is invalid, or the plan fails authoring lint | 2    |
+| `INVALID_INPUT`     | `--idle-timeout` is empty, non-numeric, negative, a nonzero sub-minute value, or overflowing                                                       | 2    |
+| `INPUT_NOT_FOUND`   | The plan cannot be read                                                                                                                            | 1    |
 
 Lint runs before the port opens, so a plan that fails lint never reaches a reviewer.
 

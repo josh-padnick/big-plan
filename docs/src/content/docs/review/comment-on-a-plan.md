@@ -95,12 +95,12 @@ server-rendered article without client-rendering or gating the plan.
 
 ## If it goes wrong
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| **Blocked - no agent connected** | Nothing is attached to answer you | The message sends itself when an agent reconnects; open **Agent Status** for the prompt that starts one |
-| The composer refuses to send | The runtime has stopped accepting changes, lost contact, or been replaced | Your text is kept; see [When a review goes wrong](/review/troubleshooting/) |
-| **Original target unavailable** | The block the comment was anchored to no longer exists at that structural path | The thread keeps its recorded address; Big Plan never re-attaches it to nearby prose by guesswork |
-| An image will not attach | The file is not PNG, JPEG, or WebP, or the message is past four images, 10 MiB each, or 20 MiB total | Reduce or convert it; a standalone rendered document accepts no image bytes at all |
+| What you see                     | What it means                                                                                        | What to do                                                                                              |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Blocked - no agent connected** | Nothing is attached to answer you                                                                    | The message sends itself when an agent reconnects; open **Agent Status** for the prompt that starts one |
+| The composer refuses to send     | The runtime has stopped accepting changes, lost contact, or been replaced                            | Your text is kept; see [When a review goes wrong](/review/troubleshooting/)                             |
+| **Original target unavailable**  | The block the comment was anchored to no longer exists at that structural path                       | The thread keeps its recorded address; Big Plan never re-attaches it to nearby prose by guesswork       |
+| An image will not attach         | The file is not PNG, JPEG, or WebP, or the message is past four images, 10 MiB each, or 20 MiB total | Reduce or convert it; a standalone rendered document accepts no image bytes at all                      |
 
 ## Next
 

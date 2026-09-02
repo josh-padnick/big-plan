@@ -23,16 +23,16 @@ account and no third-party service.
 
 ## Section guide
 
-| Read this | When |
-| --- | --- |
-| [Start a review](/review/start-a-review/) | You have a plan file and need it in front of you |
-| [Comment on a plan](/review/comment-on-a-plan/) | You want to tell the agent something about one part of it |
-| [Answer the plan's decisions](/review/answer-decisions/) | The plan is asking you a question |
-| [Read the agent's changes](/review/read-changes/) | The agent answered and you want to see what moved |
-| [Approve a plan](/review/approve-a-plan/) | You are ready for the agent to start work |
-| [Export a plan as Markdown](/review/export-markdown/) | You need the plan outside Big Plan |
-| [Change how the viewer looks](/review/viewer-settings/) | Appearance, colour theme, or the note that rides with an approval |
-| [When a review goes wrong](/review/troubleshooting/) | The page or the command is not doing what you expected |
+| Read this                                                | When                                                              |
+| -------------------------------------------------------- | ----------------------------------------------------------------- |
+| [Start a review](/review/start-a-review/)                | You have a plan file and need it in front of you                  |
+| [Comment on a plan](/review/comment-on-a-plan/)          | You want to tell the agent something about one part of it         |
+| [Answer the plan's decisions](/review/answer-decisions/) | The plan is asking you a question                                 |
+| [Read the agent's changes](/review/read-changes/)        | The agent answered and you want to see what moved                 |
+| [Approve a plan](/review/approve-a-plan/)                | You are ready for the agent to start work                         |
+| [Export a plan as Markdown](/review/export-markdown/)    | You need the plan outside Big Plan                                |
+| [Change how the viewer looks](/review/viewer-settings/)  | Appearance, colour theme, or the note that rides with an approval |
+| [When a review goes wrong](/review/troubleshooting/)     | The page or the command is not doing what you expected            |
 
 ## Next
 

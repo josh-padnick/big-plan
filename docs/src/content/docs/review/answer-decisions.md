@@ -59,12 +59,12 @@ A standalone rendered document has no Inputs tab: the contract is derived by the
 
 ## If it goes wrong
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| The card says the answer is not saved yet | A save failed and is being retried | Keep the page open until the card reports the answer saved |
-| The card asks to be answered again | The decision's own content changed, so the stored answer stopped applying | Answer it again, or restore the decision's exact wording to revive the original answer |
-| A row reads **Stale** | You answered and the plan moved underneath the answer | Same as above; stale is its own state, not a kind of unanswered |
-| Every answering control is disabled | This page is a read-only review session | Open the newest review for that plan |
+| What you see                              | What it means                                                             | What to do                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| The card says the answer is not saved yet | A save failed and is being retried                                        | Keep the page open until the card reports the answer saved                             |
+| The card asks to be answered again        | The decision's own content changed, so the stored answer stopped applying | Answer it again, or restore the decision's exact wording to revive the original answer |
+| A row reads **Stale**                     | You answered and the plan moved underneath the answer                     | Same as above; stale is its own state, not a kind of unanswered                        |
+| Every answering control is disabled       | This page is a read-only review session                                   | Open the newest review for that plan                                                   |
 
 ## Next
 

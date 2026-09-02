@@ -30,11 +30,11 @@ Export is available from live reviews, including a session that has become read-
 
 ## If it goes wrong
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| **Export** is not in **More actions** | You are reading a standalone rendered document | Open the live review for that plan |
+| What you see                             | What it means                                                         | What to do                                      |
+| ---------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------- |
+| **Export** is not in **More actions**    | You are reading a standalone rendered document                        | Open the live review for that plan              |
 | The export is missing recent agent edits | Those edits are still a private candidate and have not been published | They appear once the agent publishes its answer |
-| The export carries no approval summary | The approval in force does not pin the exported version | Re-approve the current plan, then export again |
+| The export carries no approval summary   | The approval in force does not pin the exported version               | Re-approve the current plan, then export again  |
 
 ## Next
 

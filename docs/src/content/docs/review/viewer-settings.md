@@ -62,11 +62,11 @@ thing: a blank note falls back to the standard wording, so an approval never car
 
 ## If it goes wrong
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| The approval field says it could not save | The browser refused storage | The field keeps what you typed; copy it somewhere before closing the tab |
-| Your appearance choice does not persist | The browser is refusing site storage, so `System` is used | Allow storage for the page's origin, or accept the OS default |
-| A theme looks wrong in one appearance | Every theme ships coordinated light and dark variants, so this is a defect | [Report it](/concepts/security-policy/) or open an issue |
+| What you see                              | What it means                                                              | What to do                                                               |
+| ----------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| The approval field says it could not save | The browser refused storage                                                | The field keeps what you typed; copy it somewhere before closing the tab |
+| Your appearance choice does not persist   | The browser is refusing site storage, so `System` is used                  | Allow storage for the page's origin, or accept the OS default            |
+| A theme looks wrong in one appearance     | Every theme ships coordinated light and dark variants, so this is a defect | [Report it](/concepts/security-policy/) or open an issue                 |
 
 ## Next
 

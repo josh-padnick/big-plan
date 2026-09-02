@@ -77,13 +77,13 @@ fuzzy matching or silently attach it to nearby prose.
 
 ## If it goes wrong
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| The page warns the count may be incomplete | Big Plan could not reach the runtime while reading recorded acceptances | It keeps retrying; leave the page open |
-| An acceptance says it is not saved yet | Recording failed and is being retried | Keep the review open until the set reports itself accepted |
-| A mark comes back off after you set it | The runtime refused the acceptance outright | The review says so rather than claiming work nothing recorded |
-| **Revert response** is not offered | The plan changed again after that response | Reverting is only available while the response is still the latest state of its own baseline |
-| **Resolve thread** is refused | The agent still owes that thread an answer | Cancel the waiting message, or wait for its answer, then resolve |
+| What you see                               | What it means                                                           | What to do                                                                                   |
+| ------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| The page warns the count may be incomplete | Big Plan could not reach the runtime while reading recorded acceptances | It keeps retrying; leave the page open                                                       |
+| An acceptance says it is not saved yet     | Recording failed and is being retried                                   | Keep the review open until the set reports itself accepted                                   |
+| A mark comes back off after you set it     | The runtime refused the acceptance outright                             | The review says so rather than claiming work nothing recorded                                |
+| **Revert response** is not offered         | The plan changed again after that response                              | Reverting is only available while the response is still the latest state of its own baseline |
+| **Resolve thread** is refused              | The agent still owes that thread an answer                              | Cancel the waiting message, or wait for its answer, then resolve                             |
 
 ## Next
 

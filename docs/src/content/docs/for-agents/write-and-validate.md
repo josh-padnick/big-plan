@@ -66,13 +66,13 @@ created for you. This does not replace the live-review workflow.
 
 ## If it goes wrong
 
-| What you see | What to do |
-| --- | --- |
-| `GUIDANCE_REQUIRED` | Run `guidance` from the same working directory you run the gated command in |
-| `Cannot validate document with invalid MDX` | Every recoverable problem is in the `help` entries as `line:column message`; fix them in one pass |
-| Only one diagnostic came back | An MDX syntax error stopped parsing before component validation; fix it and run again |
-| `Plan failed authoring lint` | Each entry is `line:column [rule-id] message`; see [Fix a validation error](/authoring/fix-a-validation-error/) |
-| `custody: held` | A live runtime already serves this plan; give your human the address it printed |
+| What you see                                | What to do                                                                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `GUIDANCE_REQUIRED`                         | Run `guidance` from the same working directory you run the gated command in                                     |
+| `Cannot validate document with invalid MDX` | Every recoverable problem is in the `help` entries as `line:column message`; fix them in one pass               |
+| Only one diagnostic came back               | An MDX syntax error stopped parsing before component validation; fix it and run again                           |
+| `Plan failed authoring lint`                | Each entry is `line:column [rule-id] message`; see [Fix a validation error](/authoring/fix-a-validation-error/) |
+| `custody: held`                             | A live runtime already serves this plan; give your human the address it printed                                 |
 
 ## Next
 

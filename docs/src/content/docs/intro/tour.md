@@ -14,14 +14,14 @@ of what you are looking at.
 
 Along the top of every document.
 
-| Control | What it does | Where it appears |
-| --- | --- | --- |
-| The logo | Follows the effective light or dark appearance, independently of the colour theme | Everywhere |
-| **Approve plan** | Opens the approval dialog | Live review with write custody only |
-| **Feedback** | Opens the sidebar on **Comments**, **Chat**, or **Inputs** | Live review |
-| **Agent Status** | The coding-agent connection and its current work | Live review |
-| **More actions** | **Export**, then **Settings** | Live review |
-| The gear | **Settings** on its own | Standalone rendered document |
+| Control          | What it does                                                                      | Where it appears                    |
+| ---------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
+| The logo         | Follows the effective light or dark appearance, independently of the colour theme | Everywhere                          |
+| **Approve plan** | Opens the approval dialog                                                         | Live review with write custody only |
+| **Feedback**     | Opens the sidebar on **Comments**, **Chat**, or **Inputs**                        | Live review                         |
+| **Agent Status** | The coding-agent connection and its current work                                  | Live review                         |
+| **More actions** | **Export**, then **Settings**                                                     | Live review                         |
+| The gear         | **Settings** on its own                                                           | Standalone rendered document        |
 
 A read-only review — one whose plan a newer session took custody of — keeps showing an approval
 already in force but offers no approval actions. A standalone document shows no approval
@@ -68,12 +68,12 @@ See [Comment on a plan](/review/comment-on-a-plan/) for the workflow.
 
 Four things share one sidebar, and choosing an open one closes it.
 
-| Tab | What it holds |
-| --- | --- |
-| **Comments** | Staged and sent comments, grouped by the package they were sent in |
-| **Chat** | Plan-wide questions, and threads the agent pushed into the review |
-| **Inputs** | What the review is still waiting for — for now, every decision the plan asks |
-| **Agent Status** | The connected agent's identity, its current work, and the connect prompt |
+| Tab              | What it holds                                                                |
+| ---------------- | ---------------------------------------------------------------------------- |
+| **Comments**     | Staged and sent comments, grouped by the package they were sent in           |
+| **Chat**         | Plan-wide questions, and threads the agent pushed into the review            |
+| **Inputs**       | What the review is still waiting for — for now, every decision the plan asks |
+| **Agent Status** | The connected agent's identity, its current work, and the connect prompt     |
 
 ## Decision cards
 

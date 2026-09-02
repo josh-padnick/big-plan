@@ -11,10 +11,10 @@ big-plan compile <input.mdx> [output.json]
 
 ## Arguments
 
-| Argument | Required | Behaviour |
-| --- | --- | --- |
-| `input.mdx` | Yes | The plan to compile |
-| `output.json` | No | Where to write. Defaults to the input path with its extension replaced by `.model.json` |
+| Argument      | Required | Behaviour                                                                               |
+| ------------- | -------- | --------------------------------------------------------------------------------------- |
+| `input.mdx`   | Yes      | The plan to compile                                                                     |
+| `output.json` | No       | Where to write. Defaults to the input path with its extension replaced by `.model.json` |
 
 ## Options
 
@@ -44,10 +44,10 @@ Generated element ids inside models match the ids in the rendered HTML, so a too
 
 ## Errors
 
-| Code | Raised when | Exit |
-| --- | --- | --- |
-| `VALIDATION_ERROR` | The input argument is missing, a third positional argument is present, the output would overwrite the input, or the MDX is invalid | 2 |
-| `INPUT_NOT_FOUND` | The input cannot be read | 1 |
+| Code               | Raised when                                                                                                                        | Exit |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `VALIDATION_ERROR` | The input argument is missing, a third positional argument is present, the output would overwrite the input, or the MDX is invalid | 2    |
+| `INPUT_NOT_FOUND`  | The input cannot be read                                                                                                           | 1    |
 
 `compile` is **not** gated, so machine tooling can run it without a guidance acknowledgment.
 It is also the one command that stays permissive about authoring lint: it continues to accept

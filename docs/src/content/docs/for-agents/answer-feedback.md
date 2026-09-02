@@ -41,7 +41,7 @@ the claim it was taken out on.
 
    For each later meaningful step, use a short, specific progress line. A turn can run longer
    than you report progress for, and after 75 seconds of silence the reviewer's thread reads
-   **No progress for _N_m**.
+   **No progress for \_N_m**.
 
 3. **Edit `candidate_plan`, never the plan path.** The plan path stays read-only identity, so
    relative asset paths and repository context still resolve against it. Big Plan writes the
@@ -101,13 +101,13 @@ output nothing would read.
 
 ## If it goes wrong
 
-| Code or result | What it means | What to do |
-| --- | --- | --- |
-| `SOURCE_MOVED` | The plan changed underneath your candidate | Take the work again from the current plan with `agent next` |
-| `NOT_PRIMARY` | The reviewer made another agent the primary | Stop claiming; see [Handle a handoff or disconnect](/for-agents/handoff/) |
-| `AGENT_DISCONNECTED` | The reviewer disconnected you | Terminal; end the session |
-| `role: "observer"` | Another agent answers this review | Not an error. Without `--wait` it is final; with `--wait` keep asking |
-| No work available | Another claim is live | Pass `--wait` |
+| Code or result            | What it means                                                                    | What to do                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `SOURCE_MOVED`            | The plan changed underneath your candidate                                       | Take the work again from the current plan with `agent next`                                    |
+| `NOT_PRIMARY`             | The reviewer made another agent the primary                                      | Stop claiming; see [Handle a handoff or disconnect](/for-agents/handoff/)                      |
+| `AGENT_DISCONNECTED`      | The reviewer disconnected you                                                    | Terminal; end the session                                                                      |
+| `role: "observer"`        | Another agent answers this review                                                | Not an error. Without `--wait` it is final; with `--wait` keep asking                          |
+| No work available         | Another claim is live                                                            | Pass `--wait`                                                                                  |
 | Your claim was taken back | You reported nothing for far longer than a turn takes and no agent was connected | Pick up current work with `agent next`; a returning `respond` is refused rather than published |
 
 ## Next

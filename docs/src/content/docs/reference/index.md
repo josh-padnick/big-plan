@@ -12,16 +12,16 @@ to do something, it links to the page in [Review a plan](/review/) or
 Big Plan exposes seven product commands through the `big-plan` executable, plus the local
 review-link service and the package runner's built-in updater.
 
-| Command | Reach for it when |
-| --- | --- |
-| [`guidance`](/reference/commands/guidance/) | You are about to write a plan, or a gated command told you no |
-| [`skill`](/reference/commands/skill/) | A harness wants a discoverable `SKILL.md` |
+| Command                                     | Reach for it when                                                        |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| [`guidance`](/reference/commands/guidance/) | You are about to write a plan, or a gated command told you no            |
+| [`skill`](/reference/commands/skill/)       | A harness wants a discoverable `SKILL.md`                                |
 | [`validate`](/reference/commands/validate/) | You want to know whether a plan is renderable and clean, writing nothing |
-| [`render`](/reference/commands/render/) | You want one self-contained HTML document you can send by path |
-| [`compile`](/reference/commands/compile/) | A tool needs the plan as machine-readable JSON |
-| [`review`](/reference/commands/review/) | A person is going to read, comment on, and approve the plan |
-| [`agent`](/reference/commands/agent/) | A coding-agent session is answering a live review |
-| [`service`](/reference/commands/service/) | A saved review link stopped resolving |
+| [`render`](/reference/commands/render/)     | You want one self-contained HTML document you can send by path           |
+| [`compile`](/reference/commands/compile/)   | A tool needs the plan as machine-readable JSON                           |
+| [`review`](/reference/commands/review/)     | A person is going to read, comment on, and approve the plan              |
+| [`agent`](/reference/commands/agent/)       | A coding-agent session is answering a live review                        |
+| [`service`](/reference/commands/service/)   | A saved review link stopped resolving                                    |
 
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result
 serialization, which is also where the built-in `update` command comes from.
@@ -73,14 +73,14 @@ npx -y big-plan@latest update --check
 
 ## Section guide
 
-| Read this | When |
-| --- | --- |
-| A command page above | You need one command's arguments, options, result, or errors |
-| [Error codes](/reference/error-codes/) | You have a code and want to know what raises it |
-| [Lint rules](/reference/lint-rules/) | A lint diagnostic surprised you and you want its exact boundary |
-| [Configuration and state](/reference/configuration/) | You need an environment variable or a state directory |
-| [The compiled plan model](/reference/plan-model/) | You are consuming `compile` output |
-| [Files Big Plan writes](/reference/files/) | You want to know what appears on your disk |
+| Read this                                            | When                                                            |
+| ---------------------------------------------------- | --------------------------------------------------------------- |
+| A command page above                                 | You need one command's arguments, options, result, or errors    |
+| [Error codes](/reference/error-codes/)               | You have a code and want to know what raises it                 |
+| [Lint rules](/reference/lint-rules/)                 | A lint diagnostic surprised you and you want its exact boundary |
+| [Configuration and state](/reference/configuration/) | You need an environment variable or a state directory           |
+| [The compiled plan model](/reference/plan-model/)    | You are consuming `compile` output                              |
+| [Files Big Plan writes](/reference/files/)           | You want to know what appears on your disk                      |
 
 ## Top-level help and version
 

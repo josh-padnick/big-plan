@@ -835,9 +835,7 @@ try {
     requested.length === 0
       ? renderFixture({ dir, name: "viewer", mdx: VIEWER_FIXTURE })
       : undefined;
-  for (const colorScheme of viewerHtml === undefined
-    ? []
-    : ["light", "dark"]) {
+  for (const colorScheme of viewerHtml === undefined ? [] : ["light", "dark"]) {
     await capture({
       browser,
       colorScheme,

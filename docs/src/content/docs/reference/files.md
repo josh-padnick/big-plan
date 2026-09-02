@@ -77,12 +77,12 @@ version control. Feedback packages and their Markdown briefs live under
 
 ## What is safe to delete
 
-| Path | Safe to delete | What you lose |
-| --- | --- | --- |
-| `<plan>.html`, `<plan>.model.json` | Yes | Nothing; both are derived and regenerate |
-| `.big-plan/review/<plan-id>/` | While no review is running | Staged comments, decision answers, recorded acceptances, and the approval log for that plan |
-| `.big-plan/feedback/` | Yes | The human-readable feedback and approval briefs |
-| `~/.big-plan/service/` | While no review link needs to resolve | Nothing durable; the next link-printing command recreates it |
+| Path                               | Safe to delete                        | What you lose                                                                               |
+| ---------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `<plan>.html`, `<plan>.model.json` | Yes                                   | Nothing; both are derived and regenerate                                                    |
+| `.big-plan/review/<plan-id>/`      | While no review is running            | Staged comments, decision answers, recorded acceptances, and the approval log for that plan |
+| `.big-plan/feedback/`              | Yes                                   | The human-readable feedback and approval briefs                                             |
+| `~/.big-plan/service/`             | While no review link needs to resolve | Nothing durable; the next link-printing command recreates it                                |
 
 Never edit the plan file while a review holds custody of it. The authoritative source has
 exactly one writer; see [One writer owns the plan](/concepts/one-writer/).

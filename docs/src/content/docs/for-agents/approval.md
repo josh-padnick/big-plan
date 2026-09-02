@@ -16,13 +16,13 @@ You are the primary agent on a live review, running the loop in
 When the reviewer confirms approval, Big Plan writes one `approval` mailbox request whose
 `requestId` is the new approval id. It carries:
 
-| Field | What it holds |
-| --- | --- |
-| `planPath` | The absolute path of the approved plan |
-| `pinnedSnapshot` | The digest of the exact revision that was approved |
-| The recorded answers | Every decision the reviewer answered |
-| The unanswered decisions | Every decision they deliberately left open |
-| The covering message | The note from the reviewer's **Settings** |
+| Field                    | What it holds                                      |
+| ------------------------ | -------------------------------------------------- |
+| `planPath`               | The absolute path of the approved plan             |
+| `pinnedSnapshot`         | The digest of the exact revision that was approved |
+| The recorded answers     | Every decision the reviewer answered               |
+| The unanswered decisions | Every decision they deliberately left open         |
+| The covering message     | The note from the reviewer's **Settings**          |
 
 Approval also writes those answers into the plan source itself: the decision gains
 `state="decided"` and the option they chose gains `chosen`, and nothing else in the file
@@ -57,13 +57,13 @@ the failure this check exists to prevent.
 
 ## If it goes wrong
 
-| What you find | What to do |
-| --- | --- |
-| `planPath` is missing from the request | Hard stop; report it with `hardStop` |
-| The file at `planPath` does not exist | Hard stop; report it. Do not look for another copy |
-| The digest does not equal `pinnedSnapshot` | Hard stop; report it. The plan moved after the approval was recorded |
-| A decision you needed is unanswered | Approval never picks an answer. Ask through the ordinary feedback flow rather than choosing one yourself |
-| The reviewer revoked the approval | The plan is back in review and any still-unanswered approval request is cancelled. Stop executing |
+| What you find                              | What to do                                                                                               |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `planPath` is missing from the request     | Hard stop; report it with `hardStop`                                                                     |
+| The file at `planPath` does not exist      | Hard stop; report it. Do not look for another copy                                                       |
+| The digest does not equal `pinnedSnapshot` | Hard stop; report it. The plan moved after the approval was recorded                                     |
+| A decision you needed is unanswered        | Approval never picks an answer. Ask through the ordinary feedback flow rather than choosing one yourself |
+| The reviewer revoked the approval          | The plan is back in review and any still-unanswered approval request is cancelled. Stop executing        |
 
 ## Related
 

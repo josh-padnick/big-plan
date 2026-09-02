@@ -42,10 +42,7 @@ Generated element ids inside models match the ids in the rendered HTML, so a too
       "blockId": "b7f2c1a9",
       "model": {
         "question": "Ship behind a feature flag?",
-        "options": [
-          { "title": "Yes", "recommended": true },
-          { "title": "No" }
-        ]
+        "options": [{ "title": "Yes", "recommended": true }, { "title": "No" }]
       }
     }
   ]

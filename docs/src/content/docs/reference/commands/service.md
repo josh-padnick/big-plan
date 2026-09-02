@@ -73,9 +73,9 @@ respawns it before a link is printed.
 
 ## Errors
 
-| Code | Raised when | Exit |
-| --- | --- | --- |
-| `INVALID_INPUT` | An unknown action or invalid action arguments | 2 |
+| Code            | Raised when                                   | Exit |
+| --------------- | --------------------------------------------- | ---- |
+| `INVALID_INPUT` | An unknown action or invalid action arguments | 2    |
 
 `service` is not gated by the guidance acknowledgment.
 

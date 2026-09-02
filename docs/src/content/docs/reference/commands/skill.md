@@ -11,9 +11,9 @@ big-plan skill [write <path>]
 
 ## Arguments
 
-| Argument | Required | Behaviour |
-| --- | --- | --- |
-| `write <path>` | No | Write the skill text to the resolved path, creating parent directories as needed |
+| Argument       | Required | Behaviour                                                                        |
+| -------------- | -------- | -------------------------------------------------------------------------------- |
+| `write <path>` | No       | Write the skill text to the resolved path, creating parent directories as needed |
 
 With no arguments, `skill` returns the Markdown skill text, including harness-oriented
 frontmatter, and writes nothing.
@@ -43,9 +43,9 @@ Prefer `npx -y big-plan@latest` for always-current one-off runs; see [Use the sk
 
 ## Errors
 
-| Code | Raised when | Exit |
-| --- | --- | --- |
-| `VALIDATION_ERROR` | An unknown option or an unknown action; the filesystem is left unchanged | 2 |
+| Code               | Raised when                                                              | Exit |
+| ------------------ | ------------------------------------------------------------------------ | ---- |
+| `VALIDATION_ERROR` | An unknown option or an unknown action; the filesystem is left unchanged | 2    |
 
 `skill` is not gated, so it runs without a guidance acknowledgment.
 

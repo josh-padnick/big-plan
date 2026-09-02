@@ -11,9 +11,9 @@ big-plan guidance [component]
 
 ## Arguments
 
-| Argument | Required | Behaviour |
-| --- | --- | --- |
-| `component` | No | Print one component's judgment-level usage guidance instead of the shared principles |
+| Argument    | Required | Behaviour                                                                            |
+| ----------- | -------- | ------------------------------------------------------------------------------------ |
+| `component` | No       | Print one component's judgment-level usage guidance instead of the shared principles |
 
 ## What it does
 
@@ -47,9 +47,9 @@ Filesystem restrictions therefore never lock an agent out of the plan workflow.
 
 ## Errors
 
-| Code | Raised when | Exit |
-| --- | --- | --- |
-| `VALIDATION_ERROR` | The component name is unknown; the message lists the components that have guidance | 2 |
+| Code               | Raised when                                                                        | Exit |
+| ------------------ | ---------------------------------------------------------------------------------- | ---- |
+| `VALIDATION_ERROR` | The component name is unknown; the message lists the components that have guidance | 2    |
 
 ## Troubleshooting
 

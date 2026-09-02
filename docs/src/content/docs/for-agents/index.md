@@ -11,14 +11,14 @@ Reading on anyway is a fine way to audit exactly what your agent is told.
 
 ## Section guide
 
-| Read this | When |
-| --- | --- |
-| [Set Big Plan up for your human](/for-agents/setup/) | You were asked to set Big Plan up, once |
-| [Write and validate a plan](/for-agents/write-and-validate/) | Every session, before you implement anything |
-| [Answer reviewer feedback](/for-agents/answer-feedback/) | A human is commenting on a live review |
-| [Handle a handoff or disconnect](/for-agents/handoff/) | You got `NOT_PRIMARY`, `AGENT_DISCONNECTED`, or an observer result |
-| [Handle an approval](/for-agents/approval/) | An `approval` request arrived in your mailbox |
-| [Install and update the skill](/for-agents/use-the-skill/) | A harness wants a discoverable `SKILL.md` |
+| Read this                                                    | When                                                               |
+| ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| [Set Big Plan up for your human](/for-agents/setup/)         | You were asked to set Big Plan up, once                            |
+| [Write and validate a plan](/for-agents/write-and-validate/) | Every session, before you implement anything                       |
+| [Answer reviewer feedback](/for-agents/answer-feedback/)     | A human is commenting on a live review                             |
+| [Handle a handoff or disconnect](/for-agents/handoff/)       | You got `NOT_PRIMARY`, `AGENT_DISCONNECTED`, or an observer result |
+| [Handle an approval](/for-agents/approval/)                  | An `approval` request arrived in your mailbox                      |
+| [Install and update the skill](/for-agents/use-the-skill/)   | A harness wants a discoverable `SKILL.md`                          |
 
 The plan **format** is not in this section, because a human plan author needs it as much as
 you do: it is [Writing plans](/authoring/).

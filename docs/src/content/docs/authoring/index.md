@@ -10,7 +10,7 @@ A plan is prose plus components, and the file on disk stays the greppable, diffa
 This page describes the system, not how to write well.
 Everything a plan author has to judge - the title, the structure, the deck shape, terseness, when a component beats prose - is owned by `big-plan guidance` and stated there once.
 
-This section describes the system. Everything a plan author has to *judge* — the title, the
+This section describes the system. Everything a plan author has to _judge_ — the title, the
 structure, the deck shape, terseness, when a component beats prose — is owned by
 `big-plan guidance` and stated there once, so it stays current through package upgrades
 rather than drifting on this site.
@@ -46,14 +46,14 @@ Because `<` and `{` begin MDX syntax, write them in code spans or fences when yo
 
 ## Section guide
 
-| Read this | When |
-| --- | --- |
-| [Anatomy of a plan](/authoring/anatomy-of-a-plan/) | You are starting a plan and want the shape it should take |
-| [Where each rule lives](/authoring/where-rules-live/) | You are not sure which surface owns a rule you need |
-| [Choose the right component](/authoring/choose-a-component/) | Two components look interchangeable |
-| [Slide types](/authoring/slide-types/) | You are about to mark a section with a `Slide` type |
+| Read this                                                    | When                                                        |
+| ------------------------------------------------------------ | ----------------------------------------------------------- |
+| [Anatomy of a plan](/authoring/anatomy-of-a-plan/)           | You are starting a plan and want the shape it should take   |
+| [Where each rule lives](/authoring/where-rules-live/)        | You are not sure which surface owns a rule you need         |
+| [Choose the right component](/authoring/choose-a-component/) | Two components look interchangeable                         |
+| [Slide types](/authoring/slide-types/)                       | You are about to mark a section with a `Slide` type         |
 | [Fix a validation error](/authoring/fix-a-validation-error/) | `validate` told you no and you want the edit that clears it |
-| [Components](/components/) | You need one component's exact attributes and shapes |
+| [Components](/components/)                                   | You need one component's exact attributes and shapes        |
 
 ## Next
 

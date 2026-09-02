@@ -102,14 +102,14 @@ The command reports `custody: seized` together with the session it displaced.
 
 ## If it goes wrong
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| `custody: held` | A live runtime already serves this plan, so no second one started | Open the address it printed; that session, its page, and its agent keep working |
-| `custody: seized` | `--takeover` replaced a live runtime | Expected only when you passed `--takeover`; the replaced page and its agent go read-only until each reloads |
-| `GUIDANCE_REQUIRED` | Guidance has not been read in this directory in the last 24 hours | Run `npx -y big-plan@latest guidance`, then start the review again |
-| `Plan failed authoring lint` | Lint runs before the port opens | Fix each `line:column [rule-id] message` entry, then start the review again |
-| The default port is already held | Something else holds `8790` | The command says so, names the holder where the platform can report one, and keeps working with the session's direct address; or set `BIG_PLAN_PORT` |
-| The page says the review is restarting | A runtime stopped without recording an ending | The address is held for the replacement runtime, and the page carries the command that starts the review again |
+| What you see                           | What it means                                                     | What to do                                                                                                                                           |
+| -------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `custody: held`                        | A live runtime already serves this plan, so no second one started | Open the address it printed; that session, its page, and its agent keep working                                                                      |
+| `custody: seized`                      | `--takeover` replaced a live runtime                              | Expected only when you passed `--takeover`; the replaced page and its agent go read-only until each reloads                                          |
+| `GUIDANCE_REQUIRED`                    | Guidance has not been read in this directory in the last 24 hours | Run `npx -y big-plan@latest guidance`, then start the review again                                                                                   |
+| `Plan failed authoring lint`           | Lint runs before the port opens                                   | Fix each `line:column [rule-id] message` entry, then start the review again                                                                          |
+| The default port is already held       | Something else holds `8790`                                       | The command says so, names the holder where the platform can report one, and keeps working with the session's direct address; or set `BIG_PLAN_PORT` |
+| The page says the review is restarting | A runtime stopped without recording an ending                     | The address is held for the replacement runtime, and the page carries the command that starts the review again                                       |
 
 More failure modes, including a session that stops accepting changes, are in
 [When a review goes wrong](/review/troubleshooting/).

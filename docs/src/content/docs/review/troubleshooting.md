@@ -11,17 +11,17 @@ is refusing before it tries.
 
 ## Find your symptom
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| **This review session has stopped accepting changes** | One change never finished; after 30 seconds the runtime refuses it and answers later writes rather than leaving them waiting | Keep the tab open, stop the runtime with `Ctrl+C`, and start it again on the same plan |
-| The page reports it has lost contact with the runtime | A request timed out; the page cannot tell an idle expiry from a stopped runtime | Use **Refresh** when it is offered; if you have unsaved input it stays disabled and the page asks you to keep the tab open |
-| **Open latest review** appears | A newer review session for this plan was recorded before contact was lost | Follow it; that session holds write custody now |
-| The stable address says the review is restarting | A runtime stopped without recording an ending | The address is held for the replacement; the page carries the command that starts the review again |
-| A deliberate stop page | Someone stopped the runtime with `Ctrl+C` or it hit its idle timeout | Start the review again on the same plan |
-| `custody: held` from `big-plan review` | A live runtime already serves this plan | Open the address the command printed rather than starting a second runtime |
-| An action is refused before it sends | The runtime is unreachable, has stopped accepting changes, or a newer session replaced this one | Nothing you typed is discarded; the refusal names the condition the page actually observed |
-| **Agent may be stalled** | The agent has reported nothing for 75 seconds | This describes the silence, not the connection; the work is still picked up and the answer is still accepted when it arrives |
-| **Blocked - no agent connected** | No agent is attached to answer | The message sends itself when one reconnects |
+| What you see                                          | What it means                                                                                                                | What to do                                                                                                                   |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **This review session has stopped accepting changes** | One change never finished; after 30 seconds the runtime refuses it and answers later writes rather than leaving them waiting | Keep the tab open, stop the runtime with `Ctrl+C`, and start it again on the same plan                                       |
+| The page reports it has lost contact with the runtime | A request timed out; the page cannot tell an idle expiry from a stopped runtime                                              | Use **Refresh** when it is offered; if you have unsaved input it stays disabled and the page asks you to keep the tab open   |
+| **Open latest review** appears                        | A newer review session for this plan was recorded before contact was lost                                                    | Follow it; that session holds write custody now                                                                              |
+| The stable address says the review is restarting      | A runtime stopped without recording an ending                                                                                | The address is held for the replacement; the page carries the command that starts the review again                           |
+| A deliberate stop page                                | Someone stopped the runtime with `Ctrl+C` or it hit its idle timeout                                                         | Start the review again on the same plan                                                                                      |
+| `custody: held` from `big-plan review`                | A live runtime already serves this plan                                                                                      | Open the address the command printed rather than starting a second runtime                                                   |
+| An action is refused before it sends                  | The runtime is unreachable, has stopped accepting changes, or a newer session replaced this one                              | Nothing you typed is discarded; the refusal names the condition the page actually observed                                   |
+| **Agent may be stalled**                              | The agent has reported nothing for 75 seconds                                                                                | This describes the silence, not the connection; the work is still picked up and the answer is still accepted when it arrives |
+| **Blocked - no agent connected**                      | No agent is attached to answer                                                                                               | The message sends itself when one reconnects                                                                                 |
 
 ## What the page can and cannot tell you
 
@@ -67,12 +67,12 @@ The same refusal covers a runtime the page has lost contact with and a session a
 
 `review` fails before it opens a port rather than serving a plan it cannot stand behind.
 
-| Code | Raised when |
-| --- | --- |
-| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours |
-| `VALIDATION_ERROR` | The input argument is missing, a second positional argument is present, the MDX is invalid, or the plan fails authoring lint |
-| `INVALID_INPUT` | `--idle-timeout` is empty, non-numeric, negative, a nonzero value under one minute, or overflowing |
-| `INPUT_NOT_FOUND` | The plan file cannot be read; the message carries the resolved absolute path |
+| Code                | Raised when                                                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours                                                   |
+| `VALIDATION_ERROR`  | The input argument is missing, a second positional argument is present, the MDX is invalid, or the plan fails authoring lint |
+| `INVALID_INPUT`     | `--idle-timeout` is empty, non-numeric, negative, a nonzero value under one minute, or overflowing                           |
+| `INPUT_NOT_FOUND`   | The plan file cannot be read; the message carries the resolved absolute path                                                 |
 
 Every code, and which commands raise it, is in [Error codes](/reference/error-codes/).
 

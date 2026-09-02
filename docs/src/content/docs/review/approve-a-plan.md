@@ -65,12 +65,12 @@ An unapproved, revoked, or stale plan renders no stamp at all, so an export neve
 
 ## If it goes wrong
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| The confirmation reports the approval was not delivered | The mailbox write failed | The approval is still recorded; the details keep showing the delivery failure, and a runtime restart retries |
-| Approval reports a brief-publication failure | The Markdown brief could not be written | The finalization record is retained so a restart can retry both the brief and the mailbox delivery |
-| A decision you expected to be recorded was left alone | It was unanswered at approval time | Approval never picks an answer for you; answer it and re-approve |
-| **Approve plan** is missing | This session is read-only, or this is a standalone rendered document | Open the newest review for that plan |
+| What you see                                            | What it means                                                        | What to do                                                                                                   |
+| ------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| The confirmation reports the approval was not delivered | The mailbox write failed                                             | The approval is still recorded; the details keep showing the delivery failure, and a runtime restart retries |
+| Approval reports a brief-publication failure            | The Markdown brief could not be written                              | The finalization record is retained so a restart can retry both the brief and the mailbox delivery           |
+| A decision you expected to be recorded was left alone   | It was unanswered at approval time                                   | Approval never picks an answer for you; answer it and re-approve                                             |
+| **Approve plan** is missing                             | This session is read-only, or this is a standalone rendered document | Open the newest review for that plan                                                                         |
 
 ## Next
 

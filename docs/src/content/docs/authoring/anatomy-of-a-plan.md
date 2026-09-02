@@ -37,7 +37,10 @@ the whole card is capped so it cannot grow into a summary of everything.
 
 ```mdx
 <TableOfContents>
-  <Entry section="Status quo" gist="Captures retry inline and block the request" />
+  <Entry
+    section="Status quo"
+    gist="Captures retry inline and block the request"
+  />
   ...
 </TableOfContents>
 ```

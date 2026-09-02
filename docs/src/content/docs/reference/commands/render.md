@@ -11,10 +11,10 @@ big-plan render <input.mdx> [output.html]
 
 ## Arguments
 
-| Argument | Required | Behaviour |
-| --- | --- | --- |
-| `input.mdx` | Yes | The plan to render, resolved against the current working directory and read as UTF-8 |
-| `output.html` | No | Where to write. Defaults to the input path with its extension replaced by `.html`, so the output sits next to the input |
+| Argument      | Required | Behaviour                                                                                                               |
+| ------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `input.mdx`   | Yes      | The plan to render, resolved against the current working directory and read as UTF-8                                    |
+| `output.html` | No       | Where to write. Defaults to the input path with its extension replaced by `.html`, so the output sits next to the input |
 
 ## Options
 
@@ -63,11 +63,11 @@ it pinned. An unapproved, revoked, or stale plan renders no stamp at all.
 
 ## Errors
 
-| Code | Raised when | Exit |
-| --- | --- | --- |
-| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours | 2 |
-| `VALIDATION_ERROR` | The input argument is missing, a third positional argument is present, the output would overwrite the input, the MDX is invalid, or the plan fails authoring lint | 2 |
-| `INPUT_NOT_FOUND` | The input cannot be read; the message carries the resolved absolute path | 1 |
+| Code                | Raised when                                                                                                                                                       | Exit |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours                                                                                        | 2    |
+| `VALIDATION_ERROR`  | The input argument is missing, a third positional argument is present, the output would overwrite the input, the MDX is invalid, or the plan fails authoring lint | 2    |
+| `INPUT_NOT_FOUND`   | The input cannot be read; the message carries the resolved absolute path                                                                                          | 1    |
 
 An invalid document never renders partially, and no output file is written in any of these
 cases.

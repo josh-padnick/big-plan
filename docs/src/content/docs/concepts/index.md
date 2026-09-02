@@ -19,14 +19,14 @@ Four ideas carry most of Big Plan's design:
 
 ## Section guide
 
-| Read this | When |
-| --- | --- |
-| [How Big Plan works](/concepts/how-it-works/) | You want the compilation model and what each command publishes |
-| [One writer owns the plan](/concepts/one-writer/) | You want to know what can and cannot overwrite your plan file |
-| [Trust boundaries](/concepts/trust-boundaries/) | You are assessing the local review runtime |
-| [Rendered plans are inert](/concepts/inert-documents/) | You are deciding whether to open a plan someone sent you |
-| [Reporting a vulnerability](/concepts/security-policy/) | You found something and need the private channel |
-| [Supply chain and releases](/concepts/supply-chain/) | You need to verify a published tarball |
+| Read this                                               | When                                                           |
+| ------------------------------------------------------- | -------------------------------------------------------------- |
+| [How Big Plan works](/concepts/how-it-works/)           | You want the compilation model and what each command publishes |
+| [One writer owns the plan](/concepts/one-writer/)       | You want to know what can and cannot overwrite your plan file  |
+| [Trust boundaries](/concepts/trust-boundaries/)         | You are assessing the local review runtime                     |
+| [Rendered plans are inert](/concepts/inert-documents/)  | You are deciding whether to open a plan someone sent you       |
+| [Reporting a vulnerability](/concepts/security-policy/) | You found something and need the private channel               |
+| [Supply chain and releases](/concepts/supply-chain/)    | You need to verify a published tarball                         |
 
 ## Next
 

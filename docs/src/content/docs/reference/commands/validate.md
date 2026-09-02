@@ -11,9 +11,9 @@ big-plan validate <input.mdx>
 
 ## Arguments
 
-| Argument | Required | Behaviour |
-| --- | --- | --- |
-| `input.mdx` | Yes | The plan to check, resolved against the current working directory |
+| Argument    | Required | Behaviour                                                         |
+| ----------- | -------- | ----------------------------------------------------------------- |
+| `input.mdx` | Yes      | The plan to check, resolved against the current working directory |
 
 `validate` accepts no output argument and rejects a second positional argument.
 
@@ -43,11 +43,11 @@ It writes no output.
 
 ## Errors
 
-| Code | Raised when | Exit |
-| --- | --- | --- |
-| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours | 2 |
-| `VALIDATION_ERROR` | The input argument is missing, a second positional argument is present, an option is unknown, the MDX is invalid, or the plan fails authoring lint | 2 |
-| `INPUT_NOT_FOUND` | The input cannot be read; the message carries the resolved absolute path | 1 |
+| Code                | Raised when                                                                                                                                        | Exit |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours                                                                         | 2    |
+| `VALIDATION_ERROR`  | The input argument is missing, a second positional argument is present, an option is unknown, the MDX is invalid, or the plan fails authoring lint | 2    |
+| `INPUT_NOT_FOUND`   | The input cannot be read; the message carries the resolved absolute path                                                                           | 1    |
 
 ## Troubleshooting
 
