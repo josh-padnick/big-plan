@@ -228,6 +228,10 @@ export const DiffTourProvider = ({
     }),
     [active?.placeId, autoAccepted, canRecord, refresh, tourValue, tour],
   );
+  const isActiveRejected =
+    tour !== null &&
+    active !== undefined &&
+    tourValue.isPlaceRejected(tour.diff, active.placeId);
   const isActiveAccepted =
     tour !== null &&
     active !== undefined &&
@@ -240,22 +244,31 @@ export const DiffTourProvider = ({
           places.map((place) => place.placeId),
         );
   const allAccepted = standing?.isAccepted === true;
+  const allDecided = standing?.isSettled === true;
   useEffect(() => {
-    if (!allAccepted) setShowCompletionSummary(false);
+    if (!allDecided) setShowCompletionSummary(false);
     else setShowCompletionSummary(true);
-  }, [allAccepted, tour?.diff.from, tour?.diff.to]);
+  }, [allDecided, tour?.diff.from, tour?.diff.to]);
+
+  /** Takes back whatever verdict the current change holds. */
+  const undoActivePlace = (): void => {
+    if (tour === null || active === undefined) return;
+    setPlacesDecided(tour.diff, [active.placeId], undefined);
+  };
 
   /** Accepts the current evidence and advances to the next open decision. */
   const acceptActivePlace = (): void => {
     if (tour === null || active === undefined) return;
     if (isActiveAccepted) {
-      setPlacesDecided(tour.diff, [active.placeId], undefined);
+      undoActivePlace();
       return;
     }
     setPlacesDecided(tour.diff, [active.placeId], "accepted");
     const nextIndex = places.findIndex(
       (place, placeIndex) =>
-        placeIndex > index && !isPlaceAccepted(tour.diff, place.placeId),
+        placeIndex > index &&
+        !isPlaceAccepted(tour.diff, place.placeId) &&
+        !tourValue.isPlaceRejected(tour.diff, place.placeId),
     );
     if (nextIndex >= 0) {
       setIndex(nextIndex);
@@ -290,8 +303,13 @@ export const DiffTourProvider = ({
                   finished are the same piece of information, so they share one
                   slot beside the title instead of sitting at opposite ends. */}
               {showCompletionSummary && standing !== null ? (
-                <Badge tone="statusAccent" size="status">
-                  All changes accepted ({standing.accepted} of {standing.total})
+                <Badge
+                  tone={allAccepted ? "statusAccent" : "statusNeutral"}
+                  size="status"
+                >
+                  {allAccepted
+                    ? `All changes accepted (${standing.accepted} of ${standing.total})`
+                    : `All changes decided (${standing.accepted} accepted, ${standing.rejected} rejected)`}
                 </Badge>
               ) : (
                 <Badge tone="statusNeutral" size="status">
@@ -426,10 +444,15 @@ export const DiffTourProvider = ({
                       Revert
                     </Button>
                   )}
-                  {isActiveAccepted ? (
+                  {isActiveAccepted || isActiveRejected ? (
                     <>
-                      <Badge tone="statusAccent" size="status">
-                        Accepted
+                      <Badge
+                        tone={
+                          isActiveRejected ? "statusDanger" : "statusAccent"
+                        }
+                        size="status"
+                      >
+                        {isActiveRejected ? "Rejected" : "Accepted"}
                       </Badge>
                       <Button
                         variant="ghost"
@@ -437,10 +460,12 @@ export const DiffTourProvider = ({
                         disabled={!canRecord}
                         aria-label={
                           canRecord
-                            ? "Undo acceptance for this change"
+                            ? isActiveRejected
+                              ? "Undo rejection for this change"
+                              : "Undo acceptance for this change"
                             : UNRECORDABLE_ACCEPTANCE_LABEL
                         }
-                        onClick={acceptActivePlace}
+                        onClick={undoActivePlace}
                       >
                         Undo
                       </Button>

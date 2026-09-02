@@ -2,6 +2,11 @@
 // something one browser remembers: it survives a reload and a runtime restart,
 // it is readable on disk, and every surface that shows how much of the change
 // set is still open agrees with every other one.
+//
+// BIG-201 adds the second verdict to the same journey. A rejection has to be
+// as visible as an acceptance and as reversible: a reviewer who cannot see
+// their rejection cannot tell it happened, and one who cannot undo it has been
+// given a decision they cannot take back.
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -260,6 +265,95 @@ test("should keep an accepted change accepted across a reload and a restart", as
         await replacement.close();
       }
     });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should show a rejected change and let the reviewer undo it", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-rejections-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, AFTER);
+  const runtime = await startPreviewRuntime(planPath);
+  const verdictsPath = runtime.store.changeVerdictsPath;
+  try {
+    await openThread(page, runtime.url);
+    await expect(
+      rail(page).getByRole("button", { name: /changes across .* slides?/u }),
+    ).toContainText("2 changes across 2 slides");
+    // Recording it through the runtime is what BIG-19's review bar will do
+    // from the page; this journey is about what the surface shows once the
+    // verdict exists, which is the half BIG-201 owns.
+    const rejected = await page.evaluate(async () => {
+      const token = document.documentElement.dataset.reviewToken ?? "";
+      const headers = { "x-big-plan-review-token": token };
+      const sets: {
+        readonly changeSets: ReadonlyArray<Record<string, string>>;
+      } = await (await fetch("api/change-sets", { headers })).json();
+      const set = sets.changeSets[0];
+      if (set === undefined) return false;
+      const diff: { readonly places: ReadonlyArray<{ placeId: string }> } =
+        await (
+          await fetch(
+            `api/snapshot-diff?from=${set.baseSnapshot}&to=${set.resultSnapshot}`,
+            { headers },
+          )
+        ).json();
+      const response = await fetch("api/change-verdicts", {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify({
+          op: "reject",
+          from: set.baseSnapshot,
+          to: set.resultSnapshot,
+          placeIds: diff.places.map((place) => place.placeId),
+        }),
+      });
+      return response.ok;
+    });
+    expect(rejected).toBe(true);
+
+    // The sidebar marks a rejected place the way it marks an accepted one,
+    // and says how the set was closed rather than calling it accepted.
+    await expect(
+      rail(page).locator("[data-review-place-verdict='rejected']"),
+    ).toHaveCount(2);
+    await expect(
+      rail(page).locator("[data-review-changes-accepted]"),
+    ).toHaveCount(0);
+    await expect(
+      rail(page).locator("[data-review-changes-decided]"),
+    ).toContainText("0 accepted, 2 rejected");
+
+    await rail(page)
+      .getByRole("button", { name: /Review changes \(2\)/u })
+      .click();
+    await expect(stepper(page)).toContainText(
+      "All changes decided (0 accepted, 2 rejected)",
+    );
+    const undone = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/change-verdicts") &&
+        response.request().method() === "POST",
+    );
+    await stepper(page).getByRole("button", { name: "Back to review" }).click();
+    await stepper(page)
+      .getByRole("button", { name: "Undo rejection for this change" })
+      .click();
+    expect((await undone).ok()).toBe(true);
+    // Undecided again, and open to either verdict: the control that replaces
+    // Undo is the one that offers the other answer.
+    await expect(
+      stepper(page).getByRole("button", { name: "Accept this change" }),
+    ).toBeVisible();
+    expect(
+      (await recordedChanges(verdictsPath)).filter(
+        (entry) => entry.verdict === "rejected",
+      ),
+    ).toHaveLength(1);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

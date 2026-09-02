@@ -12,6 +12,7 @@ import {
 } from "react";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { X_ICON } from "../../icons/lucide/x.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
@@ -516,6 +517,7 @@ export const AgentChangeDigest = ({
     activePlaceId,
     canRecordAcceptance,
     isPlaceAccepted,
+    isPlaceRejected,
     setPlacesDecided,
     standingOf,
     closeTour,
@@ -599,6 +601,11 @@ export const AgentChangeDigest = ({
     available.map((place) => place.placeId),
   );
   const allAccepted = standing.isAccepted;
+  // A rejected change is decided, so it counts towards the set being finished
+  // while staying separate from what was kept: reporting a set with rejections
+  // as accepted would credit work the reviewer took out.
+  const allDecided = standing.isSettled;
+  const decidedCount = standing.accepted + standing.rejected;
   const ownsActiveTour =
     activeDiff?.from === diff.from && activeDiff?.to === diff.to;
   const isActive =
@@ -637,9 +644,13 @@ export const AgentChangeDigest = ({
         <Icon icon={CHEVRON_RIGHT_ICON} />
         {available.length} change{available.length === 1 ? "" : "s"} across{" "}
         {sections.size} slide{sections.size === 1 ? "" : "s"}
-        {standing.accepted === 0 ? null : allAccepted ? (
-          <Badge className="ml-auto" size="status" tone="statusAccent">
-            Accepted
+        {decidedCount === 0 ? null : allDecided ? (
+          <Badge
+            className="ml-auto"
+            size="status"
+            tone={allAccepted ? "statusAccent" : "statusNeutral"}
+          >
+            {allAccepted ? "Accepted" : "Decided"}
           </Badge>
         ) : (
           <span
@@ -647,10 +658,16 @@ export const AgentChangeDigest = ({
             // be told only "1/2". The image role is what lets the label stand
             // in for the shorthand the sighted reader sees.
             role="img"
-            className="ml-auto shrink-0 font-medium text-accent"
-            aria-label={`${standing.accepted} of ${standing.total} changes accepted`}
+            className={`ml-auto shrink-0 font-medium ${
+              standing.rejected > 0 ? "text-muted" : "text-accent"
+            }`}
+            aria-label={
+              standing.rejected === 0
+                ? `${standing.accepted} of ${standing.total} changes accepted`
+                : `${decidedCount} of ${standing.total} changes decided, ${standing.rejected} rejected`
+            }
           >
-            {standing.accepted}/{standing.total}
+            {decidedCount}/{standing.total}
           </span>
         )}
       </button>
@@ -699,8 +716,17 @@ export const AgentChangeDigest = ({
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-accent [&>svg]:size-3.5"
                       aria-label="Accepted"
+                      data-review-place-verdict="accepted"
                     >
                       <Icon icon={CHECK_ICON} />
+                    </span>
+                  ) : isPlaceRejected(diff, entry.placeId) ? (
+                    <span
+                      className="row-span-2 inline-flex shrink-0 items-center self-center text-danger [&>svg]:size-3.5"
+                      aria-label="Rejected"
+                      data-review-place-verdict="rejected"
+                    >
+                      <Icon icon={X_ICON} />
                     </span>
                   ) : null}
                   <em className="col-start-1 text-2xs font-normal text-muted capitalize">
@@ -724,6 +750,14 @@ export const AgentChangeDigest = ({
           data-review-changes-accepted=""
         >
           Change set accepted
+        </p>
+      ) : allDecided ? (
+        <p
+          className="m-0 border-t border-edge pt-2 text-2xs font-semibold text-muted"
+          data-review-changes-decided=""
+        >
+          Change set decided &mdash; {standing.accepted} accepted,{" "}
+          {standing.rejected} rejected
         </p>
       ) : null}
       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -751,13 +785,13 @@ export const AgentChangeDigest = ({
           {isActive
             ? "Exit review"
             : (actionLabel ??
-              (standing.accepted > 0 && !allAccepted
+              (decidedCount > 0 && !allDecided
                 ? "Continue review"
                 : available.length === 1
                   ? "Review change"
                   : `Review changes (${available.length})`))}
         </button>
-        {available.length <= 1 || allAccepted ? null : (
+        {available.length <= 1 || allDecided ? null : (
           <Button
             variant="accentOutline"
             size="micro"
