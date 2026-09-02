@@ -15,6 +15,7 @@
     "big-plan": "bin/big-plan.mjs"
   },
   "files": [
+    "CHANGELOG.md",
     "bin",
     "dist",
     "examples/diff-gallery-before.mdx"

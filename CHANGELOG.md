@@ -23,7 +23,7 @@ Big Plan makes reviewing agent plans a first-class experience. An agent writes a
 
 ### A component vocabulary for plan content
 
-Seventeen built-in components, each an opinionated presentation of one kind of plan information:
+Twenty built-in components, each an opinionated presentation of one kind of plan information:
 
 - **Prose and structure** — `Callout`, `QuickSummary` (faceted into What, How, Risks, and Decisions, with hard summary caps), `TableOfContents`, `Part`, `Slide`.
 - **Decisions** — `Decision`, `QuickDecision`, and `DecisionAnalysis`, a scored criteria matrix with reader-adjustable weights, a live score row, and an explained best match.
