@@ -251,9 +251,11 @@ export const validateChangeVerdictMutation = ({
   }
   if (
     candidate.onlyUndecided !== undefined &&
-    typeof candidate.onlyUndecided !== "boolean"
+    (candidate.op !== "accept" || candidate.onlyUndecided !== true)
   ) {
-    throw new ChangeVerdictsRejected('"onlyUndecided" must be true or false');
+    throw new ChangeVerdictsRejected(
+      '"onlyUndecided" may only be true for an "accept" mutation',
+    );
   }
   return {
     op: candidate.op,

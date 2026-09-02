@@ -232,6 +232,22 @@ describe("validateChangeVerdictMutation", () => {
       }),
     ).toThrow(/repeats a change/u);
   });
+
+  it.each([
+    { op: "accept", onlyUndecided: false },
+    { op: "reject", onlyUndecided: true },
+    { op: "undo", onlyUndecided: true },
+  ])(
+    "refuses onlyUndecided=$onlyUndecided for a $op mutation",
+    ({ op, onlyUndecided }) => {
+      expect(() =>
+        validateChangeVerdictMutation({
+          value: { op, from: FROM, to: TO, placeIds: ["p1"], onlyUndecided },
+          now: NOW,
+        }),
+      ).toThrow(/may only be true for an "accept" mutation/u);
+    },
+  );
 });
 
 describe("applyChangeVerdictMutation", () => {
