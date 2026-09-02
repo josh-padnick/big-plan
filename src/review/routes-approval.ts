@@ -71,10 +71,14 @@ import {
   applyChangeVerdictMutation,
   type StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
-import { changeVerdictKey } from "./shared/change-verdict.js";
 import {
-  changeSetsFromExchange,
+  changeVerdictBatches,
+  changeVerdictKey,
+} from "./shared/change-verdict.js";
+import {
+  changeSetsFromCommitted,
   deriveOpenItems,
+  type OpenChangeSet,
 } from "./shared/open-items.js";
 import { readCommittedChangeSets } from "./change-set-commit.js";
 import {
@@ -182,35 +186,29 @@ const openRequestIds = async (
 
 const changeSetsAtApproval = async (
   context: ReviewRouteContext,
-): Promise<ReturnType<typeof changeSetsFromExchange>> => {
-  const exchange = await readAgentExchange({
-    store: context.store,
-    sessionId: context.sessionId,
-    planId: context.planId,
-  });
-  const placeIdsByRevision = new Map<string, ReadonlyArray<string>>();
+): Promise<ReadonlyArray<OpenChangeSet>> => {
   const fallbackTitle = basename(
     context.resolvedPlanPath,
     extname(context.resolvedPlanPath),
   );
-  // Approval closes the sets the reviewer was shown, so it counts them the
-  // same way the review surface does: one folded set per thread, whose places
-  // are the ones its baseline-to-now diff actually has. An approval response
-  // is the decision that closes those sets rather than a change inside one, so
-  // it never contributes a set of its own.
-  const committedChangeSetIds = new Set(
-    (await readCommittedChangeSets({ store: context.store })).map(
-      (changeSet) => changeSet.changeSetId,
-    ),
-  );
-  const folded = changeSetsFromExchange({
+  // Approval closes the sets the reviewer was shown, so it counts them from
+  // the aggregate the reader counts them from: the committed revision log's
+  // fold, one set per thread, spanning baseline to latest committed result.
+  // The agent exchange is read only for the labels those sets are named by.
+  const [committed, exchange] = await Promise.all([
+    readCommittedChangeSets({ store: context.store }),
+    readAgentExchange({
+      store: context.store,
+      sessionId: context.sessionId,
+      planId: context.planId,
+    }),
+  ]);
+  const folded = changeSetsFromCommitted({
+    committed,
     requests: exchange.requests,
-    responses: exchange.responses.filter(
-      (response) => response.kind !== "approval",
-    ),
     placeIdsByRevision: new Map(),
-    committedChangeSetIds,
   });
+  const placeIdsByRevision = new Map<string, ReadonlyArray<string>>();
   for (const { from, to } of folded) {
     const [beforeSource, afterSource] = await Promise.all([
       readSnapshot({ store: context.store, snapshot: from }),
@@ -243,6 +241,16 @@ const changeSetsAtApproval = async (
   }));
 };
 
+/**
+ * Records the reviewer's acceptance of every change set still open, then reads
+ * the counts back out of the record it just wrote.
+ *
+ * The counts are read back rather than assumed because an approval that says
+ * it accepted every change set is the reviewer's evidence that it did. Taking
+ * the total as the accepted count would report the same number whether or not
+ * a single verdict row reached the ledger, which is precisely the reading a
+ * reviewer cannot check for themselves.
+ */
 const acceptChangeSets = async ({
   context,
   inputs,
@@ -258,36 +266,41 @@ const acceptChangeSets = async ({
 }> => {
   let verdicts = await context.changeVerdicts.read();
   const changeSets = await changeSetsAtApproval(context);
-  const items = deriveOpenItems({
-    changeSets,
-    accepted: new Set(verdicts.accepted.map(changeVerdictKey)),
-    inputs,
-    requests: requestIds.map((requestId) => ({ requestId, label: requestId })),
-  });
+  const standingOf = (
+    state: StoredChangeVerdicts,
+  ): ReturnType<typeof deriveOpenItems> =>
+    deriveOpenItems({
+      changeSets,
+      accepted: new Set(state.accepted.map(changeVerdictKey)),
+      inputs,
+      requests: requestIds.map((requestId) => ({
+        requestId,
+        label: requestId,
+      })),
+    });
   const acceptedAt = new Date().toISOString();
-  for (const changeSet of items.changeSets.open) {
+  for (const changeSet of standingOf(verdicts).changeSets.open) {
     if (changeSet.placeIds.length === 0) {
       throw new ApprovalRecordRejected(
         `Change set ${changeSet.id} could not be resolved for approval`,
       );
     }
-    verdicts = applyChangeVerdictMutation({
-      verdicts,
-      mutation: {
-        op: "accept",
-        from: changeSet.from,
-        to: changeSet.to,
-        placeIds: changeSet.placeIds,
-        acceptedAt,
-        actor: "reviewer",
-      },
-    });
+    for (const placeIds of changeVerdictBatches(changeSet.placeIds)) {
+      verdicts = applyChangeVerdictMutation({
+        verdicts,
+        mutation: {
+          op: "accept",
+          from: changeSet.from,
+          to: changeSet.to,
+          placeIds,
+          acceptedAt,
+          actor: "reviewer",
+        },
+      });
+    }
   }
-  return {
-    verdicts,
-    accepted: items.changeSets.total,
-    total: items.changeSets.total,
-  };
+  const settled = standingOf(verdicts).changeSets;
+  return { verdicts, accepted: settled.accepted, total: settled.total };
 };
 
 /**

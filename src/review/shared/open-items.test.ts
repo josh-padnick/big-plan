@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  changeSetsFromExchange,
+  changeSetsFromCommitted,
   approveChangeSetCaveat,
   approveDecisionCaveat,
   approveIsPrimary,
@@ -181,37 +181,30 @@ describe("openRequestsFromExchange", () => {
   });
 });
 
-describe("changeSetsFromExchange", () => {
+describe("changeSetsFromCommitted", () => {
   const S1 = "1".repeat(16);
   const S2 = "2".repeat(16);
   const S3 = "3".repeat(16);
-  const S4 = "4".repeat(16);
 
-  it("counts a multi-round thread once, spanning its whole span", () => {
+  it("spans a multi-round thread once, from its baseline to its latest result", () => {
     expect(
-      changeSetsFromExchange({
+      changeSetsFromCommitted({
+        committed: [
+          { changeSetId: "c0de", baseSnapshot: S1, resultSnapshot: S3 },
+        ],
         requests: [
           {
             requestId: "req1req1req1req1",
-            premiseSnapshot: S1,
-            baselineSnapshot: S1,
             commentId: "c0de",
             targetLabel: "Retry backoff",
           },
           {
             requestId: "req2req2req2req2",
-            premiseSnapshot: S2,
-            baselineSnapshot: S2,
             commentId: "c0de",
             targetLabel: "Retry backoff",
           },
         ],
-        responses: [
-          { requestId: "req1req1req1req1", resultSnapshot: S2 },
-          { requestId: "req2req2req2req2", resultSnapshot: S3 },
-        ],
         placeIdsByRevision: new Map([[`${S1}:${S3}`, ["p1"]]]),
-        committedChangeSetIds: new Set(["c0de"]),
       }),
     ).toEqual([
       {
@@ -224,143 +217,74 @@ describe("changeSetsFromExchange", () => {
     ]);
   });
 
-  it("folds the opening feedback round the store names by its comments", () => {
+  it("counts a thread the agent exchange window no longer carries", () => {
     expect(
-      changeSetsFromExchange({
-        requests: [
-          {
-            requestId: "req1req1req1req1",
-            premiseSnapshot: S1,
-            comments: [{ id: "c0de" }],
-          },
-          {
-            requestId: "req2req2req2req2",
-            premiseSnapshot: S2,
-            commentId: "c0de",
-          },
+      changeSetsFromCommitted({
+        committed: [
+          { changeSetId: "c0de", baseSnapshot: S1, resultSnapshot: S2 },
         ],
-        responses: [
-          { requestId: "req1req1req1req1", resultSnapshot: S2 },
-          { requestId: "req2req2req2req2", resultSnapshot: S3 },
-        ],
-        placeIdsByRevision: new Map(),
-        committedChangeSetIds: new Set(["c0de"]),
+        requests: [],
+        placeIdsByRevision: new Map([[`${S1}:${S2}`, ["p1"]]]),
       }),
-    ).toMatchObject([{ id: "c0de", from: S1, to: S3 }]);
-  });
-
-  it("keeps threads apart when they changed the plan in turn", () => {
-    expect(
-      changeSetsFromExchange({
-        requests: [
-          {
-            requestId: "req1req1req1req1",
-            premiseSnapshot: S1,
-            commentId: "c0de",
-          },
-          {
-            requestId: "req2req2req2req2",
-            premiseSnapshot: S2,
-            commentId: "d1ce",
-          },
-        ],
-        responses: [
-          { requestId: "req1req1req1req1", resultSnapshot: S2 },
-          { requestId: "req2req2req2req2", resultSnapshot: S3 },
-        ],
-        placeIdsByRevision: new Map(),
-        committedChangeSetIds: new Set(["c0de", "d1ce"]),
-      }).map((changeSet) => changeSet.id),
-    ).toEqual(["c0de", "d1ce"]);
-  });
-
-  it("folds one feedback response into every committed comment change set", () => {
-    expect(
-      changeSetsFromExchange({
-        requests: [
-          {
-            requestId: "req1req1req1req1",
-            premiseSnapshot: S1,
-            commentIds: ["c0de", "d1ce"],
-            comments: [{ id: "c0de" }, { id: "d1ce" }],
-          },
-          {
-            requestId: "req2req2req2req2",
-            premiseSnapshot: S2,
-            baselineSnapshot: S2,
-            commentId: "c0de",
-          },
-          {
-            requestId: "req3req3req3req3",
-            premiseSnapshot: S3,
-            baselineSnapshot: S3,
-            commentId: "d1ce",
-          },
-        ],
-        responses: [
-          { requestId: "req1req1req1req1", resultSnapshot: S2 },
-          { requestId: "req2req2req2req2", resultSnapshot: S3 },
-          { requestId: "req3req3req3req3", resultSnapshot: S4 },
-        ],
-        placeIdsByRevision: new Map([
-          [`${S1}:${S3}`, ["c-place-1", "c-place-2"]],
-          [`${S1}:${S4}`, ["d-place"]],
-        ]),
-        committedChangeSetIds: new Set(["c0de", "d1ce"]),
-      }),
-    ).toMatchObject([
+    ).toEqual([
       {
         id: "c0de",
+        label: `Version ${S2.slice(0, 7)}`,
         from: S1,
-        to: S3,
-        placeIds: ["c-place-1", "c-place-2"],
-      },
-      {
-        id: "d1ce",
-        from: S1,
-        to: S4,
-        placeIds: ["d-place"],
+        to: S2,
+        placeIds: ["p1"],
       },
     ]);
   });
 
-  it("falls back to the request when the fold has not named the thread yet", () => {
+  it("names a set from the comments the store holds on its opening round", () => {
     expect(
-      changeSetsFromExchange({
+      changeSetsFromCommitted({
+        committed: [
+          { changeSetId: "c0de", baseSnapshot: S1, resultSnapshot: S2 },
+        ],
         requests: [
           {
             requestId: "req1req1req1req1",
-            premiseSnapshot: S1,
-            commentId: "c0de",
+            comments: [{ id: "c0de" }],
+            targetLabel: "2 · Rollout",
           },
         ],
-        responses: [{ requestId: "req1req1req1req1", resultSnapshot: S2 }],
+        placeIdsByRevision: new Map(),
+      }),
+    ).toEqual([
+      {
+        id: "c0de",
+        label: "2 · Rollout",
+        from: S1,
+        to: S2,
+        placeIds: [],
+        sectionId: "2",
+      },
+    ]);
+  });
+
+  it("keeps threads apart and holds the fold's order", () => {
+    expect(
+      changeSetsFromCommitted({
+        committed: [
+          { changeSetId: "c0de", baseSnapshot: S1, resultSnapshot: S2 },
+          { changeSetId: "d1ce", baseSnapshot: S2, resultSnapshot: S3 },
+        ],
+        requests: [],
         placeIdsByRevision: new Map(),
       }).map((changeSet) => changeSet.id),
-    ).toEqual(["req1req1req1req1"]);
+    ).toEqual(["c0de", "d1ce"]);
   });
 
   it("drops a thread whose rounds cancelled out back to its baseline", () => {
     expect(
-      changeSetsFromExchange({
-        requests: [
-          {
-            requestId: "req1req1req1req1",
-            premiseSnapshot: S1,
-            commentId: "c0de",
-          },
-          {
-            requestId: "req2req2req2req2",
-            premiseSnapshot: S2,
-            commentId: "c0de",
-          },
+      changeSetsFromCommitted({
+        committed: [
+          { changeSetId: "c0de", baseSnapshot: S1, resultSnapshot: S1 },
         ],
-        responses: [
-          { requestId: "req1req1req1req1", resultSnapshot: S2 },
-          { requestId: "req2req2req2req2", resultSnapshot: S1 },
-        ],
+        requests: [],
         placeIdsByRevision: new Map(),
-        committedChangeSetIds: new Set(["c0de"]),
       }),
     ).toEqual([]);
   });
