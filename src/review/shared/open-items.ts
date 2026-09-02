@@ -63,11 +63,16 @@ const APPROVE_CHANGE_SET_CAVEAT = "Approval will auto-accept all change sets.";
 const APPROVE_DECISION_CAVEAT =
   "Approval will report unanswered decisions as not answered.";
 
-/** The request shape a change set is counted from. */
-type ChangeSetRequest = {
+/** One change set as the committed revision log folds it. */
+export type CommittedChangeSetFold = {
+  readonly changeSetId: string;
+  readonly baseSnapshot: string;
+  readonly resultSnapshot: string;
+};
+
+/** The request shape a change set reads its human label from. */
+type ChangeSetLabelSource = {
   readonly requestId: string;
-  readonly premiseSnapshot: string;
-  readonly baselineSnapshot?: string;
   readonly targetLabel?: string;
   /** The browser's projection of a feedback request's comments. */
   readonly commentIds?: ReadonlyArray<string>;
@@ -78,126 +83,89 @@ type ChangeSetRequest = {
 };
 
 /**
- * Which change set a request's revision belongs to.
- *
- * A thread's replies all commit into the set the thread owns, so the ids the
- * request carries are tried against the committed fold before the request
- * falls back to owning a set alone - which is what a chat turn or a revision
- * committed before the fold knew about it actually does.
- *
- * A feedback request names its comments one way in the store and another over
- * the wire, and both callers pass their own shape straight through, so both
- * are read here: missing the store's shape would leave a thread's opening
- * round owning a set of its own that no later reply could fold into.
+ * The ids one request can have contributed a revision under: its own, and
+ * every comment or thread it targets. A feedback request names its comments
+ * one way in the store and another over the wire, and both callers pass their
+ * own shape straight through, so both are read here.
  */
-const changeSetIdFor = ({
-  request,
-  changeSetIds,
-}: {
-  readonly request: ChangeSetRequest;
-  readonly changeSetIds: ReadonlySet<string>;
-}): string =>
-  [
-    ...(request.commentIds ?? []),
-    ...(request.comments ?? []).map((comment) => comment.id),
-    ...(request.commentId === undefined ? [] : [request.commentId]),
-    ...(request.threadId === undefined ? [] : [request.threadId]),
-  ].find((id) => changeSetIds.has(id)) ?? request.requestId;
+const changeSetIdsOwnedBy = (
+  request: ChangeSetLabelSource,
+): ReadonlyArray<string> => [
+  ...(request.commentIds ?? []),
+  ...(request.comments ?? []).map((comment) => comment.id),
+  ...(request.commentId === undefined ? [] : [request.commentId]),
+  ...(request.threadId === undefined ? [] : [request.threadId]),
+  request.requestId,
+];
 
-/** Every committed change set a request's revision advances. */
-const changeSetIdsFor = ({
-  request,
-  changeSetIds,
-}: {
-  readonly request: ChangeSetRequest;
-  readonly changeSetIds: ReadonlySet<string>;
-}): ReadonlyArray<string> => {
-  const matched = new Set(
-    [
-      ...(request.commentIds ?? []),
-      ...(request.comments ?? []).map((comment) => comment.id),
-      ...(request.commentId === undefined ? [] : [request.commentId]),
-      ...(request.threadId === undefined ? [] : [request.threadId]),
-    ].filter((id) => changeSetIds.has(id)),
-  );
-  return matched.size === 0
-    ? [changeSetIdFor({ request, changeSetIds })]
-    : [...matched];
+/**
+ * The label each change set is named by, taken from the first request that
+ * addressed it. The set's baseline is where its first committed revision put
+ * it, so its name comes from the same round rather than from whichever later
+ * reply happened to be read last.
+ */
+const changeSetLabels = (
+  requests: ReadonlyArray<ChangeSetLabelSource>,
+): ReadonlyMap<string, string> => {
+  const labels = new Map<string, string>();
+  for (const request of requests) {
+    const label = request.targetLabel;
+    if (label === undefined || label === "") continue;
+    for (const id of changeSetIdsOwnedBy(request)) {
+      if (!labels.has(id)) labels.set(id, label);
+    }
+  }
+  return labels;
 };
 
 /**
- * Change sets as the approve dialog counts them: one per set that actually
- * moved the plan, spanning every revision committed into it.
+ * Change sets as the approve dialog counts them, read from the aggregate the
+ * committed revision log already owns.
  *
- * A thread that answered three times is one thing to review, not three, and
- * the two earlier rounds are not separately acceptable - they no longer
- * describe any before-and-after the plan still stands on. So the rounds fold:
- * the set starts where its first revision did and ends where its last one left
- * the plan.
+ * The fold is the authority on what a thread proposes: one set per thread,
+ * starting where its first committed revision started and ending where its
+ * latest one left the plan. Re-deriving that from agent responses instead was
+ * an approximation in two ways that both fail quietly. The exchange is a
+ * bounded window, so an older thread simply stopped being counted - approval
+ * would then report every change set accepted while writing no acceptance for
+ * the ones it could no longer see. And a fold assembled in response-read order
+ * can pick a different baseline than the log's commit order did, which writes
+ * acceptances at an address the reader's own diff never asks about, leaving
+ * the change set open after the approval that closed it.
+ *
+ * Requests are read for labels alone; nothing about a set's identity or span
+ * comes from them.
  */
-export const changeSetsFromExchange = ({
+export const changeSetsFromCommitted = ({
+  committed,
   requests,
-  responses,
   placeIdsByRevision,
-  committedChangeSetIds = new Set(),
 }: {
-  readonly requests: ReadonlyArray<ChangeSetRequest>;
-  readonly responses: ReadonlyArray<{
-    readonly requestId: string;
-    readonly resultSnapshot: string;
-    readonly kind?: string;
-  }>;
+  readonly committed: ReadonlyArray<CommittedChangeSetFold>;
+  readonly requests: ReadonlyArray<ChangeSetLabelSource>;
   readonly placeIdsByRevision: ReadonlyMap<string, ReadonlyArray<string>>;
-  readonly committedChangeSetIds?: ReadonlySet<string>;
 }): ReadonlyArray<OpenChangeSet> => {
-  const byId = new Map(requests.map((request) => [request.requestId, request]));
-  const folded = new Map<
-    string,
-    { readonly from: string; to: string; readonly label: string }
-  >();
-  for (const response of responses) {
-    // An approval answer publishes nothing, so there is no revision to accept
-    // or revert. Judged by digests alone an agent that wrote to its candidate
-    // and then refused would still list a change set for bytes that never
-    // reached the plan.
-    if (response.kind === "approval") continue;
-    const request = byId.get(response.requestId);
-    if (request === undefined) continue;
-    const from = request.baselineSnapshot ?? request.premiseSnapshot;
-    if (from === response.resultSnapshot) continue;
-    const ids = changeSetIdsFor({
-      request,
-      changeSetIds: committedChangeSetIds,
-    });
-    for (const id of ids) {
-      const started = folded.get(id);
-      if (started === undefined) {
-        folded.set(id, {
-          from,
-          to: response.resultSnapshot,
-          label:
-            request.targetLabel ??
-            `Version ${response.resultSnapshot.slice(0, 7)}`,
-        });
-        continue;
-      }
-      started.to = response.resultSnapshot;
-    }
-  }
-  const sets: OpenChangeSet[] = [];
-  for (const [id, { from, to, label }] of folded) {
-    if (from === to) continue;
+  const labels = changeSetLabels(requests);
+  return committed.flatMap((changeSet): ReadonlyArray<OpenChangeSet> => {
+    const from = changeSet.baseSnapshot;
+    const to = changeSet.resultSnapshot;
+    // A thread whose rounds cancelled back to where they started proposes
+    // nothing, so there is no before-and-after left to accept.
+    if (from === to) return [];
+    const label =
+      labels.get(changeSet.changeSetId) ?? `Version ${to.slice(0, 7)}`;
     const sectionId = sectionIdFromLabel(label);
-    sets.push({
-      id,
-      label,
-      from,
-      to,
-      placeIds: placeIdsByRevision.get(`${from}:${to}`) ?? [],
-      ...(sectionId === undefined ? {} : { sectionId }),
-    });
-  }
-  return sets;
+    return [
+      {
+        id: changeSet.changeSetId,
+        label,
+        from,
+        to,
+        placeIds: placeIdsByRevision.get(`${from}:${to}`) ?? [],
+        ...(sectionId === undefined ? {} : { sectionId }),
+      },
+    ];
+  });
 };
 
 /** In-flight and queued requests, in the order the mailbox holds them. */
