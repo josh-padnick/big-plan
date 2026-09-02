@@ -60,6 +60,57 @@ const decisionBlockId = (markdown: string): string => {
   return block.id;
 };
 
+const tiers = (rows: string): string => `# Plan
+
+One sentence of lede so the plan opens the way the linter asks.
+
+## Service budget per tier
+
+Each triage tier gets an explicit budget.
+
+<DataTable title="Triage tiers">
+
+\`\`\`table
+| Tier | First response | Escalates after | Owner |
+| --- | --- | --- | --- |
+${rows}
+\`\`\`
+
+</DataTable>`;
+
+const dataTableBlockId = (markdown: string): string => {
+  const block = compileMarkdown({ markdown }).blocks.find(
+    (candidate) => candidate.kind === "data-table",
+  );
+  if (block === undefined) throw new Error("DataTable fixture did not compile");
+  return block.id;
+};
+
+/** What each declared anchor of one rendered side was actually addressed as. */
+const anchorAddresses = (view: string, side: "proposed" | "baseline") => {
+  const nodes = elements(fromHtml(view, { fragment: true }));
+  const sideRoot = nodes.find(
+    (node) => node.properties.dataComponentDiffSide === side,
+  );
+  if (sideRoot === undefined) return [];
+  return [sideRoot, ...elements(sideRoot)]
+    .filter((node) => typeof node.properties.dataCommentableLabel === "string")
+    .map((node) => ({
+      declared: String(node.properties.dataCommentableLabel).replaceAll(
+        "`",
+        "",
+      ),
+      label:
+        side === "proposed"
+          ? node.properties.dataBlockLabel
+          : node.properties.dataBaselineBlockLabel,
+      blockId:
+        side === "proposed"
+          ? node.properties.dataBlockId
+          : node.properties.dataBaselineBlockId,
+    }));
+};
+
 describe("render diff view", () => {
   it("should render one addressed Decision root with an isolated baseline", () => {
     const baselineMarkdown = decision("Ship now");
@@ -462,6 +513,43 @@ ${description}
       ).toHaveLength(1);
     },
   );
+
+  it("should give every repeated field anchor its own address on both sides", () => {
+    // Sibling anchors routinely repeat every fact the diff can compare a field
+    // by: two rows of a table naming one owner is ordinary authoring. An anchor
+    // that loses its address does not fail loudly - the reviewer's gesture
+    // simply lands on the row or the figure around it, and the note reaches the
+    // agent pointing at a neighbour of the field it was aimed at.
+    const baselineMarkdown = tiers(
+      "| Urgent | 10 minutes | 1 hour | On-call reviewer |\n| Standard | 4 hours | 4 hours | On-call reviewer |",
+    );
+    const proposedMarkdown = tiers(
+      "| Urgent | 5 minutes | 30 minutes | On-call reviewer |\n| Standard | 6 hours | 4 hours | On-call reviewer |",
+    );
+    const rendered = renderDiffView({
+      baselineDocument: compileMarkdown({ markdown: baselineMarkdown }),
+      proposedDocument: compileMarkdown({ markdown: proposedMarkdown }),
+      baselineBlockId: dataTableBlockId(baselineMarkdown),
+      proposedBlockId: dataTableBlockId(proposedMarkdown),
+      status: "changed",
+      runs: [],
+      baselineSnapshot: "abcdef0123456789",
+    });
+    for (const side of ["proposed", "baseline"] as const) {
+      const addresses = anchorAddresses(rendered?.view ?? "", side);
+      expect(addresses.length).toBeGreaterThan(0);
+      // Every anchor the component declared is addressed, and each declared
+      // label is the label the address carries.
+      expect(
+        addresses.filter((address) => address.blockId === undefined),
+      ).toEqual([]);
+      expect(
+        addresses.filter((address) => address.label !== address.declared),
+      ).toEqual([]);
+      const ids = addresses.map((address) => address.blockId);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
 });
 
 describe("renderIsolatedBlockView", () => {

@@ -5,6 +5,7 @@ import type {
   SnapshotDiff,
 } from "../shared/review-wire.js";
 import {
+  candidateMatchesLiveKind,
   candidateMatchesLiveText,
   lensAnchorCandidates,
   tourStartIndex,
@@ -12,6 +13,7 @@ import {
 
 const location = (fields: Partial<DiffLocation>): DiffLocation => ({
   status: "changed",
+  isComponentRoot: false,
   scope: "section/approach",
   kind: "paragraph",
   label: "Approach",
@@ -133,6 +135,76 @@ describe("lensAnchorCandidates", () => {
     ]);
   });
 
+  it("should hold a superseded component to the kind its id named", () => {
+    // A structural path is not an identity. Without this the historical card
+    // would stand over whatever component inherited the path, hiding a live
+    // block behind a record of something else.
+    const candidates = lensAnchorCandidates(
+      location({
+        kind: "data-table",
+        isComponentRoot: true,
+        newBlockId: "approach/data-table-1",
+        view: "<div data-component-diff></div>",
+      }),
+      { isSuperseded: true },
+    );
+    expect(candidates[0]?.expectedKind).toBe("data-table");
+    expect(
+      candidateMatchesLiveKind({
+        candidate: candidates[0] ?? { blockId: "", placement: "replace" },
+        liveKind: "wireframe",
+      }),
+    ).toBe(false);
+    expect(
+      candidateMatchesLiveKind({
+        candidate: candidates[0] ?? { blockId: "", placement: "replace" },
+        liveKind: "data-table",
+      }),
+    ).toBe(true);
+  });
+
+  it("should hold a superseded component to its place rather than its old text", () => {
+    // A location that brought its own rendering reads the live block for
+    // nothing, so a text expectation could only exile a change the plan still
+    // has a place for into the archive at the foot of the document.
+    expect(
+      lensAnchorCandidates(
+        location({
+          kind: "data-table",
+          isComponentRoot: true,
+          newBlockId: "approach/data-table-1",
+          view: "<div data-component-diff></div>",
+        }),
+        { isSuperseded: true },
+      ),
+    ).toEqual([
+      {
+        blockId: "approach/data-table-1",
+        placement: "replace",
+        expectedKind: "data-table",
+      },
+    ]);
+  });
+
+  it("should not expect a picture identity from a superseded component view", () => {
+    const candidates = lensAnchorCandidates(
+      location({
+        kind: "wireframe",
+        isComponentRoot: true,
+        newBlockId: "approach/wireframe-1",
+        view: "<div data-component-diff></div>",
+        newPresentation: {
+          aspect: "image",
+          source: "./assets/after.png",
+          alt: "Map",
+        },
+      }),
+      { isSuperseded: true },
+    );
+    expect(candidates[0]?.expectedPicture).toBeUndefined();
+    expect(candidates[0]?.expectedText).toBeUndefined();
+  });
+
   it("should leave same-snapshot candidates without a text expectation", () => {
     const candidates = lensAnchorCandidates(
       location({ newBlockId: "approach/paragraph-1" }),
@@ -140,6 +212,44 @@ describe("lensAnchorCandidates", () => {
     );
     expect(candidates).toHaveLength(1);
     expect(candidates[0]?.expectedText).toBeUndefined();
+  });
+});
+
+describe("candidateMatchesLiveKind", () => {
+  it("should accept a component the plan revised again", () => {
+    // The case the reader is meant to see in place: same component, new
+    // content. Text equality would refuse this and exile the change.
+    const candidates = lensAnchorCandidates(
+      location({
+        kind: "wireframe",
+        isComponentRoot: true,
+        newBlockId: "approach/wireframe-1",
+        newText: "the words it used to hold",
+        view: "<div data-component-diff></div>",
+      }),
+      { isSuperseded: true },
+    );
+    const candidate = candidates[0];
+    expect(candidate?.expectedText).toBeUndefined();
+    expect(
+      candidateMatchesLiveKind({
+        candidate: candidate ?? { blockId: "", placement: "replace" },
+        liveKind: "wireframe",
+      }),
+    ).toBe(true);
+  });
+
+  it("should accept any live kind when the id shares the document's snapshot", () => {
+    const candidates = lensAnchorCandidates(
+      location({ newBlockId: "approach/paragraph-1" }),
+      { isSuperseded: false },
+    );
+    expect(
+      candidateMatchesLiveKind({
+        candidate: candidates[0] ?? { blockId: "", placement: "replace" },
+        liveKind: "anything",
+      }),
+    ).toBe(true);
   });
 });
 

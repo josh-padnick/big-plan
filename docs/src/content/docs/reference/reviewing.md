@@ -459,7 +459,8 @@ Their controls work inside the change: diagram theme and flow controls, tree cop
 A wireframe change compares the two prototypes one at a time behind the **Was**/**Now** toggle.
 That toggle is an ordinary pair of radios drawn where they sit: the pointer, the keyboard, and a screen reader all reach the same box, and Tab enters it in reading order with the arrow keys moving between the two sides.
 For a changed wireframe, its own screen switcher marks screens that were added, removed, moved, or updated; wholly added or removed wireframes keep plain entries.
-A removed component or a change superseded by a later revision appears as inert evidence rather than as something to answer.
+A removed component, or a superseded change whose component no longer has a place in the plan, appears as inert evidence rather than as something to answer.
+A superseded component change whose block still stands replaces that block in place, so the tour does not stop on a change outside the reader's view.
 A removed wireframe keeps its own screen switcher, so the screens the change took away stay readable.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.

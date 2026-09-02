@@ -7,6 +7,7 @@ import {
   baselineMissReason,
   candidateMatchesLivePicture,
   liveBaselineBlock,
+  liveLensAnchor,
   lensMissReason,
   pickLiveCandidate,
   type LiveCandidate,
@@ -118,6 +119,92 @@ describe("candidateMatchesLivePicture", () => {
         livePicture: { source: "./assets/b.png", alt: "Map" },
       }),
     ).toBe(true);
+  });
+});
+
+describe("liveLensAnchor", () => {
+  const globals = globalThis as unknown as {
+    CSS?: { escape(value: string): string };
+    HTMLElement?: unknown;
+    document?: {
+      querySelector<TElement>(selector: string): TElement | null;
+    };
+  };
+  const originalCSS = globals.CSS;
+  const originalDocument = globals.document;
+  const originalHTMLElement = globals.HTMLElement;
+
+  afterEach(() => {
+    globals.CSS = originalCSS;
+    globals.document = originalDocument;
+    globals.HTMLElement = originalHTMLElement;
+  });
+
+  const componentLocation = {
+    status: "changed",
+    isComponentRoot: true,
+    scope: "section/approach",
+    kind: "data-table",
+    label: "Rollout gates",
+    section: "Approach",
+    newBlockId: "approach/data-table-1",
+    oldText: "was",
+    newText: "now",
+    runs: [],
+    view: "<figure data-component-diff></figure>",
+  } as const;
+
+  const articleHolding = (blockKind: string) => {
+    const element = {
+      closest: () => null,
+      getClientRects: () => [{}],
+      dataset: { blockKind },
+      // liveBlockText clones the block and strips injected chrome before
+      // reading it, so the stub answers that shape.
+      cloneNode: () => ({
+        querySelectorAll: () => [] as ReadonlyArray<never>,
+        textContent: "whatever the block says now",
+      }),
+      matches: () => false,
+      querySelector: () => null,
+    } as unknown as HTMLElement;
+    globals.CSS = { escape: (value) => value };
+    // liveBlockText narrows its clone with `instanceof HTMLElement`; the stub
+    // is deliberately not one, so the text falls back to textContent - which
+    // is what this suite wants, since the kind is the fact under test.
+    globals.HTMLElement = class {};
+    globals.document = {
+      querySelector: () => ({ querySelectorAll: () => [element] }),
+    } as never;
+    return element;
+  };
+
+  it("should place a superseded component beside a block of the kind it named", () => {
+    // The change is about this component, revised again. Its words have moved
+    // on, which is exactly why the text is not what it is held to.
+    const element = articleHolding("data-table");
+    expect(liveLensAnchor(componentLocation, { isSuperseded: true })).toEqual({
+      found: element,
+      placement: "replace",
+    });
+  });
+
+  it("should refuse a superseded component whose id now names another kind", () => {
+    // A structural path the plan reused for something else. Replacing here
+    // would hide a live component behind a record of a different one, so the
+    // change belongs in the archive instead.
+    articleHolding("wireframe");
+    expect(liveLensAnchor(componentLocation, { isSuperseded: true })).toEqual({
+      missing: "drifted-content",
+    });
+  });
+
+  it("should not ask the question at all while the change set is current", () => {
+    const element = articleHolding("wireframe");
+    expect(liveLensAnchor(componentLocation, { isSuperseded: false })).toEqual({
+      found: element,
+      placement: "replace",
+    });
   });
 });
 

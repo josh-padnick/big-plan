@@ -86,6 +86,8 @@ Both gates are statements a machine can verify, so the protocol cannot be forgot
 
 `.github/workflows/merge-gates.yml` runs the gates and `scripts/merge-gates/gates.mjs` decides them.
 A failing gate prints exactly what is missing and the next action to take, so read the check before asking anyone.
+These are comment-protocol gates, not source-validation checks: when either one is red because its current-head marker is missing, changing product code, tests, workflow packaging, or lint configuration cannot satisfy it.
+Complete the review or validation work the diagnostic names, then post the required marker in a pull request conversation comment.
 
 ### The comment formats
 

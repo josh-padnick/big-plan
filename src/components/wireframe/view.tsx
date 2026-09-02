@@ -1044,6 +1044,39 @@ const Screen = ({
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
+      {/* The caption leads the drawing it names rather than following it. Two
+          facts belong to a screen and not to the drawing itself - which device
+          it is drawn at, and the affordance for commenting on this screen -
+          and putting them under the frame stacked them against the screen
+          switcher's own name for the same screen, so the reader met the screen
+          named twice with a control between the copies. Above the frame they
+          sit directly under the switcher that selected them, which is where
+          the reader already is.
+
+          It stays a direct child of the screen's own `<figure>`, so the
+          caption/figure relationship is the one HTML already defines rather
+          than a styled div a screen reader has to infer, and so the fit module
+          keeps pinning its width to the frame's painted width and reserving
+          its height. Both are `:scope >` reads that say nothing about order.
+
+          The name is the switcher's job wherever a switcher exists, so it is
+          carried for assistive technology and painted only when this screen
+          has no switcher naming it - a lone screen, or a document whose script
+          never ran. A drawing with no name at all is one the reader has to
+          name from context. */}
+      <figcaption className="wireframe-screen-caption mx-auto mb-3 w-full text-sm">
+        <span className="wireframe-screen-name wireframe-screen-title block break-words">
+          {screen.name}
+        </span>
+        <span className="wireframe-screen-viewport mt-1 block break-words text-xs text-muted">
+          {preset.label} · {preset.width} × {preset.height}px{" "}
+          {workspaceViewport
+            ? "workspace viewport"
+            : preset.heightPolicy === "fixed"
+              ? "fixed frame"
+              : "minimum · grows with content"}
+        </span>
+      </figcaption>
       <div className="wireframe-frame-card mx-auto block w-fit">
         <div
           className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
@@ -1077,32 +1110,6 @@ const Screen = ({
           </div>
         </div>
       </div>
-      {/* The caption reads after the drawing it names, as a figure's caption
-          does: the reader looks at the screen, then learns what it is. It is a
-          direct child of the screen's own `<figure>` so the caption/figure
-          relationship is the one HTML already defines, rather than a styled
-          div a screen reader has to infer. The name leads on its own line and
-          the viewport note follows as a subordinate second line, because two
-          facts of unequal weight on one row read as one run-on label. Every
-          screen carries it, including a lone screen: a drawing with no name
-          under it is a drawing the reader has to name from context.
-
-          The fit module pins this element's width to the frame's painted
-          width, so both lines wrap inside the frame instead of running past
-          its edge. */}
-      <figcaption className="wireframe-screen-caption mx-auto mt-3 w-full text-sm">
-        <span className="wireframe-screen-name wireframe-screen-title block break-words">
-          {screen.name}
-        </span>
-        <span className="wireframe-screen-viewport mt-1 block break-words text-xs text-muted">
-          {preset.label} · {preset.width} × {preset.height}px{" "}
-          {workspaceViewport
-            ? "workspace viewport"
-            : preset.heightPolicy === "fixed"
-              ? "fixed frame"
-              : "minimum · grows with content"}
-        </span>
-      </figcaption>
     </figure>
   );
 };
