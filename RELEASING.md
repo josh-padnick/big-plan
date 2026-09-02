@@ -32,10 +32,16 @@ The workflow needs npm CLI 11.5.1 or newer and runs its publish job on a GitHub-
 **How an entry is generated.** Start from the machine-generated raw material, then write the entry a first-time reader needs.
 
 ```sh
-export PREVIOUS_TAG="v0.0.0"   # the previous release tag, or the first commit for the first release
-git log --no-merges --format='%s' "${PREVIOUS_TAG}..main"
+export VERSION="$(node -p "require('./package.json').version")"
+
+# The previous release tag. There is none for the first release, so fall back
+# to the root commit, which `generate-notes` also accepts as a starting point.
+export PREVIOUS_REF="$(git describe --tags --abbrev=0 --match 'v*.*.*' 2>/dev/null \
+  || git rev-list --max-parents=0 HEAD)"
+
+git log --no-merges --format='%s' "${PREVIOUS_REF}..main"
 gh api "repos/josh-padnick/big-plan/releases/generate-notes" \
-  -f tag_name="v${VERSION}" -f previous_tag_name="${PREVIOUS_TAG}" --jq .body
+  -f tag_name="v${VERSION}" -f previous_tag_name="${PREVIOUS_REF}" --jq .body
 ```
 
 `.github/release.yml` groups that generated list by pull-request label. Use it as the source of facts, not as the entry. The entry itself groups those changes by **theme and capability**, in the order a new reader meets them, and says what each one lets a person do. A raw commit or pull-request list is not an acceptable entry.
@@ -94,13 +100,21 @@ export VERSION="$(node -p "require('./package.json').version")"
 
    The audit must report a verified provenance attestation. The npm version page must link that attestation to the expected GitHub commit and `publish.yml` run.
 
-   Publish the GitHub release for `v${VERSION}` with the `CHANGELOG.md` entry for that version as its body.
-
 7. From a trusted maintainer terminal authenticated to npm with 2FA, promote the already-published bytes. This moves a dist-tag; it does not publish again:
 
    ```sh
    npm dist-tag add "big-plan@${VERSION}" latest
    test "$(npm view big-plan@latest version)" = "$VERSION"
+   ```
+
+8. Only once `latest` reports `$VERSION`, publish the GitHub release for `v${VERSION}` with that version's `CHANGELOG.md` entry as its body. The announcement comes last on purpose: a release note published before promotion tells readers to install a version that `npm install big-plan` still cannot reach.
+
+   ```sh
+   export NOTES="$(mktemp -d)/notes.md"
+   awk -v v="## ${VERSION} " 'index($0,v)==1{f=1;print;next} f&&/^## /{exit} f' \
+     CHANGELOG.md > "$NOTES"
+   test -s "$NOTES"
+   gh release create "v${VERSION}" --title "big-plan ${VERSION}" --notes-file "$NOTES"
    ```
 
 Do not promote if CI, generated drift, the publish workflow, provenance, or the canary smoke test is missing or red.
