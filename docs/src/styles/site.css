@@ -64,7 +64,7 @@ a.site-title img {
 /* The spine: every band opens on the same left edge with the same quiet label,
    so the page has one alignment to follow rather than several. */
 .landing .band > p.eyebrow {
-  margin-block: 0 var(--step-2);
+  margin-block: 0 var(--step-1) !important;
   max-width: none;
   color: var(--sl-color-text-accent);
   font-size: 0.7rem;
@@ -73,11 +73,19 @@ a.site-title img {
   text-transform: uppercase;
 }
 
-/* Starlight's markdown defaults set a large margin above every heading, which
-   would break the eyebrow away from the title it labels. The two belong to
-   each other, so the override is stated rather than fought with specificity. */
+/* An eyebrow and the title under it are one unit, so they sit tight. Starlight
+   wraps every heading in `.sl-heading-wrapper` for its anchor link and gives
+   that wrapper the large top margin, so the override has to reach the wrapper
+   rather than the heading it contains. */
+.landing .band > .sl-heading-wrapper,
 .landing .band > h2 {
-  margin-block: 0 var(--step-2) !important;
+  margin-block-start: 0 !important;
+  margin-block-end: var(--step-2) !important;
+}
+
+.landing .band :is(.sl-heading-wrapper, h2) > h2,
+.landing .band > h2 {
+  margin-block: 0;
   border: 0;
   padding: 0;
   font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.1rem);
@@ -281,4 +289,85 @@ a.site-title img {
   .landing .sample:focus-visible {
     transform: none;
   }
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+/* The hero image is a whole review document rather than a crop, turned a few
+   degrees so it reads as an object on the page instead of a flat inset. */
+.hero img {
+  border: 1px solid var(--rule, var(--sl-color-gray-5));
+  border-radius: 0.75rem;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 8%),
+    -18px 26px 50px -18px rgb(0 0 0 / 28%);
+  transform: perspective(1800px) rotateY(-7deg) rotateX(2.5deg) rotate(-0.6deg)
+    scale(1.02);
+  transform-origin: center left;
+}
+
+@media (max-width: 50rem) {
+  .hero img {
+    transform: none;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero img {
+    transform: none;
+  }
+}
+
+/* --- Component library note ---------------------------------------------- */
+
+.landing .band > p.kinds-more {
+  max-width: 42rem;
+  margin-block-start: var(--step-3);
+  color: var(--sl-color-gray-2);
+  font-size: 0.9375rem;
+}
+
+/* --- Next steps ---------------------------------------------------------- */
+
+/* Whole rows are the target, not the words inside them, so a link is easy to
+   hit with a pointer and reachable in one stop with a keyboard. */
+.landing ul.next-steps {
+  margin-block-start: var(--step-3);
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--rule);
+  max-width: 42rem;
+}
+
+.landing ul.next-steps li {
+  margin: 0;
+  border-block-end: 1px solid var(--rule);
+}
+
+.landing ul.next-steps li a {
+  display: block;
+  padding-block: var(--step-2);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.landing ul.next-steps li a::after {
+  content: " \2192";
+  color: var(--sl-color-text-accent);
+}
+
+.landing ul.next-steps li:hover,
+.landing ul.next-steps li:focus-within {
+  background: color-mix(in srgb, var(--sl-color-gray-6) 60%, transparent);
+}
+
+.landing ul.next-steps li span {
+  display: block;
+  margin-block-start: calc(var(--step-1) * -0.5);
+  padding-block-end: var(--step-2);
+  color: var(--sl-color-gray-2);
+  font-size: 0.9rem;
+  line-height: 1.4;
 }

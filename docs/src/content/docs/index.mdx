@@ -3,12 +3,12 @@ title: Big Plan
 description: Review agent plans and reach agreement before an agent acts.
 template: splash
 hero:
-  title: Agree on the plan before the agent acts
-  tagline: Your agent writes the plan. Big Plan renders it as a document built for review, on your machine, with no account.
+  title: Agent plans you actually want to read
+  tagline: Big Plan tells your agent how to write nice plans, then renders them directly on your machine. Designed by humans, for humans.
   image:
-    alt: The example plan rendered in the Big Plan viewer, with section navigation and a themed reading column.
-    light: ../../assets/viewer-light.png
-    dark: ../../assets/viewer-dark.png
+    alt: A Big Plan review document showing a database table schema with key badges and column notes, above a grouped, filterable data table.
+    light: ../../assets/hero-light.png
+    dark: ../../assets/hero-dark.png
   actions:
     - text: Install now
       link: /intro/installation/
@@ -37,9 +37,7 @@ import allComponentsDark from "../../assets/samples/all-components-dark.png";
 <InstallPrompt prompt="Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it." />
 
 <Aside type="caution" title="Big Plan is in alpha">
-  Commands, the plan format, and the rendered output may change together while the product finds
-  its cleanest model. Your plan file, your privacy, and the guarantee that a plan never executes
-  are not among the things that will move. [What alpha means here](/alpha/).
+  Big Plan is undergoing rapid changes. [Read more about what alpha means](/alpha/).
 </Aside>
 
 <div class="landing">
@@ -113,24 +111,20 @@ principles and unlocks the rest of the workflow for that directory.
 
 <p class="eyebrow">First-class rendering</p>
 
-## A plan is not one kind of information, so it should not render as one
+## A large library of components, so a plan renders as what it is
 
-Most of a plan is prose, and prose renders as prose. But a plan also carries decisions, code
-changes, schemas, file moves, API contracts, and screens — and each of those reads far better as
-the thing it is than as another paragraph describing it.
+Most of a plan is prose. But a plan also carries decisions, code changes, schemas, API
+contracts, and screens — and each of those reads far better as the thing it is than as another
+paragraph describing it.
 
-So Big Plan gives twenty kinds of plan information their own **first-class rendering**. The agent
-picks the right one and fills in the content; it never designs a layout, which is why the tenth
-plan you review reads exactly like the first.
+So Big Plan ships a **library of twenty components**, each one a first-class rendering of a kind
+of plan information. The agent picks the right component and fills in the content; it never
+designs a layout, which is why the tenth plan you review reads exactly like the first.
 
 <div class="kinds">
   <div>
     <h3>Decisions</h3>
     <ul>
-      <li>
-        <a href="/components/quick-decision/">QuickDecision</a>
-        <span>One small question, answered from the option titles alone</span>
-      </li>
       <li>
         <a href="/components/decision/">Decision</a>
         <span>A tradeoff read option by option, with its considerations</span>
@@ -149,14 +143,6 @@ plan you review reads exactly like the first.
         <span>A change with gutters, counts, and line-anchored notes</span>
       </li>
       <li>
-        <a href="/components/code-snippet/">CodeSnippet</a>
-        <span>Existing code, with real file identity and line numbers</span>
-      </li>
-      <li>
-        <a href="/components/file-tree/">FileTree</a>
-        <span>Where code lives, or where it will</span>
-      </li>
-      <li>
         <a href="/components/file-tree-diff/">FileTreeDiff</a>
         <span>Added, modified, removed, and renamed in one tree</span>
       </li>
@@ -173,22 +159,10 @@ plan you review reads exactly like the first.
         <a href="/components/database-table-schema/">DatabaseTableSchema</a>
         <span>One table, its keys, indexes, and verbatim DDL</span>
       </li>
-      <li>
-        <a href="/components/http-endpoint/">HttpEndpoint</a>
-        <span>Parameters, request body, status-coded responses</span>
-      </li>
-      <li>
-        <a href="/components/graphql-operation/">GraphqlOperation</a>
-        <span>One query or mutation, with its payload shape</span>
-      </li>
-      <li>
-        <a href="/components/grpc-method/">GrpcMethod</a>
-        <span>A streaming-aware signature and its status codes</span>
-      </li>
     </ul>
   </div>
   <div>
-    <h3>Pictures and structure</h3>
+    <h3>Pictures</h3>
     <ul>
       <li>
         <a href="/components/wireframe/">Wireframe</a>
@@ -198,26 +172,14 @@ plan you review reads exactly like the first.
         <a href="/components/flow-diagram/">FlowDiagram</a>
         <span>A staged story in cards and labelled connectors</span>
       </li>
-      <li>
-        <a href="/components/mermaid-diagram/">MermaidDiagram</a>
-        <span>Sequence, state, class, ER, and general graphs</span>
-      </li>
-      <li>
-        <a href="/components/quick-summary/">QuickSummary</a>
-        <span>The card that opens every plan: why, what, how</span>
-      </li>
-      <li>
-        <a href="/components/table-of-contents/">TableOfContents</a>
-        <span>The whole argument in one look, before you read it</span>
-      </li>
-      <li>
-        <a href="/components/slide/">Slide</a> · <a href="/components/part/">Part</a> ·{" "}
-        <a href="/components/callout/">Callout</a>
-        <span>Typed sections, numbered acts, and the one thing not to miss</span>
-      </li>
     </ul>
   </div>
 </div>
+
+<p class="kinds-more">
+  Eight of twenty. <a href="/components/">See the whole library</a> — API contracts, diagrams,
+  code excerpts, callouts, and the structure components that shape the document itself.
+</p>
 
 </section>
 
@@ -275,26 +237,30 @@ documents, with working navigation, copy, and maximize controls.
 
 <p class="eyebrow">Next</p>
 
-## Where to go from here
+## Next Steps
 
-<div class="closers">
-  <a href="/intro/what-is-big-plan/">
-    <strong>What is Big Plan?</strong>
+<ul class="next-steps">
+  <li>
+    <a href="/intro/first-review/">Your first review</a>
+    <span>One plan from download to approval, in about five minutes.</span>
+  </li>
+  <li>
+    <a href="/intro/what-is-big-plan/">What is Big Plan?</a>
     <span>What it is, and what it deliberately is not.</span>
-  </a>
-  <a href="/intro/ui-review/">
-    <strong>UI review</strong>
+  </li>
+  <li>
+    <a href="/intro/ui-review/">UI review</a>
     <span>What it looks like, in real screenshots.</span>
-  </a>
-  <a href="/review/">
-    <strong>How it works</strong>
+  </li>
+  <li>
+    <a href="/review/">How it works</a>
     <span>The whole loop, from guidance to approval.</span>
-  </a>
-  <a href="/intro/first-review/">
-    <strong>Your first review</strong>
-    <span>One plan from download to approval, in five minutes.</span>
-  </a>
-</div>
+  </li>
+  <li>
+    <a href="/samples/">Sample plans</a>
+    <span>Four real plans you can open right now.</span>
+  </li>
+</ul>
 
 </section>
 
