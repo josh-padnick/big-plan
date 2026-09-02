@@ -8349,8 +8349,12 @@ describe("review runtime approval", () => {
           path: "/api/change-verdicts",
         });
         await expect(verdicts.json()).resolves.toMatchObject({
-          accepted: [
-            expect.objectContaining({ from: digest, to: publishedDigest }),
+          decided: [
+            expect.objectContaining({
+              from: digest,
+              to: publishedDigest,
+              verdict: "accepted",
+            }),
           ],
         });
       },
