@@ -385,6 +385,9 @@ test("should show a rejected change and let the reviewer undo it", async ({
     await expect(page.locator("[data-review-historical-changes]")).toHaveCount(
       0,
     );
+    await expect(
+      stepper(page).getByRole("button", { name: "View changes" }),
+    ).toHaveCount(0);
     const undone = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/change-verdicts") &&

@@ -260,6 +260,9 @@ export const DiffTourProvider = ({
   const isActiveRejected = activeDisposition === "rejected";
   const isShowingActiveChanges =
     active !== undefined && shownChangesPlaceId === active.placeId;
+  useEffect(() => {
+    if (isActiveRejected) setShownChangesPlaceId(null);
+  }, [isActiveRejected]);
   const standing =
     tour === null
       ? null
@@ -497,25 +500,27 @@ export const DiffTourProvider = ({
                           plan is one control away, so the reviewer can check
                           what they accepted - and unaccept against the same
                           view that produced the acceptance. */}
-                      <Button
-                        variant="outline"
-                        size="micro"
-                        aria-pressed={isShowingActiveChanges}
-                        onClick={() =>
-                          setShownChangesPlaceId(
-                            isShowingActiveChanges ? null : active.placeId,
-                          )
-                        }
-                      >
-                        <Icon
-                          icon={
-                            isShowingActiveChanges ? EYE_OFF_ICON : EYE_ICON
+                      {isActiveRejected ? null : (
+                        <Button
+                          variant="outline"
+                          size="micro"
+                          aria-pressed={isShowingActiveChanges}
+                          onClick={() =>
+                            setShownChangesPlaceId(
+                              isShowingActiveChanges ? null : active.placeId,
+                            )
                           }
-                        />
-                        {isShowingActiveChanges
-                          ? "Hide changes"
-                          : "View changes"}
-                      </Button>
+                        >
+                          <Icon
+                            icon={
+                              isShowingActiveChanges ? EYE_OFF_ICON : EYE_ICON
+                            }
+                          />
+                          {isShowingActiveChanges
+                            ? "Hide changes"
+                            : "View changes"}
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="micro"

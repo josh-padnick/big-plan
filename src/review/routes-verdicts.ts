@@ -267,29 +267,39 @@ export const recordChangeVerdicts = async (
 ): Promise<ReviewRouteResponse> => {
   const { changeVerdicts } = context;
   let mutation: ChangeVerdictMutation;
-  let before: ReadonlyArray<string>;
   let verdicts: StoredChangeVerdicts;
-  let previous: StoredChangeVerdicts;
+  let captured:
+    | {
+        readonly previous: StoredChangeVerdicts;
+        readonly rejected: ReadonlyArray<string>;
+      }
+    | undefined;
   try {
     mutation = validateChangeVerdictMutation({
       value: payloadOf(request.body),
       now: new Date().toISOString(),
     });
-    previous = await changeVerdicts.read();
-    before = rejectedPlaceIdsFor({
-      verdicts: previous,
-      from: mutation.from,
-      to: mutation.to,
+    verdicts = await changeVerdicts.update((current) => {
+      captured = {
+        previous: current,
+        rejected: rejectedPlaceIdsFor({
+          verdicts: current,
+          from: mutation.from,
+          to: mutation.to,
+        }),
+      };
+      return applyChangeVerdictMutation({ verdicts: current, mutation });
     });
-    verdicts = await changeVerdicts.update((current) =>
-      applyChangeVerdictMutation({ verdicts: current, mutation }),
-    );
   } catch (error: unknown) {
     if (error instanceof ChangeVerdictsRejected) {
       return refusal({ status: 400, reason: error.message });
     }
     throw error;
   }
+  if (captured === undefined) {
+    throw new Error("The verdict update did not inspect the stored record");
+  }
+  const { previous, rejected: before } = captured;
   const after = rejectedPlaceIdsFor({
     verdicts,
     from: mutation.from,
