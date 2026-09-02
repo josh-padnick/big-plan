@@ -801,13 +801,16 @@ export const AgentChangeDigest = ({
                 ? "Accept all changes"
                 : UNRECORDABLE_ACCEPTANCE_LABEL
             }
-            onClick={() =>
-              setPlacesDecided(
-                diff,
-                available.map((place) => place.placeId),
-                "accepted",
-              )
-            }
+            onClick={() => {
+              const undecided = available
+                .filter(
+                  (place) => dispositionOf(diff, place.placeId) === "undecided",
+                )
+                .map((place) => place.placeId);
+              if (undecided.length > 0) {
+                setPlacesDecided(diff, undecided, "accepted");
+              }
+            }}
           >
             Accept all
           </Button>

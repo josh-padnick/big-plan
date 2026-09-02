@@ -331,7 +331,7 @@ export const recordChangeVerdicts = async (
   if (captured === undefined) {
     throw new Error("The verdict update did not inspect the stored record");
   }
-  const { previous, rejected: before } = captured;
+  const { previous, result, rejected: before } = captured;
   const after = rejectedPlaceIdsFor({
     verdicts,
     from: mutation.from,
@@ -358,7 +358,7 @@ export const recordChangeVerdicts = async (
     const compensation = inverseOf(mutation, previous);
     if (compensation !== undefined) {
       await changeVerdicts.update((current) =>
-        mutationResultIsCurrent({ current, result: captured.result, mutation })
+        mutationResultIsCurrent({ current, result, mutation })
           ? applyChangeVerdictMutation({
               verdicts: current,
               mutation: compensation,

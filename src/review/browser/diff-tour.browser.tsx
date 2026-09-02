@@ -458,13 +458,18 @@ export const DiffTourProvider = ({
                           ? "Accept all changes"
                           : UNRECORDABLE_ACCEPTANCE_LABEL
                       }
-                      onClick={() =>
-                        setPlacesDecided(
-                          tour.diff,
-                          places.map((place) => place.placeId),
-                          "accepted",
-                        )
-                      }
+                      onClick={() => {
+                        const undecided = places
+                          .filter(
+                            (place) =>
+                              dispositionOf(tour.diff, place.placeId) ===
+                              "undecided",
+                          )
+                          .map((place) => place.placeId);
+                        if (undecided.length > 0) {
+                          setPlacesDecided(tour.diff, undecided, "accepted");
+                        }
+                      }}
                     >
                       Accept all
                     </Button>

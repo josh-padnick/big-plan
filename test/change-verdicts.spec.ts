@@ -408,6 +408,59 @@ test("should show a rejected change and let the reviewer undo it", async ({
         (entry) => entry.verdict === "rejected",
       ),
     ).toHaveLength(1);
+
+    const stepperAccepted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/change-verdicts") &&
+        response.request().method() === "POST",
+    );
+    await stepper(page)
+      .getByRole("button", { name: "Accept all changes" })
+      .click();
+    expect((await stepperAccepted).ok()).toBe(true);
+    expect(await recordedChanges(verdictsPath)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ verdict: "accepted" }),
+        expect.objectContaining({ verdict: "rejected" }),
+      ]),
+    );
+    await expect(page.locator("article")).toContainText(
+      "Rolling back is automatic.",
+    );
+    await expect(page.locator("article")).not.toContainText(
+      "Rolling back is a manual step the release engineer runs by hand.",
+    );
+
+    const unaccepted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/change-verdicts") &&
+        response.request().method() === "POST",
+    );
+    await stepper(page).getByRole("button", { name: "Back to review" }).click();
+    await stepper(page)
+      .getByRole("button", { name: "Unaccept this change" })
+      .click();
+    expect((await unaccepted).ok()).toBe(true);
+    await stepper(page).getByRole("button", { name: "Exit review" }).click();
+
+    const railAccepted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/change-verdicts") &&
+        response.request().method() === "POST",
+    );
+    await rail(page)
+      .getByRole("button", { name: "Accept all changes" })
+      .click();
+    expect((await railAccepted).ok()).toBe(true);
+    expect(await recordedChanges(verdictsPath)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ verdict: "accepted" }),
+        expect.objectContaining({ verdict: "rejected" }),
+      ]),
+    );
+    await expect(page.locator("article")).toContainText(
+      "Rolling back is automatic.",
+    );
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
