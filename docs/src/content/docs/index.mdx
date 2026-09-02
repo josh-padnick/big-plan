@@ -3,8 +3,8 @@ title: Big Plan
 description: Review agent plans and reach agreement before an agent acts.
 template: splash
 hero:
-  title: Big Plan
-  tagline: Agree on the plan before the agent acts.
+  title: Agree on the plan before the agent acts
+  tagline: Your agent writes the plan. Big Plan renders it as a document built for review, on your machine, with no account.
   image:
     alt: The example plan rendered in the Big Plan viewer, with section navigation and a themed reading column.
     light: ../../assets/viewer-light.png
@@ -13,118 +13,289 @@ hero:
     - text: Install now
       link: /intro/installation/
       icon: right-arrow
+      variant: primary
       attrs:
         data-install-prompt-trigger: ""
-    - text: See a sample plan
-      link: /samples/
-      icon: document
+    - text: Read the docs
+      link: /intro/what-is-big-plan/
+      icon: open-book
+      variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import { Aside } from "@astrojs/starlight/components";
 import InstallPrompt from "../../components/InstallPrompt.astro";
+import ThemeImage from "../../components/ThemeImage.astro";
+import rateLimitingLight from "../../assets/samples/rate-limiting-light.png";
+import rateLimitingDark from "../../assets/samples/rate-limiting-dark.png";
+import retryQueueLight from "../../assets/samples/retry-queue-light.png";
+import retryQueueDark from "../../assets/samples/retry-queue-dark.png";
+import workflowLight from "../../assets/samples/workflow-builder-light.png";
+import workflowDark from "../../assets/samples/workflow-builder-dark.png";
+import allComponentsLight from "../../assets/samples/all-components-light.png";
+import allComponentsDark from "../../assets/samples/all-components-dark.png";
 
-Your agent writes the plan. Big Plan renders it as a document built for review, on your machine,
-with no account and no third-party service.
+<InstallPrompt prompt="Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it." />
 
-## Set it up with one prompt
+<Aside type="caution" title="Big Plan is in alpha">
+  Commands, the plan format, and the rendered output may change together while the product finds
+  its cleanest model. Your plan file, your privacy, and the guarantee that a plan never executes
+  are not among the things that will move. [What alpha means here](/alpha/).
+</Aside>
 
-Paste this into your coding agent:
+<div class="landing">
+
+<section class="band">
+
+<p class="eyebrow">The problem</p>
+
+## The most important document in the workflow is the least readable one
+
+An agent's plan usually arrives as thousands of words of Markdown, scrolled past in a terminal or
+skimmed in a raw diff. When reading the plan is painful, review quietly collapses into
+rubber-stamping — and the decisions that matter most go unexamined.
+
+The big decisions happen in the plan, while they are still cheap to change. Once execution
+starts, changing course means unwinding work. While the plan is on the table, changing everything
+costs one comment.
+
+<div class="value-grid">
+  <div>
+    <h3>Read it, don't scroll it</h3>
+    <p>
+      Section navigation, a summary card, readable code, and purpose-built presentation for
+      decisions, diffs, schemas, and screens.
+    </p>
+  </div>
+  <div>
+    <h3>Point at the thing you mean</h3>
+    <p>
+      Comment on a slide, a component, or a sentence. The note is anchored to that block and
+      stays anchored when the agent rewrites around it.
+    </p>
+  </div>
+  <div>
+    <h3>Decide, don't just discuss</h3>
+    <p>
+      A plan can ask you questions. Answer them in place, and approval writes your answers into
+      the plan file itself.
+    </p>
+  </div>
+  <div>
+    <h3>Nothing leaves your machine</h3>
+    <p>
+      No account, no service. The rendered document makes no external requests, and a plan can
+      never introduce code into it.
+    </p>
+  </div>
+</div>
+
+</section>
+
+<section class="band band-quiet">
+
+<p class="eyebrow">Set up</p>
+
+## One prompt, and your agent does the rest
+
+Paste this into your coding agent. It needs Node.js 22 or newer and installs nothing globally.
 
 ```text
 Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.
 ```
 
-<InstallPrompt prompt="Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it." />
+The linked setup guide is server-controlled and stays current as Big Plan changes, so the prompt
+never has to. Prefer to do it yourself? `npx -y big-plan@latest guidance` prints the plan-writing
+principles and unlocks the rest of the workflow for that directory.
 
-It needs Node.js 22 or newer, and it installs nothing globally. The linked
-[setup guide](/setup.md) stays current as Big Plan changes, so the prompt never does.
+</section>
 
-Prefer to do it yourself? `npx -y big-plan@latest guidance` prints the plan-writing principles
-and unlocks the rest of the workflow for that directory.
+<section class="band">
 
-## Pick where to start
+<p class="eyebrow">First-class rendering</p>
 
-<CardGrid>
-  <Card title="See how it works" icon="comment">
-    The whole loop in one page: your agent writes a plan, you read it as a document, comment on
-    it, answer its questions, and approve.
+## A plan is not one kind of information, so it should not render as one
 
-    [Open How it works →](/review/)
-  </Card>
-  <Card title="Write a plan a human wants to read" icon="pencil">
-    What a plan file may contain, the twenty components, the five slide types, and the fix for
-    every diagnostic the validator raises.
+Most of a plan is prose, and prose renders as prose. But a plan also carries decisions, code
+changes, schemas, file moves, API contracts, and screens — and each of those reads far better as
+the thing it is than as another paragraph describing it.
 
-    [Open Write a plan →](/authoring/)
-  </Card>
-  <Card title="Operate Big Plan as a coding agent" icon="rocket">
-    Set it up for your human, write and validate a plan, answer reviewer feedback, and handle
-    an approval.
+So Big Plan gives twenty kinds of plan information their own **first-class rendering**. The agent
+picks the right one and fills in the content; it never designs a layout, which is why the tenth
+plan you review reads exactly like the first.
 
-    [Open For agents →](/for-agents/)
-  </Card>
-</CardGrid>
+<div class="kinds">
+  <div>
+    <h3>Decisions</h3>
+    <ul>
+      <li>
+        <a href="/components/quick-decision/">QuickDecision</a>
+        <span>One small question, answered from the option titles alone</span>
+      </li>
+      <li>
+        <a href="/components/decision/">Decision</a>
+        <span>A tradeoff read option by option, with its considerations</span>
+      </li>
+      <li>
+        <a href="/components/decision-analysis/">DecisionAnalysis</a>
+        <span>A weighted criteria matrix you can audit</span>
+      </li>
+    </ul>
+  </div>
+  <div>
+    <h3>Code and files</h3>
+    <ul>
+      <li>
+        <a href="/components/code-diff/">CodeDiff</a>
+        <span>A change with gutters, counts, and line-anchored notes</span>
+      </li>
+      <li>
+        <a href="/components/code-snippet/">CodeSnippet</a>
+        <span>Existing code, with real file identity and line numbers</span>
+      </li>
+      <li>
+        <a href="/components/file-tree/">FileTree</a>
+        <span>Where code lives, or where it will</span>
+      </li>
+      <li>
+        <a href="/components/file-tree-diff/">FileTreeDiff</a>
+        <span>Added, modified, removed, and renamed in one tree</span>
+      </li>
+    </ul>
+  </div>
+  <div>
+    <h3>Data and contracts</h3>
+    <ul>
+      <li>
+        <a href="/components/data-table/">DataTable</a>
+        <span>A dataset you can sort, filter, group, and reshape</span>
+      </li>
+      <li>
+        <a href="/components/database-table-schema/">DatabaseTableSchema</a>
+        <span>One table, its keys, indexes, and verbatim DDL</span>
+      </li>
+      <li>
+        <a href="/components/http-endpoint/">HttpEndpoint</a>
+        <span>Parameters, request body, status-coded responses</span>
+      </li>
+      <li>
+        <a href="/components/graphql-operation/">GraphqlOperation</a>
+        <span>One query or mutation, with its payload shape</span>
+      </li>
+      <li>
+        <a href="/components/grpc-method/">GrpcMethod</a>
+        <span>A streaming-aware signature and its status codes</span>
+      </li>
+    </ul>
+  </div>
+  <div>
+    <h3>Pictures and structure</h3>
+    <ul>
+      <li>
+        <a href="/components/wireframe/">Wireframe</a>
+        <span>True-size screens, connected into a walkable prototype</span>
+      </li>
+      <li>
+        <a href="/components/flow-diagram/">FlowDiagram</a>
+        <span>A staged story in cards and labelled connectors</span>
+      </li>
+      <li>
+        <a href="/components/mermaid-diagram/">MermaidDiagram</a>
+        <span>Sequence, state, class, ER, and general graphs</span>
+      </li>
+      <li>
+        <a href="/components/quick-summary/">QuickSummary</a>
+        <span>The card that opens every plan: why, what, how</span>
+      </li>
+      <li>
+        <a href="/components/table-of-contents/">TableOfContents</a>
+        <span>The whole argument in one look, before you read it</span>
+      </li>
+      <li>
+        <a href="/components/slide/">Slide</a> · <a href="/components/part/">Part</a> ·{" "}
+        <a href="/components/callout/">Callout</a>
+        <span>Typed sections, numbered acts, and the one thing not to miss</span>
+      </li>
+    </ul>
+  </div>
+</div>
 
-## What a plan is made of
+</section>
 
-A plan is Markdown plus a closed set of components, so every plan renders into the same
-document shape. The agent spends its effort on the decisions rather than the presentation.
+<section class="band band-quiet">
 
-<CardGrid>
-  <LinkCard
-    title="Decision"
-    href="/components/decision/"
-    description="A tradeoff read option by option, each with its own verdict-lined considerations."
-  />
-  <LinkCard
-    title="CodeDiff"
-    href="/components/code-diff/"
-    description="One file's diff with gutters, change counts, and line-anchored annotations."
-  />
-  <LinkCard
-    title="Wireframe"
-    href="/components/wireframe/"
-    description="True-size product screens connected into a short walkable prototype."
-  />
-  <LinkCard
-    title="DatabaseTableSchema"
-    href="/components/database-table-schema/"
-    description="One table's schema, with key badges, foreign keys, indexes, and verbatim DDL."
-  />
-</CardGrid>
+<p class="eyebrow">See one</p>
 
-[See all twenty components →](/components/)
+## Four real plans, open in your browser
 
-## Read a real one
+Rendered by the current CLI from the repository's own examples. Not screenshots — the actual
+documents, with working navigation, copy, and maximize controls.
 
-Four plans, rendered by the current CLI from the repository's own examples, open in your
-browser: [a short plan](/samples/rate-limiting/), [one shaped as a
-deck](/samples/retry-queue/), [a UI-heavy one with clickable
-wireframes](/samples/workflow-builder/), and [one that uses every
-component](/samples/all-components/).
+<div class="samples">
+  <a class="sample" href="/plans/rate-limiting/">
+    <span class="shot">
+      <ThemeImage light={rateLimitingLight} dark={rateLimitingDark} alt="The rate limiting plan open in the Big Plan viewer" />
+    </span>
+    <span class="meta">
+      <strong>Rate limiting for a public API</strong>
+      <span>A short, ordinary plan. Start here.</span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/retry-queue/">
+    <span class="shot">
+      <ThemeImage light={retryQueueLight} dark={retryQueueDark} alt="The payments retry queue plan, structured as a deck of numbered acts" />
+    </span>
+    <span class="meta">
+      <strong>A payments retry queue</strong>
+      <span>The same shape, organised as a deck.</span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/workflow-builder/">
+    <span class="shot">
+      <ThemeImage light={workflowLight} dark={workflowDark} alt="The workflow builder plan, showing a wireframe prototype of eleven screens" />
+    </span>
+    <span class="meta">
+      <strong>A workflow builder surface</strong>
+      <span>Eleven wireframe screens you can click through.</span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/all-components/">
+    <span class="shot">
+      <ThemeImage light={allComponentsLight} dark={allComponentsDark} alt="A plan that renders every Big Plan component in one document" />
+    </span>
+    <span class="meta">
+      <strong>Every component at once</strong>
+      <span>A gallery rather than a plan.</span>
+    </span>
+  </a>
+</div>
 
-## Before you start
+</section>
 
-:::caution[Pre-alpha]
-Big Plan has no compatibility contract until an explicit milestone establishes one.
-Commands, document formats, and rendered output may change together as the product finds its
-cleanest model.
-:::
+<section class="band">
 
-<CardGrid>
-  <LinkCard
-    title="What is Big Plan?"
-    href="/intro/what-is-big-plan/"
-    description="What it is, and what it deliberately is not."
-  />
-  <LinkCard
-    title="UI review"
-    href="/intro/ui-review/"
-    description="What it actually looks like, in real screenshots."
-  />
-  <LinkCard
-    title="Sample plans"
-    href="/samples/"
-    description="Four real plans you can open and read right now."
-  />
-</CardGrid>
+<p class="eyebrow">Next</p>
+
+## Where to go from here
+
+<div class="closers">
+  <a href="/intro/what-is-big-plan/">
+    <strong>What is Big Plan?</strong>
+    <span>What it is, and what it deliberately is not.</span>
+  </a>
+  <a href="/intro/ui-review/">
+    <strong>UI review</strong>
+    <span>What it looks like, in real screenshots.</span>
+  </a>
+  <a href="/review/">
+    <strong>How it works</strong>
+    <span>The whole loop, from guidance to approval.</span>
+  </a>
+  <a href="/intro/first-review/">
+    <strong>Your first review</strong>
+    <span>One plan from download to approval, in five minutes.</span>
+  </a>
+</div>
+
+</section>
+
+</div>

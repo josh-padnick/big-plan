@@ -117,6 +117,10 @@ const { prompt } = Astro.props;
 
 <style>
   dialog {
+    /* A modal dialog is centred by the user-agent `margin: auto`, which a
+       global reset can flatten. Stating it here keeps the prompt in the middle
+       of the viewport instead of the top-left corner. */
+    margin: auto;
     width: min(36rem, calc(100% - 2rem));
     border: 1px solid var(--sl-color-gray-5);
     border-radius: 0.75rem;

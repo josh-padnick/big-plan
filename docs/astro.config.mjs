@@ -60,6 +60,12 @@ export default defineConfig({
       },
       // The shared sidebar module also drives the llms.txt page map.
       sidebar: [...SIDEBAR],
+      // The site title carries the alpha marker, which links to the page
+      // explaining what alpha means rather than asserting it in passing.
+      components: {
+        SiteTitle: "./src/components/SiteTitle.astro",
+      },
+      customCss: ["./src/styles/site.css"],
     }),
   ],
 });
