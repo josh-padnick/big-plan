@@ -90,6 +90,7 @@ import {
   publishReviewImage,
   readProgress,
   writeComments,
+  writeChangeVerdicts,
   writeResolvedCommentIds,
   writeSnapshot,
 } from "./store.js";
@@ -1587,6 +1588,73 @@ Two workers drain the queue every two seconds.
       expect(source).toContain(
         "Two workers drain the queue every two seconds.",
       );
+    });
+  });
+
+  it("should reconcile persisted rejection bytes when verdict state is read", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const placeId = placeFor(places, "durable");
+      await writeChangeVerdicts({
+        store: target.store,
+        verdicts: {
+          version: 1,
+          revision: 1,
+          decided: [
+            {
+              from: FROM,
+              to: TO,
+              placeId,
+              verdict: "rejected",
+              decidedAt: "2026-09-02T12:00:00.000Z",
+              actor: "reviewer",
+            },
+          ],
+        },
+      });
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+
+      expect(response.status).toBe(200);
+      const source = await readFile(planPath, "utf8");
+      expect(source).toContain("wait in a durable queue.");
+      expect(source).not.toContain("durable Postgres queue");
+    });
+  });
+
+  it("should leave an unexplainable plan untouched when verdict state is read", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const moved = `${PROPOSED}\nA later revision landed.\n`;
+      await writeFile(planPath, moved);
+      await writeChangeVerdicts({
+        store: target.store,
+        verdicts: {
+          version: 1,
+          revision: 1,
+          decided: [
+            {
+              from: FROM,
+              to: TO,
+              placeId: placeFor(places, "durable"),
+              verdict: "rejected",
+              decidedAt: "2026-09-02T12:00:00.000Z",
+              actor: "reviewer",
+            },
+          ],
+        },
+      });
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
     });
   });
 

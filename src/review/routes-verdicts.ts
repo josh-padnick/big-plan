@@ -61,11 +61,6 @@ const verdictState = (verdicts: StoredChangeVerdicts): ReviewRouteResponse =>
   });
 
 /** Reads the recorded verdicts with the revision that produced them. */
-export const readChangeVerdictState = async (
-  context: ReviewRouteContext,
-): Promise<ReviewRouteResponse> =>
-  verdictState(await context.changeVerdicts.read());
-
 /**
  * Brings the plan source into agreement with a revision's rejected places.
  *
@@ -106,8 +101,9 @@ const reconcilePlanSource = async ({
   const expectedSource = restored(before);
   const nextSource = restored(after);
   if (expectedSource === nextSource) return;
-  const expectedSnapshot = deriveSnapshotDigest(expectedSource);
   const currentSource = await readFile(resolvedPlanPath, "utf8");
+  if (currentSource === nextSource) return;
+  const expectedSnapshot = deriveSnapshotDigest(expectedSource);
   if (deriveSnapshotDigest(currentSource) !== expectedSnapshot) {
     throw new ChangeRestoreRejected(PLAN_MOVED_REASON);
   }
@@ -124,6 +120,59 @@ const reconcilePlanSource = async ({
     source: nextSource,
   });
   readerProgress.accept(nextSnapshot);
+};
+
+/** Repairs a verdict write whose following derived-source write was interrupted. */
+const reconcileRecordedRejections = async ({
+  context,
+  verdicts,
+}: {
+  readonly context: ReviewRouteContext;
+  readonly verdicts: StoredChangeVerdicts;
+}): Promise<void> => {
+  const revisions = new Map<string, { from: string; to: string }>();
+  for (const entry of verdicts.decided) {
+    if (entry.verdict !== "rejected") continue;
+    revisions.set(`${entry.from}:${entry.to}`, {
+      from: entry.from,
+      to: entry.to,
+    });
+  }
+  for (const { from, to } of revisions.values()) {
+    const after = rejectedPlaceIdsFor({ verdicts, from, to });
+    const rejected = verdicts.decided.filter(
+      (entry) =>
+        entry.verdict === "rejected" && entry.from === from && entry.to === to,
+    );
+    const latestDecision = rejected.reduce(
+      (latest, entry) =>
+        entry.decidedAt > latest ? entry.decidedAt : latest,
+      "",
+    );
+    const before = rejected
+      .filter((entry) => entry.decidedAt !== latestDecision)
+      .map((entry) => entry.placeId);
+    try {
+      await reconcilePlanSource({ context, from, to, before, after });
+    } catch (error: unknown) {
+      if (
+        error instanceof ChangeRestoreRejected &&
+        error.message === PLAN_MOVED_REASON
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+};
+
+/** Reads the recorded verdicts and repairs an interrupted rejection publish. */
+export const readChangeVerdictState = async (
+  context: ReviewRouteContext,
+): Promise<ReviewRouteResponse> => {
+  const verdicts = await context.changeVerdicts.read();
+  await reconcileRecordedRejections({ context, verdicts });
+  return verdictState(verdicts);
 };
 
 const inverseOf = (
