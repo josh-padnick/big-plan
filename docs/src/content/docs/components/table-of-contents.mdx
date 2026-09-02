@@ -3,13 +3,29 @@ title: TableOfContents
 description: The plan in one look - one linked row per section, each carrying the section's one-line gist.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import table_of_contentsLight from "../../../assets/components/table-of-contents-light.png";
+import table_of_contentsDark from "../../../assets/components/table-of-contents-dark.png";
+
 `TableOfContents` shows the whole argument before the reader commits to any of it: one row per section, each row a link carrying the section name and its one-line gist.
 Big Plan completes the overview at render time with slide numbers, section links, and group headers derived from the plan's [Part](/components/part/) dividers, so the author writes only the entries.
+
+## How it looks
+
+<ThemeImage
+  light={table_of_contentsLight}
+  dark={table_of_contentsDark}
+  alt="A table of contents with one linked row per section and its one-line gist"
+/>
 
 ## When to use it
 
 Place one `TableOfContents` directly after the `QuickSummary`, before the first `Part` or section.
 Skip it only in a very short plan whose sidebar navigation already tells the whole story.
+
+### When not to use it
+
+Do not use it in a very short plan whose sidebar navigation already tells the whole story, and never let a gist become a topic label instead of a takeaway.
 
 ## Authoring
 

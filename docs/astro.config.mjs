@@ -7,6 +7,16 @@ import { SIDEBAR } from "./src/sidebar";
 
 export default defineConfig({
   site: "https://bigplan.dev",
+  // Every path the job-shaped reorganization moved still resolves.
+  redirects: {
+    "/architecture": "/concepts/how-it-works/",
+    "/intro/features": "/review/",
+    "/reference/cli": "/reference/",
+    "/reference/reviewing": "/review/",
+    "/reference/security": "/concepts/security-policy/",
+    "/for-agents/render-a-plan": "/for-agents/write-and-validate/",
+    "/for-agents/authoring-plans": "/authoring/",
+  },
   integrations: [
     mermaid(),
     starlight({

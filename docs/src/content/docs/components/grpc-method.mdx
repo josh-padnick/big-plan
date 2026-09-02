@@ -26,6 +26,10 @@ Use `GrpcMethod` when a plan proposes or changes an RPC and the reviewer should 
 - Loose proto samples with no method contract to review - use a plain fence
 - Whole-service or message-heavy schema dumps - the card documents one method; larger proto excerpts belong in prose or fences
 
+## Compared with
+
+- **[`HttpEndpoint`](/components/http-endpoint/)** and **[`GraphqlOperation`](/components/graphql-operation/)** — the same card shape for the other two transports.
+
 ## Use cases
 
 - Propose a streaming RPC where the streaming kind must be unmissable - the signature places the `stream` keyword and the badge names the kind, which even Google's reference fails to surface

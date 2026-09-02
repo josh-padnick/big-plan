@@ -1,6 +1,6 @@
 ---
 title: How Big Plan works
-description: Why Big Plan treats a plan as a compiled document, and how that design produces machine-readable JSON, a self-contained review document, or portable Markdown.
+description: Why Big Plan treats a plan as a compiled document, and how that design produces JSON, an HTML review document, or portable Markdown.
 ---
 
 Big Plan's central architectural idea is to treat an authored plan like source code rather than an HTML template.
@@ -48,7 +48,7 @@ A plan is an MDX document made from Markdown and built-in components.
 Imports, exports, expressions, and inline JSX are rejected.
 A plan is prose plus components, nothing else.
 That keeps every plan greppable and diffable, which the review workflow depends on, and it means the renderer never has to run code an agent wrote.
-The full contract lives in [Authoring plans](/for-agents/authoring-plans/) and [Linting rules](/reference/lint-rules/).
+The full contract lives in [Writing plans](/authoring/) and [Linting rules](/reference/lint-rules/).
 
 ## Slide vocabulary is shared data
 
@@ -108,15 +108,7 @@ See the [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blo
 Rendering the static artifact touches no server, account, or other machine.
 The live `review` command adds a loopback runtime with a per-plan review token so the browser and local coding agent can exchange comments, progress, and responses; its owner-only state remains beside the plan on the reviewer's machine.
 
-## One writer owns the plan source
+## Next
 
-The plan file on disk is authoritative, and exactly one code path may write it.
-An agent's edits go into a claim-scoped stage rather than the plan itself.
-A stage publishes only under the plan-mutation lock, only while the recorded lock holder, the claim generation, and the source's base digest all still hold, and only through a single atomic rename, with a journal written beforehand so an interrupted publish can be settled after a crash.
-
-A reviewer's revert crosses that same boundary and re-proves the digest it was computed against.
-That is why a revision an agent published while you were deciding refuses the revert instead of disappearing under it: the revert is rejected rather than silently applied to content it never saw.
-
-One local filesystem limit is accepted rather than fixed.
-Node offers no file-open relative to an already-open directory handle, so someone who can already write inside your plan directory can swap an ancestor directory between the moment a path is validated and the moment it is opened.
-Closing that race is not possible with the available primitives, and an attacker who can write in that directory already has the access the check would protect, so Big Plan documents the limit instead of pretending to remove it.
+[One writer owns the plan](/concepts/one-writer/) — why your plan file cannot be silently
+overwritten.

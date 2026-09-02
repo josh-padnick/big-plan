@@ -9,6 +9,19 @@ The big decisions happen in the plan, while they're still cheap to change.
 Plans are a big deal.
 Make yours a big plan.
 
+## Philosophy
+
+Big Plan makes two bets that shape everything else.
+
+**A plan should be structured, not freeform.** Plans are MDX with a fixed library of typed
+components, so every plan renders into the same document shape. The agent spends its effort on
+the decisions rather than the presentation, and the tenth plan you review reads exactly like
+the first.
+
+**A plan on your own disk should not require an account.** One standalone command renders it,
+the output is one HTML file, and nothing about reviewing it involves logging in or leaving your
+machine.
+
 ## Small plans and big plans
 
 In a typical AI workflow, the more confident you are in the plan, the better your agent performs at execution, and the faster your final review goes.
@@ -53,6 +66,6 @@ For how Big Plan compares to its closest neighbors, Lavish and Agent-Native Plan
 An agent writes its plan as a document on disk, and Big Plan renders it into a local review document.
 Everything runs on your machine, the rendered file makes no external requests, and the plan file on your disk stays the source of truth.
 
-## Next step
+## Next
 
-[Render your first plan in under a minute.](/intro/installation/)
+[Install Big Plan](/intro/installation/) — Node.js 22, one command, nothing installed globally.

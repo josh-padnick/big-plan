@@ -3,8 +3,20 @@ title: QuickSummary
 description: A standout card of the plan's key points, capped at five bullets and six hundred characters so it stays a summary.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import quick_summaryLight from "../../../assets/components/quick-summary-light.png";
+import quick_summaryDark from "../../../assets/components/quick-summary-dark.png";
+
 `QuickSummary` opens a plan with the few points a reviewer must know, rendered as a labeled card that stands apart from body prose.
 Its caps are the point: a summary that cannot grow cannot become an aggregation of the whole plan.
+
+## How it looks
+
+<ThemeImage
+  light={quick_summaryLight}
+  dark={quick_summaryDark}
+  alt="A quick summary card with its Why hero band above What and How"
+/>
 
 ## When to use it
 
@@ -15,6 +27,10 @@ A reader who stops after it should know what will change, how it will work, whic
 
 Do not use it anywhere but the top of the document, and never as a section recap.
 If a point only matters to readers of one section, it belongs in that section.
+
+## Compared with
+
+- **[`Callout`](/components/callout/)** — reach for it for one thing a skimming reviewer must not miss anywhere in the plan. `QuickSummary` is the opening card, and there is exactly one per plan.
 
 ## Authoring
 

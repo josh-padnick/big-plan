@@ -3,16 +3,36 @@ title: FlowDiagram
 description: A staged diagram of tinted node cards joined by verb-labeled, directed connectors, with an explicit fork when one node feeds several.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import flow_diagramLight from "../../../assets/components/flow-diagram-light.png";
+import flow_diagramDark from "../../../assets/components/flow-diagram-dark.png";
+
 `FlowDiagram` diagrams genuinely relational content - flows, dependencies, fan-outs - as staged columns read left to right.
 Small-caps stage headers name what each column holds, and content-sized cards carry a bold label with an optional monospace identifier, status badge, and short body.
 Cards stay intrinsically sized for short content and wrap long labels, identifiers, URLs, and body text within a readable bound.
 Every connector touches its cards with an arrowhead pointing subject-to-object of its verb.
 When one node feeds several, the diagram draws an explicit branching fork rather than a lone arrow beside a stack.
 
+## How it looks
+
+<ThemeImage
+  light={flow_diagramLight}
+  dark={flow_diagramDark}
+  alt="A staged flow diagram with three stages joined by verb-labelled connectors"
+/>
+
 ## When to use it
 
 Reach for `FlowDiagram` when the point is a relationship: how an artifact travels, what depends on what, where one source fans out.
 A list of parallel claims is bullets, not a diagram.
+
+### When not to use it
+
+Do not use it for a list of claims dressed as boxes. If the arrows would not say anything, the content is a list. Do not use it for a general graph, a sequence, or a state machine either.
+
+## Compared with
+
+- **[`MermaidDiagram`](/components/mermaid-diagram/)** — reach for it for a general graph beyond a staged left-to-right story, or for a sequence, class, state, entity-relationship, schedule, journey, pie, mindmap, timeline, or git view.
 
 ## Authoring
 

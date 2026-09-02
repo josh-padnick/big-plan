@@ -1,5 +1,5 @@
 ---
-title: Use the skill
+title: Install and update the skill
 description: Install Big Plan's thin agent skill shell and keep authoring rules fresh via the CLI.
 ---
 
@@ -52,8 +52,8 @@ There is no silent overwrite of user skill directories.
 7. When the mailbox returns an `approval` request, re-read `planPath`, verify its digest equals `pinnedSnapshot`, acknowledge without editing the plan, and begin execution in your own harness.
    A missing path, a missing file, or a digest mismatch is a hard stop: report it through the response by adding `hardStop` (one line naming what you found), and do not search for another copy.
 
-Details for the review address live in [Reviewing a plan](/reference/reviewing/).
-Authoring constraints live in [Authoring plans](/for-agents/authoring-plans/).
+Details for the review address live in [Start a review](/review/start-a-review/).
+Authoring constraints live in [Writing plans](/authoring/).
 Both still defer style judgment to `big-plan guidance`.
 
 ## How captain pushes updates to end users

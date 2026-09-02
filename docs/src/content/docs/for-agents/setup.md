@@ -1,4 +1,7 @@
-# Set up Big Plan
+---
+title: Set Big Plan up for your human
+description: The one-time setup a coding agent performs so every future session uses the plan-review workflow.
+---
 
 You are a coding agent setting up Big Plan for your human.
 Big Plan renders an MDX plan file containing Markdown and built-in components into one self-contained HTML document your human reviews, so you reach agreement before you act.
@@ -59,7 +62,7 @@ Before implementing any non-trivial task:
 6. Do not start implementing until your human agrees.
    When they ask for changes, revise the plan file, validate again, and continue the live review.
 
-See [Reviewing a plan](https://bigplan.dev/reference/reviewing/) for the complete live-review workflow.
+See [Review a plan](https://bigplan.dev/review/) for the complete live-review workflow.
 
 For a portable artifact instead, `npx -y big-plan@latest render plan.mdx` writes a self-contained `plan.html` document next to the source. You can share that file by its absolute path or a `file://` URL, but it does not replace the live-review workflow above.
 
@@ -92,6 +95,11 @@ Report the CLI version, where you wrote the skill (if any), where you added the 
 
 - https://bigplan.dev/llms.txt - map of every docs page in clean markdown.
 - https://bigplan.dev/for-agents/use-the-skill.md - skill install and update strategy.
-- https://bigplan.dev/for-agents/render-a-plan.md - the operational rendering workflow.
-- https://bigplan.dev/for-agents/authoring-plans.md - the plan document format.
+- https://bigplan.dev/for-agents/write-and-validate.md - the authoring loop you run each session.
+- https://bigplan.dev/authoring.md - the plan document format.
 - https://bigplan.dev/reference/lint-rules.md - every authoring rule the validator enforces.
+
+## Related
+
+- [Write and validate a plan](/for-agents/write-and-validate/) — the loop you run each session.
+- [Install and update the skill](/for-agents/use-the-skill/) — how updates reach you.

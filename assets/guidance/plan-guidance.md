@@ -189,7 +189,7 @@ Every component's attributes and accepted shapes are at https://bigplan.dev/comp
 ## 11. Validate, render, and reread
 
 Run `big-plan validate <plan.mdx>` and fix every diagnostic until it passes; each one names its rule and its fix, which is why they are not repeated here.
-What the parser rejects is at https://bigplan.dev/for-agents/authoring-plans/, and every lint rule's exact boundaries are at https://bigplan.dev/reference/lint-rules/.
+What the parser rejects is at https://bigplan.dev/authoring/, and every lint rule's exact boundaries are at https://bigplan.dev/reference/lint-rules/.
 
 Passing lint means the plan is renderable and statically clean; it says nothing about whether the plan reads well, and that is the only bar that matters.
 Render the plan, then reread the rendered document exactly as the human will, top to bottom.

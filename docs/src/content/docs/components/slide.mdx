@@ -3,6 +3,10 @@ title: Slide
 description: The self-closing type marker that connects a recurring slide role to its specific authoring guidance and structural name.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import slideLight from "../../../assets/components/slide-light.png";
+import slideDark from "../../../assets/components/slide-dark.png";
+
 `Slide` applies one type from Big Plan's closed, guidance-bearing catalog to the heading immediately after it.
 Most markers describe an h2 slide.
 A `user-journey` marker can also describe an h3 sub-slide inside an h2 group.
@@ -11,6 +15,30 @@ The heading remains the large, plan-specific title.
 
 The marker itself emits no HTML.
 Untyped slides keep the existing behavior: the h2 is both their name and title.
+
+## How it looks
+
+<ThemeImage
+  light={slideLight}
+  dark={slideDark}
+  alt="A typed slide frame carrying its structural kicker above the plan-specific title"
+/>
+
+## When to use it
+
+Use it when a section's purpose matches one of the [five registered slide types](/authoring/slide-types/).
+The marker applies that type's structural name and its authoring guidance to the heading below
+it, and lint then enforces the type's objective facts.
+
+### When not to use it
+
+Do not force a one-off idea into the nearest catalog label. When no type fits, write an untyped
+slide under the general principles; typed coverage is not a quality target.
+
+## Compared with
+
+- **[`Part`](/components/part/)** — reach for it to group slides into an act. `Slide` types one
+  section.
 
 ## Authoring
 

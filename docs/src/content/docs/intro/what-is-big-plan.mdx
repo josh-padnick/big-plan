@@ -22,14 +22,6 @@ Run it in your favorite agent harness as a skill like this:
   </TabItem>
 </Tabs>
 
-## Why build it?
-
-Agent plans are kind of a big deal.
-
-The more confident you are in your agent's plan, the better your agent will perform at the execution step and the faster your final review will go.
-
-But an agent's standard wall-of-text plan is painful to read! If plans are so important for the human, they should present in a first-class way. These plans really are a big deal, so we call them "big plans".
-
 ## What makes a good agent plan
 
 A great agent plan should be:
@@ -46,7 +38,29 @@ A great agent plan should be:
 
 1. **Local and private.** Your plan can contain sensitive information; it shouldn't be shared with anyone else without a good reason.
 
-## Next step
+## What Big Plan is not
 
-The fastest way to get a feel for Big Plan is to see one.
-[Check out the demo](/intro/demo/), then [render your own plan in under a minute](/intro/installation/).
+- **Not code review.** Code review judges a change after the work is done. Big Plan reviews
+  intent before any code exists.
+- **Not project management.** No tickets, statuses, or boards. It exists only for the moment of
+  agreement.
+- **Not a Markdown preview.** A preview shows you the text. Big Plan is built for review:
+  section navigation, readable code, typed components, anchored comments, and approval.
+- **Not a service.** Everything runs on your machine, the rendered file makes no external
+  requests, and the plan file on your disk stays the source of truth.
+
+## Section guide
+
+| Read this | When |
+| --- | --- |
+| [Why plans deserve this](/intro/why-big-plan/) | You want the argument, not the mechanics |
+| [Install Big Plan](/intro/installation/) | You are ready to run it |
+| [Your first review](/intro/first-review/) | You want one plan taken from download to approval |
+| [A tour of the review document](/intro/tour/) | You want to know what every control does |
+| [See a rendered plan](/intro/demo/) | You want to look before installing |
+| [How Big Plan compares](/intro/vs-other/) | You are weighing it against Lavish or Agent-Native Plans |
+
+## Next
+
+[Why plans deserve this](/intro/why-big-plan/) — the argument for treating a plan as a
+first-class document.

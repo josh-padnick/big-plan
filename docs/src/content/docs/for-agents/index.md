@@ -9,12 +9,19 @@ It carries operational steps, exact commands, and machine-readable endpoints, wi
 If you're a human, the same ground is covered for you in [What is Big Plan?](/intro/what-is-big-plan/) and [Installation](/intro/installation/).
 Reading on anyway is a fine way to audit exactly what your agent is told.
 
-## What's here
+## Section guide
 
-- [Use the skill](/for-agents/use-the-skill/): install the thin skill shell and keep guidance fresh via package upgrades.
-- [Render a plan](/for-agents/render-a-plan/): the operational loop for rendering a plan and handing it to a human for review.
-- [Authoring plans](/for-agents/authoring-plans/): what a plan document is, how the guidance gate works, and where each kind of rule lives.
-- [setup.md](/setup.md): the one-time setup instructions an agent follows using the current Big Plan CLI without a global install.
+| Read this | When |
+| --- | --- |
+| [Set Big Plan up for your human](/for-agents/setup/) | You were asked to set Big Plan up, once |
+| [Write and validate a plan](/for-agents/write-and-validate/) | Every session, before you implement anything |
+| [Answer reviewer feedback](/for-agents/answer-feedback/) | A human is commenting on a live review |
+| [Handle a handoff or disconnect](/for-agents/handoff/) | You got `NOT_PRIMARY`, `AGENT_DISCONNECTED`, or an observer result |
+| [Handle an approval](/for-agents/approval/) | An `approval` request arrived in your mailbox |
+| [Install and update the skill](/for-agents/use-the-skill/) | A harness wants a discoverable `SKILL.md` |
+
+The plan **format** is not in this section, because a human plan author needs it as much as
+you do: it is [Writing plans](/authoring/).
 
 ## Read these docs as Markdown
 
@@ -31,9 +38,14 @@ Replace a page's trailing slash with `.md`:
 
 ```text
 https://bigplan.dev/intro/installation/       ->  https://bigplan.dev/intro/installation.md
-https://bigplan.dev/reference/cli/            ->  https://bigplan.dev/reference/cli.md
-https://bigplan.dev/for-agents/render-a-plan/ ->  https://bigplan.dev/for-agents/render-a-plan.md
+https://bigplan.dev/reference/error-codes/    ->  https://bigplan.dev/reference/error-codes.md
+https://bigplan.dev/for-agents/handoff/       ->  https://bigplan.dev/for-agents/handoff.md
 ```
 
 Each `.md` response starts with frontmatter carrying `title`, `description`, and `canonical` (the page's HTML URL), followed by a clean Markdown projection of the page that removes presentation-only MDX.
 Fetch [`/llms.txt`](/llms.txt) once to see the map, fetch the `.md` URLs your task needs, and fall back to [`/llms-full.txt`](/llms-full.txt) only when you genuinely need the whole corpus.
+
+## Next
+
+[Set Big Plan up for your human](/for-agents/setup/) — the one-time setup, also published at
+[/setup.md](/setup.md) for the stable install prompt.

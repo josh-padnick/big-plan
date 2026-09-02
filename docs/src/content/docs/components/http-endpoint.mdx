@@ -3,7 +3,19 @@ title: HttpEndpoint
 description: A component that renders one HTTP endpoint as a structured API review card with parameters, request, and responses.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import http_endpointLight from "../../../assets/components/http-endpoint-light.png";
+import http_endpointDark from "../../../assets/components/http-endpoint-dark.png";
+
 `HttpEndpoint` shows one proposed HTTP endpoint - method, path, parameters, request body, and responses - so a plan that introduces or changes an API can be reviewed on the contract itself instead of prose approximations of it.
+
+## How it looks
+
+<ThemeImage
+  light={http_endpointLight}
+  dark={http_endpointDark}
+  alt="An HTTP endpoint card with grouped parameters, a request body, and status-coded responses"
+/>
 
 ## When to use it
 
@@ -13,6 +25,10 @@ Use `HttpEndpoint` when a plan proposes, changes, or relies on an HTTP endpoint 
 
 - Loose examples - a single request or response sample with no contract to review is just a fenced code block
 - Changed endpoints as diffs - change states are deliberately not part of this component; describe before-and-after in prose until a diff treatment exists
+
+## Compared with
+
+- **[`GraphqlOperation`](/components/graphql-operation/)** and **[`GrpcMethod`](/components/grpc-method/)** — the same card shape for the other two transports.
 
 ## Use cases
 

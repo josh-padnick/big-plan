@@ -3,13 +3,33 @@ title: MermaidDiagram
 description: A compile-time Mermaid diagram rendered as static, reviewable light and dark SVGs without a browser Mermaid runtime.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import mermaid_diagramLight from "../../../assets/components/mermaid-diagram-light.png";
+import mermaid_diagramDark from "../../../assets/components/mermaid-diagram-dark.png";
+
 `MermaidDiagram` accepts an explicit Mermaid subset and renders it during compilation. Official Mermaid owns parsing details that are accepted by the subset, text measurement, routing, and geometry; Big Plan owns review anchors, safety checks, and viewer integration.
+
+## How it looks
+
+<ThemeImage
+  light={mermaid_diagramLight}
+  dark={mermaid_diagramDark}
+  alt="A Mermaid state diagram rendered as a static SVG figure"
+/>
 
 ## When to use it
 
 Use `MermaidDiagram` when the plan needs a general graph—a cycle, merge, fan-in/fan-out, parallel or rank-skipping edges—or one of the supported static Mermaid views such as a sequence, state, class, entity relationship, schedule, journey, timeline, mindmap, pie, or git graph.
 
 Use `FlowDiagram` when stages, comparable cards, and a chronological left-to-right relationship are the point.
+
+### When not to use it
+
+Do not use it for a staged left-to-right story, which has a first-class presentation of its own, and do not reach for a diagram at all when a sentence would carry the same relationship.
+
+## Compared with
+
+- **[`FlowDiagram`](/components/flow-diagram/)** — reach for it when the content is a staged story and you want Big Plan's own card-and-connector presentation, with tones, badges, and per-node body lines.
 
 ## Authoring
 

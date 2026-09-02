@@ -5,7 +5,7 @@ description: How Big Plan compares to Lavish and Agent-Native Plans, and the two
 
 Big Plan is not the first tool to notice that agent plans deserve better than a wall of text.
 Two neighbors approach the same problem well, and comparing them is the clearest way to see the two bets Big Plan makes: discrete typed components, and a standalone local file you never sign in to view.
-Both bets come straight from Big Plan's [philosophy](/intro/what-is-big-plan/#philosophy) of what a plan should be.
+Both bets come straight from Big Plan's [philosophy](/intro/why-big-plan/#philosophy) of what a plan should be.
 
 ## Big Plan vs. Lavish
 
@@ -29,9 +29,9 @@ The difference is packaging and custody.
 Agent-Native Plans is part of a larger platform, and the default flow signs you in to view your plan.
 Big Plan sees no reason a plan on your own disk should require an account: it is one standalone command (`npx -y big-plan@latest render plan.mdx`), the output is one HTML file, and nothing about reviewing it involves logging in or leaving your machine.
 
-Big Plan is pre-alpha, but its [local review workflow](/reference/reviewing/) now carries comments and agent responses without an account or third-party service.
+Big Plan is pre-alpha, but its [local review workflow](/review/) now carries comments and agent responses without an account or third-party service.
 What it offers is the combination the others do not: structured, consistent plan documents and a live feedback loop from a standalone tool that keeps everything on your disk.
 
-## Next step
+## Next
 
-[Render your first plan in under a minute.](/intro/installation/)
+[Install Big Plan](/intro/installation/) — Node.js 22, one command, nothing installed globally.
