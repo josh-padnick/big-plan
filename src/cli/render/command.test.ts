@@ -68,7 +68,9 @@ describe("renderCommand", () => {
     });
     const html = await readFile(outputPath, "utf8");
     expect(html).toContain("<title>Adapter plan</title>");
-    expect(html).toMatch(/<html lang="en" data-plan-id="[a-f0-9]{32}">/);
+    expect(html).toMatch(
+      /<html lang="en" class="overscroll-y-none" data-plan-id="[a-f0-9]{32}">/,
+    );
   });
 
   it("should stamp an export of an approved plan and leave a stale one unmarked", async () => {

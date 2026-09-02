@@ -60,7 +60,7 @@ export const renderPage = ({
     .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
     .join("");
   return `<!doctype html>
-<html lang="en"${root}>
+<html lang="en" class="overscroll-y-none"${root}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
