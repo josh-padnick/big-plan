@@ -41,6 +41,7 @@ describe("deriveOpenItems", () => {
     const items = deriveOpenItems({
       changeSets: [changeSet()],
       accepted: new Set([`${FROM}:${TO}:p1`, `${FROM}:${TO}:p2`]),
+      rejected: new Set(),
       inputs: [input({ state: "answered", detail: "Answered: Gradual" })],
       requests: [],
     });
@@ -50,10 +51,28 @@ describe("deriveOpenItems", () => {
     expect(items.changeSets.open).toEqual([]);
   });
 
+  // A rejected change is answered, not outstanding: the reviewer decided it and
+  // the plan already carries that decision, so it must not keep Approve behind
+  // work that no longer needs anyone.
+  it("promotes Approve when every change is decided, rejections included", () => {
+    const items = deriveOpenItems({
+      changeSets: [changeSet()],
+      accepted: new Set([`${FROM}:${TO}:p1`]),
+      rejected: new Set([`${FROM}:${TO}:p2`]),
+      inputs: [input({ state: "answered", detail: "Answered: Gradual" })],
+      requests: [],
+    });
+    expect(approveIsPrimary(items)).toBe(true);
+    expect(items.changeSets.open).toEqual([]);
+    expect(items.changeSets.settled).toBe(1);
+    expect(items.changeSets.accepted).toBe(0);
+  });
+
   it("demotes Approve while a change set is open, even with unanswered decisions", () => {
     const items = deriveOpenItems({
       changeSets: [changeSet()],
       accepted: new Set(),
+      rejected: new Set(),
       inputs: [input()],
       requests: [],
     });
@@ -70,6 +89,7 @@ describe("deriveOpenItems", () => {
     const items = deriveOpenItems({
       changeSets: [changeSet({ placeIds: [] })],
       accepted: new Set(),
+      rejected: new Set(),
       inputs: [],
       requests: [],
     });
@@ -81,6 +101,7 @@ describe("deriveOpenItems", () => {
     const items = deriveOpenItems({
       changeSets: [],
       accepted: new Set(),
+      rejected: new Set(),
       inputs: [
         input({ inputId: "critical", isCritical: true }),
         input({ inputId: "advisory" }),
@@ -111,6 +132,7 @@ describe("deriveOpenItems", () => {
     const items = deriveOpenItems({
       changeSets: [],
       accepted: new Set(),
+      rejected: new Set(),
       inputs: [input()],
       requests: [],
     });
@@ -121,6 +143,7 @@ describe("deriveOpenItems", () => {
     const items = deriveOpenItems({
       changeSets: [],
       accepted: new Set(),
+      rejected: new Set(),
       inputs: [],
       requests: [],
     });

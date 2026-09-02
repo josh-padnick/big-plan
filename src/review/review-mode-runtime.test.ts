@@ -263,6 +263,7 @@ describe("review mode protocol", () => {
           to: alpha.to,
           placeIds: alphaPlaces,
           accepted,
+          rejected: new Set(),
         }),
       ).toMatchObject({ open: 0, isAccepted: true });
       expect(
@@ -271,9 +272,10 @@ describe("review mode protocol", () => {
           to: beta.to,
           placeIds: betaPlaces,
           accepted,
+          rejected: new Set(),
         }),
       ).toMatchObject({ accepted: 1, open: betaPlaces.length - 1 });
-      expect(verdicts.accepted).toEqual(
+      expect(verdicts.decided).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             from: beta.from,
@@ -316,7 +318,7 @@ describe("review mode protocol", () => {
         }),
       ).toMatchObject({ open: 0, isAccepted: true });
       expect(
-        verdicts.accepted.filter(
+        verdicts.decided.filter(
           (entry) => entry.from === arriving.from && entry.to === arriving.to,
         ),
       ).toEqual(
@@ -375,6 +377,7 @@ describe("review mode protocol", () => {
           to: restarted.to,
           placeIds: restartedPlaces,
           accepted: acceptedChangeKeys(verdicts),
+          rejected: new Set(),
         }),
       ).toMatchObject({ accepted: 0, open: restartedPlaces.length });
     } finally {
@@ -485,10 +488,11 @@ describe("review mode protocol", () => {
           to: resultSnapshot,
           placeIds: places,
           accepted: acceptedChangeKeys(verdicts),
+          rejected: new Set(),
         }),
       ).toMatchObject({ open: 0, isAccepted: true });
       expect(
-        verdicts.accepted.filter(
+        verdicts.decided.filter(
           (entry) =>
             entry.from === minted.stage.baseSnapshot &&
             entry.to === resultSnapshot,

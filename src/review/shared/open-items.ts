@@ -43,6 +43,8 @@ export type DerivedOpenItems = {
   readonly changeSets: {
     readonly total: number;
     readonly accepted: number;
+    /** Sets whose places all carry a verdict, whichever way each one went. */
+    readonly settled: number;
     readonly open: ReadonlyArray<OpenChangeSet>;
     readonly standing: ReadonlyArray<ChangeSetStanding>;
   };
@@ -217,11 +219,13 @@ const requestLabel = (request: {
 export const deriveOpenItems = ({
   changeSets,
   accepted,
+  rejected,
   inputs,
   requests,
 }: {
   readonly changeSets: ReadonlyArray<OpenChangeSet>;
   readonly accepted: ReadonlySet<string>;
+  readonly rejected: ReadonlySet<string>;
   readonly inputs: ReadonlyArray<ReviewInput>;
   readonly requests: ReadonlyArray<OpenRequest>;
 }): DerivedOpenItems => {
@@ -231,6 +235,7 @@ export const deriveOpenItems = ({
       to: changeSet.to,
       placeIds: changeSet.placeIds,
       accepted,
+      rejected,
     }),
   );
   const openChangeSets = changeSets.filter((changeSet, index) => {
@@ -239,7 +244,10 @@ export const deriveOpenItems = ({
     // A set whose places have not loaded yet is still open: treating it as
     // closed would promote Approve before the reviewer has seen the work.
     if (changeSet.placeIds.length === 0) return true;
-    return !setStanding.isAccepted;
+    // A rejected change is decided, not outstanding: the reviewer answered it
+    // and the plan already carries that answer, so a set holding one still
+    // closes. Only a place nobody has decided keeps a set open.
+    return !setStanding.isSettled;
   });
   const inputStanding = reviewInputStanding(inputs);
   const unanswered = inputs.filter((input) => input.state !== "answered");
@@ -252,6 +260,7 @@ export const deriveOpenItems = ({
     changeSets: {
       total: changeSets.length,
       accepted: standing.filter((set) => set.isAccepted).length,
+      settled: standing.filter((set) => set.isSettled).length,
       open: openChangeSets,
       standing,
     },
