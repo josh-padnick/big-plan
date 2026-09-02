@@ -17,6 +17,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -46,11 +47,9 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import { changeVerdictKey } from "../shared/change-verdict.js";
 import {
-  boundPreviewText,
   projectRevertLoss,
   REVERT_LEAD_LINE,
   revertChangeCount,
-  SLIDE_HOVER_LIMIT,
   type RevertSlideLoss,
 } from "../shared/revert-copy.js";
 import {
@@ -1122,53 +1121,19 @@ const liveSlideOf = ({
 };
 
 /**
- * What a minimized slide says about itself, read from the slide the reader is
- * looking at rather than from the diff.
+ * The kicker a slide shows, read from the slide the reader is looking at
+ * rather than from the diff.
  *
  * The ordinal in "2 / Goals and non-goals" exists only in the rendered kicker;
  * nothing on the wire carries it. Reading the live slide is therefore not a
  * shortcut but the only way to name the slide the way the document does, and
  * it is the same walk every other surface that names a slide already makes.
  */
-const readSlideChrome = (
-  slide: RevertSlideLoss,
-): { readonly kicker: string | undefined; readonly content: string } => {
-  const element = liveSlideOf(slide);
-  if (element === null) return { kicker: undefined, content: "" };
-  const kicker = element
-    .querySelector<HTMLElement>("[data-slide-kicker]")
+const readSlideKicker = (slide: RevertSlideLoss): string | undefined => {
+  const kicker = liveSlideOf(slide)
+    ?.querySelector<HTMLElement>("[data-slide-kicker]")
     ?.textContent?.trim();
-  // Leaf blocks only: a list and its items both answer textContent, and
-  // joining both prints every item twice. textContent rather than innerText
-  // because a collapsed slide is still the content this revert deletes, and
-  // an unrendered element has no innerText at all.
-  const parts: string[] = [];
-  for (const node of element.querySelectorAll<HTMLElement>(
-    "p, li, h2, h3, h4, blockquote, figcaption, td, th",
-  )) {
-    // The slide's own kicker and title are already the row's two lines, so
-    // repeating them would spend the hover text's bound on what the reader
-    // just read.
-    if (
-      node.hasAttribute("data-slide-kicker") ||
-      node.hasAttribute("data-collapse-name")
-    ) {
-      continue;
-    }
-    if (
-      node.querySelector(
-        "p, li, h2, h3, h4, blockquote, figcaption, td, th",
-      ) !== null
-    ) {
-      continue;
-    }
-    const text = node.textContent?.trim();
-    if (text !== undefined && text !== "") parts.push(text);
-  }
-  return {
-    kicker: kicker === "" ? undefined : kicker,
-    content: parts.join(" "),
-  };
+  return kicker === "" ? undefined : kicker;
 };
 
 /** The address the browser resolved for a picture the plan is showing. */
@@ -1190,93 +1155,93 @@ const liveImageSource = ({
 };
 
 /**
- * One affected slide, drawn the way the plan draws a minimized slide.
+ * One affected slide, drawn and behaving the way the plan draws a slide.
  *
- * A reviewer already knows what a collapsed slide looks like, so the list of
- * what a revert deletes is a list of those, in the same card, with the same
- * kicker over the same title. Hovering one gives back the slide's own words,
- * bounded: enough to recognize what is on it without reprinting the plan
- * inside a dialog.
+ * A reviewer already knows this card: it is the slide, collapsed, with its own
+ * kicker over its own title, and it opens the way that slide opens. What it
+ * opens onto is the difference that matters here - not the slide's contents,
+ * but the passages and pictures this revert takes off it. Keeping them behind
+ * the disclosure is what lets the box answer "which slides?" at a glance and
+ * "what exactly?" on demand, instead of answering both at once and reading as
+ * the plan reprinted inside a dialog.
  */
 const RevertSlideRow = ({ slide }: { readonly slide: RevertSlideLoss }) => {
-  const chrome = useMemo(() => readSlideChrome(slide), [slide]);
-  const hover = boundPreviewText(chrome.content, SLIDE_HOVER_LIMIT);
-  const kicker = chrome.kicker ?? slide.title;
+  const [isOpen, setIsOpen] = useState(false);
+  const kicker = readSlideKicker(slide) ?? slide.title;
   const changes = `${slide.changeCount} ${slide.changeCount === 1 ? "change" : "changes"}`;
+  const panelId = useId();
   return (
-    <li className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-      <Tooltip
-        sections={[
-          {
-            term: slide.title,
-            detail:
-              hover.text === ""
-                ? "This slide is no longer in the plan."
-                : hover.text,
-          },
-        ]}
-        placement="below"
-        asChild
-        isInstant
+    <li
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border border-edge bg-raised shadow-raised"
+      data-review-revert-slide={slide.scope}
+      {...(isOpen ? { "data-review-revert-slide-open": "" } : {})}
+    >
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-controls={panelId}
+        className="grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-0 bg-transparent px-3 py-2 text-left hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+        onClick={() => setIsOpen((open) => !open)}
       >
-        <div
-          tabIndex={0}
-          className="grid min-w-0 cursor-default grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-edge bg-raised px-3 py-2 shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          data-review-revert-slide={slide.scope}
+        {/* The chevron the plan's own slide shows, turning the way that one
+            turns: right when closed, down when open. */}
+        <span
+          className={`text-subtle opacity-40 transition-transform [&_svg]:size-4 ${isOpen ? "rotate-90" : ""}`}
         >
-          {/* The chevron a collapsed slide shows, pointing the way that slide
-              points: this row stands for a slide the reader could open. */}
-          <span className="text-subtle opacity-40 [&_svg]:size-4">
-            <Icon icon={CHEVRON_RIGHT_ICON} />
+          <Icon icon={CHEVRON_RIGHT_ICON} />
+        </span>
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
+          <span className="truncate text-2xs font-semibold uppercase tracking-caps text-subtle">
+            {kicker}
           </span>
-          <span className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
-            <span className="truncate text-2xs font-semibold uppercase tracking-caps text-subtle">
-              {kicker}
-            </span>
-            <span className="truncate text-sm font-semibold text-ink">
-              {slide.title}
-            </span>
+          <span className="truncate text-sm font-semibold text-ink">
+            {slide.title}
           </span>
-          <span className="shrink-0 text-2xs tabular-nums text-muted">
-            {changes}
-          </span>
-        </div>
-      </Tooltip>
-      {slide.previews.length === 0 ? null : (
-        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1.5 p-0 pl-8">
-          {slide.previews.map((preview, index) =>
-            preview.shape === "image" ? (
-              <li
-                key={`image-${index}`}
-                className="flex min-w-0 items-center gap-2"
-              >
-                <ReviewImage
-                  source={liveImageSource({
-                    slide,
-                    source: preview.image.source,
-                  })}
-                  alt={preview.image.alt}
-                />
-                <span className="min-w-0 flex-1 truncate text-xs text-muted">
-                  {preview.image.alt === "" ? "Picture" : preview.image.alt}
-                </span>
-              </li>
-            ) : (
-              <li
-                key={`text-${index}`}
-                className="min-w-0 border-l-2 border-edge pl-2 text-xs text-muted [overflow-wrap:anywhere]"
-              >
-                {preview.excerpt.text}
-              </li>
-            ),
-          )}
-        </ul>
-      )}
+        </span>
+        <span className="shrink-0 text-2xs tabular-nums text-muted">
+          {changes}
+        </span>
+      </button>
+      <div id={panelId} hidden={!isOpen}>
+        {slide.previews.length === 0 ? (
+          <p className="m-0 border-t border-edge px-3 py-2 text-xs text-muted">
+            This change leaves no text or picture behind on this slide.
+          </p>
+        ) : (
+          <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge p-3">
+            {slide.previews.map((preview, index) =>
+              preview.shape === "image" ? (
+                <li
+                  key={`image-${index}`}
+                  className="flex min-w-0 items-center gap-2"
+                >
+                  <ReviewImage
+                    source={liveImageSource({
+                      slide,
+                      source: preview.image.source,
+                    })}
+                    alt={preview.image.alt}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted">
+                    {preview.image.alt === "" ? "Picture" : preview.image.alt}
+                  </span>
+                </li>
+              ) : (
+                <li
+                  key={`text-${index}`}
+                  className="min-w-0 border-l-2 border-edge pl-2 text-xs text-muted [overflow-wrap:anywhere]"
+                >
+                  {preview.excerpt.text}
+                </li>
+              ),
+            )}
+          </ul>
+        )}
+      </div>
     </li>
   );
 };
 
-/** The evidence under the lead line: the content the revert deletes. */
 const RevertLossEvidence = ({
   slides,
 }: {
@@ -1302,7 +1267,7 @@ const RevertLossEvidence = ({
           This response left nothing in the plan.
         </p>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-3 p-0">
+        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-2 p-0">
           {slides.slice(0, REVERT_SLIDE_LIMIT).map((slide) => (
             <RevertSlideRow key={slide.scope} slide={slide} />
           ))}

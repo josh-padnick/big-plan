@@ -1,10 +1,11 @@
 // Owns what a revert dialog says the reviewer is about to lose. A revert takes
 // content the agent wrote back out of the plan and the review cannot recover
 // it, so the dialog leads with that and then shows the content itself, grouped
-// by the slide it lives on. There is deliberately no vocabulary of content
-// kinds here: a reviewer thinks in slides and in what is written on them, and
-// a name invented for a category of block would be one more thing to learn
-// before understanding what a button is about to delete.
+// by the slide it lives on and reachable by opening that slide. There is
+// deliberately no vocabulary of content kinds here: a reviewer thinks in
+// slides and in what is written on them, and a name invented for a category of
+// block would be one more thing to learn before understanding what a button is
+// about to delete.
 
 import { attributeDiffPlaces } from "./change-attribution.js";
 import type { DiffLocation, DiffPlace, SnapshotDiff } from "./review-wire.js";
@@ -14,16 +15,13 @@ export const REVERT_LEAD_LINE =
   "Reverting will permanently delete the following content from the plan.";
 
 /**
- * How much of a block's text stands in for it in the list.
+ * How much of a block's text stands in for it under an opened slide.
  *
  * Long enough to recognize the passage, short enough that a slide with several
- * changes still reads as a list rather than as the plan reprinted inside a
- * dialog. The slide's own hover text carries the fuller reading.
+ * changes still reads as a list of things going rather than as the plan
+ * reprinted inside a dialog.
  */
 export const EXCERPT_LIMIT = 140;
-
-/** How much of a slide's content its hover text carries. */
-export const SLIDE_HOVER_LIMIT = 400;
 
 export type BoundedText = {
   readonly text: string;

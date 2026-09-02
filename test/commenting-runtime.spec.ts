@@ -5226,11 +5226,23 @@ test("should restore and submit staged comments through the local review runtime
   await expect(revertLoss).toContainText("What you will lose");
   const revertSlide = revertLoss.locator("[data-review-revert-slide]").first();
   await expect(revertSlide).toBeVisible();
-  // The row is the slide as the plan draws it minimized: its own kicker over
-  // its own title, and hovering it gives back that slide's own words.
+  // The row is the slide as the plan draws it collapsed: its own kicker over
+  // its own title, and nothing of what goes until the reader opens it.
   await expect(revertSlide).toContainText(/\d+ \/ /u);
   await expect(revertSlide).toContainText(/\d+ changes?/u);
-  await expect(revertSlide).toHaveAttribute("aria-describedby", /.+/u);
+  const revertSlideToggle = revertSlide.getByRole("button").first();
+  await expect(revertSlideToggle).toHaveAttribute("aria-expanded", "false");
+  await revertSlideToggle.click();
+  await expect(revertSlideToggle).toHaveAttribute("aria-expanded", "true");
+  // Opening it reveals the passage this revert takes off that slide: the
+  // reworded sentence goes, while the paragraph the revert brings back does
+  // not appear as something being lost.
+  const revertPassage = revertSlide.getByText(/atomically/u);
+  await expect(revertPassage).toBeVisible();
+  await expect(revertSlide).not.toContainText("Keep every reviewer note safe");
+  await revertSlideToggle.click();
+  await expect(revertSlideToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(revertPassage).toBeHidden();
   // The mechanics the dialog used to lead with are gone from it entirely.
   await expect(revertDialog).not.toContainText("Earlier changes stay in place");
   await revertDialog.getByRole("button", { name: "Revert response" }).click();
