@@ -424,7 +424,6 @@ type ComposeState = {
 
 type SelectionControlState = {
   readonly target: Extract<CommentTarget, { readonly type: "selection" }>;
-  readonly origin: HTMLElement;
   readonly top: number;
   readonly left: number;
 };
@@ -1338,18 +1337,6 @@ const selectionControlState = (): SelectionControlState | null => {
     return null;
   }
   const images = authoredImagesIntersecting(range);
-  const targetSide = diffSideOfElement(startBlock);
-  const selectionElements = [endBlock, ...images];
-  if (
-    selectionElements.some(
-      (element) =>
-        diffSideOfElement(element) !== targetSide ||
-        element.dataset.baselineSnapshot !==
-          startBlock.dataset.baselineSnapshot,
-    )
-  ) {
-    return null;
-  }
   const text = selection.toString();
   const imageEvidence = images
     .map((image) => `[Image: ${blockIdentity(image).label}]`)
@@ -1394,7 +1381,6 @@ const selectionControlState = (): SelectionControlState | null => {
       quote,
       isQuoteExcerpt,
     },
-    origin: startBlock,
     top: Math.max(8, rect.top - 44),
     left: Math.max(8, Math.min(window.innerWidth - 132, rect.left)),
   };
@@ -6610,11 +6596,7 @@ export const ReviewController = () => {
         return;
       }
       event.preventDefault();
-      beginTarget(
-        selectionControl.target,
-        { top: selectionControl.top },
-        selectionControl.origin,
-      );
+      beginTarget(selectionControl.target, { top: selectionControl.top });
       setSelectionControl(null);
     };
     document.addEventListener("keydown", beginSelectedComment);
@@ -8111,13 +8093,9 @@ export const ReviewController = () => {
             aria-label={selectionCommentLabel(selectionControl.target)}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
-              beginTarget(
-                selectionControl.target,
-                {
-                  top: selectionControl.top,
-                },
-                selectionControl.origin,
-              );
+              beginTarget(selectionControl.target, {
+                top: selectionControl.top,
+              });
               setSelectionControl(null);
             }}
           >
