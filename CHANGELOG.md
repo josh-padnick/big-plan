@@ -12,7 +12,7 @@ Big Plan is pre-1.0 and has no compatibility contract yet; see [Pre-release comp
 
 The first real release of Big Plan, published as an alpha. Version `0.0.1` was a July 2026 placeholder that claimed the npm name and nothing more; everything below shipped after it.
 
-The `-alpha.1` suffix says the shape of what Big Plan does is settled but its surfaces are not yet frozen: the CLI, the plan source format, the machine-readable JSON, and the rendered output may still change without a deprecation path. Install it the documented way — `npx -y big-plan@latest` — which resolves the `latest` dist-tag and therefore reaches this version.
+The `-alpha.1` suffix says the shape of what Big Plan does is settled but its surfaces are not yet frozen: the CLI, the plan source format, the machine-readable JSON, and the rendered output may still change without a deprecation path. At release time `npx -y big-plan@latest` reaches this version, because the release promotes it to the `latest` dist-tag; that tag moves on to later releases, so pin `npx -y big-plan@0.1.0-alpha.1` to install exactly this one.
 
 Big Plan makes reviewing agent plans a first-class experience. An agent writes a plan as MDX, and Big Plan turns it into a human-friendly review document that a person can read, question, and accept before any code is written.
 

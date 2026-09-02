@@ -34,14 +34,23 @@ The workflow needs npm CLI 11.5.1 or newer and runs its publish job on a GitHub-
 ```sh
 export VERSION="$(node -p "require('./package.json').version")"
 
-# The previous release tag. There is none for the first release, so fall back
-# to the root commit, which `generate-notes` also accepts as a starting point.
-export PREVIOUS_REF="$(git describe --tags --abbrev=0 --match 'v*.*.*' 2>/dev/null \
-  || git rev-list --max-parents=0 HEAD)"
+# The previous release tag, empty when none exists yet.
+export PREVIOUS_TAG="$(git describe --tags --abbrev=0 --match 'v*.*.*' 2>/dev/null || true)"
 
-git log --no-merges --format='%s' "${PREVIOUS_REF}..main"
-gh api "repos/josh-padnick/big-plan/releases/generate-notes" \
-  -f tag_name="v${VERSION}" -f previous_tag_name="${PREVIOUS_REF}" --jq .body
+# `git log` needs a starting point either way; the root commit stands in for
+# the first release.
+git log --no-merges --format='%s' \
+  "${PREVIOUS_TAG:-$(git rev-list --max-parents=0 HEAD)}..main"
+
+# `previous_tag_name` must name a tag that exists, so send it only when there
+# is one. Omitted, GitHub chooses the starting point itself.
+if [ -n "$PREVIOUS_TAG" ]; then
+  gh api "repos/josh-padnick/big-plan/releases/generate-notes" \
+    -f tag_name="v${VERSION}" -f previous_tag_name="$PREVIOUS_TAG" --jq .body
+else
+  gh api "repos/josh-padnick/big-plan/releases/generate-notes" \
+    -f tag_name="v${VERSION}" --jq .body
+fi
 ```
 
 `.github/release.yml` groups that generated list by pull-request label. Use it as the source of facts, not as the entry. The entry itself groups those changes by **theme and capability**, in the order a new reader meets them, and says what each one lets a person do. A raw commit or pull-request list is not an acceptable entry.
