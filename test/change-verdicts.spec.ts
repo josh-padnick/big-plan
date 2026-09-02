@@ -68,10 +68,15 @@ const stepper = (page: Page) => page.locator("[data-review-diff-stepper]");
 /** What the verdict record holds on disk, without going through a route. */
 const recordedChanges = async (
   path: string,
-): Promise<ReadonlyArray<{ readonly placeId: string }>> => {
+): Promise<
+  ReadonlyArray<{ readonly placeId: string; readonly verdict: string }>
+> => {
   const stored: unknown = JSON.parse(await readFile(path, "utf8"));
-  return typeof stored === "object" && stored !== null && "accepted" in stored
-    ? (stored.accepted as ReadonlyArray<{ readonly placeId: string }>)
+  return typeof stored === "object" && stored !== null && "decided" in stored
+    ? (stored.decided as ReadonlyArray<{
+        readonly placeId: string;
+        readonly verdict: string;
+      }>)
     : [];
 };
 
