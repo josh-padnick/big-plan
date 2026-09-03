@@ -5164,6 +5164,10 @@ export const ReviewController = () => {
         latestReviewStateRef.current.state.resolvedCommentIds.has(commentId)
       ) {
         setStatus(RESOLVED_THREAD_NEW_WORK_ERROR);
+        reportRefusedWrite({
+          path: "reply",
+          refusal: RESOLVED_THREAD_NEW_WORK_ERROR,
+        });
         return;
       }
       const pending = new Set(replyPendingCommentIdsRef.current).add(commentId);
@@ -5200,6 +5204,19 @@ export const ReviewController = () => {
       }),
     );
   }, []);
+  const refreshAgentSnapshot = async (): Promise<void> => {
+    if (identity === null) return;
+    try {
+      acceptAgentSnapshot(
+        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
+      );
+    } catch (error) {
+      reportReviewFailure({
+        title: "Agent status could not be refreshed",
+        detail: errorMessage(error),
+      });
+    }
+  };
   const serializeRuntimeWrite = useCallback(
     <Value,>(write: () => Promise<Value>): Promise<Value> => {
       const result = persistenceQueue.current.then(write, write);
@@ -6774,6 +6791,10 @@ export const ReviewController = () => {
             setIsRecoveryConflictOpen(true);
           } else {
             setStatus(STALE_SUBMISSION_STATUS);
+            reportRefusedWrite({
+              path: "submit-comment",
+              refusal: STALE_SUBMISSION_STATUS,
+            });
           }
           return;
         }
@@ -7107,14 +7128,13 @@ export const ReviewController = () => {
         body: { kind: "chat", body },
       });
       setChatBody("");
-      acceptAgentSnapshot(
-        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
-      );
     } catch (error) {
       reportFailedWrite({ path: "chat", error });
+      return;
     } finally {
       setIsSendingChat(false);
     }
+    await refreshAgentSnapshot();
   };
 
   /*
@@ -7152,12 +7172,11 @@ export const ReviewController = () => {
         method: "POST",
         body: { writerId, answer, carryWorkInProgress },
       });
-      acceptAgentSnapshot(
-        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
-      );
     } catch (error) {
       reportFailedWrite({ path: "agent-primacy", error });
+      return;
     }
+    await refreshAgentSnapshot();
   };
 
   const answerAgentPrimacy: AgentRosterProps["onAnswer"] = ({
@@ -7199,9 +7218,6 @@ export const ReviewController = () => {
         method: "POST",
         body: { requestId },
       });
-      acceptAgentSnapshot(
-        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
-      );
     } catch (error) {
       setCancelPendingRequestIds((current) => {
         const next = new Set(current);
@@ -7219,7 +7235,9 @@ export const ReviewController = () => {
         // snapshot when the runtime becomes reachable again.
       }
       reportFailedWrite({ path: "cancel-request", error });
+      return;
     }
+    await refreshAgentSnapshot();
   };
 
   /**
@@ -7257,11 +7275,13 @@ export const ReviewController = () => {
         method: "POST",
         body: {},
       });
-      acceptAgentSnapshot(
-        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
-      );
     } catch (error) {
       reportFailedWrite({ path: "disconnect-agent", error });
+      setIsDisconnectingAgent(false);
+      return;
+    }
+    try {
+      await refreshAgentSnapshot();
     } finally {
       // Cleared either way. The runtime's own answer takes over from here: a
       // directive it recorded keeps the control pending, and a refusal has to
