@@ -131,7 +131,7 @@ describe("agent command adapter", () => {
           throw new Error("The connection did not provide its protocol path");
         }
         await expect(readFile(result["protocol"], "utf8")).resolves.toContain(
-          "# Answer a live review request",
+          "title: Answer a live review request",
         );
         const productExecutable = fileURLToPath(
           new URL("../../../bin/big-plan.mjs", import.meta.url),
