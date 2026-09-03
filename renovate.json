@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
   "rangeStrategy": "pin",
   "minimumReleaseAge": "7 days",
   "schedule": ["before 5am on monday"],
@@ -13,9 +14,17 @@
       "description": "Keep major updates in individual PRs",
       "matchUpdateTypes": ["major"],
       "groupName": null
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
     }
   ],
   "vulnerabilityAlerts": {
     "enabled": true
-  }
+  },
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "prConcurrentLimit": 3
 }
