@@ -46,43 +46,50 @@ import allComponentsDark from "../../assets/samples/all-components-dark.png";
 
 <p class="eyebrow">The problem</p>
 
-## The most important document in the workflow is the least readable one
+## The most important document in the workflow is the least readable one.
 
-An agent's plan usually arrives as thousands of words of Markdown, scrolled past in a terminal or
-skimmed in a raw diff. When reading the plan is painful, review quietly collapses into
-rubber-stamping — and the decisions that matter most go unexamined.
+_An agent plan usually arrives as a wall of text. Or maybe if you are lucky, an HTML artifact,
+but there is still no avoiding verbosity, awkward wording, and just plain too much text. And yet
+the best the big decisions happen in the plan, where they are still cheap to change._
 
-The big decisions happen in the plan, while they are still cheap to change. Once execution
-starts, changing course means unwinding work. While the plan is on the table, changing everything
-costs one comment.
+</section>
+
+<section class="band">
+
+<p class="eyebrow">The solution</p>
+
+## Reading agent plans should be delightful
 
 <div class="value-grid">
   <div>
-    <h3>Read it, don't scroll it</h3>
+    <h3>Easy to navigate</h3>
     <p>
-      Section navigation, a summary card, readable code, and purpose-built presentation for
-      decisions, diffs, schemas, and screens.
+      A table of contents, organized by section, summary cards, and first-class rendering for
+      decisions, diffs, schemas, mockups, and more.
     </p>
   </div>
   <div>
-    <h3>Point at the thing you mean</h3>
+    <h3>Easy to read</h3>
     <p>
-      Comment on a slide, a component, or a sentence. The note is anchored to that block and
-      stays anchored when the agent rewrites around it.
+      Big Plan gives agents special guidance on how to write content that is enjoyable for humans
+      to read.
     </p>
   </div>
   <div>
-    <h3>Decide, don't just discuss</h3>
+    <h3>Add comments</h3>
     <p>
-      A plan can ask you questions. Answer them in place, and approval writes your answers into
-      the plan file itself.
+      Comment on any part of the plan. Send it to your agent immediately, or in batch with other
+      comments.
     </p>
   </div>
   <div>
-    <h3>Nothing leaves your machine</h3>
+    <h3>Make decisions</h3>
+    <p>The plan can ask you questions. Answer them directly in the plan.</p>
+  </div>
+  <div>
+    <h3>All local</h3>
     <p>
-      No account, no service. The rendered document makes no external requests, and a plan can
-      never introduce code into it.
+      Big Plan requires no account or hosted service so all your plans stay local.
     </p>
   </div>
 </div>
@@ -101,10 +108,6 @@ Paste this into your coding agent. It needs Node.js 22 or newer and installs not
 Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.
 ```
 
-The linked setup guide is server-controlled and stays current as Big Plan changes, so the prompt
-never has to. Prefer to do it yourself? `npx -y big-plan@latest guidance` prints the plan-writing
-principles and unlocks the rest of the workflow for that directory.
-
 </section>
 
 <section class="band">
@@ -113,66 +116,54 @@ principles and unlocks the rest of the workflow for that directory.
 
 ## A large library of components, so a plan renders as what it is
 
-Most of a plan is prose. But a plan also carries decisions, code changes, schemas, API
-contracts, and screens — and each of those reads far better as the thing it is than as another
-paragraph describing it.
-
-So Big Plan ships a **library of twenty components**, each one a first-class rendering of a kind
-of plan information. The agent picks the right component and fills in the content; it never
-designs a layout, which is why the tenth plan you review reads exactly like the first.
+Plans can carry decisions, code changes, schemas, API contracts, mock-ups and more. Big Plan
+renders common information patterns in a first-class way by shipping a growing library of
+components. The agent picks the right component and fills in the content.
 
 <div class="kinds">
-  <div>
+  <div class="kind-group">
     <h3>Decisions</h3>
-    <ul>
-      <li>
-        <a href="/components/decision/">Decision</a>
-        <span>A tradeoff read option by option, with its considerations</span>
-      </li>
-      <li>
-        <a href="/components/decision-analysis/">DecisionAnalysis</a>
-        <span>A weighted criteria matrix you can audit</span>
-      </li>
-    </ul>
+    <a class="kind" href="/components/decision/">
+      <strong>Decision</strong>
+      <span>A tradeoff read option by option, with its considerations</span>
+    </a>
+    <a class="kind" href="/components/decision-analysis/">
+      <strong>DecisionAnalysis</strong>
+      <span>A weighted criteria matrix you can audit</span>
+    </a>
   </div>
-  <div>
+  <div class="kind-group">
     <h3>Code and files</h3>
-    <ul>
-      <li>
-        <a href="/components/code-diff/">CodeDiff</a>
-        <span>A change with gutters, counts, and line-anchored notes</span>
-      </li>
-      <li>
-        <a href="/components/file-tree-diff/">FileTreeDiff</a>
-        <span>Added, modified, removed, and renamed in one tree</span>
-      </li>
-    </ul>
+    <a class="kind" href="/components/code-diff/">
+      <strong>CodeDiff</strong>
+      <span>A change with gutters, counts, and line-anchored notes</span>
+    </a>
+    <a class="kind" href="/components/file-tree-diff/">
+      <strong>FileTreeDiff</strong>
+      <span>Added, modified, removed, and renamed in one tree</span>
+    </a>
   </div>
-  <div>
+  <div class="kind-group">
     <h3>Data and contracts</h3>
-    <ul>
-      <li>
-        <a href="/components/data-table/">DataTable</a>
-        <span>A dataset you can sort, filter, group, and reshape</span>
-      </li>
-      <li>
-        <a href="/components/database-table-schema/">DatabaseTableSchema</a>
-        <span>One table, its keys, indexes, and verbatim DDL</span>
-      </li>
-    </ul>
+    <a class="kind" href="/components/data-table/">
+      <strong>DataTable</strong>
+      <span>A dataset you can sort, filter, group, and reshape</span>
+    </a>
+    <a class="kind" href="/components/database-table-schema/">
+      <strong>DatabaseTableSchema</strong>
+      <span>One table, its keys, indexes, and verbatim DDL</span>
+    </a>
   </div>
-  <div>
+  <div class="kind-group">
     <h3>Pictures</h3>
-    <ul>
-      <li>
-        <a href="/components/wireframe/">Wireframe</a>
-        <span>True-size screens, connected into a walkable prototype</span>
-      </li>
-      <li>
-        <a href="/components/flow-diagram/">FlowDiagram</a>
-        <span>A staged story in cards and labelled connectors</span>
-      </li>
-    </ul>
+    <a class="kind" href="/components/wireframe/">
+      <strong>Wireframe</strong>
+      <span>True-size screens, connected into a walkable prototype</span>
+    </a>
+    <a class="kind" href="/components/flow-diagram/">
+      <strong>FlowDiagram</strong>
+      <span>A staged story in cards and labelled connectors</span>
+    </a>
   </div>
 </div>
 
@@ -187,7 +178,7 @@ designs a layout, which is why the tenth plan you review reads exactly like the 
 
 <p class="eyebrow">See one</p>
 
-## Four real plans, open in your browser
+## See sample plans
 
 Rendered by the current CLI from the repository's own examples. Not screenshots — the actual
 documents, with working navigation, copy, and maximize controls.
@@ -241,24 +232,20 @@ documents, with working navigation, copy, and maximize controls.
 
 <ul class="next-steps">
   <li>
-    <a href="/intro/first-review/">Your first review</a>
-    <span>One plan from download to approval, in about five minutes.</span>
+    <a href="/intro/installation/">Install Big Plan</a>
+    <span>One prompt to your agent, or one command yourself.</span>
   </li>
   <li>
     <a href="/intro/what-is-big-plan/">What is Big Plan?</a>
     <span>What it is, and what it deliberately is not.</span>
   </li>
   <li>
-    <a href="/intro/ui-review/">UI review</a>
+    <a href="/intro/ui-review/">See the UI</a>
     <span>What it looks like, in real screenshots.</span>
   </li>
   <li>
     <a href="/review/">How it works</a>
     <span>The whole loop, from guidance to approval.</span>
-  </li>
-  <li>
-    <a href="/samples/">Sample plans</a>
-    <span>Four real plans you can open right now.</span>
   </li>
 </ul>
 

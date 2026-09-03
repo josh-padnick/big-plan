@@ -108,15 +108,24 @@ a.site-title img {
 
 /* --- Value proposition -------------------------------------------------- */
 
+/* The accent rules read as one row of parallel statements, so the cards align
+   at the top rather than letting a taller neighbour push the next one down.
+   A narrower track fits three across on a wide screen, which sets five items
+   as 3 + 2 instead of stranding the fifth alone under two full rows. */
 .landing .value-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
-  gap: var(--step-3);
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+  gap: var(--step-3) var(--step-4);
   margin-block-start: var(--step-4);
 }
 
+/* Starlight's markdown flow gives every block after the first a top margin.
+   Inside a grid that lands as a 16px step down on every card except the one in
+   the first cell, so the row tops disagree; the grid owns this spacing. */
 .landing .value-grid > div {
   min-width: 0;
+  margin-block-start: 0;
   border-inline-start: 2px solid var(--sl-color-text-accent);
   padding-inline-start: var(--step-3);
 }
@@ -133,18 +142,80 @@ a.site-title img {
   font-size: 0.9375rem;
 }
 
+/* --- Link feedback the theme leaves flat --------------------------------- */
+
+/* Two links on the page answered a pointer with nothing at all. The site title
+   is a link on every page, and the alpha aside's link is the one a reader is
+   most likely to try first, so both now acknowledge the pointer in the same
+   way the rest of the page does. ("Skip to content" is deliberately untouched:
+   it is only ever reachable by keyboard, and it already has a focus style.) */
+.site-title,
+a.site-title {
+  transition: opacity 0.15s ease;
+}
+
+.site-title:hover,
+a.site-title:hover,
+.site-title:focus-visible,
+a.site-title:focus-visible {
+  opacity: 0.75;
+}
+
+.landing-aside a,
+.sl-markdown-content .starlight-aside a {
+  text-underline-offset: 0.2em;
+  transition:
+    color 0.15s ease,
+    text-decoration-color 0.15s ease;
+}
+
+.landing-aside a:hover,
+.sl-markdown-content .starlight-aside a:hover,
+.landing-aside a:focus-visible,
+.sl-markdown-content .starlight-aside a:focus-visible {
+  color: var(--sl-color-white);
+  text-decoration-color: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-title,
+  a.site-title,
+  .landing-aside a,
+  .sl-markdown-content .starlight-aside a {
+    transition: none;
+  }
+}
+
+/* --- Heading anchor links ----------------------------------------------- */
+
+/* Starlight pulls its heading anchor back by exactly its own width
+   (margin-inline-start: -29px) so the icon tucks into the content column's
+   gutter. That works for a documentation heading; on the landing page's
+   display headings it lands the icon on top of the last word, which is what a
+   reader sees the moment they hover a section title. The landing page has no
+   per-section deep links pointing at it, so the anchor is hidden here rather
+   than repositioned - documentation pages keep theirs untouched. */
+.landing :is(h1, h2, h3, h4) + a.sl-anchor-link,
+.landing a.sl-anchor-link {
+  display: none;
+}
+
 /* --- Component inventory ------------------------------------------------ */
 
+/* One component per row rather than two columns: a reader scanning for the
+   component that matches their plan reads a single list top to bottom instead
+   of tracking across a grid. The category heading labels the run beneath it. */
 .landing .kinds {
-  display: grid;
-  align-items: start;
-  grid-template-columns: repeat(auto-fit, minmax(min(21rem, 100%), 1fr));
-  gap: var(--step-3) var(--step-4);
+  display: block;
   margin-block-start: var(--step-4);
 }
 
-.landing .kinds > div {
-  min-width: 0;
+.landing .kind-group {
+  margin-block-start: 0;
+}
+
+.landing .kind-group + .kind-group {
+  margin-block-start: var(--step-4);
 }
 
 .landing .kinds h3 {
@@ -158,31 +229,51 @@ a.site-title img {
   color: var(--sl-color-gray-2);
 }
 
-.landing .kinds ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.landing .kinds li {
-  margin-block-start: var(--step-1);
-  font-size: 0.9375rem;
-  line-height: 1.35;
-}
-
-.landing .kinds li a {
-  font-weight: 600;
+/* Each row is the whole clickable target, so the name and its one-line gist
+   sit on one line where there is room and stack when there is not. */
+.landing .kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--step-2);
+  padding-block: var(--step-1);
+  border-block-end: 1px solid var(--rule);
+  color: inherit;
   text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    padding-inline 0.15s ease;
 }
 
-.landing .kinds li a:hover {
+.landing .kind:hover,
+.landing .kind:focus-visible {
+  background: var(--sl-color-gray-6, var(--sl-color-bg-nav));
+}
+
+.landing .kind strong {
+  min-width: 14rem;
+  color: var(--sl-color-text-accent);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.landing .kind:hover strong,
+.landing .kind:focus-visible strong {
   text-decoration: underline;
 }
 
-.landing .kinds li span {
-  display: block;
+.landing .kind span {
+  flex: 1 1 18rem;
+  min-width: 0;
   color: var(--sl-color-gray-3);
-  font-size: 0.84rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing .kind {
+    transition: none;
+  }
 }
 
 /* --- Sample thumbnails -------------------------------------------------- */
