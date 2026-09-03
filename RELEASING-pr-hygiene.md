@@ -40,20 +40,17 @@ Do not close or delete these.
 
 When each opens a pull request, add its row here rather than leaving it unrecorded.
 
-## Holds unlanded work — decision required before the tag
-
-Neither branch is safe to sweep. Both carry commits whose content is demonstrably **not** on `main`, and neither was superseded by a merged successor.
-
-| Branch                     | Tip                         | Disposition                             | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| -------------------------- | --------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fm/bp-big115-revert-copy` | `5a9cf90678ca` (2026-09-01) | **DEFERRED-PAST-LAUNCH** — BIG-115      | Three commits adding `src/review/shared/revert-copy.ts` (186 lines) and its test (220 lines), which do not exist on `main` at any path. No pull request was ever opened. BIG-115 slide-preview work is also being read by the BIG-19 lane, so this may be absorbed there rather than landed on its own.                                                                                                                                   |
-| `fm/bp-connection-log-fix` | `4dba2aa9461e` (2026-08-19) | **DEFERRED-PAST-LAUNCH** — no issue yet | PR [#174](https://github.com/josh-padnick/big-plan/pull/174) merged as `6336e7b6` at 12:25 and did not touch `scripts/merge-gates`. Commit `4dba2aa9` was pushed to the branch at 12:39, **after** that merge, adding ~201 lines of clean-review merge-gate detection (`cleanReview` patterns plus `CONTRIBUTING.md` prose). `cleanReview` appears nowhere in `scripts/merge-gates` on `main`, and no later pull request reintroduced it. |
-
 ## Deferred past launch
 
-| Branch                    | Tip                         | Disposition                        | Reason                                                                                                                                                                                                                               |
-| ------------------------- | --------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `fm/bp-ci-hosted-runners` | `687e50e4a6f8` (2026-08-28) | **DEFERRED-PAST-LAUNCH** — BIG-254 | PR [#221](https://github.com/josh-padnick/big-plan/pull/221) "Run CI on GitHub-hosted runners" was closed unmerged. `main` still runs two jobs on `self-hosted`, so the migration was not adopted. The tag is unaffected either way. |
+Three branches are deliberately not in the launch tag. None of them is on `main`, so none of them affects what the tag captures; deferring them is what keeps the tree unambiguous rather than merely tidy.
+
+The first two carry commits whose content is demonstrably **not** on `main` and were not superseded by any merged successor. Neither is safe to sweep, and neither is dead. **Do not delete either one.** Destroying unlanded work is not authorised by this record; it needs the captain's sign-off.
+
+| Branch                     | Tip                     | Disposition                                          | Reason and evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------- | ----------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fm/bp-big115-revert-copy` | `5a9cf906` (2026-09-01) | **DEFERRED-PAST-LAUNCH** — BIG-19                    | **Intentionally preserved** for the BIG-19 review-bar lane, which is reusing its delete-warning copy and slide-preview treatment. Evidence it is unlanded: three commits adding `src/review/shared/revert-copy.ts` (186 lines) and its test (220 lines), which exist nowhere on `main` at any path, and no pull request was ever opened. Revisit only after BIG-19 lands and confirms it absorbed what it needs; deletion would still need captain sign-off at that point.                                                                                                         |
+| `fm/bp-connection-log-fix` | `4dba2aa9` (2026-08-19) | **DEFERRED-PAST-LAUNCH** — orphaned, no owning issue | Orphaned merge-gate work needing a captain keep-or-discard decision after launch. Do not land it, do not delete it. Evidence: PR [#174](https://github.com/josh-padnick/big-plan/pull/174) merged as `6336e7b6` at 12:25 and did not touch `scripts/merge-gates`; commit `4dba2aa9` was pushed at 12:39, **after** that merge, adding ~201 lines of clean-review merge-gate detection (`cleanReview` patterns plus `CONTRIBUTING.md` prose). `cleanReview` appears nowhere in `scripts/merge-gates` on `main`, and no later pull request reintroduced it, so it landed in nothing. |
+| `fm/bp-ci-hosted-runners`  | `687e50e4` (2026-08-28) | **DEFERRED-PAST-LAUNCH** — BIG-254                   | PR [#221](https://github.com/josh-padnick/big-plan/pull/221) "Run CI on GitHub-hosted runners" was closed unmerged. `main` still runs two jobs on `self-hosted`, so the migration was not adopted. The tag is unaffected either way.                                                                                                                                                                                                                                                                                                                                               |
 
 ## Closed or superseded — branch left in place
 
@@ -218,14 +215,14 @@ The `no-mistakes` remote is a **local** bare mirror (`/Users/agent1/.no-mistakes
 
 ## Record
 
-|                                        |                                                            |
-| -------------------------------------- | ---------------------------------------------------------- |
-| Recorded                               | 2026-09-02                                                 |
-| `main` at the time                     | `66748411`                                                 |
-| Open pull requests                     | 1 (#241, live)                                             |
-| Remote branches besides `main`, before | 135                                                        |
-| Remote branches besides `main`, after  | 32                                                         |
-| Deleted                                | 103                                                        |
-| Open decisions blocking a clean tag    | 2 (`fm/bp-big115-revert-copy`, `fm/bp-connection-log-fix`) |
+|                                        |                                                         |
+| -------------------------------------- | ------------------------------------------------------- |
+| Recorded                               | 2026-09-02                                              |
+| `main` at the time                     | `66748411`                                              |
+| Open pull requests                     | 1 (#241, live)                                          |
+| Remote branches besides `main`, before | 135                                                     |
+| Remote branches besides `main`, after  | 32                                                      |
+| Deleted                                | 103                                                     |
+| Open decisions blocking a clean tag    | 0 — every branch and pull request carries a disposition |
 
-This record is kept current until the tag is cut. A lane that lands, or a decision that resolves one of the two rows above, updates its row here in the same change.
+This record is kept current until the tag is cut. A live lane that lands, a new pull request one of them opens, or a deferred branch whose disposition changes, updates its row here in the same change.
