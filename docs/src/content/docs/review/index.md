@@ -103,15 +103,15 @@ starts work.
 
 ## Where to go next
 
-| You want to                       | Read                                      |
-| --------------------------------- | ----------------------------------------- |
-| Run this yourself, once           | [Your first review](/intro/first-review/) |
-| See what the interface looks like | [UI review](/intro/ui-review/)            |
-| Look at real plans                | [Sample plans](/samples/)                 |
-| Know what a plan can contain      | [Components](/components/)                |
-| Write plans yourself              | [Write a plan](/authoring/)               |
-| Operate Big Plan as an agent      | [For agents](/for-agents/)                |
-| Look up a command                 | [Reference](/reference/)                  |
+| You want to                       | Read                                                 |
+| --------------------------------- | ---------------------------------------------------- |
+| Run this yourself, once           | [Your first review](/intro/first-review/)            |
+| See what the interface looks like | [UI review](/intro/ui-review/)                       |
+| Look at real plans                | [Sample plans](/samples/)                            |
+| Know what a plan can contain      | [Components](/components/)                           |
+| Write plans yourself              | [Write a plan](/for-agents/#what-a-plan-may-contain) |
+| Operate Big Plan as an agent      | [For agents](/for-agents/)                           |
+| Look up a command                 | [Reference](/reference/commands/render/)             |
 
 ## Next
 

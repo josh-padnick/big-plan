@@ -26,11 +26,11 @@ In practice:
 ## What is not going to change
 
 - **Your plan file stays yours.** It is on your disk, it is the source of truth, and exactly one
-  code path writes it. See [One writer owns the plan](/concepts/one-writer/).
+  code path writes it. See [One writer owns the plan](/security/#one-writer-owns-the-plan).
 - **Nothing leaves your machine.** No account, no service, no outbound requests from a rendered
   document.
 - **A plan never executes.** Plan-authored code is rejected at compile time rather than run. See
-  [Rendered plans are inert](/security/inert-documents/).
+  [Rendered plans are inert](/security/#rendered-plans-are-inert).
 
 Those three are the product, not features of this release.
 
@@ -58,7 +58,7 @@ change on your own schedule.
 
 Ordinary bugs and ideas go to [the issue
 tracker](https://github.com/josh-padnick/big-plan/issues). Security issues go through the private
-channel described in [Reporting a vulnerability](/security/reporting/) — never a public issue.
+channel described in [Reporting a vulnerability](/security/#reporting-a-vulnerability) — never a public issue.
 
 ## Next
 

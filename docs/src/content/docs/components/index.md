@@ -1,5 +1,5 @@
 ---
-title: Components
+title: The component library
 description: The twenty built-in components, grouped by the job each one does in a plan.
 ---
 
@@ -12,8 +12,8 @@ evaluates code from a plan: attributes are strings or bare booleans, structured 
 fenced or scoped children, and any authoring mistake fails the render with a positional
 diagnostic.
 
-If two of these look interchangeable, [Choose the right component](/authoring/choose-a-component/)
-is the page that separates them.
+If two of them look interchangeable, the [pairs worth separating](#pairs-worth-separating) at the
+bottom of this page say which to reach for.
 
 The sidebar groups these five ways, and so does this page.
 
@@ -64,13 +64,35 @@ Things a sentence cannot carry.
 
 The shape of the document itself, and the one thing a skimmer must not miss.
 
-| Component                                         | What it is for                                                                            |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [Callout](/components/callout/)                   | A note, tip, warning, or danger a skimming reviewer must not miss                         |
-| [Part](/components/part/)                         | The plan's sections divided into numbered acts, rendered as anchored divider bands        |
-| [QuickSummary](/components/quick-summary/)        | The plan's key points as a standout opening card. Exactly one per plan                    |
-| [Slide](/components/slide/)                       | A recurring [slide type](/authoring/slide-types/) and its guidance applied to one section |
-| [TableOfContents](/components/table-of-contents/) | The plan in one look: one linked row per section with its one-line gist                   |
+| Component                                         | What it is for                                                                             |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [Callout](/components/callout/)                   | A note, tip, warning, or danger a skimming reviewer must not miss                          |
+| [Part](/components/part/)                         | The plan's sections divided into numbered acts, rendered as anchored divider bands         |
+| [QuickSummary](/components/quick-summary/)        | The plan's key points as a standout opening card. Exactly one per plan                     |
+| [Slide](/components/slide/)                       | A recurring [slide type](/for-agents/#slide-types) and its guidance applied to one section |
+| [TableOfContents](/components/table-of-contents/) | The plan in one look: one linked row per section with its one-line gist                    |
+
+## Pairs worth separating
+
+A few of these look like each other. The dividing line is what the reviewer needs to _see_.
+
+| Reach for          | Rather than        | When                                                                                                |
+| ------------------ | ------------------ | --------------------------------------------------------------------------------------------------- |
+| `QuickDecision`    | `Decision`         | The reviewer can answer from the option titles alone                                                |
+| `Decision`         | `DecisionAnalysis` | Option-by-option considerations are enough, and a matrix would be ceremony                          |
+| `DecisionAnalysis` | `Decision`         | The reviewer should audit the choice across explicit criteria, or check weighted arithmetic         |
+| `CodeSnippet`      | `CodeDiff`         | You are showing existing code to read, with no change to mark                                       |
+| `CodeDiff`         | `CodeSnippet`      | The point is what changes, not what is there                                                        |
+| `FileTree`         | `FileTreeDiff`     | The tree carries no change status. `FileTreeDiff` rejects a tree with no change and points you here |
+| `FileTreeDiff`     | `FileTree`         | Entries carry added, modified, removed, or renamed status                                           |
+| `FlowDiagram`      | `MermaidDiagram`   | The content is a staged left-to-right story and you want Big Plan's own cards and connectors        |
+| `MermaidDiagram`   | `FlowDiagram`      | It is a general graph, or a sequence, class, state, or ER view                                      |
+| A Markdown table   | `DataTable`        | Under roughly ten rows and four columns. A prose table cannot wrap, sort, or filter                 |
+| `DataTable`        | A Markdown table   | The grid is a reference the reviewer returns to, or would scroll sideways as prose                  |
+
+And before any of them: if the content is an argument, prose is usually right. Reach for a
+component when the reader needs to compare, scan, sort, or point at something. Never draw an
+illustration as ASCII art in a code fence.
 
 ## Every page has the same shape
 
@@ -84,4 +106,4 @@ A scoped child component is valid only in its declared hierarchy: `Annotation` i
 
 ## Next
 
-[Choose the right component](/authoring/choose-a-component/) — which of these to reach for.
+[Choose the right component](/components/) — which of these to reach for.

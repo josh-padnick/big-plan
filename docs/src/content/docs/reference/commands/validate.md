@@ -61,5 +61,5 @@ It writes no output.
 
 ## Related
 
-- [Fix a validation error](/authoring/fix-a-validation-error/) — every diagnostic, keyed to its edit.
+- [Fix a validation error](/for-agents/#fix-a-validation-error) — every diagnostic, keyed to its edit.
 - [Lint rules](/reference/lint-rules/) — the exhaustive matching boundaries.

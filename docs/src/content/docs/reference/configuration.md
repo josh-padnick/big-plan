@@ -51,5 +51,5 @@ When no state location accepts writes at all, the guidance gate degrades rather 
 
 ## Related
 
-- [Files Big Plan writes](/reference/files/) — the full layout beside your plan.
+- [Files Big Plan writes](/for-agents/#files-big-plan-writes) — the full layout beside your plan.
 - [`big-plan service`](/reference/commands/service/) — the process that reads `BIG_PLAN_PORT`.

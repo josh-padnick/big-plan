@@ -76,13 +76,13 @@ complete reading experience when scripts are disabled.
 
 ## If it goes wrong
 
-| What you see                                      | What it means                                                                 | What to do                                                                                                  |
-| ------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `GUIDANCE_REQUIRED`                               | `render`, `validate`, and `review` are gated                                  | Run `npx -y big-plan@latest guidance` in the same working directory                                         |
-| A syntax error from Node                          | Your Node.js is older than 22                                                 | Upgrade Node; check with `node --version`                                                                   |
-| `npx big-plan` runs an unexpected version         | An unversioned `npx` run may use a matching package already installed locally | Use `npx -y big-plan@latest`, or pin an exact version                                                       |
-| `Cannot render document with invalid MDX`         | The plan has authoring errors                                                 | Every diagnostic is in the `help` entries; see [Fix a validation error](/authoring/fix-a-validation-error/) |
-| The download wrote an HTML page instead of a plan | `curl` followed a redirect or an error page                                   | Check the file starts with `#`, and re-download                                                             |
+| What you see                                      | What it means                                                                 | What to do                                                                                                   |
+| ------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `GUIDANCE_REQUIRED`                               | `render`, `validate`, and `review` are gated                                  | Run `npx -y big-plan@latest guidance` in the same working directory                                          |
+| A syntax error from Node                          | Your Node.js is older than 22                                                 | Upgrade Node; check with `node --version`                                                                    |
+| `npx big-plan` runs an unexpected version         | An unversioned `npx` run may use a matching package already installed locally | Use `npx -y big-plan@latest`, or pin an exact version                                                        |
+| `Cannot render document with invalid MDX`         | The plan has authoring errors                                                 | Every diagnostic is in the `help` entries; see [Fix a validation error](/for-agents/#fix-a-validation-error) |
+| The download wrote an HTML page instead of a plan | `curl` followed a redirect or an error page                                   | Check the file starts with `#`, and re-download                                                              |
 
 ## Next
 

@@ -66,5 +66,5 @@ legal Markdown that a quality rule flags.
 
 ## Related
 
-- [The compiled plan model](/reference/plan-model/) — the field-by-field contract.
-- [How Big Plan works](/concepts/how-it-works/) — why every command agrees.
+- [The compiled plan model](/for-agents/#the-compiled-plan-model) — the field-by-field contract.
+- [How Big Plan works](/review/) — why every command agrees.

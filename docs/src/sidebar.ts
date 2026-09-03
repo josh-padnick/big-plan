@@ -40,13 +40,11 @@ export const SIDEBAR: readonly SidebarEntry[] = [
     collapsed: true,
     items: [
       { label: "How it works", slug: "review" },
-      { label: "How compilation works", slug: "concepts/how-it-works" },
-      { label: "One writer owns the plan", slug: "concepts/one-writer" },
       {
         label: "Components",
         collapsed: true,
         items: [
-          { label: "Overview", slug: "components" },
+          { label: "The component library", slug: "components" },
           {
             label: "Decisions",
             collapsed: true,
@@ -114,28 +112,9 @@ export const SIDEBAR: readonly SidebarEntry[] = [
     ],
   },
   {
-    label: "Write a plan",
-    collapsed: true,
-    items: [
-      { label: "Overview", slug: "authoring" },
-      { label: "Anatomy of a plan", slug: "authoring/anatomy-of-a-plan" },
-      { label: "Where each rule lives", slug: "authoring/where-rules-live" },
-      {
-        label: "Choose the right component",
-        slug: "authoring/choose-a-component",
-      },
-      { label: "Slide types", slug: "authoring/slide-types" },
-      {
-        label: "Fix a validation error",
-        slug: "authoring/fix-a-validation-error",
-      },
-    ],
-  },
-  {
     label: "Reference",
     collapsed: true,
     items: [
-      { label: "Overview", slug: "reference" },
       {
         label: "Commands",
         collapsed: true,
@@ -150,24 +129,11 @@ export const SIDEBAR: readonly SidebarEntry[] = [
           { label: "big-plan service", slug: "reference/commands/service" },
         ],
       },
-      { label: "Error codes", slug: "reference/error-codes" },
       { label: "Lint rules", slug: "reference/lint-rules" },
       { label: "Configuration and state", slug: "reference/configuration" },
-      { label: "The compiled plan model", slug: "reference/plan-model" },
-      { label: "Files Big Plan writes", slug: "reference/files" },
     ],
   },
-  {
-    label: "Security",
-    collapsed: true,
-    items: [
-      { label: "Overview", slug: "security" },
-      { label: "Rendered plans are inert", slug: "security/inert-documents" },
-      { label: "Trust boundaries", slug: "security/trust-boundaries" },
-      { label: "Reporting a vulnerability", slug: "security/reporting" },
-      { label: "Supply chain and releases", slug: "security/supply-chain" },
-    ],
-  },
-  // One page, so it is a link rather than a group of one.
+  // Each is one page, so each is a link rather than a group of one.
+  { label: "Security", slug: "security" },
   { label: "For agents", slug: "for-agents" },
 ];

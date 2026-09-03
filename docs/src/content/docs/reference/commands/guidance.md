@@ -66,5 +66,5 @@ Filesystem restrictions therefore never lock an agent out of the plan workflow.
 
 ## Related
 
-- [Where each rule lives](/authoring/where-rules-live/) — which surface owns which rule.
+- [Where each rule lives](/for-agents/#guidance-is-the-live-instruction-source) — which surface owns which rule.
 - [Configuration and state](/reference/configuration/) — where the acknowledgment is stored.

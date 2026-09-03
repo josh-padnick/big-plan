@@ -86,4 +86,4 @@ cases.
 ## Related
 
 - [Your first review](/intro/first-review/) — the end-to-end walkthrough.
-- [Fix a validation error](/authoring/fix-a-validation-error/) — every diagnostic, keyed to its edit.
+- [Fix a validation error](/for-agents/#fix-a-validation-error) — every diagnostic, keyed to its edit.
