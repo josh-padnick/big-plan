@@ -497,6 +497,10 @@ describe("agent work loop lifecycle", () => {
   it.each([
     { label: "malformed JSON", response: "{" },
     { label: "a missing request id", response: JSON.stringify({}) },
+    {
+      label: "an unknown request id",
+      response: JSON.stringify({ requestId: "eeeeeeeeeeeeeeee" }),
+    },
   ])(
     "should give an actionable retry when response_file contains $label",
     async ({ response }) => {

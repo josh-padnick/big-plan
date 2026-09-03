@@ -1684,7 +1684,9 @@ const respond = async ({
     return fail("The reviewer canceled this agent request");
   }
   if (request === undefined || requestIsTerminal(request)) {
-    return fail("The response does not answer the current pending request");
+    return failResponseCorrection(
+      "its requestId does not match the current pending request",
+    );
   }
   // The agent answers from the candidate it has been editing, and that
   // candidate's generation is the claim it really holds. A displaced agent
