@@ -101,13 +101,14 @@ describe("agentSessionReference", () => {
     );
   });
 
-  it("should not copy a URL that carries no bare session id", () => {
+  it.each([
+    "https://claude.ai",
+    "https://claude.ai/",
+    "https://claude.ai/?token=value",
+  ])("should not copy the pathless URL %j", (sessionUrl) => {
     expect(
-      agentSessionReference({
-        sessionUrl: "https://claude.ai/?token=value",
-        writerId: "writer-1",
-      }),
-    ).toEqual({ handle: "https://claude.ai/?token=value" });
+      agentSessionReference({ sessionUrl, writerId: "writer-1" }),
+    ).toEqual({ handle: sessionUrl });
   });
 
   it("should copy a declared handle when no URL was declared", () => {
