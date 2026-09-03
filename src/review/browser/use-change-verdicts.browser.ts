@@ -30,6 +30,7 @@ import {
   changeVerdictBatches,
   changeVerdictKey,
   rejectedChangeKeys,
+  type ChangeVerdictScope,
   type ChangeVerdictState,
 } from "../shared/change-verdict.js";
 import { decodeChangeVerdicts } from "../shared/review-wire.js";
@@ -74,10 +75,8 @@ const VERDICT_READ_TOAST_ID = "big-plan-change-verdict-read";
 export const PLAN_SOURCE_MOVED_EVENT = "bigplan:plan-source-moved";
 
 /** One gesture on its way to the record. */
-export type PendingVerdict = {
+export type PendingVerdict = ChangeVerdictScope & {
   readonly op: "accept" | "reject" | "undo";
-  readonly from: string;
-  readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
   readonly onlyUndecided?: boolean;
   /**
@@ -134,6 +133,7 @@ const overlay = ({
   for (const mutation of pending) {
     for (const placeId of mutation.placeIds) {
       const key = changeVerdictKey({
+        changeSetId: mutation.changeSetId,
         from: mutation.from,
         to: mutation.to,
         placeId,
@@ -224,6 +224,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
               method: "POST",
               body: {
                 op: head.op,
+                changeSetId: head.changeSetId,
                 from: head.from,
                 to: head.to,
                 placeIds: head.placeIds,
@@ -305,6 +306,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
         ...queue.current,
         ...batches.map((placeIds) => ({
           op: input.op,
+          changeSetId: input.changeSetId,
           from: input.from,
           to: input.to,
           placeIds,

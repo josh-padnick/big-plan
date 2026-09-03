@@ -640,17 +640,60 @@ const componentKeyFor = ({
   return owner?.isComponentRoot === true ? owner.id : undefined;
 };
 
-/** Groups adjacent changed blocks within a section into calm review stops. */
+/**
+ * Which change set declared each changed block, as the party that knows the
+ * committed revisions hands it in.
+ *
+ * It is data passed in rather than something this module derives, because the
+ * revision log and the agent exchange are review-runtime facts and grouping is
+ * a pure rule over blocks. The map is deliberately partial: a block no change
+ * set declared has no owner here, and grouping treats that as unknown rather
+ * than as an owner of its own.
+ */
+export type ChangeOwnership = ReadonlyMap<string, string>;
+
+// The change set a location belongs to, when the partition names one. Both
+// sides are asked because a declared target names the block as the revision
+// that changed it left it, while a deleted block only exists on the old side.
+const ownerChangeSetFor = ({
+  location,
+  ownership,
+}: {
+  readonly location: SnapshotDiffLocation;
+  readonly ownership: ChangeOwnership | undefined;
+}): string | undefined => {
+  if (ownership === undefined) return undefined;
+  const newOwner =
+    location.newBlockId === undefined
+      ? undefined
+      : ownership.get(location.newBlockId);
+  if (newOwner !== undefined) return newOwner;
+  return location.oldBlockId === undefined
+    ? undefined
+    : ownership.get(location.oldBlockId);
+};
+
+/**
+ * Groups adjacent changed blocks within a section into calm review stops.
+ *
+ * Adjacency is geometric, and ownership is not, so grouping asks both. Two
+ * changed blocks that sit side by side but belong to different change sets are
+ * two review stops rather than one: merging them mints a single place id that
+ * both threads then attribute, and a place both threads attribute is a place
+ * either one's acceptance silently closes for the other.
+ */
 export const buildSnapshotDiff = ({
   from,
   to,
   before,
   after,
+  ownership,
 }: {
   readonly from: string;
   readonly to: string;
   readonly before: ReadonlyArray<SnapshotBlock>;
   readonly after: ReadonlyArray<SnapshotBlock>;
+  readonly ownership?: ChangeOwnership;
 }): BuiltSnapshotDiff => {
   const locations = diffSnapshots({ before, after });
   const groups: Array<Array<number>> = [];
@@ -676,6 +719,15 @@ export const buildSnapshotDiff = ({
       previous === undefined
         ? undefined
         : componentKeyFor({ location: previous, before, after });
+    const currentChangeSet = ownerChangeSetFor({ location, ownership });
+    const previousChangeSet =
+      previous === undefined
+        ? undefined
+        : ownerChangeSetFor({ location: previous, ownership });
+    const sameChangeSet =
+      currentChangeSet === undefined ||
+      previousChangeSet === undefined ||
+      currentChangeSet === previousChangeSet;
     const renderedEvidence =
       location.isComponentRoot || RENDERED_SNAPSHOT_KINDS.has(location.kind);
     const previousRenderedEvidence =
@@ -687,6 +739,7 @@ export const buildSnapshotDiff = ({
       group !== undefined &&
       previous !== undefined &&
       previous.section === location.section &&
+      sameChangeSet &&
       (currentComponentKey === undefined ||
         previousComponentKey === undefined ||
         currentComponentKey === previousComponentKey) &&
@@ -714,6 +767,14 @@ export const buildSnapshotDiff = ({
       const statuses = new Set(
         groupedLocations.map((location) => location.status),
       );
+      const ownerChangeSetIds = [
+        ...new Set(
+          groupedLocations.flatMap((location) => {
+            const owner = ownerChangeSetFor({ location, ownership });
+            return owner === undefined ? [] : [owner];
+          }),
+        ),
+      ];
       return {
         placeId: placeId({ from, to, locations: groupedLocations }),
         status: statuses.size === 1 ? first.status : "changed",
@@ -721,6 +782,7 @@ export const buildSnapshotDiff = ({
         section: first.section,
         note: placeNote(groupedLocations),
         locationIndexes,
+        ...(ownerChangeSetIds.length === 0 ? {} : { ownerChangeSetIds }),
       };
     }),
   };

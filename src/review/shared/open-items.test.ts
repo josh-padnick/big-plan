@@ -18,8 +18,10 @@ import type { ReviewInput } from "./input-contract.js";
 const FROM = "aaaaaaaaaaaaaaaa";
 const TO = "bbbbbbbbbbbbbbbb";
 
+const SET_ID = "req1req1req1req1";
+
 const changeSet = (overrides: Partial<OpenChangeSet> = {}): OpenChangeSet => ({
-  id: "req1req1req1req1",
+  id: SET_ID,
   label: "Retry backoff",
   from: FROM,
   to: TO,
@@ -40,7 +42,10 @@ describe("deriveOpenItems", () => {
   it("promotes Approve when every change set is accepted", () => {
     const items = deriveOpenItems({
       changeSets: [changeSet()],
-      accepted: new Set([`${FROM}:${TO}:p1`, `${FROM}:${TO}:p2`]),
+      accepted: new Set([
+        `${SET_ID}:${FROM}:${TO}:p1`,
+        `${SET_ID}:${FROM}:${TO}:p2`,
+      ]),
       rejected: new Set(),
       inputs: [input({ state: "answered", detail: "Answered: Gradual" })],
       requests: [],
@@ -57,8 +62,8 @@ describe("deriveOpenItems", () => {
   it("promotes Approve when every change is decided, rejections included", () => {
     const items = deriveOpenItems({
       changeSets: [changeSet()],
-      accepted: new Set([`${FROM}:${TO}:p1`]),
-      rejected: new Set([`${FROM}:${TO}:p2`]),
+      accepted: new Set([`${SET_ID}:${FROM}:${TO}:p1`]),
+      rejected: new Set([`${SET_ID}:${FROM}:${TO}:p2`]),
       inputs: [input({ state: "answered", detail: "Answered: Gradual" })],
       requests: [],
     });

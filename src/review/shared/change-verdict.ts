@@ -13,11 +13,19 @@
 // reject - so nothing about how the first decision went can survive to
 // constrain the second.
 //
-// A verdict is addressed by the revision it belongs to - the diff's two
-// snapshot digests - plus the place inside it. That address is content-pinned
-// by construction: a later plan revision produces a different result digest, so
-// a verdict can never migrate onto different content. Nothing here needs a
-// currency predicate for the same reason.
+// A verdict is addressed by the change set that proposed it, the revision it
+// belongs to - the diff's two snapshot digests - and the place inside it. That
+// address is content-pinned by construction: a later plan revision produces a
+// different result digest, so a verdict can never migrate onto different
+// content. Nothing here needs a currency predicate for the same reason.
+//
+// The change set is part of the address because a revision line is shared and
+// a reviewer's decision is not. Two threads answered by one revision routinely
+// attribute the same place - their edits land side by side and the diff groups
+// them - and without an owner in the key those two threads hold one acceptance
+// fact between them, so closing one silently closes the other. The owner makes
+// the address say whose decision it is, which is the difference between a
+// record that can be read back per thread and one that cannot.
 //
 // The counting lives here rather than at each surface because a change set's
 // progress is shown in more than one place at once - the digest attached to an
@@ -25,10 +33,22 @@
 // each derive it are two surfaces that can disagree about whether the change
 // set still has open work.
 
-/** The revision-scoped address of one change place. */
-export type ChangeVerdictAddress = {
+/**
+ * The scope one surface records verdicts under: the change set that owns the
+ * decision, and the revision its diff spans.
+ *
+ * It is named separately from the address because every surface that decides
+ * changes holds it once and names many places inside it, and because a scope
+ * with no place in it is still the thing a standing is counted over.
+ */
+export type ChangeVerdictScope = {
+  readonly changeSetId: string;
   readonly from: string;
   readonly to: string;
+};
+
+/** The owner- and revision-scoped address of one change place. */
+export type ChangeVerdictAddress = ChangeVerdictScope & {
   readonly placeId: string;
 };
 
@@ -72,6 +92,13 @@ export type ChangeVerdictState = {
 /** A snapshot digest, as every review endpoint spells one. */
 export const SNAPSHOT_DIGEST = /^[a-f0-9]{16,64}$/u;
 
+/**
+ * A change-set id, as both the committed revision log and the verdict record
+ * spell one. It names either an ordinary comment thread or an immutable
+ * request-keyed transaction, so it accepts short comment ids and request ids.
+ */
+export const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/u;
+
 /** A place id is the diff's own, so it is bounded like any other stored id. */
 export const PLACE_ID_LIMIT = 256;
 
@@ -104,10 +131,11 @@ export const changeVerdictBatches = (
 
 /** The key one verdict is stored and looked up under. */
 export const changeVerdictKey = ({
+  changeSetId,
   from,
   to,
   placeId,
-}: ChangeVerdictAddress): string => `${from}:${to}:${placeId}`;
+}: ChangeVerdictAddress): string => `${changeSetId}:${from}:${to}:${placeId}`;
 
 const keysWithVerdict = ({
   state,
@@ -173,14 +201,13 @@ export type ChangeSetStanding = {
  * stay separate above that because they leave the plan in opposite states.
  */
 export const changeSetStanding = ({
+  changeSetId,
   from,
   to,
   placeIds,
   accepted,
   rejected,
-}: {
-  readonly from: string;
-  readonly to: string;
+}: ChangeVerdictScope & {
   readonly placeIds: ReadonlyArray<string>;
   readonly accepted: ReadonlySet<string>;
   readonly rejected: ReadonlySet<string>;
@@ -188,7 +215,7 @@ export const changeSetStanding = ({
   const total = placeIds.length;
   const dispositions = placeIds.map((placeId) =>
     changeDispositionOf({
-      address: { from, to, placeId },
+      address: { changeSetId, from, to, placeId },
       accepted,
       rejected,
     }),

@@ -58,11 +58,14 @@ describe("threadChangesAllDecided", () => {
   const from = deriveSnapshotDigest(BASELINE);
   const to = deriveSnapshotDigest(PROPOSED);
 
+  const SESSION = "dddddddddddddddd";
+  const PLAN = "eeeeeeeeeeeeeeee";
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "big-plan-thread-decided-"));
     planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PROPOSED);
-    store = reviewStoreFor({ planPath, planId: "eeeeeeeeeeeeeeee" });
+    store = reviewStoreFor({ planPath, planId: PLAN });
     await prepareStore(store);
     await writeSnapshot({ store, snapshot: from, source: BASELINE });
     await writeSnapshot({ store, snapshot: to, source: PROPOSED });
@@ -98,10 +101,18 @@ describe("threadChangesAllDecided", () => {
     await expect(
       threadChangesAllDecided({
         store,
+        sessionId: SESSION,
+        planId: PLAN,
         planPath,
         changeSetId: THREAD,
         verdicts: decided([
-          { from, to, placeId: first ?? "", verdict: "accepted" },
+          {
+            changeSetId: THREAD,
+            from,
+            to,
+            placeId: first ?? "",
+            verdict: "accepted",
+          },
         ]),
       }),
     ).resolves.toBe(false);
@@ -113,10 +124,13 @@ describe("threadChangesAllDecided", () => {
     await expect(
       threadChangesAllDecided({
         store,
+        sessionId: SESSION,
+        planId: PLAN,
         planPath,
         changeSetId: THREAD,
         verdicts: decided(
           all.map((placeId, index) => ({
+            changeSetId: THREAD,
             from,
             to,
             placeId,
@@ -132,6 +146,8 @@ describe("threadChangesAllDecided", () => {
     await expect(
       threadChangesAllDecided({
         store,
+        sessionId: SESSION,
+        planId: PLAN,
         planPath,
         changeSetId: "9999999999999999",
         verdicts: decided([]),
@@ -144,6 +160,8 @@ describe("threadChangesAllDecided", () => {
     await expect(
       threadChangesAllDecided({
         store,
+        sessionId: SESSION,
+        planId: PLAN,
         planPath,
         changeSetId: THREAD,
         verdicts: decided(

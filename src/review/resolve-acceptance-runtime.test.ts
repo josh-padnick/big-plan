@@ -217,14 +217,26 @@ describe("resolving a thread", () => {
         runtime,
         path: "/api/change-verdicts",
         method: "POST",
-        body: { op: "reject", from, to, placeIds: [rejected] },
+        body: {
+          op: "reject",
+          changeSetId: THREAD,
+          from,
+          to,
+          placeIds: [rejected],
+        },
       });
       expect(rejection.status).toBe(200);
       const acceptance = await callRuntime({
         runtime,
         path: "/api/change-verdicts",
         method: "POST",
-        body: { op: "accept", from, to, placeIds: [accepted] },
+        body: {
+          op: "accept",
+          changeSetId: THREAD,
+          from,
+          to,
+          placeIds: [accepted],
+        },
       });
       expect(acceptance.status).toBe(200);
       const decidedBefore = await readChangeVerdicts({
@@ -280,6 +292,7 @@ describe("resolving a thread", () => {
       expect(verdicts.revision).toBe(afterInterrupted.revision + 1);
       expect(
         changeSetStanding({
+          changeSetId: THREAD,
           from,
           to,
           placeIds: places,

@@ -94,6 +94,8 @@ export const closuresForResolvedThreads = async ({
     if (span === undefined) continue;
     const diff = await transactionSnapshotDiff({
       store,
+      sessionId,
+      planId,
       planPath,
       from: span.from,
       to: span.to,
@@ -106,9 +108,17 @@ export const closuresForResolvedThreads = async ({
     const placeIds =
       changeTargets === undefined
         ? diff.places.map((place) => place.placeId)
-        : attributeDiffPlaces({ diff, changeTargets }).placeIds;
+        : attributeDiffPlaces({ diff, changeTargets, changeSetId: commentId })
+            .placeIds;
     if (placeIds.length === 0) continue;
-    closures.push({ from: span.from, to: span.to, placeIds });
+    // A thread's change set is keyed by the comment it grew from, so that is
+    // the owner every verdict this resolve records is addressed to.
+    closures.push({
+      changeSetId: commentId,
+      from: span.from,
+      to: span.to,
+      placeIds,
+    });
   }
   return closures;
 };

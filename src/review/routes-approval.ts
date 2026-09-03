@@ -67,6 +67,7 @@ import { requestIsTerminal } from "./shared/agent-request-state.js";
 import { encodeApprovalSummary } from "./shared/review-wire.js";
 import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
+import { readChangeOwnership } from "./change-ownership.js";
 import {
   applyChangeVerdictMutation,
   type StoredChangeVerdicts,
@@ -212,6 +213,7 @@ const changeSetsAtApproval = async (
   });
   const placeIdsByRevision = new Map<string, ReadonlyArray<string>>();
   for (const { from, to } of folded) {
+    if (placeIdsByRevision.has(`${from}:${to}`)) continue;
     const [beforeSource, afterSource] = await Promise.all([
       readSnapshot({ store: context.store, snapshot: from }),
       readSnapshot({ store: context.store, snapshot: to }),
@@ -226,11 +228,21 @@ const changeSetsAtApproval = async (
       fallbackTitle,
       identity: {},
     });
+    // Approval closes the sets at the addresses the reviewer was shown, so it
+    // groups the revision exactly as the reader's diff grouped it.
+    const ownership = await readChangeOwnership({
+      store: context.store,
+      sessionId: context.sessionId,
+      planId: context.planId,
+      from,
+      to,
+    });
     const diff = buildSnapshotDiff({
       from,
       to,
       before: before.blocks,
       after: after.blocks,
+      ...(ownership === undefined ? {} : { ownership }),
     });
     placeIdsByRevision.set(
       `${from}:${to}`,
@@ -296,6 +308,7 @@ const acceptChangeSets = async ({
     // row that says the reviewer accepted the change it took out.
     const undecided = changeSet.placeIds.filter((placeId) => {
       const key = changeVerdictKey({
+        changeSetId: changeSet.id,
         from: changeSet.from,
         to: changeSet.to,
         placeId,
@@ -307,6 +320,7 @@ const acceptChangeSets = async ({
         verdicts,
         mutation: {
           op: "accept",
+          changeSetId: changeSet.id,
           from: changeSet.from,
           to: changeSet.to,
           placeIds,

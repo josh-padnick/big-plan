@@ -14,12 +14,9 @@ import { join } from "node:path";
 import type { AgentResponse } from "./agent-exchange.js";
 import { readStoreJson, writeStoreJson } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
+import { CHANGE_SET_ID, SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
-// A change-set id names either an ordinary comment thread or an immutable
-// request-keyed transaction, so it accepts short comment ids and request ids.
-const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/;
 const COMMITTED_REVISION_VERSION = 1;
 
 /** What caused the change set the committed revision belongs to. */

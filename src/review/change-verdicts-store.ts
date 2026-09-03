@@ -12,6 +12,7 @@
 
 import { join } from "node:path";
 import {
+  CHANGE_SET_ID,
   DECIDED_CHANGE_LIMIT,
   VERDICT_BATCH_LIMIT,
   PLACE_ID_LIMIT,
@@ -47,6 +48,8 @@ export type StoredChangeVerdicts = ChangeVerdictState & {
  */
 export type ChangeVerdictMutation = {
   readonly op: "accept" | "reject" | "undo";
+  /** The change set whose decision this is, so no other set inherits it. */
+  readonly changeSetId: string;
   readonly from: string;
   readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
@@ -84,6 +87,19 @@ const record = ({
     throw new ChangeVerdictsRejected(`"${field}" must be an object`);
   }
   return value as Readonly<Record<string, unknown>>;
+};
+
+// A change-set id addresses the owner of a decision, so it is checked to the
+// same shape the committed revision log mints one in. An id no change set
+// holds addresses no decision and is inert rather than dangerous, but a
+// free-form one would let a browser widen a verdict past any owner at all.
+const changeSetId = (value: unknown): string => {
+  if (typeof value !== "string" || !CHANGE_SET_ID.test(value)) {
+    throw new ChangeVerdictsRejected(
+      '"changeSetId" must be a hexadecimal change-set id',
+    );
+  }
+  return value;
 };
 
 const digest = ({
@@ -172,6 +188,7 @@ const verdict = (value: unknown): ChangeVerdict => {
   const candidate = record({ value, field: "verdict" });
   const decidedBy = actor(candidate.actor);
   return {
+    changeSetId: changeSetId(candidate.changeSetId),
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
     placeId: placeId(candidate.placeId),
@@ -259,6 +276,7 @@ export const validateChangeVerdictMutation = ({
   }
   return {
     op: candidate.op,
+    changeSetId: changeSetId(candidate.changeSetId),
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
     placeIds,
@@ -291,6 +309,7 @@ export const applyChangeVerdictMutation = ({
           !mutation.onlyUndecided ||
           !verdicts.decided.some(
             (entry) =>
+              entry.changeSetId === mutation.changeSetId &&
               entry.from === mutation.from &&
               entry.to === mutation.to &&
               entry.placeId === placeId,
@@ -298,6 +317,7 @@ export const applyChangeVerdictMutation = ({
       )
       .map((placeId) =>
         changeVerdictKey({
+          changeSetId: mutation.changeSetId,
           from: mutation.from,
           to: mutation.to,
           placeId,
@@ -320,10 +340,16 @@ export const applyChangeVerdictMutation = ({
     ...mutation.placeIds
       .filter((placeId) =>
         touched.has(
-          changeVerdictKey({ from: mutation.from, to: mutation.to, placeId }),
+          changeVerdictKey({
+            changeSetId: mutation.changeSetId,
+            from: mutation.from,
+            to: mutation.to,
+            placeId,
+          }),
         ),
       )
       .map((placeId) => ({
+        changeSetId: mutation.changeSetId,
         from: mutation.from,
         to: mutation.to,
         placeId,
@@ -346,6 +372,11 @@ export const applyChangeVerdictMutation = ({
  * A rejected place is the one verdict that also owns bytes, so the set of them
  * is what the plan source has to agree with. Deriving it here keeps that
  * question answerable from the record alone.
+ *
+ * It reads across owners deliberately, where the address a verdict is stored
+ * under does not. A verdict is one change set's decision, but the plan source
+ * is shared, so the bytes have to follow every rejection recorded against the
+ * revision rather than whichever set the reviewer happened to be reading.
  */
 export const rejectedPlaceIdsFor = ({
   verdicts,

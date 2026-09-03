@@ -12,6 +12,10 @@ import {
   writeSnapshot,
 } from "./store.js";
 
+const PLAN_ID = "0123456789abcdef";
+const SESSION_ID = "fedcba9876543210";
+const CHANGE_SET_ID = "abcdef0123456789";
+
 describe("autoAcceptChangeSets", () => {
   it("preserves an existing rejection", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-auto-accept-"));
@@ -23,7 +27,7 @@ describe("autoAcceptChangeSets", () => {
     await writeFile(planPath, proposed);
     const store = reviewStoreFor({
       planPath,
-      planId: "0123456789abcdef",
+      planId: PLAN_ID,
     });
     try {
       await prepareStore(store);
@@ -46,6 +50,7 @@ describe("autoAcceptChangeSets", () => {
           revision: 1,
           decided: [
             {
+              changeSetId: CHANGE_SET_ID,
               from,
               to,
               placeId,
@@ -59,8 +64,10 @@ describe("autoAcceptChangeSets", () => {
 
       const { verdicts } = await autoAcceptChangeSets({
         store,
+        sessionId: SESSION_ID,
+        planId: PLAN_ID,
         planPath,
-        transactions: [{ from, to }],
+        transactions: [{ changeSetId: CHANGE_SET_ID, from, to }],
         decidedAt: "2026-09-02T12:01:00.000Z",
       });
 

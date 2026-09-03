@@ -1485,6 +1485,9 @@ Two workers drain the queue every two seconds.
 `;
   const FROM = deriveSnapshotDigest(BASELINE);
   const TO = deriveSnapshotDigest(PROPOSED);
+  // The one change set this proposal was committed under, which is what every
+  // verdict over it is addressed to.
+  const PROPOSAL_CHANGE_SET_ID = "b".repeat(16);
 
   /**
    * A runtime whose plan already holds one agent proposal, with both of that
@@ -1511,7 +1514,7 @@ Two workers drain the queue every two seconds.
         store: target.store,
         revision: {
           requestId: "a".repeat(16),
-          changeSetIds: ["b".repeat(16)],
+          changeSetIds: [PROPOSAL_CHANGE_SET_ID],
           baseSnapshot: FROM,
           resultSnapshot: TO,
           provenance: "feedback",
@@ -1553,18 +1556,20 @@ Two workers drain the queue every two seconds.
     sessionToken,
     op,
     placeIds,
+    changeSetId = PROPOSAL_CHANGE_SET_ID,
   }: {
     readonly target: ReviewRuntime;
     readonly sessionToken: string;
     readonly op: "accept" | "reject" | "undo";
     readonly placeIds: ReadonlyArray<string>;
+    readonly changeSetId?: string;
   }): Promise<Response> =>
     callRuntime({
       target,
       sessionToken,
       path: "/api/change-verdicts",
       method: "POST",
-      body: { op, from: FROM, to: TO, placeIds },
+      body: { op, changeSetId, from: FROM, to: TO, placeIds },
     });
 
   const placeFor = (
@@ -1612,6 +1617,7 @@ Two workers drain the queue every two seconds.
           revision: 1,
           decided: [
             {
+              changeSetId: PROPOSAL_CHANGE_SET_ID,
               from: FROM,
               to: TO,
               placeId,
@@ -1647,6 +1653,7 @@ Two workers drain the queue every two seconds.
           revision: 1,
           decided: [
             {
+              changeSetId: PROPOSAL_CHANGE_SET_ID,
               from: FROM,
               to: TO,
               placeId: placeFor(places, "durable"),
@@ -1686,6 +1693,7 @@ Two workers drain the queue every two seconds.
           revision: 2,
           decided: [
             {
+              changeSetId: PROPOSAL_CHANGE_SET_ID,
               from: FROM,
               to: TO,
               placeId: durable,

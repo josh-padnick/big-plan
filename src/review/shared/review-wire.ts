@@ -3,6 +3,7 @@
 
 import { isStoredCommentTarget, type ReviewComment } from "./comment.js";
 import {
+  CHANGE_SET_ID,
   PLACE_ID_LIMIT,
   SNAPSHOT_DIGEST,
   type ChangeVerdict,
@@ -247,6 +248,13 @@ export type DiffPlace = {
   readonly section: string;
   readonly note: "reworded" | "rewritten" | "replaced" | "added" | "removed";
   readonly locationIndexes: ReadonlyArray<number>;
+  /**
+   * The change sets that declared the blocks in this place, where the runtime
+   * could name them. It is what lets a thread say whose work the rest of the
+   * changes in view belong to instead of counting them anonymously; a place
+   * whose blocks nobody declared carries none.
+   */
+  readonly ownerChangeSetIds?: ReadonlyArray<string>;
 };
 
 export type SnapshotDiff = {
@@ -469,6 +477,8 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
     revision: storedRevision(value.revision),
     decided: value.decided.flatMap((entry): ReadonlyArray<ChangeVerdict> =>
       isReviewWireRecord(entry) &&
+      typeof entry.changeSetId === "string" &&
+      CHANGE_SET_ID.test(entry.changeSetId) &&
       typeof entry.from === "string" &&
       SNAPSHOT_DIGEST.test(entry.from) &&
       typeof entry.to === "string" &&
@@ -483,6 +493,7 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
         entry.actor === "auto-accept")
         ? [
             {
+              changeSetId: entry.changeSetId,
               from: entry.from,
               to: entry.to,
               placeId: entry.placeId,
@@ -519,7 +530,6 @@ export type CommittedChangeSetState = {
 
 // A change set is keyed by an ordinary comment thread's short id or by an
 // immutable transaction's request id, so the wire accepts both widths.
-const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/;
 
 const CHANGE_SET_PROVENANCE: ReadonlySet<string> = new Set<ChangeSetProvenance>(
   ["feedback", "reply", "chat", "push"],
@@ -1348,6 +1358,12 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
         index < locations.length,
     );
     if (locationIndexes.length !== place.locationIndexes.length) return [];
+    const ownerChangeSetIds = Array.isArray(place.ownerChangeSetIds)
+      ? place.ownerChangeSetIds.filter(
+          (id): id is string =>
+            typeof id === "string" && CHANGE_SET_ID.test(id),
+        )
+      : [];
     return [
       {
         placeId: place.placeId,
@@ -1356,6 +1372,7 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
         section: place.section,
         note: place.note,
         locationIndexes,
+        ...(ownerChangeSetIds.length === 0 ? {} : { ownerChangeSetIds }),
       },
     ];
   });

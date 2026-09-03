@@ -16,6 +16,7 @@ import {
   type StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
+import { readChangeOwnership } from "./change-ownership.js";
 import type { SnapshotDiff } from "./shared/review-wire.js";
 import { readSnapshot, type ReviewStore } from "./store.js";
 import {
@@ -26,6 +27,8 @@ import {
 } from "./shared/change-verdict.js";
 
 export type ChangeSetTransaction = {
+  /** The change set being closed, which is what its verdicts are addressed to. */
+  readonly changeSetId: string;
   readonly from: string;
   readonly to: string;
 };
@@ -42,14 +45,23 @@ export type AcceptedOpenPlaces = {
 /**
  * Builds the diff the reader counts for one transaction, or nothing when the
  * transaction moved the plan nowhere.
+ *
+ * "The diff the reader counts" includes how the reader groups it, so the
+ * ownership partition is read here too. Minting places without it would close
+ * a set at addresses no surface ever asks about, leaving it open in front of
+ * the reviewer.
  */
 export const transactionSnapshotDiff = async ({
   store,
+  sessionId,
+  planId,
   planPath,
   from,
   to,
 }: {
   readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
   readonly planPath: string;
   readonly from: string;
   readonly to: string;
@@ -70,28 +82,48 @@ export const transactionSnapshotDiff = async ({
     fallbackTitle,
     identity: {},
   });
+  const ownership = await readChangeOwnership({
+    store,
+    sessionId,
+    planId,
+    from,
+    to,
+  });
   return buildSnapshotDiff({
     from,
     to,
     before: before.blocks,
     after: after.blocks,
+    ...(ownership === undefined ? {} : { ownership }),
   });
 };
 
 /** Builds the reader's place addresses for each arriving transaction. */
 const closuresFor = async ({
   store,
+  sessionId,
+  planId,
   planPath,
   transactions,
 }: {
   readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
   readonly planPath: string;
   readonly transactions: ReadonlyArray<ChangeSetTransaction>;
 }): Promise<ReadonlyArray<ChangeSetClosure>> => {
   return Promise.all(
-    transactions.map(async ({ from, to }) => {
-      const diff = await transactionSnapshotDiff({ store, planPath, from, to });
+    transactions.map(async ({ changeSetId, from, to }) => {
+      const diff = await transactionSnapshotDiff({
+        store,
+        sessionId,
+        planId,
+        planPath,
+        from,
+        to,
+      });
       return {
+        changeSetId,
         from,
         to,
         placeIds:
@@ -134,6 +166,7 @@ export const acceptOpenPlaces = async ({
       for (const closure of closures) {
         const open = closure.placeIds.filter((placeId) => {
           const key = changeVerdictKey({
+            changeSetId: closure.changeSetId,
             from: closure.from,
             to: closure.to,
             placeId,
@@ -145,6 +178,7 @@ export const acceptOpenPlaces = async ({
             verdicts: next,
             mutation: {
               op: "accept",
+              changeSetId: closure.changeSetId,
               from: closure.from,
               to: closure.to,
               placeIds: batch,
@@ -155,6 +189,7 @@ export const acceptOpenPlaces = async ({
           for (const placeId of batch) {
             accepted.add(
               changeVerdictKey({
+                changeSetId: closure.changeSetId,
                 from: closure.from,
                 to: closure.to,
                 placeId,
@@ -218,11 +253,15 @@ export const restoreOpenPlaces = async ({
  */
 export const autoAcceptChangeSets = async ({
   store,
+  sessionId,
+  planId,
   planPath,
   transactions,
   decidedAt,
 }: {
   readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
   readonly planPath: string;
   readonly transactions: ReadonlyArray<ChangeSetTransaction>;
   readonly decidedAt: string;
@@ -230,7 +269,13 @@ export const autoAcceptChangeSets = async ({
   readonly verdicts: StoredChangeVerdicts;
   readonly closures: ReadonlyArray<ChangeSetClosure>;
 }> => {
-  const closures = await closuresFor({ store, planPath, transactions });
+  const closures = await closuresFor({
+    store,
+    sessionId,
+    planId,
+    planPath,
+    transactions,
+  });
   const acceptance = await acceptOpenPlaces({ store, closures, decidedAt });
   return {
     verdicts: acceptance.verdicts,

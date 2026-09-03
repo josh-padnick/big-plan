@@ -791,6 +791,8 @@ export const deleteSentComment = async (
       ? false
       : await threadChangesAllDecided({
           store,
+          sessionId,
+          planId,
           planPath: resolvedPlanPath,
           changeSetId: commentId,
           verdicts: await context.changeVerdicts.read(),

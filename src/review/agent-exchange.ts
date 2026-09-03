@@ -1679,6 +1679,37 @@ export const readAgentCommentHistory = async ({
   };
 };
 
+/**
+ * Reads the responses the named requests produced, from the whole persisted
+ * history rather than the bounded window the reader is served.
+ *
+ * A committed revision names the request that published it, and a request that
+ * scrolled out of that window still published bytes the diff is showing, so
+ * anything that joins revisions back to what the agent declared has to be able
+ * to reach it.
+ */
+export const readAgentResponsesFor = async ({
+  store,
+  sessionId,
+  planId,
+  requestIds,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly requestIds: ReadonlySet<string>;
+}): Promise<ReadonlyArray<AgentResponse>> => {
+  const complete = await readCompleteAgentExchange({
+    store,
+    sessionId,
+    planId,
+    retain: () => ({ requestIds, responseIds: requestIds }),
+  });
+  return complete.responses.filter((response) =>
+    requestIds.has(response.requestId),
+  );
+};
+
 /** Reads one response only when its complete persisted shape is valid. */
 export const readValidatedAgentResponse = async ({
   store,

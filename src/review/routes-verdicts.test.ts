@@ -10,6 +10,10 @@ import type { ReviewRouteContext } from "./review-route-context.js";
 import { recordChangeVerdicts } from "./routes-verdicts.js";
 import { prepareStore, reviewStoreFor, writeSnapshot } from "./store.js";
 
+const CHANGE_SET_ID = "abcdef0123456789";
+const SESSION_ID = "fedcba9876543210";
+const PLAN_ID = "0123456789abcdef";
+
 const directories: Array<string> = [];
 
 afterEach(async () => {
@@ -33,7 +37,7 @@ describe("recordChangeVerdicts", () => {
     await writeFile(planPath, moved);
     const store = reviewStoreFor({
       planPath,
-      planId: "0123456789abcdef",
+      planId: PLAN_ID,
     });
     await prepareStore(store);
     await Promise.all([
@@ -53,6 +57,7 @@ describe("recordChangeVerdicts", () => {
       revision: 1,
       decided: [
         {
+          changeSetId: CHANGE_SET_ID,
           from,
           to,
           placeId,
@@ -64,6 +69,8 @@ describe("recordChangeVerdicts", () => {
     };
     const context = {
       store,
+      sessionId: SESSION_ID,
+      planId: PLAN_ID,
       resolvedPlanPath: planPath,
       changeVerdicts: {
         read: async () => ({ version: 1, revision: 0, decided: [] }),
@@ -80,7 +87,13 @@ describe("recordChangeVerdicts", () => {
     const response = await recordChangeVerdicts(context, {
       query: new URLSearchParams(),
       headers: {},
-      body: { op: "reject", from, to, placeIds: [placeId] },
+      body: {
+        op: "reject",
+        changeSetId: CHANGE_SET_ID,
+        from,
+        to,
+        placeIds: [placeId],
+      },
     });
 
     expect(response.status).toBe(409);
@@ -107,7 +120,7 @@ describe("recordChangeVerdicts", () => {
     await writeFile(planPath, moved);
     const store = reviewStoreFor({
       planPath,
-      planId: "0123456789abcdef",
+      planId: PLAN_ID,
     });
     await prepareStore(store);
     await Promise.all([
@@ -127,6 +140,7 @@ describe("recordChangeVerdicts", () => {
       revision: 1,
       decided: [
         {
+          changeSetId: CHANGE_SET_ID,
           from,
           to,
           placeId,
@@ -139,6 +153,8 @@ describe("recordChangeVerdicts", () => {
     let updates = 0;
     const context = {
       store,
+      sessionId: SESSION_ID,
+      planId: PLAN_ID,
       resolvedPlanPath: planPath,
       changeVerdicts: {
         read: async () => stored,
@@ -151,6 +167,7 @@ describe("recordChangeVerdicts", () => {
               verdicts: stored,
               mutation: {
                 op: "accept",
+                changeSetId: CHANGE_SET_ID,
                 from,
                 to,
                 placeIds: [placeId],
@@ -169,7 +186,13 @@ describe("recordChangeVerdicts", () => {
     const response = await recordChangeVerdicts(context, {
       query: new URLSearchParams(),
       headers: {},
-      body: { op: "undo", from, to, placeIds: [placeId] },
+      body: {
+        op: "undo",
+        changeSetId: CHANGE_SET_ID,
+        from,
+        to,
+        placeIds: [placeId],
+      },
     });
 
     expect(response.status).toBe(409);
@@ -196,7 +219,7 @@ describe("recordChangeVerdicts", () => {
     directories.push(directory);
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, moved);
-    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    const store = reviewStoreFor({ planPath, planId: PLAN_ID });
     await prepareStore(store);
     await Promise.all([
       writeSnapshot({ store, snapshot: from, source: baseline }),
@@ -220,6 +243,7 @@ describe("recordChangeVerdicts", () => {
       revision: 1,
       decided: [
         {
+          changeSetId: CHANGE_SET_ID,
           from,
           to,
           placeId: acceptedPlace,
@@ -231,6 +255,8 @@ describe("recordChangeVerdicts", () => {
     };
     const context = {
       store,
+      sessionId: SESSION_ID,
+      planId: PLAN_ID,
       resolvedPlanPath: planPath,
       changeVerdicts: {
         read: async () => stored,
@@ -249,6 +275,7 @@ describe("recordChangeVerdicts", () => {
       headers: {},
       body: {
         op: "reject",
+        changeSetId: CHANGE_SET_ID,
         from,
         to,
         placeIds: [acceptedPlace, undecidedPlace],

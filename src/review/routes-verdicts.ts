@@ -40,6 +40,7 @@ import {
   restoreRejectedPlaces,
 } from "./change-restore.js";
 import { readCommittedChangeSets } from "./change-set-commit.js";
+import { readChangeOwnership } from "./change-ownership.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
 import { revertPlanSource } from "./staged-plan-mutation.js";
@@ -86,9 +87,16 @@ const reconcilePlanSource = async ({
 }): Promise<void> => {
   const { store, resolvedPlanPath, readerProgress } = context;
   const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
-  const [baselineSource, proposedSource] = await Promise.all([
+  const [baselineSource, proposedSource, ownership] = await Promise.all([
     readSnapshot({ store, snapshot: from }),
     readSnapshot({ store, snapshot: to }),
+    readChangeOwnership({
+      store,
+      sessionId: context.sessionId,
+      planId: context.planId,
+      from,
+      to,
+    }),
   ]);
   const restored = (placeIds: ReadonlyArray<string>): string =>
     restoreRejectedPlaces({
@@ -98,6 +106,7 @@ const reconcilePlanSource = async ({
       to,
       placeIds,
       fallbackTitle,
+      ...(ownership === undefined ? {} : { ownership }),
     });
   const expectedSource = restored(before);
   const nextSource = restored(after);
@@ -151,9 +160,16 @@ const reconcileRecordedRejections = async ({
   const matches: Array<string> = [];
   for (const { from, to } of revisions.values()) {
     const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
-    const [baselineSource, proposedSource] = await Promise.all([
+    const [baselineSource, proposedSource, ownership] = await Promise.all([
       readSnapshot({ store, snapshot: from }),
       readSnapshot({ store, snapshot: to }),
+      readChangeOwnership({
+        store,
+        sessionId: context.sessionId,
+        planId: context.planId,
+        from,
+        to,
+      }),
     ]);
     const rejected = rejectedPlaceIdsFor({ verdicts, from, to });
     const restored = (placeIds: ReadonlyArray<string>): string =>
@@ -164,6 +180,7 @@ const reconcileRecordedRejections = async ({
         to,
         placeIds,
         fallbackTitle,
+        ...(ownership === undefined ? {} : { ownership }),
       });
     const intendedSource = restored(rejected);
     if (currentSource === intendedSource) return;
@@ -174,6 +191,7 @@ const reconcileRecordedRejections = async ({
       from,
       to,
       fallbackTitle,
+      ...(ownership === undefined ? {} : { ownership }),
     });
     let matchingNeighbors = 0;
     for (const placeId of places) {
@@ -229,25 +247,31 @@ const restorePreviousVerdicts = ({
   readonly result: StoredChangeVerdicts;
   readonly mutation: ChangeVerdictMutation;
 }): StoredChangeVerdicts => {
+  // Every lookup is scoped to the mutation's own change set as well as its
+  // bounds. Two sets can attribute one place inside a shared revision, and
+  // taking a failed write back by bounds alone would revoke the other set's
+  // verdict on a gesture its reviewer never made.
+  const ownedByMutation = (entry: {
+    readonly changeSetId: string;
+    readonly from: string;
+    readonly to: string;
+  }): boolean =>
+    entry.changeSetId === mutation.changeSetId &&
+    entry.from === mutation.from &&
+    entry.to === mutation.to;
   const previousByPlace = new Map(
     previous.decided
-      .filter(
-        (entry) => entry.from === mutation.from && entry.to === mutation.to,
-      )
+      .filter(ownedByMutation)
       .map((entry) => [entry.placeId, entry]),
   );
   const resultByPlace = new Map(
     result.decided
-      .filter(
-        (entry) => entry.from === mutation.from && entry.to === mutation.to,
-      )
+      .filter(ownedByMutation)
       .map((entry) => [entry.placeId, entry]),
   );
   const currentByPlace = new Map(
     current.decided
-      .filter(
-        (entry) => entry.from === mutation.from && entry.to === mutation.to,
-      )
+      .filter(ownedByMutation)
       .map((entry) => [entry.placeId, entry]),
   );
   const same = (
@@ -264,10 +288,7 @@ const restorePreviousVerdicts = ({
   }
   if (eligible.size === 0) return current;
   const restored = current.decided.filter(
-    (entry) =>
-      entry.from !== mutation.from ||
-      entry.to !== mutation.to ||
-      !eligible.has(entry.placeId),
+    (entry) => !ownedByMutation(entry) || !eligible.has(entry.placeId),
   );
   for (const placeId of mutation.placeIds) {
     if (!eligible.has(placeId)) continue;

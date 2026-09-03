@@ -26,6 +26,7 @@ import { ACKNOWLEDGED_STATUS_LABEL } from "../shared/agent-status.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
+import type { ForeignChangeSet } from "../shared/change-attribution.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
   AgentIdentityChip,
@@ -500,6 +501,28 @@ export const PlanMovedSinceNote = ({ detail }: { readonly detail: string }) => (
   </p>
 );
 
+const FOREIGN_LABEL_LIMIT = 60;
+
+/**
+ * What a foreign change set is called in the disclosure. A set the page can
+ * name is named; one it cannot is still declared to be somebody else's work,
+ * because "another thread" is the fact the reviewer needs and an id is not.
+ */
+const foreignName = ({
+  foreign,
+  changeSetLabel,
+}: {
+  readonly foreign: ForeignChangeSet;
+  readonly changeSetLabel?: (changeSetId: string) => string | undefined;
+}): string => {
+  const label = changeSetLabel?.(foreign.changeSetId)?.trim() ?? "";
+  if (label === "") return "another thread";
+  const firstLine = label.split("\n", 1)[0] ?? label;
+  return firstLine.length > FOREIGN_LABEL_LIMIT
+    ? `${firstLine.slice(0, FOREIGN_LABEL_LIMIT - 1).trimEnd()}…`
+    : firstLine;
+};
+
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
   diff,
@@ -507,6 +530,8 @@ export const AgentChangeDigest = ({
   agentIdentity,
   placeIds,
   spilloverCount,
+  foreignChangeSets,
+  changeSetLabel,
   isSuperseded,
   isPremiseView,
   planMovedDetail,
@@ -519,11 +544,21 @@ export const AgentChangeDigest = ({
   chatThreadId,
 }: {
   readonly diff: SnapshotDiff | null;
-  /** The thread that owns this change set, where the set has one. */
-  readonly changeSetId?: string;
+  /** The change set this digest belongs to, and whose verdicts it records. */
+  readonly changeSetId: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly placeIds?: ReadonlyArray<string>;
   readonly spilloverCount?: number;
+  /**
+   * The other change sets whose work sits inside this span. Naming them is the
+   * disclosure that makes an overlap visible: this thread's diff spans the
+   * shared revision line, so another thread's revision routinely appears in it,
+   * and a reviewer who cannot see whose it is has no way to know their own
+   * decision is not the only one this view is about.
+   */
+  readonly foreignChangeSets?: ReadonlyArray<ForeignChangeSet>;
+  /** Resolves a foreign set's own name, when the page knows one. */
+  readonly changeSetLabel?: (changeSetId: string) => string | undefined;
   readonly isSuperseded?: boolean;
   /** True when this digest compares the reviewer's premise with the plan now. */
   readonly isPremiseView?: boolean;
@@ -628,7 +663,7 @@ export const AgentChangeDigest = ({
     });
     openTour({
       diff,
-      ...(changeSetId === undefined ? {} : { changeSetId }),
+      changeSetId,
       ...(startPlaceId === undefined ? {} : { startPlaceId }),
       placeIds: placeIdsInTour,
       isSuperseded,
@@ -669,10 +704,14 @@ export const AgentChangeDigest = ({
     );
   }
   if (available.length === 0) return null;
+  // Everything this digest asks or records is addressed to its own change set
+  // over the revision in view, so a neighbouring thread reading the same
+  // revision can never inherit the answer.
+  const scope = { changeSetId, from: diff.from, to: diff.to };
   // The digest and the stepper reviewing this same set both ask the selector,
   // so the two can never disagree about how much is still open.
   const standing = standingOf(
-    diff,
+    scope,
     available.map((place) => place.placeId),
   );
   const allAccepted = standing.isAccepted;
@@ -769,7 +808,7 @@ export const AgentChangeDigest = ({
                   onClick={() =>
                     openTour({
                       diff,
-                      ...(changeSetId === undefined ? {} : { changeSetId }),
+                      changeSetId,
                       placeIds: placeIdsInTour,
                       startPlaceId: entry.placeId,
                       isSuperseded,
@@ -784,7 +823,7 @@ export const AgentChangeDigest = ({
                   <span className="min-w-0 [overflow-wrap:anywhere]">
                     {entry.label}
                   </span>
-                  {isPlaceAccepted(diff, entry.placeId) ? (
+                  {isPlaceAccepted(scope, entry.placeId) ? (
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-accent [&>svg]:size-3.5"
                       aria-label="Accepted"
@@ -792,7 +831,7 @@ export const AgentChangeDigest = ({
                     >
                       <Icon icon={CHECK_ICON} />
                     </span>
-                  ) : dispositionOf(diff, entry.placeId) === "rejected" ? (
+                  ) : dispositionOf(scope, entry.placeId) === "rejected" ? (
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-danger [&>svg]:size-3.5"
                       aria-label="Rejected"
@@ -811,10 +850,28 @@ export const AgentChangeDigest = ({
         </div>
       ) : null}
       {spilloverCount === undefined || spilloverCount === 0 ? null : (
-        <p className="m-0 text-2xs text-muted">
-          {spilloverCount} other change{spilloverCount === 1 ? "" : "s"}{" "}
-          elsewhere in this snapshot
-        </p>
+        <div className="m-0 grid grid-cols-[minmax(0,1fr)] gap-0.5 text-2xs text-muted">
+          <p className="m-0">
+            {spilloverCount} other change{spilloverCount === 1 ? "" : "s"}{" "}
+            elsewhere in this snapshot
+          </p>
+          {(foreignChangeSets ?? []).length === 0 ? null : (
+            <ul
+              className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-0.5 p-0"
+              data-review-foreign-change-sets=""
+            >
+              {(foreignChangeSets ?? []).map((foreign) => (
+                <li key={foreign.changeSetId} className="min-w-0 truncate">
+                  {foreign.placeCount}{" "}
+                  {foreign.placeCount === 1 ? "belongs" : "belong"} to{" "}
+                  <span className="font-semibold">
+                    {foreignName({ foreign, changeSetLabel })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
       {allAccepted ? (
         <p
@@ -843,7 +900,7 @@ export const AgentChangeDigest = ({
             }
             openTour({
               diff,
-              ...(changeSetId === undefined ? {} : { changeSetId }),
+              changeSetId,
               placeIds: placeIdsInTour,
               isSuperseded,
               isPremiseView,

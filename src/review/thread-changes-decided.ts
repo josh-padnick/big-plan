@@ -17,6 +17,7 @@
 import { basename, extname } from "node:path";
 import { changedPlaceIds } from "./change-restore.js";
 import { readCommittedChangeSets } from "./change-set-commit.js";
+import { readChangeOwnership } from "./change-ownership.js";
 import {
   changeDispositionOf,
   acceptedChangeKeys,
@@ -34,11 +35,15 @@ import type { ReviewStore } from "./store.js";
  */
 export const threadChangesAllDecided = async ({
   store,
+  sessionId,
+  planId,
   planPath,
   changeSetId,
   verdicts,
 }: {
   readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
   readonly planPath: string;
   readonly changeSetId: string;
   readonly verdicts: ChangeVerdictState;
@@ -60,12 +65,22 @@ export const threadChangesAllDecided = async ({
     // and an unanswerable question is not a yes.
     return false;
   }
+  // The reader's own addresses, which means the reader's own grouping: a place
+  // minted without the ownership partition is one no recorded verdict names.
+  const ownership = await readChangeOwnership({
+    store,
+    sessionId,
+    planId,
+    from,
+    to,
+  });
   const places = changedPlaceIds({
     baselineSource,
     proposedSource,
     from,
     to,
     fallbackTitle: basename(planPath, extname(planPath)),
+    ...(ownership === undefined ? {} : { ownership }),
   });
   if (places.length === 0) return false;
   const accepted = acceptedChangeKeys(verdicts);
@@ -73,7 +88,7 @@ export const threadChangesAllDecided = async ({
   return places.every(
     (placeId) =>
       changeDispositionOf({
-        address: { from, to, placeId },
+        address: { changeSetId, from, to, placeId },
         accepted,
         rejected,
       }) !== "undecided",

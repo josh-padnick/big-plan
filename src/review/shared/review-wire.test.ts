@@ -946,6 +946,7 @@ describe("review wire contract", () => {
       revision: 4,
       decided: [
         {
+          changeSetId: "cafe",
           from: "a".repeat(16),
           to: "b".repeat(16),
           placeId: "place-1",
@@ -954,15 +955,27 @@ describe("review wire contract", () => {
           actor: "auto-accept",
         },
         {
+          changeSetId: "beef",
           from: "a".repeat(16),
           to: "b".repeat(16),
           placeId: "place-2",
           verdict: "rejected",
           decidedAt: "2026-08-18T00:00:00.000Z",
         },
-        { from: "not-a-digest", to: "b".repeat(16), placeId: "place-3" },
-        { from: "a".repeat(16), to: "b".repeat(16), placeId: "" },
         {
+          changeSetId: "cafe",
+          from: "not-a-digest",
+          to: "b".repeat(16),
+          placeId: "place-3",
+        },
+        {
+          changeSetId: "cafe",
+          from: "a".repeat(16),
+          to: "b".repeat(16),
+          placeId: "",
+        },
+        {
+          changeSetId: "cafe",
           from: "a".repeat(16),
           to: "b".repeat(16),
           placeId: "place-4",
@@ -970,12 +983,23 @@ describe("review wire contract", () => {
           decidedAt: "2026-08-18T00:00:00.000Z",
         },
         {
+          changeSetId: "cafe",
           from: "a".repeat(16),
           to: "b".repeat(16),
           placeId: "place-5",
           verdict: "accepted",
           decidedAt: "2026-08-18T00:00:00.000Z",
           actor: "mode",
+        },
+        // A verdict with no owner addresses no change set, so it can never be
+        // counted against one: dropping it is what keeps an unaddressed row
+        // from closing whichever set happens to share its bounds.
+        {
+          from: "a".repeat(16),
+          to: "b".repeat(16),
+          placeId: "place-6",
+          verdict: "accepted",
+          decidedAt: "2026-08-18T00:00:00.000Z",
         },
         "not a verdict",
       ],

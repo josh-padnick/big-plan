@@ -231,6 +231,7 @@ export const deriveOpenItems = ({
 }): DerivedOpenItems => {
   const standing = changeSets.map((changeSet) =>
     changeSetStanding({
+      changeSetId: changeSet.id,
       from: changeSet.from,
       to: changeSet.to,
       placeIds: changeSet.placeIds,

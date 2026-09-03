@@ -44,7 +44,10 @@ import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
-import { changeVerdictKey } from "../shared/change-verdict.js";
+import {
+  changeVerdictKey,
+  type ChangeVerdictScope,
+} from "../shared/change-verdict.js";
 import {
   planLossChangeCount,
   projectPlanLoss,
@@ -1111,15 +1114,21 @@ const PLAN_LOSS_SLIDE_LIMIT = 6;
  */
 const useThreadDeleteLoss = ({
   identity,
+  changeSetId,
   from,
   to,
   dispositionOf,
   active,
 }: {
   readonly identity: RuntimeIdentity | null;
+  /** The thread whose set this is, so it reads that thread's own verdicts. */
+  readonly changeSetId: string | undefined;
   readonly from: string | undefined;
   readonly to: string | undefined;
-  readonly dispositionOf: (diff: SnapshotDiff, placeId: string) => string;
+  readonly dispositionOf: (
+    scope: ChangeVerdictScope,
+    placeId: string,
+  ) => string;
   readonly active: boolean;
 }): {
   readonly diff: SnapshotDiff | null;
@@ -1159,14 +1168,18 @@ const useThreadDeleteLoss = ({
   }, [active]);
   const undecidedPlaceIds = useMemo(
     () =>
-      diff === null
+      diff === null || changeSetId === undefined
         ? []
         : diff.places
             .filter(
-              (place) => dispositionOf(diff, place.placeId) === "undecided",
+              (place) =>
+                dispositionOf(
+                  { changeSetId, from: diff.from, to: diff.to },
+                  place.placeId,
+                ) === "undecided",
             )
             .map((place) => place.placeId),
-    [diff, dispositionOf],
+    [changeSetId, diff, dispositionOf],
   );
   return {
     diff,
@@ -3651,12 +3664,13 @@ const ChangeAttachment = ({
   onDeleteThread,
   thread,
   chatThreadId,
+  changeSetLabel,
 }: {
   readonly identity: RuntimeIdentity;
   readonly from: string;
   readonly to: string;
   /** The thread that owns this change set, so the stepper follows its rounds. */
-  readonly changeSetId?: string;
+  readonly changeSetId: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly changeTargets?: ReadonlyArray<string>;
   /**
@@ -3674,6 +3688,8 @@ const ChangeAttachment = ({
     readonly onOpen: () => void;
   };
   readonly chatThreadId?: string;
+  /** Names the other change sets whose work this span carries. */
+  readonly changeSetLabel?: (changeSetId: string) => string | undefined;
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(() =>
     readySnapshotDiff(identity, from, to),
@@ -3696,14 +3712,16 @@ const ChangeAttachment = ({
   const attributed =
     diff === null || changeTargets === undefined
       ? undefined
-      : attributeDiffPlaces({ diff, changeTargets });
+      : attributeDiffPlaces({ diff, changeTargets, changeSetId });
   return (
     <AgentChangeDigest
       diff={diff}
-      {...(changeSetId === undefined ? {} : { changeSetId })}
+      changeSetId={changeSetId}
       agentIdentity={agentIdentity}
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
+      foreignChangeSets={attributed?.foreign}
+      {...(changeSetLabel === undefined ? {} : { changeSetLabel })}
       isSuperseded={currentSnapshot !== "" && currentSnapshot !== to}
       {...(planMovedSince
         ? {
@@ -3787,8 +3805,13 @@ const StalePremiseNotice = ({
       ? {
           placeIds: diff.places.map((place) => place.placeId),
           spilloverCount: 0,
+          foreign: [],
         }
-      : attributeDiffPlaces({ diff, changeTargets: blockIds });
+      : attributeDiffPlaces({
+          diff,
+          changeTargets: blockIds,
+          changeSetId: comment.id,
+        });
   const changedOutsideTarget =
     blockIds.length > 0 && attributed.placeIds.length === 0;
   const placeIds = changedOutsideTarget
@@ -3827,6 +3850,9 @@ const StalePremiseNotice = ({
             threadId: comment.id,
             kind: "premise",
           })}
+          foreignChangeSets={
+            changedOutsideTarget ? undefined : attributed.foreign
+          }
           isSuperseded
           isPremiseView
           isLoading={false}
@@ -3908,6 +3934,7 @@ const SentThread = ({
   pushedOrigin,
   onArmAutoAccept,
   appliedSummaries = [],
+  changeSetLabel,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -3943,6 +3970,8 @@ const SentThread = ({
   readonly pushedOrigin?: "prompt" | "about";
   /** Offered only by pushed threads while this session is in review mode. */
   readonly onArmAutoAccept?: () => void;
+  /** Names another change set whose work sits inside this thread's span. */
+  readonly changeSetLabel?: (changeSetId: string) => string | undefined;
   readonly appliedSummaries?: ReadonlyArray<{
     readonly changeSetId: string;
     readonly text: string;
@@ -4603,6 +4632,7 @@ const SentThread = ({
                 onDeleteThread={canDeleteComment ? onDelete : undefined}
                 thread={{ label: comment.body, onOpen: onJump }}
                 chatThreadId={comment.id}
+                {...(changeSetLabel === undefined ? {} : { changeSetLabel })}
               />
             </ProposedChangesTurn>
           ) : identity !== null && latestExchange?.response === undefined ? (
@@ -4765,6 +4795,7 @@ const ChatExchange = ({
             <ChangeAttachment
               key={`${request.requestId}:${response.resultSnapshot}`}
               identity={identity}
+              changeSetId={request.requestId}
               from={request.baselineSnapshot ?? request.premiseSnapshot}
               to={response.resultSnapshot}
               {...(request.claimedModel === undefined
@@ -5002,6 +5033,8 @@ export const ReviewController = () => {
       : undefined;
   const threadDelete = useThreadDeleteLoss({
     identity,
+    changeSetId:
+      pendingDelete?.kind === "thread" ? pendingDelete.comment.id : undefined,
     from: threadDeleteChange?.from,
     to: threadDeleteChange?.to,
     dispositionOf,
@@ -7435,7 +7468,9 @@ export const ReviewController = () => {
       // thread are about to go.
       closeTour();
       const result = await setPlacesDecided(
-        diff,
+        // The rejections are this thread's own, so they are recorded against
+        // its change set rather than against whatever else shares the bounds.
+        { changeSetId: commentId, from: diff.from, to: diff.to },
         undecidedPlaceIds,
         "rejected",
         {
@@ -7694,6 +7729,23 @@ export const ReviewController = () => {
   const pushedThreadOriginById = new Map(
     pushedThreadOpeners.map((opener) => [opener.comment.id, opener.origin]),
   );
+  // What each change set is called, so a thread whose span contains another
+  // thread's revision can say whose work that is instead of counting it. A
+  // comment-keyed set is named by the comment it grew from; a request-keyed
+  // transaction by what its request targeted.
+  const changeSetNames = new Map<string, string>();
+  for (const comment of [...sent, ...pushedThreadComments]) {
+    const body = comment.body.trim();
+    if (body !== "") changeSetNames.set(comment.id, body);
+  }
+  for (const request of agent.requests) {
+    const label = request.targetLabel?.trim() ?? "";
+    if (label !== "" && !changeSetNames.has(request.requestId)) {
+      changeSetNames.set(request.requestId, label);
+    }
+  }
+  const changeSetLabel = (changeSetId: string): string | undefined =>
+    changeSetNames.get(changeSetId);
   const sentIds = new Set(sent.map((comment) => comment.id));
   const threadProjections = projectCommentThreads({
     comments: [
@@ -8141,12 +8193,15 @@ export const ReviewController = () => {
         const diff = changeSetDiffs.get(changeSet.changeSetId);
         if (diff === undefined) continue;
         const placeIds = diff.places.map((place) => place.placeId);
-        if (!standingOf(diff, placeIds).isAccepted) allClosed = false;
+        const scope = {
+          changeSetId: changeSet.changeSetId,
+          from: diff.from,
+          to: diff.to,
+        };
+        if (!standingOf(scope, placeIds).isAccepted) allClosed = false;
         if (
           placeIds.some((placeId) =>
-            autoAccepted.has(
-              changeVerdictKey({ from: diff.from, to: diff.to, placeId }),
-            ),
+            autoAccepted.has(changeVerdictKey({ ...scope, placeId })),
           )
         ) {
           hasModeVerdict = true;
@@ -8185,7 +8240,11 @@ export const ReviewController = () => {
       const diff = changeSetDiffs.get(changeSet.changeSetId);
       if (diff !== undefined) {
         open += standingOf(
-          diff,
+          {
+            changeSetId: changeSet.changeSetId,
+            from: diff.from,
+            to: diff.to,
+          },
           diff.places.map((place) => place.placeId),
         ).open;
       }
@@ -8271,6 +8330,7 @@ export const ReviewController = () => {
     return (
       <li key={comment.id} className="min-w-0">
         <SentThread
+          changeSetLabel={changeSetLabel}
           comment={comment}
           surface="rail"
           associated={false}
@@ -9129,6 +9189,7 @@ export const ReviewController = () => {
                   if (thread === undefined) return null;
                   return (
                     <SentThread
+                      changeSetLabel={changeSetLabel}
                       key={comment.id}
                       comment={comment}
                       surface="rail"
@@ -9545,6 +9606,7 @@ export const ReviewController = () => {
             if (thread === undefined) return null;
             return (
               <SentThread
+                changeSetLabel={changeSetLabel}
                 comment={comment}
                 surface="thread"
                 associated={

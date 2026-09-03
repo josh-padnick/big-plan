@@ -451,8 +451,18 @@ const autoAcceptPushIfArmed = async ({
   if (armed?.sessionId !== response.sessionId) return;
   await autoAcceptChangeSets({
     store,
+    sessionId: response.sessionId,
+    planId: response.planId,
     planPath,
-    transactions: [{ from: baseSnapshot, to: resultSnapshot }],
+    // A push is an immutable transaction keyed by the request that opened it,
+    // so the set this closes is that request and nothing else.
+    transactions: [
+      {
+        changeSetId: response.requestId,
+        from: baseSnapshot,
+        to: resultSnapshot,
+      },
+    ],
     decidedAt,
   });
 };
