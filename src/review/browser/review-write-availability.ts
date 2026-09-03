@@ -6,10 +6,14 @@
 // after the reviewer has already been told the action was under way.
 
 import {
+  REVIEW_SESSION_OUT_OF_DATE_HEADLINE,
+  REVIEW_SESSION_OUT_OF_DATE_SUPPORTING,
   REVIEW_SESSION_UNREACHABLE_HEADLINE,
   REVIEW_SESSION_UNREACHABLE_SUPPORTING,
+  type ReviewSessionReach,
 } from "../shared/agent-status.js";
 import {
+  reviewPollIsOffline,
   reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
   type ReviewPollHealth,
@@ -20,6 +24,7 @@ export type ReviewWriteBlock =
   | "no-review-session"
   | "session-replaced"
   | "runtime-offline"
+  | "session-refused"
   | "writes-stalled";
 
 export type ReviewWriteBlocked = {
@@ -60,6 +65,17 @@ const BLOCKS = {
     remedy: REVIEW_SESSION_UNREACHABLE_SUPPORTING,
     label: REVIEW_SESSION_UNREACHABLE_HEADLINE,
   },
+  /* A runtime that answers every poll and refuses each one is not
+     unreachable, and the unreachable remedy - restart it - would restart a
+     runtime that is up. This is the state an open tab is left in when its
+     runtime is restarted or its store re-minted underneath it, and until it
+     was named the gate let a write through that the runtime then refused in
+     silence (BIG-282). */
+  "session-refused": {
+    cause: "This tab's review session is out of date.",
+    remedy: REVIEW_SESSION_OUT_OF_DATE_SUPPORTING,
+    label: REVIEW_SESSION_OUT_OF_DATE_HEADLINE,
+  },
   "writes-stalled": {
     cause: "The review session has stopped accepting changes.",
     remedy: "Restart the review runtime to continue.",
@@ -85,7 +101,9 @@ const blocked = (block: ReviewWriteBlock): ReviewWriteBlocked => ({
  * only permanent block: a runtime handing custody to a newer one stays replaced
  * however the page's own polling is doing, and its remedy is right either way.
  * A stalled runtime is reported last because only a runtime still answering can
- * report its own stall.
+ * report its own stall. A refused session sits beside an unreachable one: the
+ * two are the same poll-health machine's two failing states, and a page in
+ * either cannot promise that a write will land (BIG-282).
  */
 export const reviewWriteAvailability = ({
   hasReviewSession,
@@ -101,6 +119,7 @@ export const reviewWriteAvailability = ({
   if (!hasReviewSession) return blocked("no-review-session");
   if (authoritative === false) return blocked("session-replaced");
   if (!reviewRuntimeCanWrite(health)) return blocked("runtime-offline");
+  if (reviewPollIsOffline(health)) return blocked("session-refused");
   if (!reviewRuntimeAcceptsWrites({ health, writesStalledMs })) {
     return blocked("writes-stalled");
   }
@@ -111,6 +130,25 @@ export const reviewWriteBlock = (
   availability: ReviewWriteAvailability,
 ): ReviewWriteBlocked | undefined =>
   availability.state === "unavailable" ? availability : undefined;
+
+/**
+ * The one reading of this tab's session that the agent card, the toolbar mark,
+ * the banner, and every thread strip share with the gate above. It is read from
+ * the gate rather than from poll health directly, so no surface can call the
+ * session reachable while a write to it is being refused: the card said
+ * "Agent connected" under a lost-contact banner, and "unreachable" over a
+ * runtime that was answering, because each read poll health its own way
+ * (BIG-264, BIG-282). The other blocks leave the session reachable, because
+ * each already has a surface of its own.
+ */
+export const reviewSessionReach = (
+  availability: ReviewWriteAvailability,
+): ReviewSessionReach => {
+  const block = reviewWriteBlock(availability);
+  if (block?.block === "runtime-offline") return "offline";
+  if (block?.block === "session-refused") return "out-of-date";
+  return "reachable";
+};
 
 /**
  * One block's standing reading, for a control that explains itself before it
@@ -172,6 +210,27 @@ const PATH_OUTCOMES = {
 
 export const reviewWritePathOutcome = (path: ReviewWritePath): string =>
   PATH_OUTCOMES[path];
+
+/**
+ * What a refused or failed write is headed, per path: the thing that did not
+ * happen, in the reviewer's words. It lives beside the outcome sentence so a
+ * notice's title and its body cannot disagree about what was attempted.
+ */
+const PATH_TITLES = {
+  "submit-comment": "Comment not sent",
+  reply: "Reply not sent",
+  chat: "Question not sent",
+  "delete-comment": "Comment not deleted",
+  "revert-changes": "Changes not reverted",
+  "cancel-request": "Request not canceled",
+  "disconnect-agent": "Agent not disconnected",
+  "agent-primacy": "Agents not changed",
+  "review-mode": "Review mode not changed",
+  "attach-image": "Image not attached",
+} as const satisfies Readonly<Record<ReviewWritePath, string>>;
+
+export const reviewWritePathTitle = (path: ReviewWritePath): string =>
+  PATH_TITLES[path];
 
 /**
  * What one mutation path must say instead of submitting, or `undefined` when

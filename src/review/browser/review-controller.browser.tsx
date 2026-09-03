@@ -188,22 +188,27 @@ import {
 import {
   agentProjectionForReviewPoll,
   INITIAL_REVIEW_POLL_HEALTH,
-  reviewPollIsOffline,
   reviewRuntimeAcceptsWrites,
   reviewRuntimeDownSinceMs,
-  reviewRuntimeIsDown,
   transitionReviewPollHealth,
   type ReviewPollHealth,
   type ReviewPollResult,
 } from "./review-poll-health.js";
 import { reviewEndReason, type ReviewEndReason } from "./review-expiry.js";
 import {
+  reviewSessionReach,
   reviewWriteAvailability,
   reviewWriteBlock,
   reviewWriteRefusal,
   type ReviewWriteAvailability,
   type ReviewWriteBlocked,
 } from "./review-write-availability.js";
+import {
+  reportFailedWrite,
+  reportRefusedWrite,
+  reportReviewFailure,
+  reviewFailureDetail as errorMessage,
+} from "./review-write-report.browser.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../shared/resolved-thread-work.js";
 import {
   isReviewRuntimeRefusal,
@@ -991,6 +996,32 @@ const ServerGoneBanner = ({
   );
 };
 
+// The runtime is up and answering, and refuses this tab: its session or token
+// no longer match what the page was served with, which is what a restart or a
+// re-minted store leaves behind. Without this the tab sat under an
+// "unreachable" card telling the reviewer to restart a runtime that was fine.
+// Recovery is a plain reload, offered under the same unsaved-input guard as
+// the lost-contact banner, because a reload discards what the runtime has not
+// been given (BIG-282).
+const SessionOutOfDateBanner = ({
+  canReload,
+  onReload,
+}: {
+  readonly canReload: boolean;
+  readonly onReload: () => void;
+}) => (
+  <RuntimeAlertBanner
+    scope="data-review-session-out-of-date"
+    heading="This tab's review session is out of date"
+    detail={`The local review server is answering, but it no longer recognises this tab. Reload this page to reconnect.${
+      canReload
+        ? ""
+        : " Keep this tab open because the latest review input has not reached the local review server."
+    } All comments are safe. This is separate from the agent connection.`}
+    action={{ label: "Reload", onAct: onReload, enabled: canReload }}
+  />
+);
+
 // The failure this exists for answers reads perfectly: the server is up, so
 // nothing else on the page looks wrong, and a reviewer would keep writing
 // comments that can no longer be saved. Refreshing cannot help, because the
@@ -1607,8 +1638,11 @@ const setSelectionHighlights = (
     );
 };
 
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : "Something went wrong.";
+// The one notice for a comparison that could not be loaded, whichever card
+// asked for it. A module-level function so the cards that keep it in effect
+// dependencies do not reload on every render of the controller.
+const reportDiffLoadFailure = (detail: string): void =>
+  reportReviewFailure({ title: "Changes could not be loaded", detail });
 
 const parseDecisionAnsweredDetail = (
   value: unknown,
@@ -4637,10 +4671,16 @@ export const ReviewController = () => {
     null,
   );
   const [associationActive, setAssociationActive] = useState(false);
+  /*
+  The rail's status line. An offline document reads it as its one channel; a
+  served review renders it only for the stale-submission and resolved-thread
+  notices, and reports every refused or failed write through a notice instead,
+  because the reviewer acts from surfaces this line is not on (BIG-282). The
+  draft notices still written here are for the offline document, where the
+  list itself is the only other feedback.
+  */
   const [status, setStatus] = useState(
-    identity === null
-      ? "Reading offline: drafts stay in this browser."
-      : "Loading review…",
+    identity === null ? "Reading offline: drafts stay in this browser." : "",
   );
   useEffect(() => {
     if (planId !== "") {
@@ -4709,8 +4749,32 @@ export const ReviewController = () => {
       readAgentRosterFor({ agents: agent.agents, nowMs: statusNowMs }).attached,
     [agent.agents, statusNowMs],
   );
-  const pollIsOffline = reviewPollIsOffline(pollHealth);
-  const serverGone = reviewRuntimeIsDown(pollHealth);
+  // The one answer every explicit mutation path consults before submitting.
+  // Memoized because handlers and effects depend on it, and a fresh object per
+  // render would re-run the writers this is meant to hold back.
+  const writeAvailability = useMemo(
+    () =>
+      reviewWriteAvailability({
+        hasReviewSession: identity !== null,
+        health: pollHealth,
+        writesStalledMs: runtimeSession?.writesStalledMs,
+        authoritative: runtimeSession?.authoritative,
+      }),
+    [
+      identity,
+      pollHealth,
+      runtimeSession?.authoritative,
+      runtimeSession?.writesStalledMs,
+    ],
+  );
+  // The one reading of the session that the agent card, the toolbar mark, the
+  // banner, each thread strip, and the gate above share. Each used to read
+  // poll health its own way, so the card said "Agent connected" under a
+  // lost-contact banner and "unreachable" over a runtime that was answering
+  // (BIG-264, BIG-282).
+  const sessionReach = reviewSessionReach(writeAvailability);
+  const serverGone = sessionReach === "offline";
+  const disconnectBlock = reviewWriteBlock(writeAvailability);
   // Only a runtime that is answering can report this, so it never competes
   // with the banner for a runtime that has gone entirely.
   const writesStalled =
@@ -4725,7 +4789,11 @@ export const ReviewController = () => {
     nowMs: runtimeDownSinceMs ?? statusNowMs,
   });
   const threadRuntime: ThreadRuntime =
-    identity === null ? "static" : pollIsOffline ? "offline" : "online";
+    identity === null
+      ? "static"
+      : sessionReach === "reachable"
+        ? "online"
+        : sessionReach;
   const agentProjection = agentProjectionForReviewPoll({
     health: pollHealth,
     hasObservedAgentSnapshot,
@@ -4752,24 +4820,6 @@ export const ReviewController = () => {
     health: pollHealth,
     writesStalledMs: runtimeSession?.writesStalledMs,
   });
-  // The one answer every explicit mutation path consults before submitting.
-  // Memoized because handlers and effects depend on it, and a fresh object per
-  // render would re-run the writers this is meant to hold back.
-  const writeAvailability = useMemo(
-    () =>
-      reviewWriteAvailability({
-        hasReviewSession: identity !== null,
-        health: pollHealth,
-        writesStalledMs: runtimeSession?.writesStalledMs,
-        authoritative: runtimeSession?.authoritative,
-      }),
-    [
-      identity,
-      pollHealth,
-      runtimeSession?.authoritative,
-      runtimeSession?.writesStalledMs,
-    ],
-  );
   const reviewAuthority: ReviewAuthority =
     identity === null || runtimeSession === null
       ? "unknown"
@@ -4782,7 +4832,6 @@ export const ReviewController = () => {
     writeAvailability.state === "available";
   const commentSubmitAvailability = deriveReviewCommentSubmitAvailability({
     canSubmit: identity === null || canSendToAgent,
-    runtimeIsUnreachable: pollIsOffline,
     writeAvailability,
   });
   const unresolvedDrafts = useMemo(
@@ -5107,7 +5156,7 @@ export const ReviewController = () => {
         availability: writeAvailability,
       });
       if (refusal !== undefined) {
-        setStatus(refusal);
+        reportRefusedWrite({ path: "reply", refusal });
         return;
       }
       if (identity === null) return;
@@ -5130,9 +5179,8 @@ export const ReviewController = () => {
         if ((replyDraftsRef.current.get(commentId) ?? "").trim() === body) {
           changeReplyDraft(commentId, "");
         }
-        setStatus("Reply sent to the coding agent.");
       } catch (error) {
-        setStatus(errorMessage(error));
+        reportFailedWrite({ path: "reply", error });
       } finally {
         const remaining = new Set(replyPendingCommentIdsRef.current);
         remaining.delete(commentId);
@@ -5981,7 +6029,10 @@ export const ReviewController = () => {
             recovered: recoveredComposer,
           });
           restoreComposer(composerAfterHydration);
-          setStatus(errorMessage(error));
+          reportReviewFailure({
+            title: "Saved review state could not be restored",
+            detail: errorMessage(error),
+          });
           setIsHydrated(true);
         }
       }
@@ -6140,9 +6191,7 @@ export const ReviewController = () => {
             drafts: merged.state.drafts,
             resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
           });
-          const reason = errorMessage(error);
-          setResolveRefusal(reason);
-          setStatus(reason);
+          setResolveRefusal(errorMessage(error));
           return;
         }
         // A stale version is the fact that tells a local edit the runtime has
@@ -6155,7 +6204,10 @@ export const ReviewController = () => {
       }
     }).catch((error: unknown) => {
       if (isRecoveryConflictPause(error)) return;
-      setStatus(errorMessage(error));
+      reportReviewFailure({
+        title: "Review state could not be saved",
+        detail: errorMessage(error),
+      });
     });
   }, [
     applyReviewState,
@@ -6514,12 +6566,13 @@ export const ReviewController = () => {
         }
         setDisplayedSnapshot(agent.currentSnapshot);
         window.scrollTo({ left: scrollX, top: scrollY });
-        setStatus(
-          "Plan refreshed in place. Open threads and review state were preserved.",
-        );
       })
       .catch((error: unknown) => {
-        if (current) setStatus(errorMessage(error));
+        if (!current) return;
+        reportReviewFailure({
+          title: "Plan could not be refreshed",
+          detail: errorMessage(error),
+        });
       });
     return () => {
       current = false;
@@ -6615,11 +6668,13 @@ export const ReviewController = () => {
       if (!canSendToAgent || identity === null) {
         const availability = deriveReviewCommentSubmitAvailability({
           canSubmit: false,
-          runtimeIsUnreachable: pollIsOffline,
           writeAvailability,
         });
         if (availability.state === "unavailable") {
-          setStatus(availability.status);
+          reportRefusedWrite({
+            path: "submit-comment",
+            refusal: availability.status,
+          });
         }
         return;
       }
@@ -6727,13 +6782,8 @@ export const ReviewController = () => {
           ...justSubmittedCommentIds.current,
           ...ids,
         ]);
-        if (!result.conflicted) {
-          setStatus(
-            `${result.comments.length} comment${result.comments.length === 1 ? "" : "s"} submitted.`,
-          );
-        }
       } catch (error) {
-        setStatus(errorMessage(error));
+        reportFailedWrite({ path: "submit-comment", error });
         if (isRecoveryConflictPause(error)) setIsRecoveryConflictOpen(true);
       } finally {
         setIsSending(false);
@@ -6742,7 +6792,6 @@ export const ReviewController = () => {
     [
       canSendToAgent,
       identity,
-      pollIsOffline,
       reconcileAuthoritativeReviewSnapshot,
       serializeReviewerStateWrite,
       writeAvailability,
@@ -6898,16 +6947,14 @@ export const ReviewController = () => {
       // Close the confirmation too: leaving it up would invite a second click
       // at a runtime that has already said it cannot take the first.
       setPendingDelete(null);
-      setStatus(refusal);
+      reportRefusedWrite({ path: "delete-comment", refusal });
       return;
     }
     if (identity === null) return;
-    // Close the confirmation and say what is happening before the round-trip.
-    // Leaving the dialog up until the runtime answers reads as a dead button,
-    // and a reviewer who clicks again deletes twice.
-    const kind = pendingDelete?.kind;
+    // Close the confirmation before the round-trip. Leaving the dialog up
+    // until the runtime answers reads as a dead button, and a reviewer who
+    // clicks again deletes twice.
     setPendingDelete(null);
-    setStatus("Deleting the comment…");
     try {
       const deleted = await serializeReviewerStateWrite(async () => {
         const base = recoveryReconciliationRef.current.base;
@@ -6945,9 +6992,11 @@ export const ReviewController = () => {
         }
       });
       if (deleted === "stale") {
-        setStatus(
-          "The review changed before deletion. Review the latest comments and try again.",
-        );
+        reportRefusedWrite({
+          path: "delete-comment",
+          refusal:
+            "The review changed before deletion. Review the latest comments and try again.",
+        });
         return;
       }
       if (replyDraftsRef.current.has(commentId)) {
@@ -6969,15 +7018,8 @@ export const ReviewController = () => {
         }),
       );
       if (selectedCommentId === commentId) setSelectedCommentId(null);
-      setStatus(
-        kind === "canceled"
-          ? "Canceled comment deleted."
-          : kind === "reverted" || kind === "abandoned"
-            ? "Comment deleted."
-            : "Queued comment deleted.",
-      );
     } catch (error) {
-      setStatus(errorMessage(error));
+      reportFailedWrite({ path: "delete-comment", error });
       if (isRecoveryConflictPause(error)) setIsRecoveryConflictOpen(true);
     }
   };
@@ -6989,15 +7031,14 @@ export const ReviewController = () => {
     });
     if (refusal !== undefined) {
       setPendingRevert(null);
-      setStatus(refusal);
+      reportRefusedWrite({ path: "revert-changes", refusal });
       return;
     }
     if (identity === null) return;
     const revert = pendingRevert;
-    // Same reason as deletion: acknowledge the confirmed action immediately,
-    // then let the refreshed plan or the error message report how it went.
+    // Same reason as deletion: close the confirmation immediately, then let
+    // the refreshed plan or the failure notice report how it went.
     setPendingRevert(null);
-    setStatus("Reverting the agent's changes…");
     try {
       await serializeRuntimeWrite(() =>
         requestJson({
@@ -7018,7 +7059,7 @@ export const ReviewController = () => {
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
     } catch (error) {
-      setStatus(errorMessage(error));
+      reportFailedWrite({ path: "revert-changes", error });
     }
   };
   const jumpTo = (comment: ReviewComment) => {
@@ -7053,7 +7094,7 @@ export const ReviewController = () => {
       availability: writeAvailability,
     });
     if (refusal !== undefined) {
-      setStatus(refusal);
+      reportRefusedWrite({ path: "chat", refusal });
       return;
     }
     if (identity === null) return;
@@ -7069,9 +7110,8 @@ export const ReviewController = () => {
       acceptAgentSnapshot(
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
-      setStatus("Plan question sent to the coding agent.");
     } catch (error) {
-      setStatus(errorMessage(error));
+      reportFailedWrite({ path: "chat", error });
     } finally {
       setIsSendingChat(false);
     }
@@ -7101,7 +7141,7 @@ export const ReviewController = () => {
       availability: writeAvailability,
     });
     if (refusal !== undefined) {
-      setStatus(refusal);
+      reportRefusedWrite({ path: "agent-primacy", refusal });
       return;
     }
     if (identity === null) return;
@@ -7115,15 +7155,8 @@ export const ReviewController = () => {
       acceptAgentSnapshot(
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
-      setStatus(
-        answer === "primary"
-          ? "That agent is now the primary."
-          : answer === "observer"
-            ? "That agent stays an observer."
-            : "That agent was disconnected.",
-      );
     } catch (error) {
-      setStatus(errorMessage(error));
+      reportFailedWrite({ path: "agent-primacy", error });
     }
   };
 
@@ -7154,7 +7187,7 @@ export const ReviewController = () => {
     if (refusal !== undefined) {
       // Never mark the request cancel-pending here: the runtime has not been
       // asked, so showing it as canceling would be a lie the page never undoes.
-      setStatus(refusal);
+      reportRefusedWrite({ path: "cancel-request", refusal });
       return;
     }
     if (identity === null) return;
@@ -7169,7 +7202,6 @@ export const ReviewController = () => {
       acceptAgentSnapshot(
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
-      setStatus("Agent request canceled.");
     } catch (error) {
       setCancelPendingRequestIds((current) => {
         const next = new Set(current);
@@ -7186,7 +7218,7 @@ export const ReviewController = () => {
         // Preserve the original cancel failure. The poll loop will recover the
         // snapshot when the runtime becomes reachable again.
       }
-      setStatus(errorMessage(error));
+      reportFailedWrite({ path: "cancel-request", error });
     }
   };
 
@@ -7197,6 +7229,11 @@ export const ReviewController = () => {
    * that choice and this owns only the request. The snapshot is re-read straight
    * afterwards so the control's pending state comes from the runtime's answer
    * rather than from a local guess about it (BIG-190).
+   *
+   * The control is inert while the gate would refuse, so the refusal below is
+   * the seam's guard rather than the reviewer's ordinary path; both it and a
+   * refusal from the runtime are reported where the reviewer is looking,
+   * because a click that changes nothing on screen reads as broken (BIG-282).
    */
   const disconnectAgent = async () => {
     const refusal = reviewWriteRefusal({
@@ -7204,7 +7241,7 @@ export const ReviewController = () => {
       availability: writeAvailability,
     });
     if (refusal !== undefined) {
-      setStatus(refusal);
+      reportRefusedWrite({ path: "disconnect-agent", refusal });
       return;
     }
     if (identity === null) return;
@@ -7223,9 +7260,8 @@ export const ReviewController = () => {
       acceptAgentSnapshot(
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
-      setStatus("The agent was told to disconnect from this review.");
     } catch (error) {
-      setStatus(errorMessage(error));
+      reportFailedWrite({ path: "disconnect-agent", error });
     } finally {
       // Cleared either way. The runtime's own answer takes over from here: a
       // directive it recorded keeps the control pending, and a refusal has to
@@ -7320,7 +7356,7 @@ export const ReviewController = () => {
     cancelPendingRequestIds,
     progressEvents: progress,
     agentConnected,
-    runtimeOffline: pollIsOffline,
+    session: sessionReach,
     now: agentProjectionNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
     ...(agentEndedAtMs === undefined ? {} : { endedAtMs: agentEndedAtMs }),
@@ -7356,7 +7392,7 @@ export const ReviewController = () => {
         identity={identity}
         status={statusForRequest(request, "chat")}
         activity={activityForRequest(request)}
-        onStatus={setStatus}
+        onStatus={reportDiffLoadFailure}
         onShowAgent={openAgentSidebar}
         onCancelRequest={(requestId) => void cancelRequest(requestId)}
         currentSnapshot={currentSnapshot}
@@ -7463,7 +7499,7 @@ export const ReviewController = () => {
       availability: writeAvailability,
     });
     if (refusal !== undefined) {
-      setStatus(refusal);
+      reportRefusedWrite({ path: "review-mode", refusal });
       return;
     }
     setIsChangingReviewMode(true);
@@ -7493,7 +7529,7 @@ export const ReviewController = () => {
       refreshVerdicts();
       setPendingAutoAcceptThreadId(null);
     } catch (error) {
-      setStatus(errorMessage(error));
+      reportFailedWrite({ path: "review-mode", error });
     } finally {
       setIsChangingReviewMode(false);
     }
@@ -7938,6 +7974,11 @@ export const ReviewController = () => {
           endReason={endReason}
           latestReviewUrl={runtimeSession?.latestReviewUrl}
         />
+      ) : sessionReach === "out-of-date" ? (
+        <SessionOutOfDateBanner
+          canReload={canRefreshReview}
+          onReload={() => window.location.reload()}
+        />
       ) : null}
       {writesStalled ? <WritesStalledBanner /> : null}
       {reviewContainerHosts.map(({ container, host }) => {
@@ -8335,7 +8376,7 @@ export const ReviewController = () => {
                     onAssociate={setAssociatedTarget}
                     identity={identity}
                     currentSnapshot={currentSnapshot}
-                    onStatus={setStatus}
+                    onStatus={reportDiffLoadFailure}
                     unsavedInputKey={`draft:rail:${comment.id}`}
                     onUnsavedInputChange={onUnsavedInputChange}
                     onResolve={() => toggleResolvedComment(comment.id)}
@@ -8373,7 +8414,7 @@ export const ReviewController = () => {
                     onAssociate={setAssociatedTarget}
                     identity={identity}
                     currentSnapshot={currentSnapshot}
-                    onStatus={setStatus}
+                    onStatus={reportDiffLoadFailure}
                     unsavedInputKey={`draft:rail:${comment.id}`}
                     onUnsavedInputChange={onUnsavedInputChange}
                     resolved
@@ -8587,6 +8628,7 @@ export const ReviewController = () => {
                         agent.presence.disconnectRequestedAtMs,
                     }),
                 isDisconnectingAgent,
+                ...(disconnectBlock === undefined ? {} : { disconnectBlock }),
                 onViewRequest: viewAgentRequest,
                 onDisconnect: () => void disconnectAgent(),
                 agents: agent.agents,
@@ -8792,7 +8834,7 @@ export const ReviewController = () => {
               onAssociate={setAssociatedTarget}
               identity={identity}
               currentSnapshot={currentSnapshot}
-              onStatus={setStatus}
+              onStatus={reportDiffLoadFailure}
               unsavedInputKey={`draft:thread:${comment.id}`}
               onUnsavedInputChange={onUnsavedInputChange}
               onResolve={() => toggleResolvedComment(comment.id)}

@@ -52,7 +52,7 @@ describe("review poll health", () => {
         cancelPendingRequestIds: new Set(),
         progressEvents: [],
         agentConnected: true,
-        runtimeOffline: false,
+        session: "reachable",
         now: projection.nowMs,
         heartbeatAt: 1_000,
       }),

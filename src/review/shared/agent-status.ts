@@ -124,8 +124,10 @@ export type CurrentAgentActivity =
          saying it is unreachable asserts something nobody checked. The remedy
          has always named the session - "Restart `big-plan review`" - so the
          headline naming the agent was the half of this state that did not
-         match the other half (BIG-273). */
-      readonly headline: "Review session unreachable";
+         match the other half (BIG-273). Two readings share the state, lost
+         contact and a runtime that refuses this tab, and `reviewSessionWords`
+         owns the words for both (BIG-282). */
+      readonly headline: string;
       readonly supporting: string;
     }
   | {
@@ -190,6 +192,39 @@ export const REVIEW_SESSION_UNREACHABLE_SUPPORTING =
   "Restart `big-plan review`, then open the new URL it prints. All comments are safe.";
 
 /**
+ * What this page knows about reaching its review session, as one fact every
+ * surface reads: the agent card, the toolbar mark, the banner, each thread's
+ * status strip, and the gate in front of every write. Two failing states,
+ * because two different things go wrong and each has its own way back.
+ * "offline" is the page losing contact. "out-of-date" is a runtime that answers
+ * every poll and refuses each one, which is what an open tab becomes when its
+ * runtime is restarted or its store re-minted underneath it; reading that as
+ * unreachable sent the reviewer to restart a runtime that was up (BIG-282).
+ */
+export type ReviewSessionReach = "reachable" | "offline" | "out-of-date";
+
+/** The headline every surface uses while the runtime refuses this tab. */
+export const REVIEW_SESSION_OUT_OF_DATE_HEADLINE = "Review session out of date";
+
+/** The way back is a reload, because the runtime is up and will recognise a freshly served page. */
+export const REVIEW_SESSION_OUT_OF_DATE_SUPPORTING =
+  "Reload this page to reconnect. All comments are safe.";
+
+/** The words for a session this page cannot use, keyed by why it cannot. */
+export const reviewSessionWords = (
+  reach: Exclude<ReviewSessionReach, "reachable">,
+): { readonly headline: string; readonly supporting: string } =>
+  reach === "offline"
+    ? {
+        headline: REVIEW_SESSION_UNREACHABLE_HEADLINE,
+        supporting: REVIEW_SESSION_UNREACHABLE_SUPPORTING,
+      }
+    : {
+        headline: REVIEW_SESSION_OUT_OF_DATE_HEADLINE,
+        supporting: REVIEW_SESSION_OUT_OF_DATE_SUPPORTING,
+      };
+
+/**
  * Maps runtime facts to the single agent status shown in viewer chrome and at
  * the head of the agent sidebar. It is one derivation because the chrome and
  * the sidebar must never disagree about what state the agent is in.
@@ -232,7 +267,7 @@ export const deriveAgentHealth = ({
      had gone that their agent had left (BIG-273). The mark stays the same,
      because both are the same severity. */
   if (activity.state === "offline") {
-    return { indicator: "error", label: REVIEW_SESSION_UNREACHABLE_HEADLINE };
+    return { indicator: "error", label: activity.headline };
   }
   if (activity.state === "disconnected") {
     return { indicator: "error", label: "Agent disconnected" };
@@ -740,7 +775,7 @@ export const deriveCurrentAgentActivity = ({
   cancelPendingRequestIds,
   progressEvents,
   agentConnected,
-  runtimeOffline,
+  session,
   now,
   heartbeatAt,
   endedAtMs,
@@ -753,7 +788,8 @@ export const deriveCurrentAgentActivity = ({
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly progressEvents: ReadonlyArray<AgentActivityProgress>;
   readonly agentConnected: boolean;
-  readonly runtimeOffline: boolean;
+  /** Whether this page can use its review session, and if not, why. */
+  readonly session: ReviewSessionReach;
   readonly now: number;
   readonly heartbeatAt: number;
   /** When the agent's own loop reported the session ending, if it did. */
@@ -767,13 +803,8 @@ export const deriveCurrentAgentActivity = ({
   readonly disconnectRequestedAtMs?: number;
   readonly everConnected: boolean;
 }): CurrentAgentActivity => {
-  if (runtimeOffline) {
-    return {
-      state: "offline",
-      tone: "danger",
-      headline: REVIEW_SESSION_UNREACHABLE_HEADLINE,
-      supporting: REVIEW_SESSION_UNREACHABLE_SUPPORTING,
-    };
+  if (session !== "reachable") {
+    return { state: "offline", tone: "danger", ...reviewSessionWords(session) };
   }
   // Work that has been picked up is judged by its own narration, and never
   // falls through to the presence question below. The two ask different things
@@ -936,7 +967,8 @@ export type AgentStatus = {
 };
 
 export type AgentStatusInput = {
-  readonly runtime: "static" | "online" | "offline";
+  readonly runtime:
+    "static" | "online" | Exclude<ReviewSessionReach, "reachable">;
   readonly request: "none" | "pending" | "answered";
   /**
    * What kind of work the request is, where the answer changes what an answer
@@ -980,16 +1012,17 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
       tone: "neutral",
     };
   }
-  if (input.runtime === "offline") {
+  if (input.runtime === "offline" || input.runtime === "out-of-date") {
+    /* The same words the sidebar and the toolbar use for this state. A
+       thread strip reading "Runtime offline" beside a rail reading "Agent is
+       unreachable" left the reviewer to work out that one condition was
+       being reported twice in two vocabularies (BIG-273). */
+    const words = reviewSessionWords(input.runtime);
     return {
       stage: "offline",
-      /* The same words the sidebar and the toolbar use for this state. A
-         thread strip reading "Runtime offline" beside a rail reading "Agent is
-         unreachable" left the reviewer to work out that one condition was
-         being reported twice in two vocabularies (BIG-273). */
-      label: REVIEW_SESSION_UNREACHABLE_HEADLINE,
-      headline: REVIEW_SESSION_UNREACHABLE_HEADLINE,
-      detail: REVIEW_SESSION_UNREACHABLE_SUPPORTING,
+      label: words.headline,
+      headline: words.headline,
+      detail: words.supporting,
       tone: "danger",
     };
   }

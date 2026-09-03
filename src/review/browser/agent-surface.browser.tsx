@@ -19,6 +19,7 @@ import {
   type AgentRosterProps,
 } from "./agent-roster.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
+import type { ReviewWriteBlocked } from "./review-write-availability.js";
 
 export type AgentSurfaceModel = {
   readonly activity: CurrentAgentActivity;
@@ -38,6 +39,12 @@ export type AgentSurfaceModel = {
   readonly disconnectRequestedAtMs?: number;
   /** Whether a disconnect the reviewer confirmed has not been answered yet. */
   readonly isDisconnectingAgent: boolean;
+  /**
+   * Why a disconnect could not be sent right now, when it could not. The
+   * control is drawn inert with this reason instead of live with a refusal
+   * waiting behind it (BIG-282).
+   */
+  readonly disconnectBlock?: ReviewWriteBlocked;
   readonly onViewRequest: (requestId: string, kind: string) => void;
   readonly onDisconnect: () => void;
   /** Every agent attached to this review, and how to answer about them. */
@@ -145,6 +152,9 @@ export const AgentSurface = ({
           ? {}
           : { disconnectRequestedAtMs: model.disconnectRequestedAtMs })}
         isDisconnectingAgent={model.isDisconnectingAgent}
+        {...(model.disconnectBlock === undefined
+          ? {}
+          : { disconnectBlock: model.disconnectBlock })}
         onViewRequest={model.onViewRequest}
         onDisconnect={model.onDisconnect}
       />

@@ -5170,14 +5170,21 @@ test("should restore and submit staged comments through the local review runtime
     }),
   );
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  // A runtime that answers and refuses is out of date for this tab, not
+  // unreachable: the remedy is a reload rather than a restart. The rail's
+  // status line and every thread's reply chip now read the same block, so the
+  // line is named by its role rather than by a text every chip shares
+  // (BIG-282).
   await expect(
-    rail.getByText("Review session unreachable", { exact: true }),
+    rail.getByRole("button", {
+      name: "Review session out of date - open Agent Status",
+    }),
   ).toBeVisible({ timeout: 6_000 });
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
   await expect(
-    rail.getByRole("img", { name: "Review session unreachable" }),
+    rail.getByRole("img", { name: "Review session out of date" }),
   ).toBeVisible();
   await rail.getByRole("button", { name: "Delete staged comment" }).click();
   await page
@@ -5197,7 +5204,7 @@ test("should restore and submit staged comments through the local review runtime
   ).toBeDisabled();
   await expect(
     offlineComposer.getByRole("button", {
-      name: "Review session unreachable",
+      name: "Review session out of date",
     }),
   ).toBeVisible();
   await offlineComposer.getByRole("button", { name: "Cancel" }).click();
