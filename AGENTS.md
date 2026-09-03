@@ -93,7 +93,7 @@ That join is what lets a document-wide pass read what a component asserted inste
 Validation renders the plan in memory while collecting the same component models in one pass.
 It discards the generated HTML, then applies its registered linting rules to the authored plan.
 React is a presentation-edge implementation tool.
-A rendered document ships a typed React interaction island for commenting plus the page envelope's first-paint preference bootstrap and the shell's self-contained viewer scripts for the [documented reader interactions](docs/src/content/docs/intro/tour.md).
+A rendered document ships a typed React interaction island for commenting plus the page envelope's first-paint preference bootstrap and the shell's self-contained viewer scripts for the [documented reader interactions](docs/src/content/docs/intro/ui-review.mdx).
 The browser React interaction island never client-renders or gates plan content.
 It may install a server-rendered article revision or component diff root, but every plan-DOM replacement crosses the single boundary described below.
 The plan remains fully readable when scripts are disabled, and Big Plan ships no separate script-free HTML variant.
