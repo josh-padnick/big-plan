@@ -101,6 +101,15 @@ describe("agentSessionReference", () => {
     );
   });
 
+  it("should not copy a URL that carries no bare session id", () => {
+    expect(
+      agentSessionReference({
+        sessionUrl: "https://claude.ai/?token=value",
+        writerId: "writer-1",
+      }),
+    ).toEqual({ handle: "https://claude.ai/?token=value" });
+  });
+
   it("should copy a declared handle when no URL was declared", () => {
     expect(
       agentSessionReference({

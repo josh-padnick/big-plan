@@ -81,19 +81,19 @@ export type AgentSessionAffordance =
  * nowhere to paste it. The tail is taken from whatever is shown.
  */
 export type AgentSessionReference = {
-  /** The value whose tail the card shows: the bare id, or the roster id. */
+  /** The value whose tail the card shows: the bare id, URL, or roster id. */
   readonly handle: string;
-  /** The bare session id to copy, absent when only a roster id stands in. */
+  /** The bare session id to copy, absent when none can be resolved. */
   readonly copyValue?: string;
 };
 
 /**
  * The bare session id a URL carries: its last non-empty path segment, which is
  * the conversation's own handle on every interface Big Plan links and the
- * natural id on the CLI addresses it does not. Falls back to the whole string
- * when it is not a URL or carries no path, so a declaration is never dropped.
+ * natural id on the CLI addresses it does not. A non-URL string is already an
+ * id. A URL with no path carries no bare id, so it remains display-only.
  */
-const bareSessionId = (sessionUrl: string): string => {
+const bareSessionId = (sessionUrl: string): string | undefined => {
   let parsed: URL | undefined;
   try {
     parsed = new URL(sessionUrl);
@@ -103,8 +103,7 @@ const bareSessionId = (sessionUrl: string): string => {
   const segments = parsed.pathname
     .split("/")
     .filter((segment) => segment !== "");
-  const last = segments[segments.length - 1];
-  return last ?? sessionUrl;
+  return segments[segments.length - 1];
 };
 
 /**
@@ -121,10 +120,15 @@ export const agentSessionReference = ({
   readonly sessionId?: string;
   readonly writerId?: string;
 }): AgentSessionReference | undefined => {
-  const id =
-    sessionId ??
-    (sessionUrl === undefined ? undefined : bareSessionId(sessionUrl));
-  if (id !== undefined) return { handle: id, copyValue: id };
+  if (sessionId !== undefined) {
+    return { handle: sessionId, copyValue: sessionId };
+  }
+  if (sessionUrl !== undefined) {
+    const id = bareSessionId(sessionUrl);
+    return id === undefined
+      ? { handle: sessionUrl }
+      : { handle: id, copyValue: id };
+  }
   return writerId === undefined ? undefined : { handle: writerId };
 };
 
