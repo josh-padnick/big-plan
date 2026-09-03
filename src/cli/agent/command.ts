@@ -1,7 +1,7 @@
 // Adapts `big-plan agent` arguments and structured CLI errors to the
 // review-owned coding-agent work loop.
 
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AxiError } from "axi-sdk-js";
 import {
   AgentWorkLoopRejected,
@@ -32,7 +32,7 @@ const invalidArguments = (): never => {
 };
 
 const executablePath = (): string =>
-  resolve(process.argv[1] ?? "bin/big-plan.mjs");
+  fileURLToPath(new URL("../../../bin/big-plan.mjs", import.meta.url));
 
 const RESERVED_ACTIONS = new Set([
   "connect",

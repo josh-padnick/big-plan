@@ -4,6 +4,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   deriveSnapshotDigest,
@@ -97,7 +98,10 @@ describe("agent command adapter", () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-cli-connect-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nAnswer this question.\n";
+    const servingExecutable = process.argv[1];
+    const wrapperExecutable = join(directory, "serve.mjs");
     try {
+      process.argv[1] = wrapperExecutable;
       await writeFile(planPath, source);
       const review = await startReviewRuntime({ planPath });
       try {
@@ -129,10 +133,24 @@ describe("agent command adapter", () => {
         await expect(readFile(result["protocol"], "utf8")).resolves.toContain(
           "# Answer a live review request",
         );
+        const productExecutable = fileURLToPath(
+          new URL("../../../bin/big-plan.mjs", import.meta.url),
+        );
+        expect(result).toMatchObject({
+          respond_command: expect.stringContaining(productExecutable),
+          note_command: expect.stringContaining(productExecutable),
+          next_command: expect.stringContaining(productExecutable),
+        });
+        expect(JSON.stringify(result)).not.toContain(wrapperExecutable);
       } finally {
         await review.close();
       }
     } finally {
+      if (servingExecutable === undefined) {
+        process.argv.splice(1, 1);
+      } else {
+        process.argv[1] = servingExecutable;
+      }
       await rm(directory, { recursive: true, force: true });
     }
   });
