@@ -28,11 +28,14 @@ export const SIDEBAR: readonly SidebarEntry[] = [
     label: "Intro",
     items: [
       { label: "What is Big Plan?", slug: "intro/what-is-big-plan" },
+      { label: "Big Plan is in alpha", slug: "alpha" },
       { label: "Install Big Plan", slug: "intro/installation" },
       { label: "Your first review", slug: "intro/first-review" },
       { label: "UI review", slug: "intro/ui-review" },
       { label: "Sample plans", slug: "samples" },
-      { label: "Big Plan vs. other", slug: "intro/vs-other" },
+      // Unlisted for now, and still published: the comparison needs a rewrite
+      // before it earns a place in the reading order.
+      // { label: "Big Plan vs. other", slug: "intro/vs-other" },
     ],
   },
   {
