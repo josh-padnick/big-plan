@@ -329,9 +329,16 @@ export const updateReviewState = async (
   // creation, so a refusal leaves the whole review state untouched and a
   // concurrent create cannot sneak onto the thread.
   try {
-    await withResolvedCommentLock({
+    const lockedVersionRefusal = await withResolvedCommentLock({
       store,
       change: async (lockedStore) => {
+        const refusal = await conditionalReviewStateRefusal({
+          context,
+          store: lockedStore,
+          payload,
+          operation: "A drafts write",
+        });
+        if (refusal !== undefined) return refusal;
         const alreadyResolved = new Set(
           await readResolvedCommentIds({
             store: lockedStore,
@@ -391,8 +398,10 @@ export const updateReviewState = async (
           }
           throw error;
         }
+        return undefined;
       },
     });
+    if (lockedVersionRefusal !== undefined) return lockedVersionRefusal;
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return refusal({ status: 409, reason: error.message });
