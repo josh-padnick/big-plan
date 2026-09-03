@@ -7,8 +7,9 @@ You ask your agent for a plan. A few minutes later it hands you a link, you read
 document instead of a wall of terminal text, you leave notes on the parts you disagree with,
 and when you are happy you approve it. That is the whole product.
 
-This page is the big picture. If you want to run it yourself, [Your first
-review](/intro/first-review/) walks the same loop with real commands.
+This page is the big picture, including what your agent runs at each step. For the same loop
+told purely from your side of it, in four short steps, see [Your first
+review](/intro/first-review/).
 
 ## The loop
 
@@ -105,7 +106,7 @@ starts work.
 
 | You want to                       | Read                                                 |
 | --------------------------------- | ---------------------------------------------------- |
-| Run this yourself, once           | [Your first review](/intro/first-review/)            |
+| Walk the loop from your side      | [Your first review](/intro/first-review/)            |
 | See what the interface looks like | [UI review](/intro/ui-review/)                       |
 | Look at real plans                | [Sample plans](/samples/)                            |
 | Know what a plan can contain      | [Components](/components/)                           |

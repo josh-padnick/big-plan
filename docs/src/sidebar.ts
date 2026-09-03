@@ -30,8 +30,12 @@ export const SIDEBAR: readonly SidebarEntry[] = [
       { label: "What is Big Plan?", slug: "intro/what-is-big-plan" },
       { label: "Big Plan is in alpha", slug: "alpha" },
       { label: "Install Big Plan", slug: "intro/installation" },
-      { label: "Your first review", slug: "intro/first-review" },
+      { label: "How it works", slug: "review" },
       { label: "UI review", slug: "intro/ui-review" },
+      // Unlisted for now, and still published: "Your first review" walks the
+      // same loop as "How it works" from the reader's side, and seven pages
+      // still link to it.
+      // { label: "Your first review", slug: "intro/first-review" },
       { label: "Sample plans", slug: "samples" },
       // Unlisted for now, and still published: the comparison needs a rewrite
       // before it earns a place in the reading order.
@@ -39,76 +43,69 @@ export const SIDEBAR: readonly SidebarEntry[] = [
     ],
   },
   {
-    label: "Review a plan",
+    label: "Components",
     collapsed: true,
     items: [
-      { label: "How it works", slug: "review" },
+      { label: "The component library", slug: "components" },
       {
-        label: "Components",
+        label: "Decisions",
         collapsed: true,
         items: [
-          { label: "The component library", slug: "components" },
+          { label: "Decision", slug: "components/decision" },
           {
-            label: "Decisions",
-            collapsed: true,
-            items: [
-              { label: "Decision", slug: "components/decision" },
-              {
-                label: "DecisionAnalysis",
-                slug: "components/decision-analysis",
-              },
-              { label: "QuickDecision", slug: "components/quick-decision" },
-            ],
+            label: "DecisionAnalysis",
+            slug: "components/decision-analysis",
           },
+          { label: "QuickDecision", slug: "components/quick-decision" },
+        ],
+      },
+      {
+        label: "Code and files",
+        collapsed: true,
+        items: [
+          { label: "CodeDiff", slug: "components/code-diff" },
+          { label: "CodeSnippet", slug: "components/code-snippet" },
+          { label: "FileTree", slug: "components/file-tree" },
+          { label: "FileTreeDiff", slug: "components/file-tree-diff" },
+        ],
+      },
+      {
+        label: "Data and contracts",
+        collapsed: true,
+        items: [
+          { label: "DataTable", slug: "components/data-table" },
           {
-            label: "Code and files",
-            collapsed: true,
-            items: [
-              { label: "CodeDiff", slug: "components/code-diff" },
-              { label: "CodeSnippet", slug: "components/code-snippet" },
-              { label: "FileTree", slug: "components/file-tree" },
-              { label: "FileTreeDiff", slug: "components/file-tree-diff" },
-            ],
+            label: "DatabaseTableSchema",
+            slug: "components/database-table-schema",
           },
+          { label: "HttpEndpoint", slug: "components/http-endpoint" },
           {
-            label: "Data and contracts",
-            collapsed: true,
-            items: [
-              { label: "DataTable", slug: "components/data-table" },
-              {
-                label: "DatabaseTableSchema",
-                slug: "components/database-table-schema",
-              },
-              { label: "HttpEndpoint", slug: "components/http-endpoint" },
-              {
-                label: "GraphqlOperation",
-                slug: "components/graphql-operation",
-              },
-              { label: "GrpcMethod", slug: "components/grpc-method" },
-            ],
+            label: "GraphqlOperation",
+            slug: "components/graphql-operation",
           },
+          { label: "GrpcMethod", slug: "components/grpc-method" },
+        ],
+      },
+      {
+        label: "Pictures",
+        collapsed: true,
+        items: [
+          { label: "FlowDiagram", slug: "components/flow-diagram" },
+          { label: "MermaidDiagram", slug: "components/mermaid-diagram" },
+          { label: "Wireframe", slug: "components/wireframe" },
+        ],
+      },
+      {
+        label: "Document structure",
+        collapsed: true,
+        items: [
+          { label: "Callout", slug: "components/callout" },
+          { label: "Part", slug: "components/part" },
+          { label: "QuickSummary", slug: "components/quick-summary" },
+          { label: "Slide", slug: "components/slide" },
           {
-            label: "Pictures",
-            collapsed: true,
-            items: [
-              { label: "FlowDiagram", slug: "components/flow-diagram" },
-              { label: "MermaidDiagram", slug: "components/mermaid-diagram" },
-              { label: "Wireframe", slug: "components/wireframe" },
-            ],
-          },
-          {
-            label: "Document structure",
-            collapsed: true,
-            items: [
-              { label: "Callout", slug: "components/callout" },
-              { label: "Part", slug: "components/part" },
-              { label: "QuickSummary", slug: "components/quick-summary" },
-              { label: "Slide", slug: "components/slide" },
-              {
-                label: "TableOfContents",
-                slug: "components/table-of-contents",
-              },
-            ],
+            label: "TableOfContents",
+            slug: "components/table-of-contents",
           },
         ],
       },

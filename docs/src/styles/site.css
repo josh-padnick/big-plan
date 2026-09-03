@@ -108,38 +108,65 @@ a.site-title img {
 
 /* --- Value proposition -------------------------------------------------- */
 
-/* The accent rules read as one row of parallel statements, so the cards align
-   at the top rather than letting a taller neighbour push the next one down.
-   A narrower track fits three across on a wide screen, which sets five items
-   as 3 + 2 instead of stranding the fifth alone under two full rows. */
+/* One concept per row. A grid set these five as columns, which asked a reader
+   to track across and left the fifth stranded; read down, each concept is a
+   single line of claim and explanation, the same shape as the component rows
+   further down the page. */
 .landing .value-grid {
-  display: grid;
-  align-items: start;
-  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
-  gap: var(--step-3) var(--step-4);
+  display: block;
   margin-block-start: var(--step-4);
 }
 
-/* Starlight's markdown flow gives every block after the first a top margin.
-   Inside a grid that lands as a 16px step down on every card except the one in
-   the first cell, so the row tops disagree; the grid owns this spacing. */
+/* Starlight's markdown flow gives every block after the first a top margin,
+   which would set the rows at uneven intervals; the list owns this spacing. */
+/* Two fixed tracks rather than a wrapping flex row: with flex, a short
+   explanation sat beside its label while a long one wrapped underneath, so the
+   same list rendered two different shapes depending on the sentence. */
 .landing .value-grid > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 var(--step-3);
   min-width: 0;
   margin-block-start: 0;
+  padding-block: var(--step-2);
   border-inline-start: 2px solid var(--sl-color-text-accent);
   padding-inline-start: var(--step-3);
 }
 
+/* One column on a narrow screen, where two would leave neither enough room. */
+@media (max-width: 34rem) {
+  .landing .value-grid > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--step-1) 0;
+  }
+}
+
+.landing .value-grid > div + div {
+  margin-block-start: var(--step-2);
+}
+
 .landing .value-grid h3 {
-  margin-block: 0 var(--step-1);
+  margin-block: 0;
   font-size: 1rem;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
 .landing .value-grid p {
+  min-width: 0;
   margin-block: 0;
   color: var(--sl-color-gray-2);
   font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+/* The section's one-line lede, between the heading and the rows. */
+.landing .band > p.band-lede {
+  max-width: 46rem;
+  margin-block: 0;
+  color: var(--sl-color-gray-2);
+  font-size: 1.0625rem;
+  line-height: 1.55;
 }
 
 /* --- Link feedback the theme leaves flat --------------------------------- */
