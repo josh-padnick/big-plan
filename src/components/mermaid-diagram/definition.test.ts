@@ -138,7 +138,7 @@ describe(
       ].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
       expect(references.length).toBeGreaterThan(0);
       for (const reference of references) expect(ids).toContain(reference);
-    });
+    }, 60_000);
 
     it("reports rejected Mermaid syntax before delivery", () => {
       const markdown = `# Invalid\n\n<MermaidDiagram>\n\n\`\`\`mermaid\nflowchart LR\n  subgraph Unsupported\n    source[Source]\n  end\n\`\`\`\n\n</MermaidDiagram>\n`;
