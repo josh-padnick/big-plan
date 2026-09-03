@@ -36,7 +36,6 @@ Do not close or delete these.
 | PR [#241](https://github.com/josh-padnick/big-plan/pull/241) — docs site reorganized around the reader's job (BIG-270), branch `bp-big270-docs-build` | **LIVE**    | Draft.                                                                                                                                                                             |
 | PR [#246](https://github.com/josh-padnick/big-plan/pull/246) — this record (BIG-277), branch `fm/bp-big277-hygiene`                                   | **LIVE**    | The record is itself an open pull request, so it appears in its own inventory. It stays open and is updated as the lanes above land; it is the last thing to merge before the tag. |
 | BIG-19 (review bar)                                                                                                                                   | **LIVE**    | In flight; no pull request open yet.                                                                                                                                               |
-| BIG-168 (resolve-thread auto-accept)                                                                                                                  | **LIVE**    | In flight; no pull request open yet.                                                                                                                                               |
 | BIG-153 (ownership-scoped acceptance)                                                                                                                 | **LIVE**    | In flight; no pull request open yet.                                                                                                                                               |
 
 When each opens a pull request, add its row here rather than leaving it unrecorded.
@@ -92,7 +91,7 @@ They are left in place rather than deleted because nothing proves their individu
 
 ## Landed and deleted
 
-103 remote branches whose work is on `main` were deleted on 2026-09-02. Nearly all had their own merged pull request. The exceptions are named in their rows: seven had a closed pull request superseded by a merged one, `fm/bp-pr64-captain-feedback` merged into a stack rather than into `main`, and `fm/commenting-pr1-foundation` had no pull request at all and qualified on tip reachability alone.
+104 remote branches whose work is on `main` were deleted: 103 in the sweep on 2026-09-02, and one more as its lane landed. Nearly all had their own merged pull request. The exceptions are named in their rows: seven had a closed pull request superseded by a merged one, `fm/bp-pr64-captain-feedback` merged into a stack rather than into `main`, and `fm/commenting-pr1-foundation` had no pull request at all and qualified on tip reachability alone.
 
 Every tip is recorded so any row is recoverable — see [Restoring a deleted branch](#restoring-a-deleted-branch).
 
@@ -190,6 +189,7 @@ Every tip is recorded so any row is recoverable — see [Restoring a deleted bra
 | `fm/bp-wireframe-maximize-rail`       | LANDED              | PR [#79](https://github.com/josh-padnick/big-plan/pull/79) merged; on `main` as `ce64cd5d`                                                                                                                                                                                                                | `02678778319b` |
 | `fm/bp-wireframe-toolbar-layout`      | LANDED              | PR [#75](https://github.com/josh-padnick/big-plan/pull/75) merged; on `main` as `474a7223`                                                                                                                                                                                                                | `9d297b1bc143` |
 | `fm/fm-validation-signoff`            | LANDED              | PR [#135](https://github.com/josh-padnick/big-plan/pull/135) merged; on `main` as `24d0447a`                                                                                                                                                                                                              | `9a209aa863d2` |
+| `fm/bp-big168-resolve-accept`         | LANDED              | PR [#247](https://github.com/josh-padnick/big-plan/pull/247) merged 2026-09-02; on `main` as `be4a27ad`                                                                                                                                                                                                   | `582eec81731b` |
 | `fm/commenting-pr1-foundation`        | LANDED              | Tip reachable from `main`                                                                                                                                                                                                                                                                                 | `657aab37a831` |
 | `fm/bp-pr64-captain-feedback`         | LANDED              | PR [#68](https://github.com/josh-padnick/big-plan/pull/68) merged into its stacked base, so it carries no `(#68)` subject on `main`; its change is read out of `main` directly (`Suggest another option` in `src/components/_shared/decision-card/decision-card.tsx`) and the stack landed as #66 and #76 | `69a46532d757` |
 | `fm/commenting-pr2-agent-diffs`       | LANDED              | PR [#85](https://github.com/josh-padnick/big-plan/pull/85) merged (`4133a396`); PR #92 on the same branch was closed. Its tip replays the causal-diff work, which is on `main` via [#117](https://github.com/josh-padnick/big-plan/pull/117) (`dbb48d80`)                                                 | `9e1024ba3038` |
@@ -220,12 +220,12 @@ The `no-mistakes` remote is a **local** bare mirror (`~/.no-mistakes/repos/…`)
 
 |                                        |                                                         |
 | -------------------------------------- | ------------------------------------------------------- |
-| Recorded                               | 2026-09-02                                              |
-| `main` at the time                     | `66748411`                                              |
+| Recorded                               | 2026-09-02, updated as each live lane lands             |
+| `main` at the time                     | `be4a27ad`                                              |
 | Open pull requests                     | 2 (#241 and #246, both live)                            |
 | Remote branches besides `main`, before | 135                                                     |
-| Remote branches besides `main`, after  | 32                                                      |
-| Deleted                                | 103                                                     |
+| Remote branches besides `main`, after  | 33 (32, plus this record's own branch)                  |
+| Deleted                                | 104                                                     |
 | Open decisions blocking a clean tag    | 0 — every branch and pull request carries a disposition |
 
 This record is kept current until the tag is cut. A live lane that lands, a new pull request one of them opens, or a deferred branch whose disposition changes, updates its row here in the same change.
