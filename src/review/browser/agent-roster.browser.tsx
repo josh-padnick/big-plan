@@ -23,6 +23,7 @@ import {
   selectPrimaryAgent,
   type RosterAgent,
 } from "../shared/agent-primacy.js";
+import { agentSessionReference } from "../shared/agent-session-link.js";
 import { compactDurationLabel } from "../shared/time-label.js";
 import {
   AgentIdentityLine,
@@ -246,13 +247,25 @@ const AgentSessionFacts = ({
   readonly agent: RosterAgent;
   readonly nowMs: number;
 }) => {
-  const declared = agent.model?.sessionId;
+  const session = agentSessionReference({
+    ...(agent.model?.sessionUrl === undefined
+      ? {}
+      : { sessionUrl: agent.model.sessionUrl }),
+    ...(agent.model?.sessionId === undefined
+      ? {}
+      : { sessionId: agent.model.sessionId }),
+    writerId: agent.writerId,
+  });
   return (
     <dl className="m-0 grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 text-2xs text-muted">
-      <AgentSessionFact
-        handle={declared ?? agent.writerId}
-        isCopyable={declared !== undefined}
-      />
+      {session === undefined ? null : (
+        <AgentSessionFact
+          handle={session.handle}
+          {...(session.copyValue === undefined
+            ? {}
+            : { copyValue: session.copyValue })}
+        />
+      )}
       <div className="min-w-0">
         <dt className="font-semibold">Attached</dt>
         <dd className="m-0 text-ink">

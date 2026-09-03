@@ -239,19 +239,21 @@ export const CopyIdentifierControl = ({
  * compare them to be sure they matched (BIG-273). Four characters is what a
  * reviewer checks against the handle their own tool printed; the control hands
  * over the whole of it for anything that needs the rest.
+ *
+ * The copy value is the whole bare session id rather than the tail shown - the
+ * id the connector declared, or the one its URL carries - so the control offers
+ * the reviewer the id to match, never the URL that wraps it (BIG-281). It is
+ * absent only when a roster id is standing in for a session that declared no id,
+ * which is a name inside Big Plan with nowhere outside it to paste.
  */
 export const AgentSessionFact = ({
   handle,
-  isCopyable = true,
+  copyValue,
 }: {
-  /** The declared session handle, or the roster id standing in for it. */
+  /** The declared session address, or the roster id standing in for it. */
   readonly handle: string;
-  /**
-   * Whether the whole handle is worth offering. A roster id standing in for a
-   * session names an agent inside Big Plan and nothing outside it, so there is
-   * nowhere for a reviewer to paste it.
-   */
-  readonly isCopyable?: boolean;
+  /** The full value the control copies; absent leaves no control to show. */
+  readonly copyValue?: string;
 }) => (
   <div className="min-w-0">
     <dt className="font-semibold">Agent session</dt>
@@ -259,7 +261,9 @@ export const AgentSessionFact = ({
       <span className="min-w-0 truncate" data-review-agent-session-id={handle}>
         {agentSessionTail(handle)}
       </span>
-      {isCopyable ? <CopyIdentifierControl value={handle} /> : null}
+      {copyValue === undefined ? null : (
+        <CopyIdentifierControl value={copyValue} />
+      )}
     </dd>
   </div>
 );

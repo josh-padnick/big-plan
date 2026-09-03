@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { agentSessionAffordance } from "./agent-session-link.js";
+import {
+  agentSessionAffordance,
+  agentSessionReference,
+} from "./agent-session-link.js";
 
 describe("agentSessionAffordance", () => {
   it.each([
@@ -62,5 +65,70 @@ describe("agentSessionAffordance", () => {
 
   it("should offer nothing when nothing was declared", () => {
     expect(agentSessionAffordance({})).toEqual({ kind: "none" });
+  });
+});
+
+describe("agentSessionReference", () => {
+  it("should copy the bare id a URL carries, not the URL", () => {
+    // The reviewer matches the id their own tool printed; the whole URL is a
+    // mouthful to check four characters of, and it still opens from its own link
+    // (BIG-281). The id is the conversation segment of the address - the linked
+    // interfaces and a CLI's own path alike.
+    expect(
+      agentSessionReference({
+        sessionUrl: "https://claude.ai/code/session_abc",
+        writerId: "writer-1",
+      }),
+    ).toEqual({ handle: "session_abc", copyValue: "session_abc" });
+    expect(
+      agentSessionReference({
+        sessionUrl: "https://localhost:4000/session/abc",
+        writerId: "writer-1",
+      }),
+    ).toEqual({ handle: "abc", copyValue: "abc" });
+    // A query on the address is not part of the id.
+    expect(
+      agentSessionReference({
+        sessionUrl: "https://claude.ai/code/8ad2b97a?tab=diff",
+      }),
+    ).toEqual({ handle: "8ad2b97a", copyValue: "8ad2b97a" });
+  });
+
+  it("should keep the whole string when it is not a URL with a path", () => {
+    // A declaration is never dropped: something not URL-shaped is its own id.
+    expect(agentSessionReference({ sessionUrl: "8ad2b97a-fb30-41bb" })).toEqual(
+      { handle: "8ad2b97a-fb30-41bb", copyValue: "8ad2b97a-fb30-41bb" },
+    );
+  });
+
+  it("should copy a declared handle when no URL was declared", () => {
+    expect(
+      agentSessionReference({
+        sessionId: "session-2e29",
+        writerId: "writer-1",
+      }),
+    ).toEqual({ handle: "session-2e29", copyValue: "session-2e29" });
+  });
+
+  it("should prefer a declared bare id over the URL's segment", () => {
+    // A declared id is already the bare id; there is nothing to derive.
+    expect(
+      agentSessionReference({
+        sessionUrl: "https://grok.com/chat/one",
+        sessionId: "two",
+      }),
+    ).toEqual({ handle: "two", copyValue: "two" });
+  });
+
+  it("should name a session by its roster id with nothing to copy", () => {
+    // A roster id names an agent inside Big Plan and nothing outside it, so it
+    // is shown but not offered - there is nowhere to paste it.
+    expect(agentSessionReference({ writerId: "writer-1" })).toEqual({
+      handle: "writer-1",
+    });
+  });
+
+  it("should resolve to nothing when there is no session and no roster id", () => {
+    expect(agentSessionReference({})).toBeUndefined();
   });
 });
