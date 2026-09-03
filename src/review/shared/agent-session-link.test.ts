@@ -106,9 +106,9 @@ describe("agentSessionReference", () => {
     "https://claude.ai/",
     "https://claude.ai/?token=value",
   ])("should not copy the pathless URL %j", (sessionUrl) => {
-    expect(
-      agentSessionReference({ sessionUrl, writerId: "writer-1" }),
-    ).toEqual({ handle: sessionUrl });
+    expect(agentSessionReference({ sessionUrl, writerId: "writer-1" })).toEqual(
+      { handle: sessionUrl },
+    );
   });
 
   it("should copy a declared handle when no URL was declared", () => {
