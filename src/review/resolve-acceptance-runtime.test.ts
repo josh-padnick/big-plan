@@ -267,6 +267,9 @@ describe("resolving a thread", () => {
         },
       });
       expect(resolved.status).toBe(200);
+      await expect(resolved.json()).resolves.toMatchObject({
+        resolvedCommentIds: [THREAD],
+      });
 
       const verdicts = await readChangeVerdicts({
         store: runtime.store,
