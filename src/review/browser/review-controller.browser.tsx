@@ -6976,8 +6976,9 @@ export const ReviewController = () => {
     // until the runtime answers reads as a dead button, and a reviewer who
     // clicks again deletes twice.
     setPendingDelete(null);
+    let deleted: "deleted" | "stale";
     try {
-      const deleted = await serializeReviewerStateWrite(async () => {
+      deleted = await serializeReviewerStateWrite(async () => {
         const base = recoveryReconciliationRef.current.base;
         try {
           const snapshot = parseSnapshot(
@@ -7012,37 +7013,36 @@ export const ReviewController = () => {
           return "stale";
         }
       });
-      if (deleted === "stale") {
-        reportRefusedWrite({
-          path: "delete-comment",
-          refusal:
-            "The review changed before deletion. Review the latest comments and try again.",
-        });
-        return;
-      }
-      if (replyDraftsRef.current.has(commentId)) {
-        const next = new Map(replyDraftsRef.current);
-        next.delete(commentId);
-        replaceReplyDrafts(next);
-      }
-      acceptAgentSnapshot(
-        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
-      );
-      setThreadOpenState((current) =>
-        setThreadOpen({
-          state: current,
-          commentId,
-          kind: "sent",
-          surface: "rail",
-          isRailOpen: isOpen,
-          open: false,
-        }),
-      );
-      if (selectedCommentId === commentId) setSelectedCommentId(null);
     } catch (error) {
       reportFailedWrite({ path: "delete-comment", error });
       if (isRecoveryConflictPause(error)) setIsRecoveryConflictOpen(true);
+      return;
     }
+    if (deleted === "stale") {
+      reportRefusedWrite({
+        path: "delete-comment",
+        refusal:
+          "The review changed before deletion. Review the latest comments and try again.",
+      });
+      return;
+    }
+    if (replyDraftsRef.current.has(commentId)) {
+      const next = new Map(replyDraftsRef.current);
+      next.delete(commentId);
+      replaceReplyDrafts(next);
+    }
+    await refreshAgentSnapshot();
+    setThreadOpenState((current) =>
+      setThreadOpen({
+        state: current,
+        commentId,
+        kind: "sent",
+        surface: "rail",
+        isRailOpen: isOpen,
+        open: false,
+      }),
+    );
+    if (selectedCommentId === commentId) setSelectedCommentId(null);
   };
   const revertAgentChanges = async () => {
     if (pendingRevert === null) return;
@@ -7069,19 +7069,18 @@ export const ReviewController = () => {
           body: revert,
         }),
       );
-      // The reverted change set no longer exists, so a tour narrating it
-      // would walk stale content.
-      closeTour();
-      // No full reload: pulling the fresh agent snapshot lets the in-place
-      // plan refresh swap the article while React state survives, so the
-      // thread the reviewer confirmed this from stays open and can drive
-      // the next revert.
-      acceptAgentSnapshot(
-        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
-      );
     } catch (error) {
       reportFailedWrite({ path: "revert-changes", error });
+      return;
     }
+    // The reverted change set no longer exists, so a tour narrating it
+    // would walk stale content.
+    closeTour();
+    // No full reload: pulling the fresh agent snapshot lets the in-place
+    // plan refresh swap the article while React state survives, so the
+    // thread the reviewer confirmed this from stays open and can drive
+    // the next revert.
+    await refreshAgentSnapshot();
   };
   const jumpTo = (comment: ReviewComment) => {
     setAssociatedTarget(comment.target);
