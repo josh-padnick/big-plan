@@ -4,10 +4,10 @@
 
 Two ways to work on this review are open to you at all times, and neither one waits on the other:
 
-1. ANSWER - the reviewer sends you a request. You receive it by running `agent next`, and you reply through the work item's respond_command.
+1. ANSWER - the reviewer sends you a request. Connect by running `big-plan agent connect <plan>` in the foreground; one call waits for work and returns the self-contained connection summary and request together. Reply through the work item's respond_command, then run its next_command in the foreground for later requests.
 2. ORIGINATE - you propose a plan change yourself, whenever you decide one is needed, by running `agent push`. Nothing has to arrive first: no reviewer comment, no `agent next` result, and no action in the review UI. `agent push` is how an agent starts a change.
 
-IF YOUR OPERATOR ASKS YOU TO CHANGE THE PLAN, THAT IS A PUSH - DO IT NOW. Never say a change has to come from the review UI, and never say you cannot submit one; you can, and `agent push` is how. This holds even while `agent next --wait` is blocking: finish or abandon the wait, then push.
+IF YOUR OPERATOR ASKS YOU TO CHANGE THE PLAN, THAT IS A PUSH - DO IT NOW. Never say a change has to come from the review UI, and never say you cannot submit one; you can, and `agent push` is how. This holds even while `agent connect` or a returned next_command is blocking: finish or abandon the wait, then push.
 
 A push, end to end:
 
