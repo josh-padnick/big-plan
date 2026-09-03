@@ -123,9 +123,12 @@ describe("agent command adapter", () => {
         });
         const summary = result["connection_summary"] as Record<string, unknown>;
         expect(typeof summary["store"]).toBe("string");
-        // The summary points the agent at the protocol doc so it can answer
-        // the request without reading Big Plan source.
-        expect(typeof result["protocol"]).toBe("string");
+        if (typeof result["protocol"] !== "string") {
+          throw new Error("The connection did not provide its protocol path");
+        }
+        await expect(readFile(result["protocol"], "utf8")).resolves.toContain(
+          "# Answer a live review request",
+        );
       } finally {
         await review.close();
       }

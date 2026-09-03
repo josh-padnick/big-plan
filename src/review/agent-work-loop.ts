@@ -203,6 +203,11 @@ const fail = (message: string): never => {
   throw new AgentWorkLoopRejected(message);
 };
 
+const failResponseCorrection = (reason: string): never =>
+  fail(
+    `change response_file and run the same respond_command again: ${reason}`,
+  );
+
 /** Opens one agent-initiated thread or continuation with a claimed stage. */
 const pushWork = async ({
   planPath,
@@ -1663,10 +1668,14 @@ const respond = async ({
   try {
     responseDraft = JSON.parse(await readFile(resolve(responsePath), "utf8"));
   } catch (error: unknown) {
-    return fail(`Cannot read the response JSON: ${String(error)}`);
+    return failResponseCorrection(
+      `Cannot read the response JSON: ${String(error)}`,
+    );
   }
   if (!isRecord(responseDraft) || typeof responseDraft.requestId !== "string") {
-    return fail("The response JSON must name its agent request");
+    return failResponseCorrection(
+      "The response JSON must name its agent request",
+    );
   }
   const request = snapshot.requests.find(
     (candidate) => candidate.requestId === responseDraft.requestId,
@@ -1809,9 +1818,7 @@ const respond = async ({
     });
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
-    return fail(
-      `Change response_file and run the same respond_command again: ${error.message}`,
-    );
+    return failResponseCorrection(error.message);
   }
   try {
     await commitStagedPlanMutation({

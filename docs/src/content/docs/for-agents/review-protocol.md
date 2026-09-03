@@ -9,7 +9,8 @@ Identity environment variables are optional; skip any you do not know.
 
 For a request, edit only the returned `candidate_plan` and `response_file`.
 Copy the returned `response_template` into `response_file`, replace its placeholder
-values, then run the returned `respond_command` exactly once.
+values, then run the returned `respond_command`. This is the one command that
+submits the response.
 
 Thread outcomes are `answered`, `changed`, `warning`, `needs-input`, or `declined`.
 Use `changed` only when you made a real revision to `candidate_plan`; it requires
@@ -19,6 +20,6 @@ letters, digits, `/`, `_`, `.`, or `-`, and is at most 300 characters. Other
 outcomes do not carry `changeTargets`. A warning also requires an 80-character
 `summary` naming the boundary it would cross.
 
-If submission is rejected, follow the error's requested correction and run the
-same returned `respond_command` again. After success, run the returned `next`
-command in the foreground to wait for another request.
+If submission is rejected, correct `response_file` as requested and retry the
+same returned `respond_command`. After success, run the returned `next` command
+in the foreground to wait for another request.
