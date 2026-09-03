@@ -3,13 +3,19 @@
 // navigation sidebar, so new pages flow into llms.txt without edits here.
 
 import type { CollectionEntry } from "astro:content";
-import { SIDEBAR } from "./sidebar";
+import { isSidebarGroup, SIDEBAR } from "./sidebar";
+import type { SidebarEntry } from "./sidebar";
 
 type DocsEntry = CollectionEntry<"docs">;
 
-const SIDEBAR_SLUGS: readonly string[] = SIDEBAR.flatMap((group) =>
-  group.items.map((item) => item.slug),
-);
+// The sidebar nests groups, so both the page order and the curated map walk it
+// rather than reading one level. A nested group's pages belong to the section
+// heading its outermost group carries, which is the grouping a reader of
+// llms.txt is looking for.
+const slugsIn = (entry: SidebarEntry): readonly string[] =>
+  isSidebarGroup(entry) ? entry.items.flatMap(slugsIn) : [entry.slug];
+
+const SIDEBAR_SLUGS: readonly string[] = SIDEBAR.flatMap(slugsIn);
 
 // The landing page leads the concatenated document; sidebar order follows.
 const FULL_DOCUMENT_ORDER: readonly string[] = ["index", ...SIDEBAR_SLUGS];
@@ -192,11 +198,11 @@ export const curatedSections = (
   entries: readonly DocsEntry[],
 ): readonly CuratedSection[] => {
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
-  const sections = SIDEBAR.map((group) => ({
-    label: group.label,
-    entries: group.items.flatMap((item) => {
-      const entry = byId.get(item.slug);
-      return entry === undefined ? [] : [entry];
+  const sections = SIDEBAR.map((entry) => ({
+    label: entry.label,
+    entries: slugsIn(entry).flatMap((slug) => {
+      const found = byId.get(slug);
+      return found === undefined ? [] : [found];
     }),
   }));
   const unlisted = orderAllEntries(

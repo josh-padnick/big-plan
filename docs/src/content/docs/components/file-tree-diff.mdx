@@ -31,6 +31,10 @@ Use `FileTreeDiff` to show which files a plan touches and how: the additions, mo
 - A structure that does not change - a plain hierarchy is [`FileTree`](/components/file-tree/)'s job, and a `FileTreeDiff` with no change status is rejected
 - The contents of one edit - showing the changed lines is [`CodeDiff`](/components/code-diff/)'s job
 
+## Compared with
+
+- **[`FileTree`](/components/file-tree/)** — reach for it for a layout with no change status. `FileTreeDiff` rejects a tree carrying no change at all and points you there.
+
 ## Use cases
 
 - Summarize the file-level footprint of a plan at a glance

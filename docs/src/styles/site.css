@@ -1,0 +1,672 @@
+/* Site-wide chrome adjustments and the landing page's own layout.
+ *
+ * The landing page is built as a luminance ladder: sections separate by the
+ * light level of their surface rather than by rules or boxes, one accent is
+ * reserved for the single thing a reader should do on each band, and a left
+ * spine of small-caps eyebrows carries the eye down the page. Spacing steps
+ * follow a 8 / 13 / 21 / 34 / 55 rhythm so the bands relate without measuring.
+ */
+
+/* --- Site title -------------------------------------------------------- */
+
+.site-title img,
+a.site-title img {
+  width: 142px;
+  height: auto;
+}
+
+/* --- Landing page ------------------------------------------------------ */
+
+/* The splash template centres markdown children; the landing owns its own
+   column, so it opts out for everything inside a band. */
+.landing :is(h2, h3, p, ul, ol, pre, div) {
+  margin-inline: 0;
+}
+
+/* The samples grid is reused on the Sample plans page, which is an ordinary
+   docs page rather than the splash landing, so the tokens it needs are
+   declared for any `.landing` wrapper rather than only for the landing page. */
+.landing {
+  --band-quiet: color-mix(in srgb, var(--sl-color-gray-6) 55%, transparent);
+  --band-deep: color-mix(in srgb, var(--sl-color-gray-6) 100%, transparent);
+  --rule: color-mix(in srgb, var(--sl-color-gray-5) 70%, transparent);
+  --step-1: 0.5rem;
+  --step-2: 0.8125rem;
+  --step-3: 1.3125rem;
+  --step-4: 2.125rem;
+  --step-5: 3.4375rem;
+
+  margin-block-start: var(--step-4);
+}
+
+/* Each band is full-bleed inside the content column, so the ladder reads as a
+   change of surface rather than as a stack of cards. */
+.landing .band {
+  margin-inline: calc(50% - 50vw);
+  padding-block: var(--step-5);
+  padding-inline: max(1.5rem, calc(50vw - 27rem));
+  border-block-start: 1px solid var(--rule);
+}
+
+.landing .band-quiet {
+  background: var(--band-quiet);
+}
+
+.landing .band-deep {
+  background: var(--band-deep);
+}
+
+/* The band's own padding positions the column, so every child hangs on the
+   same left edge instead of centring itself to its own width. That single
+   edge is what the page is read down. */
+.landing .band > * {
+  max-width: 54rem;
+  margin-inline: 0;
+}
+
+/* The spine: every band opens on the same left edge with the same quiet label,
+   so the page has one alignment to follow rather than several. */
+.landing .band > p.eyebrow {
+  margin-block: 0 var(--step-1) !important;
+  max-width: none;
+  color: var(--sl-color-text-accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* An eyebrow and the title under it are one unit, so they sit tight. Starlight
+   wraps every heading in `.sl-heading-wrapper` for its anchor link and gives
+   that wrapper the large top margin, so the override has to reach the wrapper
+   rather than the heading it contains. */
+.landing .band > .sl-heading-wrapper,
+.landing .band > h2 {
+  margin-block-start: 0 !important;
+  margin-block-end: var(--step-2) !important;
+}
+
+.landing .band :is(.sl-heading-wrapper, h2) > h2,
+.landing .band > h2 {
+  margin-block: 0;
+  border: 0;
+  padding: 0;
+  font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.1rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.landing .band > p {
+  max-width: 42rem;
+  margin-inline: 0;
+  color: var(--sl-color-gray-2);
+}
+
+.landing .band :is(pre, .expressive-code, blockquote, ul, ol) {
+  margin-inline: 0;
+}
+
+/* --- Value proposition -------------------------------------------------- */
+
+/* One concept per row. A grid set these five as columns, which asked a reader
+   to track across and left the fifth stranded; read down, each concept is a
+   single line of claim and explanation, the same shape as the component rows
+   further down the page. */
+.landing .value-grid {
+  display: block;
+  margin-block-start: var(--step-4);
+}
+
+/* Starlight's markdown flow gives every block after the first a top margin,
+   which would set the rows at uneven intervals; the list owns this spacing. */
+/* Two fixed tracks rather than a wrapping flex row: with flex, a short
+   explanation sat beside its label while a long one wrapped underneath, so the
+   same list rendered two different shapes depending on the sentence. */
+.landing .value-grid > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 var(--step-3);
+  min-width: 0;
+  margin-block-start: 0;
+  padding-block: var(--step-2);
+  border-inline-start: 2px solid var(--sl-color-text-accent);
+  padding-inline-start: var(--step-3);
+}
+
+/* One column on a narrow screen, where two would leave neither enough room. */
+@media (max-width: 34rem) {
+  .landing .value-grid > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--step-1) 0;
+  }
+}
+
+.landing .value-grid > div + div {
+  margin-block-start: var(--step-2);
+}
+
+.landing .value-grid h3 {
+  margin-block: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.landing .value-grid p {
+  min-width: 0;
+  margin-block: 0;
+  color: var(--sl-color-gray-2);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+/* The section's one-line lede, between the heading and the rows. */
+.landing .band > p.band-lede {
+  max-width: 46rem;
+  margin-block: 0;
+  color: var(--sl-color-gray-2);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+}
+
+/* --- Link feedback the theme leaves flat --------------------------------- */
+
+/* Two links on the page answered a pointer with nothing at all. The site title
+   is a link on every page, and the alpha aside's link is the one a reader is
+   most likely to try first, so both now acknowledge the pointer in the same
+   way the rest of the page does. ("Skip to content" is deliberately untouched:
+   it is only ever reachable by keyboard, and it already has a focus style.) */
+.site-title,
+a.site-title {
+  transition: opacity 0.15s ease;
+}
+
+.site-title:hover,
+a.site-title:hover,
+.site-title:focus-visible,
+a.site-title:focus-visible {
+  opacity: 0.75;
+}
+
+.landing-aside a,
+.sl-markdown-content .starlight-aside a {
+  text-underline-offset: 0.2em;
+  transition:
+    color 0.15s ease,
+    text-decoration-color 0.15s ease;
+}
+
+.landing-aside a:hover,
+.sl-markdown-content .starlight-aside a:hover,
+.landing-aside a:focus-visible,
+.sl-markdown-content .starlight-aside a:focus-visible {
+  color: var(--sl-color-white);
+  text-decoration-color: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-title,
+  a.site-title,
+  .landing-aside a,
+  .sl-markdown-content .starlight-aside a {
+    transition: none;
+  }
+}
+
+/* --- Heading anchor links ----------------------------------------------- */
+
+/* Starlight pulls its heading anchor back by exactly its own width
+   (margin-inline-start: -29px) so the icon tucks into the content column's
+   gutter. That works for a documentation heading; on the landing page's
+   display headings it lands the icon on top of the last word, which is what a
+   reader sees the moment they hover a section title. The landing page has no
+   per-section deep links pointing at it, so the anchor is hidden here rather
+   than repositioned - documentation pages keep theirs untouched. */
+.landing :is(h1, h2, h3, h4) + a.sl-anchor-link,
+.landing a.sl-anchor-link {
+  display: none;
+}
+
+/* --- Component inventory ------------------------------------------------ */
+
+/* One component per row rather than two columns: a reader scanning for the
+   component that matches their plan reads a single list top to bottom instead
+   of tracking across a grid. The category heading labels the run beneath it. */
+.landing .kinds {
+  display: block;
+  margin-block-start: var(--step-4);
+}
+
+.landing .kind-group {
+  margin-block-start: 0;
+}
+
+.landing .kind-group + .kind-group {
+  margin-block-start: var(--step-4);
+}
+
+.landing .kinds h3 {
+  margin-block: 0 var(--step-1);
+  padding-block-end: var(--step-1);
+  border-block-end: 1px solid var(--rule);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-2);
+}
+
+/* Each row is the whole clickable target, so the name and its one-line gist
+   sit on one line where there is room and stack when there is not. */
+.landing .kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--step-2);
+  padding-block: var(--step-1);
+  border-block-end: 1px solid var(--rule);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    padding-inline 0.15s ease;
+}
+
+.landing .kind:hover,
+.landing .kind:focus-visible {
+  background: var(--sl-color-gray-6, var(--sl-color-bg-nav));
+}
+
+.landing .kind strong {
+  min-width: 14rem;
+  color: var(--sl-color-text-accent);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.landing .kind:hover strong,
+.landing .kind:focus-visible strong {
+  text-decoration: underline;
+}
+
+.landing .kind span {
+  flex: 1 1 18rem;
+  min-width: 0;
+  color: var(--sl-color-gray-3);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing .kind {
+    transition: none;
+  }
+}
+
+/* --- Sample thumbnails -------------------------------------------------- */
+
+.landing .samples {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr));
+  gap: var(--step-3);
+  margin-block-start: var(--step-4);
+}
+
+.landing .sample {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--rule);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: var(--sl-color-bg);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.landing .sample:hover,
+.landing .sample:focus-visible {
+  border-color: var(--sl-color-text-accent);
+  transform: translateY(-2px);
+}
+
+.landing .sample .shot {
+  display: block;
+  aspect-ratio: 16 / 9;
+  border-block-end: 1px solid var(--rule);
+  overflow: hidden;
+}
+
+.landing .sample .shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.landing .sample .meta {
+  padding: var(--step-2) var(--step-3) var(--step-3);
+}
+
+.landing .sample .meta strong {
+  display: block;
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+
+.landing .sample .meta span {
+  display: block;
+  margin-block-start: var(--step-1);
+  color: var(--sl-color-gray-2);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+/* --- Closing actions ---------------------------------------------------- */
+
+.landing .closers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  gap: var(--step-3);
+  margin-block-start: var(--step-4);
+}
+
+.landing .closers a {
+  min-width: 0;
+  border-block-start: 2px solid var(--sl-color-text-accent);
+  padding-block-start: var(--step-2);
+  color: inherit;
+  text-decoration: none;
+}
+
+.landing .closers a strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.landing .closers a span {
+  display: block;
+  margin-block-start: var(--step-1);
+  color: var(--sl-color-gray-2);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.landing .closers a:hover strong,
+.landing .closers a:focus-visible strong {
+  color: var(--sl-color-text-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing .sample {
+    transition: none;
+  }
+
+  .landing .sample:hover,
+  .landing .sample:focus-visible {
+    transform: none;
+  }
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+/* The hero is one centred stack - headline, then subtitle, then the two
+   actions - with a straight, full-width screenshot of the real review surface
+   underneath it. The picture is the product, so it is shown as it is rather
+   than turned into an object floating beside the copy.
+   The component is overridden because Starlight's own Hero renders its image
+   at a hardcoded 400x400, which crops a landscape screenshot to a square and
+   serves it at a quarter of its displayed size; see src/components/Hero.astro.
+   Starlight scopes its hero layout to that component, so the layout is
+   restated here. */
+.hero {
+  display: grid;
+  grid-template-columns: 100%;
+  gap: clamp(2rem, 4vw, 3.5rem);
+  padding-block: clamp(2rem, calc(1rem + 6vmin), 5rem) 1rem;
+}
+
+.hero .stack {
+  order: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1.5rem, calc(1.5rem + 1vw), 2rem);
+  text-align: center;
+}
+
+.hero .copy {
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.hero .copy > * {
+  margin-inline: auto;
+}
+
+.hero h1 {
+  max-width: 18ch;
+  text-wrap: balance;
+}
+
+.hero .tagline {
+  max-width: 52ch;
+  text-wrap: pretty;
+  font-size: clamp(
+    var(--sl-text-base),
+    calc(0.0625rem + 1vw),
+    var(--sl-text-lg)
+  );
+  color: var(--sl-color-gray-2);
+}
+
+.hero h1 {
+  font-size: clamp(var(--sl-text-3xl), calc(0.5rem + 4vw), var(--sl-text-5xl));
+  line-height: var(--sl-line-height-headings);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
+}
+
+.hero .actions {
+  gap: 1rem 2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Starlight gives its primary action a hover state and its minimal one none at
+   all, so the second hero action reads as static text until it is clicked.
+   The underline reveal is the link idiom the design principles ask for, and the
+   icon carries the only movement so the label itself never shifts. */
+.hero .actions .sl-link-button.minimal {
+  text-decoration: underline solid transparent;
+  text-underline-offset: 0.35em;
+  transition:
+    color 0.15s ease,
+    text-decoration-color 0.15s ease;
+}
+
+.hero .actions .sl-link-button.minimal:hover,
+.hero .actions .sl-link-button.minimal:focus-visible {
+  color: var(--sl-color-text-accent);
+  text-decoration-color: currentColor;
+}
+
+.hero .actions .sl-link-button.minimal svg {
+  transition: transform 0.15s ease;
+}
+
+.hero .actions .sl-link-button.minimal:hover svg,
+.hero .actions .sl-link-button.minimal:focus-visible svg {
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero .actions .sl-link-button.minimal,
+  .hero .actions .sl-link-button.minimal svg {
+    transition: none;
+  }
+
+  .hero .actions .sl-link-button.minimal:hover svg,
+  .hero .actions .sl-link-button.minimal:focus-visible svg {
+    transform: none;
+  }
+}
+
+/* The screenshot: straight, full width, and captured at twice its displayed
+   size so it stays crisp. No angle, no float. */
+.hero > img,
+.hero > .hero-html {
+  order: 2;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-inline: 0;
+  object-fit: contain;
+  border: 1px solid var(--rule, var(--sl-color-gray-5));
+  border-radius: 0.75rem;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 6%),
+    0 10px 30px -12px rgb(0 0 0 / 22%);
+}
+
+/* The picture is worth more width than the reading column allows, so it runs
+   to the edges of the page while the copy above it stays centred and narrow. */
+@media (min-width: 50rem) {
+  .hero > img,
+  .hero > .hero-html {
+    width: calc(100% + 2 * var(--sl-content-pad-x, 1.5rem));
+    margin-inline: calc(-1 * var(--sl-content-pad-x, 1.5rem));
+    max-width: none;
+  }
+}
+
+/* --- Component library note ---------------------------------------------- */
+
+.landing .band > p.kinds-more {
+  max-width: 42rem;
+  margin-block-start: var(--step-3);
+  color: var(--sl-color-gray-2);
+  font-size: 0.9375rem;
+}
+
+/* --- Next steps ---------------------------------------------------------- */
+
+/* Whole rows are the target, not the words inside them, so a link is easy to
+   hit with a pointer and reachable in one stop with a keyboard. */
+.landing ul.next-steps {
+  margin-block-start: var(--step-3);
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--rule);
+  max-width: 42rem;
+}
+
+.landing ul.next-steps li {
+  margin: 0;
+  border-block-end: 1px solid var(--rule);
+}
+
+.landing ul.next-steps li a {
+  display: block;
+  padding-block: var(--step-2);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.landing ul.next-steps li a::after {
+  content: " \2192";
+  color: var(--sl-color-text-accent);
+}
+
+.landing ul.next-steps li:hover,
+.landing ul.next-steps li:focus-within {
+  background: color-mix(in srgb, var(--sl-color-gray-6) 60%, transparent);
+}
+
+.landing ul.next-steps li span {
+  display: block;
+  margin-block-start: calc(var(--step-1) * -0.5);
+  padding-block-end: var(--step-2);
+  color: var(--sl-color-gray-2);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+/* --- Sidebar ------------------------------------------------------------- */
+
+/* Starlight gives every group label the same large, heavy treatment at every
+   depth, so a group nested inside a section reads as a second section heading
+   rather than as one of its entries. Only the top-level groups are sections;
+   the ones below sit at link size, a half-step heavier than a page link so a
+   reader can still tell "opens a list" from "goes to a page". */
+.sidebar-content details details > summary .group-label > span.large {
+  font-size: var(--sl-text-sm);
+  font-weight: 500;
+}
+
+/* --- Alpha marker -------------------------------------------------------- */
+
+.alpha-pill {
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.alpha-pill:hover,
+.alpha-pill:focus-visible {
+  background: color-mix(
+    in srgb,
+    var(--sl-color-orange-low, var(--sl-color-gray-6)) 90%,
+    transparent
+  );
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.alpha-pill:focus-visible {
+  outline: 2px solid var(--sl-color-orange, var(--sl-color-text-accent));
+  outline-offset: 2px;
+}
+
+/* The dot is the only moving part: it brightens on hover so the marker
+   acknowledges the pointer without the pill jumping. */
+.alpha-pill .alpha-pill-dot {
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.alpha-pill:hover .alpha-pill-dot,
+.alpha-pill:focus-visible .alpha-pill-dot {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--sl-color-orange, currentColor) 25%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alpha-pill,
+  .alpha-pill .alpha-pill-dot {
+    transition: none;
+  }
+
+  .alpha-pill:hover .alpha-pill-dot,
+  .alpha-pill:focus-visible .alpha-pill-dot {
+    transform: none;
+  }
+}
+
+/* --- Hero image ---------------------------------------------------------- */
+
+/* The source is captured at twice its displayed size, so it stays crisp on a
+   high-density screen rather than softening into the abstract shape the first
+   hero was. */
+.hero img {
+  max-width: 100%;
+}

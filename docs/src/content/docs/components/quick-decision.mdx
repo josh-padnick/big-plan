@@ -1,11 +1,44 @@
 ---
 title: QuickDecision
-description: One small brief-format question without a comparison expander.
+description: One small brief-format question with no comparison expander, made to be batched.
 ---
 
-**Purpose: batch several independent plan calls without making them one component.**
+import ThemeImage from "../../../components/ThemeImage.astro";
+import quickDecisionLight from "../../../assets/components/quick-decision-light.png";
+import quickDecisionDark from "../../../assets/components/quick-decision-dark.png";
 
-Each `QuickDecision` is a standalone brief: recommendation framing, radio options, **Suggest another option**, and **Confirm choice**. It deliberately has no compare expander.
+Each `QuickDecision` is a standalone brief: recommendation framing, radio options,
+**Suggest another option**, and **Confirm choice**. It deliberately has no compare expander.
+
+## How it looks
+
+<ThemeImage
+  light={quickDecisionLight}
+  dark={quickDecisionDark}
+  alt="A quick decision card with radio options and a recommendation"
+/>
+
+## When to use it
+
+Use it for one small, independently answerable question — one the reviewer can settle from the
+option titles alone. Render several in sequence when a plan has a batch of them; that is what
+the component is shaped for.
+
+Mark it `critical` when the reviewer must settle the question before work begins.
+
+### When not to use it
+
+Do not use it when the reviewer needs to compare the options to answer, and do not use it to
+smuggle a weighty architectural choice past a matrix it deserves.
+
+## Compared with
+
+- **[`Decision`](/components/decision/)** — reach for it when the reviewer needs each option's
+  considerations side by side.
+- **[`DecisionAnalysis`](/components/decision-analysis/)** — reach for it when the choice is
+  weighty enough that the reviewer should audit it across criteria.
+
+## Usage
 
 ```mdx
 <QuickDecision question="Ship behind a feature flag?" context="The first week carries the rollout risk.">
@@ -14,9 +47,36 @@ Each `QuickDecision` is a standalone brief: recommendation framing, radio option
 </QuickDecision>
 ```
 
-`question` is required and `context` is optional.
-Add `critical` when the reviewer must settle this question before work begins; the card says so, and the review's [Inputs list](/reference/reviewing/#what-the-review-is-waiting-for) marks it. Add at least two uniquely titled options and at most one `recommended` option. Render several `QuickDecision` components in sequence when a plan has a batch of small questions.
+## Authoring
 
-`state` is `proposed` or `decided` and defaults to `proposed`, so a question you are asking needs no `state` at all.
-A decided question marks exactly one option `chosen`, and a chosen option requires `state="decided"`; it renders as the record of what was chosen and stops accepting answers.
-Author the pair yourself only for a choice that was settled before the review began - when the reviewer answers the question, Big Plan writes `state="decided"` and `chosen` into the plan source at approval.
+### Attributes
+
+| Attribute  | Type                      | Required | Behavior                                                                             |
+| ---------- | ------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `question` | string                    | Yes      | The question the card asks.                                                          |
+| `context`  | string                    | No       | One orienting line above the options.                                                |
+| `state`    | `"proposed" \| "decided"` | No       | Defaults to `proposed`.                                                              |
+| `critical` | bare boolean              | No       | Marks the question as one the reviewer must settle before work begins.               |
+
+### Children
+
+`Option` is valid directly in `QuickDecision`, and is self-closing.
+
+| Attribute     | Required | Behavior                                    |
+| ------------- | -------- | ------------------------------------------- |
+| `title`       | Yes      | The option's name.                          |
+| `summary`     | No       | One line of consequence.                    |
+| `recommended` | No       | At most one option may carry it.            |
+| `chosen`      | No       | Requires `state="decided"` on the parent.   |
+
+Add at least two uniquely titled options.
+
+## Answering it
+
+A `QuickDecision` is proposed until it is settled, so write no `state` for a question you are
+asking. A decided question renders as the record of what was chosen and stops asking.
+
+Big Plan writes `state="decided"` and `chosen` into the plan source itself when the reviewer
+answers at approval; author that pair by hand only for a choice settled before the review began.
+
+[Answer the plan's decisions](/review/) owns the recorded-answer behaviour.

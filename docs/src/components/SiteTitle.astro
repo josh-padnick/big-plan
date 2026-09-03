@@ -1,0 +1,75 @@
+---
+// Adds the alpha marker beside the site title, in the one place a reader looks
+// before trusting anything else on the page. It links to the page that says
+// what alpha means for Big Plan rather than asserting it and walking away.
+import Default from "@astrojs/starlight/components/SiteTitle.astro";
+---
+
+<div class="site-title-group">
+  <Default><slot /></Default>
+  <a class="alpha-pill" href="/alpha/">
+    <span class="alpha-pill-dot" aria-hidden="true"></span>
+    <span class="alpha-pill-label">Big Plan is in alpha</span>
+    <span class="alpha-pill-short" aria-hidden="true">alpha</span>
+  </a>
+</div>
+
+<style>
+  .site-title-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .alpha-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: none;
+    border: 1px solid var(--sl-color-orange-low, var(--sl-color-gray-5));
+    border-radius: 999rem;
+    padding: 0.1rem 0.6rem 0.1rem 0.5rem;
+    color: var(--sl-color-orange-high, var(--sl-color-gray-2));
+    background: color-mix(
+      in srgb,
+      var(--sl-color-orange-low, var(--sl-color-gray-6)) 45%,
+      transparent
+    );
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .alpha-pill:hover,
+  .alpha-pill:focus-visible {
+    border-color: var(--sl-color-orange, var(--sl-color-gray-3));
+    color: var(--sl-color-orange-high, var(--sl-color-white));
+  }
+
+  .alpha-pill-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: var(--sl-color-orange, currentColor);
+  }
+
+  .alpha-pill-short {
+    display: none;
+  }
+
+  /* Below the point where the header gets crowded, the pill keeps its meaning
+     with one word rather than disappearing. */
+  @media (max-width: 60rem) {
+    .alpha-pill-label {
+      display: none;
+    }
+
+    .alpha-pill-short {
+      display: inline;
+    }
+  }
+</style>

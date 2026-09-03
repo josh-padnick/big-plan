@@ -1,13 +1,15 @@
 ---
 title: What is Big Plan?
-description: Big Plan turns your agent's MDX plan into a document built for review.
+description: Big Plan turns your agent's plan into a document built for review, so you agree before the agent acts.
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from "@astrojs/starlight/components";
 
-Big Plan turns your agent's standard text plan into a rich, inert HTML document specially designed for human review.
+Big Plan turns your agent's standard text plan into a rich, inert HTML document designed for
+human review. It runs on your machine, needs no account, and the plan file on your disk stays
+the source of truth.
 
-Run it in your favorite agent harness as a skill like this:
+Run it in your favourite agent harness as a skill:
 
 <Tabs>
   <TabItem label="Claude Code">
@@ -22,31 +24,64 @@ Run it in your favorite agent harness as a skill like this:
   </TabItem>
 </Tabs>
 
-## Why build it?
+## Plans are a big deal
 
-Agent plans are kind of a big deal.
+The big decisions happen in the plan, while they are still cheap to change. Once an agent starts
+executing, changing course means unwinding work; while the plan is on the table, changing
+everything costs one comment.
 
-The more confident you are in your agent's plan, the better your agent will perform at the execution step and the faster your final review will go.
+The more confident you are in the plan, the better your agent performs at execution and the
+faster your final review goes. That confidence comes from review, and review quality is set by
+how the plan presents itself.
 
-But an agent's standard wall-of-text plan is painful to read! If plans are so important for the human, they should present in a first-class way. These plans really are a big deal, so we call them "big plans".
+## The wall of text problem
+
+By default an agent's plan arrives as thousands of words of Markdown, scrolled past in a
+terminal or skimmed in a raw diff. **The most consequential document in the workflow is
+routinely the least readable one.** When reading the plan is painful, review quietly collapses
+into rubber-stamping, and the decisions that matter most go unexamined.
+
+We think of those plans of limited ambition as small plans. If plans matter this much to the
+human, they should present in a first-class way — and those are big plans.
 
 ## What makes a good agent plan
 
-A great agent plan should be:
+1. **Easy to scan.** You don't always want to read the whole plan. Sometimes it is better to
+   scan the sections and read the details where they interest you.
+2. **Easy to read.** Sometimes a paragraph is best, but often a visual arrangement conveys the
+   same information with far less cognitive load.
+3. **Easy to update.** It is painful to reference a specific paragraph of prose. You should be
+   able to highlight a section and give the agent feedback on it.
+4. **Token-efficient.** Plans get written, revised, and re-read by agents, and every one of
+   those interactions costs tokens.
+5. **Versioned.** Sometimes the plan updates and you are not sure what changed.
+6. **Local and private.** Your plan can contain sensitive information; it should not be shared
+   with anyone else without a good reason.
 
-1. **Easy to scan.** You don't always want to read the full plan. Sometimes it's better to scan the sections and read the details where they interest you.
+## Philosophy
 
-1. **Easy to read.** There are many ways to present an idea. Sometimes a paragraph of text is best, but often a visual arrangement conveys the same information with far less cognitive load.
+Big Plan makes two bets that shape everything else.
 
-1. **Easy to update.** It's painful to reference a specific paragraph of prose. You should be able to instantly highlight a section and give the agent feedback.
+**A plan should be structured, not freeform.** Plans are MDX with a fixed library of typed
+components, so every plan renders into the same document shape. The agent spends its effort on
+the decisions rather than the presentation, and the tenth plan you review reads exactly like the
+first.
 
-1. **Token-efficient.** Plans get written, revised, and re-read by agents, and every one of those interactions costs tokens. Authoring a plan, updating it, and pulling in feedback should all be as token-efficient as possible.
+**A plan on your own disk should not require an account.** One standalone command renders it,
+the output is one HTML file, and nothing about reviewing it involves logging in or leaving your
+machine.
 
-1. **Versioned.** Sometimes the plan updates and you're not sure what changed, or you accidentally overwrite something. Versioning should allow you to easily see older plans.
+## What Big Plan is not
 
-1. **Local and private.** Your plan can contain sensitive information; it shouldn't be shared with anyone else without a good reason.
+- **Not code review.** Code review judges a change after the work is done, when pushing back is
+  expensive. Big Plan reviews intent before any code exists.
+- **Not project management.** No tickets, statuses, or boards. It exists only for the moment of
+  agreement.
+- **Not a Markdown preview.** A preview shows you the text. Big Plan is built for review:
+  section navigation, readable code, typed components, anchored comments, and approval.
+- **Not a service.** Everything runs on your machine and the rendered file makes no external
+  requests.
 
-## Next step
+## Next
 
-The fastest way to get a feel for Big Plan is to see one.
-[Check out the demo](/intro/demo/), then [render your own plan in under a minute](/intro/installation/).
+[Install Big Plan](/intro/installation/) — Node.js 22, one command, nothing installed globally.

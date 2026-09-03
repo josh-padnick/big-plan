@@ -3,14 +3,34 @@ title: Part
 description: The self-closing act divider - a numbered band that groups the sections after it into one act of the deck.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import partLight from "../../../assets/components/part-light.png";
+import partDark from "../../../assets/components/part-dark.png";
+
 `Part` divides a plan's sections into numbered acts.
 Each marker renders as a borderless, surface-tinted band carrying an accent `PART N` tag and the act title, and every section after it belongs to that act.
 Big Plan derives slide numbers, sidebar navigation grouping, and [TableOfContents](/components/table-of-contents/) group headers from the dividers, so the deck structure is authored exactly once.
+
+## How it looks
+
+<ThemeImage
+  light={partLight}
+  dark={partDark}
+  alt="A Part divider band introducing the next act of the plan"
+/>
 
 ## When to use it
 
 Group a plan of roughly five or more sections into about three acts, canonically Context, The proposal, and Shipping & your review.
 A short plan whose sections already read in one breath does not need dividers.
+
+### When not to use it
+
+Do not add parts to a short plan whose handful of sections a reader would step over, and never write the act number into the title — Big Plan numbers parts itself.
+
+## Compared with
+
+- **[`Slide`](/components/slide/)** — reach for it to type one section. `Part` groups the sections after it into an act.
 
 ## Authoring
 

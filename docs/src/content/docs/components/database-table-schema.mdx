@@ -3,11 +3,21 @@ title: DatabaseTableSchema
 description: A component for one database table's schema, rendered as a psql-style columns grid with keys, indexes, checks, and titled verbatim-DDL bands.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import database_table_schemaLight from "../../../assets/components/database-table-schema-light.png";
+import database_table_schemaDark from "../../../assets/components/database-table-schema-dark.png";
+
 `DatabaseTableSchema` shows one table's shape - columns, keys, constraints, defaults, the indexes behind its access paths, and engine-specific DDL outside the schema grammar - as a dense psql-style grid with titled verbatim-SQL bands, so a plan that proposes or changes a table can be reviewed on the schema itself instead of prose approximations of it.
 
-## Anatomy
+## How it looks
 
-The figure opens with a header band carrying the schema-qualified name and table note, above a `Column | Type | Constraints | Default | Comment` grid in which every column is exactly one equal-rhythm row.
+<ThemeImage
+  light={database_table_schemaLight}
+  dark={database_table_schemaDark}
+  alt="One table schema with key badges, a foreign key, and column notes"
+/>
+
+he figure opens with a header band carrying the schema-qualified name and table note, above a `Column | Type | Constraints | Default | Comment` grid in which every column is exactly one equal-rhythm row.
 The Constraints cell carries key badges, explicit nullability, foreign keys with their actions, check expressions, and numbered index references beside the column they govern.
 
 The tinted Indexes band below the grid numbers each index (`INDX 1`, `INDX 2`, ...) and leads with its name; the columns, method, and partial predicate follow in demoted muted text with the invariant note beneath.

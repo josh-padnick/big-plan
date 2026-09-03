@@ -3,6 +3,10 @@ title: Wireframe
 description: True-size product screens with honest device proportions, safe content growth, an open drawing vocabulary, and short walkable prototypes.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import wireframeLight from "../../../assets/components/wireframe-light.png";
+import wireframeDark from "../../../assets/components/wireframe-dark.png";
+
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
 Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1200 px logical layout within a shared 768 px painted cap.
 That cap is the figure budget every device shares, and it never widens: the reading column holds the table of contents beside it, so a screen that does not fit is simplified rather than enlarged.
@@ -15,6 +19,14 @@ Only desktop uses browser chrome; tablet renders as a native device.
 Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
 Every wireframe carries the shared `Maximize` control; while maximized, the screen switcher reflows into a left rail and <kbd>ArrowUp</kbd>/<kbd>ArrowDown</kbd> step through the screens with focus following.
 
+## How it looks
+
+<ThemeImage
+  light={wireframeLight}
+  dark={wireframeDark}
+  alt="A desktop wireframe of an operator console inside a browser frame"
+/>
+
 ## When to use it
 
 Use a wireframe when a reviewer must picture a screen or interaction path to judge the plan.
@@ -22,6 +34,10 @@ Keep explanations and design rationale in the surrounding prose, and put only cu
 
 Run `big-plan guidance Wireframe` before authoring one.
 That component guidance owns the judgment calls for product layout, form-factor honesty, action hierarchy, and choosing among primitives; this page is the syntax reference.
+
+### When not to use it
+
+Do not draw UI the reviewer does not need to see to judge the plan, and do not draw a screen that only works maximized. A screen that does not fit its device envelope is a screen to simplify.
 
 ## Design front door: CLEAR
 

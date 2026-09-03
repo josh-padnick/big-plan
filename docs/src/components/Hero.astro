@@ -1,0 +1,91 @@
+---
+// Starlight's own hero renders its image at a hardcoded 400x400, which crops a
+// landscape screenshot to a square and then serves it at a quarter of the size
+// it is displayed at - so a real product screenshot arrives cropped and soft.
+// The homepage shows the review surface as it is, full width and straight, so
+// that cropping is the one thing this override exists to undo.
+// This override changes exactly that: the image keeps its own aspect ratio and
+// Astro emits a srcset wide enough to stay crisp on a high-density screen.
+// Everything else - title, tagline, actions, markup, class names - matches the
+// default, so Starlight's own hero styles still apply.
+import type { ImageMetadata } from "astro";
+import { Image } from "astro:assets";
+import { LinkButton } from "@astrojs/starlight/components";
+
+const PAGE_TITLE_ID = "_top";
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, image, actions = [] } = data.hero || {};
+
+let darkImage: ImageMetadata | undefined;
+let lightImage: ImageMetadata | undefined;
+let rawHtml: string | undefined;
+if (image) {
+  if ("file" in image) {
+    darkImage = image.file;
+  } else if ("dark" in image) {
+    darkImage = image.dark;
+    lightImage = image.light;
+  } else {
+    rawHtml = image.html;
+  }
+}
+
+// The screenshot spans the content column, so the candidates are sized for a
+// full-width picture: one for a 1x screen and one for a 2x screen.
+const widths = [1360, 2560];
+const sizes = "(min-width: 50rem) 68rem, 100vw";
+const imageAttrs = {
+  loading: "eager" as const,
+  decoding: "async" as const,
+  alt: image?.alt || "",
+  widths,
+  sizes,
+};
+---
+
+<div class="hero">
+  {
+    darkImage && (
+      <Image
+        src={darkImage}
+        {...imageAttrs}
+        class:list={{ "light:sl-hidden": Boolean(lightImage) }}
+      />
+    )
+  }
+  {lightImage && <Image src={lightImage} {...imageAttrs} class="dark:sl-hidden" />}
+  {rawHtml && <div class="hero-html sl-flex" set:html={rawHtml} />}
+  <div class="sl-flex stack">
+    <div class="sl-flex copy">
+      <h1 id={PAGE_TITLE_ID} data-page-title set:html={title} />
+      {tagline && <div class="tagline" set:html={tagline} />}
+    </div>
+    {
+      actions.length > 0 && (
+        <div class="sl-flex actions">
+          {actions.map(
+            ({
+              attrs: { class: className, ...attrs } = {},
+              icon,
+              link: href,
+              text,
+              variant,
+            }) => (
+              <LinkButton
+                {href}
+                {variant}
+                icon={icon?.name}
+                class:list={[className]}
+                {...attrs}
+              >
+                {text}
+                {icon?.html && <Fragment set:html={icon.html} />}
+              </LinkButton>
+            ),
+          )}
+        </div>
+      )
+    }
+  </div>
+</div>

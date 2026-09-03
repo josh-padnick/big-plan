@@ -1,0 +1,701 @@
+# Workflow Builder Surface
+
+A builder for declarative agent workflows, sketched end to end with `Wireframe` so the whole surface is arguable before any of it is built.
+
+## What this covers
+
+A workflow is a graph: nodes are agent steps, edges carry control and data, and a gate stops the run until a human approves.
+
+Every screen below borrows a layout that a real desktop product already proved, rather than inventing one for a solved problem.
+The reference each screen follows, and the reason behind each layout choice, is listed under the prototype.
+
+Click through it. Every arrow in the sketch is a screen you can reach.
+
+<Wireframe
+  id="workflow-builder"
+  title="Workflow builder, ten desktop screens and one mobile"
+  initialScreen="home"
+>
+  <Screen
+    id="home"
+    name="Home"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" active />
+          <NavItem label="Workflows" navigateTo="library" />
+          <NavItem label="Runs" navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader title="Good morning, Dana">
+          <Button
+            label="New workflow"
+            emphasis="primary"
+            navigateTo="create-basics"
+          />
+        </PageHeader>
+        <Row gap="lg" align="start">
+          <Stack gap="md">
+            <Panel title="Needs your attention">
+              <Table>
+
+```
+Workflow | Run | State | Waiting
+Nightly digest | #1042 | [Needs your approval:warning] | 14m
+Release notes | #1040 | [Failed at step 6:danger] | 1d
+```
+
+              </Table>
+              <Button label="View run #1042" navigateTo="run-detail" />
+            </Panel>
+            <Panel title="Recent runs">
+              <Table>
+
+```
+Workflow | Run | Result | Finished
+Ticket triage | #1041 | [Succeeded:success] | 2h ago
+Nightly digest | #1039 | [Succeeded:success] | 1d ago
+Onboarding brief | #1038 | [Succeeded:success] | 2d ago
+```
+
+              </Table>
+              <Button label="View all runs" navigateTo="runs" />
+            </Panel>
+          </Stack>
+          <Panel eyebrow="Last 24 hours" title="Health" surface="filled">
+            <Metric label="Runs" value="36" note="3 in flight" />
+            <Divider />
+            <Progress label="Succeeded" value="86" detail="31 of 36" />
+            <Progress label="Budget used" value="42" detail="$168 of $400" />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="library"
+    name="Workflow library"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics/workflows"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" active />
+          <NavItem label="Runs" navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Workflows"
+          description="Every workflow this org can run."
+        >
+          <Button
+            label="New workflow"
+            emphasis="primary"
+            navigateTo="create-basics"
+          />
+        </PageHeader>
+        <Row gap="sm" align="end" justify="start">
+          <TextField label="Filter" kind="search" placeholder="Filter by name" />
+          <Select label="Owner" value="Anyone" />
+          <Select label="Scope" value="Org" />
+        </Row>
+        <Panel>
+          <Table>
+
+```
+Name | Owner | Steps | Last run | Result
+Nightly digest | Dana | 6 | 14m ago | [Awaiting approval:warning]
+Ticket triage | Sam | 4 | 2h ago | [Succeeded:success]
+Release notes | Priya | 9 | 1d ago | [Failed:danger]
+Onboarding brief | Dana | 3 | 2d ago | [Succeeded:success]
+Weekly rollup | Sam | 5 | Retired | [Archived]
+```
+
+          </Table>
+          <Button label="Open Nightly digest" navigateTo="canvas" />
+        </Panel>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="canvas"
+    name="Canvas builder"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics/workflows/nightly-digest/edit"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" active navigateTo="library" />
+          <NavItem label="Runs" navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <Breadcrumbs>
+          <Crumb label="Workflows" navigateTo="library" />
+          <Crumb label="Nightly digest" />
+        </Breadcrumbs>
+        <PageHeader title="Nightly digest" badge="Draft v7">
+          <Button label="Run a test" navigateTo="run-detail" />
+          <Button label="Publish" emphasis="primary" navigateTo="library" />
+        </PageHeader>
+        <Row gap="sm" align="center" justify="start">
+          <Text text="Add a block:" role="helper" />
+          <Button label="Agent step" />
+          <Button label="Approval gate" />
+          <Button label="Fan out" />
+          <Button label="Sub-workflow" />
+        </Row>
+        <Row gap="md" align="start">
+          <Panel eyebrow="Canvas" title="Trigger to delivery" surface="filled">
+            <Row gap="none" align="center">
+              <Panel eyebrow="Trigger" title="Every night, 6pm" surface="outlined">
+                <Text text="Schedule" role="helper" />
+              </Panel>
+              <Connector direction="right" />
+              <Panel eyebrow="Step 1" title="Collect artifacts" surface="outlined">
+                <Text text="Agent · Researcher" role="helper" />
+              </Panel>
+            </Row>
+            <Connector direction="down" label="on success" />
+            <Row gap="none" align="center">
+              <Panel eyebrow="Step 2" title="Draft the digest" surface="outlined">
+                <Text text="Agent · Writer" role="helper" />
+                <Badge label="Selected" tone="info" />
+              </Panel>
+              <Connector direction="right" label="then" />
+              <Panel eyebrow="Step 3" title="Human approval" surface="outlined">
+                <Text text="Gate · blocks the run" role="helper" />
+              </Panel>
+            </Row>
+            <Connector direction="down" label="approved" />
+            <Row gap="none" align="center">
+              <Panel eyebrow="Step 4" title="Publish to wiki" surface="outlined">
+                <Text text="Agent · Publisher" role="helper" />
+              </Panel>
+              <Connector direction="right" />
+              <Panel eyebrow="Done" title="Digest artifact" surface="outlined">
+                <Text text="One artifact per night" role="helper" />
+              </Panel>
+            </Row>
+          </Panel>
+          <Panel eyebrow="Step 2" title="Draft the digest" surface="filled">
+            <Text text="Agent · Writer" role="helper" />
+            <Divider />
+            <Select label="Agent" value="Writer" />
+            <TextField label="Cost ceiling" value="$2.00" />
+            <Switch label="Require approval first" />
+            <Button label="Edit this step" navigateTo="step-config" />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="step-config"
+    name="Step configuration"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics/workflows/nightly-digest/steps/2"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" active navigateTo="library" />
+          <NavItem label="Runs" navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <Breadcrumbs>
+          <Crumb label="Workflows" navigateTo="library" />
+          <Crumb label="Nightly digest" navigateTo="canvas" />
+          <Crumb label="Draft the digest" />
+        </Breadcrumbs>
+        <PageHeader title="Draft the digest" description="Step 2 · agent step">
+          <Button label="Save step" emphasis="primary" navigateTo="canvas" />
+        </PageHeader>
+        <Row gap="lg" align="start">
+          <Stack gap="md">
+            <Panel title="What this step does">
+              <TextField
+                label="Step name"
+                value="Draft the digest"
+                hint="Shown on the canvas and in every run."
+              />
+              <Select label="Agent" value="Writer" />
+              <TextArea
+                label="Prompt"
+                value="Summarize today's artifacts for the team, grouped by product. Mention anything that slipped."
+                hint="Write {artifacts} or {org} to drop in a value the step received."
+              />
+            </Panel>
+            <Panel title="When it fails">
+              <Checkbox label="Retry failed steps" checked />
+              <TextField label="Attempts" kind="number" value="3" />
+              <Select label="Then" value="Stop the run" />
+            </Panel>
+            <Panel title="Limits">
+              <TextField
+                label="Cost ceiling"
+                value="$2.00"
+                hint="The run pauses rather than overspending."
+              />
+              <Switch label="Require approval before this step" />
+              <Switch label="Record the tool-call trace" on />
+            </Panel>
+          </Stack>
+          <Rail>
+            <Panel title="What this step receives" surface="filled">
+              <Text
+                text="Values earlier steps hand to this one. Write the name in braces to use it in the prompt."
+                role="helper"
+              />
+              <Table>
+
+```
+Value | Comes from | Type
+{artifacts} | Step 1 | Artifact[]
+{org} | The trigger | Org
+{today} | The trigger | Date
+```
+
+              </Table>
+            </Panel>
+            <Panel title="What waits on it" surface="filled">
+              <Text
+                text="Step 3, Human approval, cannot start until this step finishes."
+                role="helper"
+              />
+            </Panel>
+          </Rail>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="runs"
+    name="Run history"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics/runs"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" navigateTo="library" />
+          <NavItem label="Runs" active />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader title="Runs" description="Every execution, newest first." />
+        <Row gap="sm" align="end" justify="start">
+          <TextField label="Filter" kind="search" placeholder="Filter by run" />
+          <Select label="Status" value="Any" />
+          <Select label="Workflow" value="Any" />
+        </Row>
+        <Row gap="md" align="start">
+          <Panel>
+            <Table selected="1">
+
+```
+Run | Workflow | Result | Cost | Started
+#1042 | Nightly digest | [Awaiting approval:warning] | $0.41 | 14m ago
+#1041 | Ticket triage | [Succeeded:success] | $0.12 | 2h ago
+#1040 | Release notes | [Failed:danger] | $1.86 | 1d ago
+#1039 | Nightly digest | [Succeeded:success] | $0.39 | 1d ago
+#1038 | Onboarding brief | [Succeeded:success] | $0.08 | 2d ago
+```
+
+            </Table>
+          </Panel>
+          <Panel eyebrow="Selected" title="Run #1042" surface="filled">
+            <Text text="Nightly digest · started 14m ago" role="helper" />
+            <Badge label="Awaiting approval" tone="warning" />
+            <Divider />
+            <Metric label="Cost so far" value="$0.41" note="Ceiling $2.00" />
+            <Text text="Step 3 of 4 is waiting on you." />
+            <Button
+              label="View run"
+              emphasis="primary"
+              navigateTo="run-detail"
+            />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="run-detail"
+    name="Run detail"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics/runs/1042"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" navigateTo="library" />
+          <NavItem label="Runs" active navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <Breadcrumbs>
+          <Crumb label="Runs" navigateTo="runs" />
+          <Crumb label="#1042" />
+        </Breadcrumbs>
+        <PageHeader
+          title="Run #1042"
+          description="Nightly digest · started 14m ago"
+          badge="Awaiting approval"
+        >
+          <Button label="Approve and continue" emphasis="primary" />
+        </PageHeader>
+        <Row gap="md" align="start">
+          <Panel title="Steps">
+            <Table selected="3">
+
+```
+Step | State | Took
+1 Collect artifacts | [Done:success] | 1m 04s
+2 Draft the digest | [Done:success] | 12m 41s
+3 Human approval | [Waiting on you:warning] | -
+4 Publish to wiki | [Queued] | -
+```
+
+            </Table>
+          </Panel>
+          <Stack gap="md">
+            <Panel eyebrow="Step 3" title="Waiting on you" surface="filled">
+              <Text text="Approve to publish tonight's digest to the wiki." />
+              <Row gap="sm" justify="start">
+                <Button label="Approve" emphasis="secondary" />
+                <Button label="Send back" navigateTo="step-config" />
+              </Row>
+            </Panel>
+            <Panel eyebrow="Step 2 output" title="Drafted digest">
+              <ImagePlaceholder label="Digest preview" shape="wide" />
+              <Text text="sonnet · 18,402 tokens · $0.41" role="helper" />
+            </Panel>
+            <Panel title="Cancel this run">
+              <Text
+                text="Stops after the current step and keeps what it produced."
+                role="helper"
+              />
+              <Button
+                label="Cancel run"
+                emphasis="destructive"
+                navigateTo="runs"
+              />
+            </Panel>
+          </Stack>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="create-basics"
+    name="Create workflow"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics/workflows/new"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" active navigateTo="library" />
+          <NavItem label="Runs" navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <Center measure="prose">
+          <Breadcrumbs>
+            <Crumb label="Workflows" navigateTo="library" />
+            <Crumb label="New workflow" />
+          </Breadcrumbs>
+          <Stepper>
+            <Step label="Basics" state="current" />
+            <Step label="Trigger" state="todo" />
+            <Step label="First step" state="todo" />
+          </Stepper>
+          <Panel title="Name this workflow">
+            <TextField
+              label="Name"
+              placeholder="Nightly digest"
+              hint="Shown everywhere this workflow appears."
+            />
+            <TextArea
+              label="What it is for"
+              placeholder="One or two sentences a teammate could act on."
+            />
+            <Select label="Scope" value="Org · Acme Robotics" />
+            <Checkbox
+              label="Start from a template"
+              hint="Templates prefill the trigger and the first two steps."
+            />
+          </Panel>
+          <Row gap="sm" justify="between" align="center">
+            <Button label="Cancel" emphasis="tertiary" navigateTo="library" />
+            <Button
+              label="Continue"
+              emphasis="primary"
+              navigateTo="create-trigger"
+            />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="create-trigger"
+    name="Create workflow, trigger"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics/workflows/new/trigger"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" active navigateTo="library" />
+          <NavItem label="Runs" navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <Center measure="prose">
+          <Breadcrumbs>
+            <Crumb label="Workflows" navigateTo="library" />
+            <Crumb label="New workflow" />
+          </Breadcrumbs>
+          <Stepper>
+            <Step label="Basics" state="done" />
+            <Step label="Trigger" state="current" />
+            <Step label="First step" state="todo" />
+          </Stepper>
+          <Panel title="What starts a run">
+            <Select label="Trigger" value="On a schedule" />
+            <TextField label="Runs at" value="18:00" />
+            <Select label="Time zone" value="America/Los_Angeles" />
+            <Switch label="Skip when the last run is still going" on />
+          </Panel>
+          <Panel eyebrow="Reads as" title="Every night at 6:00 PM Pacific" surface="filled">
+            <Text text="Next run would be today at 6:00 PM." role="helper" />
+            <Text
+              text="A schedule cannot fan out. Pick an event trigger for one run per item."
+              role="muted"
+            />
+          </Panel>
+          <Row gap="sm" justify="between" align="center">
+            <Button
+              label="Back"
+              emphasis="tertiary"
+              navigateTo="create-basics"
+            />
+            <Button label="Continue" emphasis="primary" navigateTo="canvas" />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="settings"
+    name="Settings"
+    device="desktop"
+
+    url="app.fabrica.dev/acme-robotics/settings"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Acme Robotics">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" navigateTo="library" />
+          <NavItem label="Runs" navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" active />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader title="Settings" description="Acme Robotics" />
+        <Row gap="lg" align="start">
+          <Nav label="Settings sections">
+            <NavItem label="General" active />
+            <NavItem label="Team" />
+            <NavItem label="Blueprints" />
+            <NavItem label="Templates" />
+            <NavItem label="Run limits" />
+          </Nav>
+          <Center measure="prose">
+            <Panel title="General">
+              <TextField label="Organization name" value="Acme Robotics" />
+              <TextField
+                label="Slug"
+                value="acme-robotics"
+                hint="app.fabrica.dev/acme-robotics"
+              />
+              <Select label="Default run scope" value="Org" />
+            </Panel>
+            <Panel title="Run limits">
+              <TextField
+                label="Monthly ceiling"
+                value="$400.00"
+                hint="Runs queue rather than exceed it."
+              />
+              <Switch label="Require approval above $5 a run" on />
+              <Switch label="Let members publish workflows" />
+            </Panel>
+            <Panel title="Danger zone">
+              <Text
+                text="Deleting an org removes its workflows and run history."
+                role="helper"
+              />
+              <Button label="Delete organization" emphasis="destructive" />
+            </Panel>
+          </Center>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="empty"
+    name="Empty library"
+    device="desktop"
+
+    url="app.fabrica.dev/nova-labs/workflows"
+  >
+    <AppShell>
+      <Sidebar brand="Fabrica" mode="Nova Labs">
+        <Nav label="Main">
+          <NavItem label="Home" navigateTo="home" />
+          <NavItem label="Workflows" active />
+          <NavItem label="Runs" navigateTo="runs" />
+          <NavItem label="Wiki" />
+          <NavItem label="Settings" navigateTo="settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader title="Workflows" />
+        <Center measure="narrow">
+          <Stack gap="md" align="center">
+            <ImagePlaceholder label="An empty canvas" shape="wide" />
+            <Heading text="No workflows yet" level="2" />
+            <Text
+              text="A workflow runs a sequence of agent steps on a trigger you choose."
+              role="muted"
+            />
+            <Button
+              label="New workflow"
+              emphasis="primary"
+              navigateTo="create-basics"
+            />
+            <Button
+              label="Start from a template"
+              emphasis="tertiary"
+              navigateTo="library"
+            />
+          </Stack>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="error"
+    name="Mobile only: run failed"
+    device="phone"
+
+  >
+    <TopBar title="Run #1040" />
+    <Stack gap="md">
+      <Panel eyebrow="Release notes" title="Run failed" surface="filled">
+        <Badge label="Step 6 of 9" tone="danger" />
+        <Text text="The publisher agent could not reach the wiki." />
+        <Text text="Failed 3 times, then stopped the run." role="helper" />
+      </Panel>
+      <Panel title="What you can do">
+        <List>
+          <ListItem label="Re-queue from step 6" meta="keeps earlier output" />
+          <ListItem label="View step 6" meta="check the target folder" />
+          <ListItem label="Cancel the run" meta="discards the draft" />
+        </List>
+      </Panel>
+      <Stack gap="sm">
+        <Button
+          label="Re-queue from step 6"
+          emphasis="primary"
+          navigateTo="runs"
+        />
+        <Button label="View the step" navigateTo="step-config" />
+        <Button label="Back to runs" emphasis="tertiary" navigateTo="runs" />
+      </Stack>
+    </Stack>
+  </Screen>
+</Wireframe>
+
+## Where each layout comes from
+
+Every desktop screen borrows a pattern a real product already proved, so the argument is about this product rather than about layout.
+
+- **Persistent workspaces**
+  - **Home** - Linear "My Issues", Stripe Dashboard home. Contrast: the work list is the heaviest thing on the page and the health rail recedes.
+  - **Workflow library** - GitHub's repository list. Alignment: a table rather than cards, so names and dates compare down a column.
+  - **Canvas builder** - the n8n and Zapier editors. Three panes, and proximity puts the selected step's controls beside the step.
+  - **Run history** - GitHub Actions runs. Master-detail with the detail inline, so the list is never lost, and figures right-align.
+  - **Run detail** - the GitHub Actions run page. Local hierarchy of breadcrumb, title, state, body; cancelling sits apart from approving.
+- **Focused routes and states**
+  - **Step configuration** - Stripe's settings form. Measure: the form holds a reading width instead of stretching across the window.
+  - **Create workflow** - Stripe onboarding. Repetition: both wizard steps are one centered column of the same shape.
+  - **Settings** - GitHub and Stripe settings. Two columns: section nav, then one form column at a reading measure.
+  - **Empty library** - Linear and Notion empty states. One sentence, one primary action, one alternative, nothing else.
+
+Across all of them: the global nav never moves, only the workspace changes; a region draws no box unless it behaves like a card; and status is a word first, tinted second.
+
+The phone screen is the single deliberate exception, because a failed run is the thing people open away from their desk.
+
+## What the sketch is claiming
+
+Three claims are worth arguing with before anything is built.
+
+A workflow is edited on a canvas, not in a list, because an author reasons about order and branching visually.
+
+A gate is a step like any other, so approval shows up in the same run timeline as the work it is holding up.
+
+A run is the unit a person opens when something goes wrong, which is why the one mobile screen is a failed run rather than a dashboard.

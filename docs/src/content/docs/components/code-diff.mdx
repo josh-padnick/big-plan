@@ -31,6 +31,11 @@ Use `CodeDiff` whenever a plan proposes a concrete change to existing code, so t
 - Decisions that are architectural rather than line-level - prose or a diagram carries those better
 - Changes too large to read line by line - summarize them in prose and reserve `CodeDiff` for the risky excerpts
 
+## Compared with
+
+- **[`CodeSnippet`](/components/code-snippet/)** — reach for it when you are showing existing code the reviewer should read, with no change to mark.
+- A plain fenced block — reach for it when the code has no file identity: a command, a config sample, or output to expect.
+
 ## Use cases
 
 - Show the exact edit an agent intends to make before it touches the file

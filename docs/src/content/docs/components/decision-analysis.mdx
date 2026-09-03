@@ -3,24 +3,100 @@ title: DecisionAnalysis
 description: A keyed criteria matrix for auditing or interactively choosing a weighty decision.
 ---
 
-**Purpose: make the evidence and arithmetic behind a recommendation inspectable.**
+import ThemeImage from "../../../components/ThemeImage.astro";
+import decisionAnalysisLight from "../../../assets/components/decision-analysis-light.png";
+import decisionAnalysisDark from "../../../assets/components/decision-analysis-dark.png";
 
-`DecisionAnalysis` uses the approved keyed chooser rail. Every criterion and value has a dashed definition affordance. Use `interaction="audit"` for the default qualitative audit surface; `interaction="choose"` enables a proposed decision to be selected, confirmed, and changed.
+`DecisionAnalysis` makes the evidence and arithmetic behind a recommendation inspectable. Every
+criterion and value carries a dashed definition affordance, so the reviewer can check what a
+word meant before trusting the score beside it.
 
-Set `scoring="weighted"` to add editable 1–5 impacts directly below criterion names, editable 1–5 star ratings with their numeric values above, composite totals in the matrix foot, and a disclosure containing the full calculation matrix. The matrix supports seven or more criteria without changing its authoring shape.
+## How it looks
+
+<ThemeImage
+  light={decisionAnalysisLight}
+  dark={decisionAnalysisDark}
+  alt="A weighted decision matrix with criteria impacts, star scores, and totals"
+/>
+
+## When to use it
+
+Use it when the reviewer must audit a recommendation across explicit criteria rather than take
+it on trust — a choice weighty enough that they should be able to disagree with your reasoning
+rather than only with your conclusion.
+
+Mark it `critical` when the reviewer must settle it before work begins. That is accepted only
+while the analysis is proposed and choosable, because a settled or audited analysis asks the
+reviewer for nothing.
+
+### When not to use it
+
+Do not use it for a question the reviewer can answer from the option titles, and do not add
+criteria to make a small decision look considered. A matrix that nobody would disagree with is
+ceremony.
+
+## Compared with
+
+- **[`Decision`](/components/decision/)** — reach for it when option-by-option considerations
+  are enough and a matrix would be ceremony.
+- **[`QuickDecision`](/components/quick-decision/)** — reach for it for a small question that
+  needs no comparison at all.
+
+## Usage
 
 ```mdx
 <DecisionAnalysis question="Which store?" state="proposed" interaction="choose" scoring="weighted">
-  <Criterion title="Reliability" impact="5">How safely the store preserves review state.</Criterion>
+  <Criterion title="Reliability" impact="5">
+    How safely the store preserves review state.
+  </Criterion>
   <Option title="PostgreSQL" recommended>
-    <Score criterion="Reliability" verdict="Strong" tone="good" score="5">Transactions preserve related state atomically.</Score>
+    <Score criterion="Reliability" verdict="Strong" tone="good" score="5">
+      Transactions preserve related state atomically.
+    </Score>
   </Option>
   <Option title="SQLite">
-    <Score criterion="Reliability" verdict="Good" tone="good" score="4">A local transaction protects each write.</Score>
+    <Score criterion="Reliability" verdict="Good" tone="good" score="4">
+      A local transaction protects each write.
+    </Score>
   </Option>
   <Reversibility rating="somewhat-hard">Changing stores requires a data migration.</Reversibility>
 </DecisionAnalysis>
 ```
 
-`state` is `proposed`, `decided`, or `deferred`; `interaction` is `audit` or `choose`, and choosing is valid only while proposed. Every option must score every criterion. A decided analysis marks exactly one option `chosen`. `Reversibility` is required and `Details` is optional.
-Add `critical` when the reviewer must settle this question before work begins; it is accepted only while proposed and choosable, the card says so, and the review's [Inputs list](/reference/reviewing/#what-the-review-is-waiting-for) marks it.
+## Authoring
+
+### Attributes
+
+| Attribute     | Type                                       | Required | Behavior                                                                     |
+| ------------- | ------------------------------------------ | -------- | ---------------------------------------------------------------------------- |
+| `question`    | string                                     | Yes      | The question the matrix answers.                                             |
+| `state`       | `"proposed" \| "decided" \| "deferred"`    | No       | Defaults to `proposed`.                                                      |
+| `interaction` | `"audit" \| "choose"`                      | No       | `audit` is the qualitative default; `choose` is valid only while proposed.   |
+| `scoring`     | `"weighted"`                               | No       | Adds 1–5 criterion impacts, 1–5 star scores, totals, and the calculation.    |
+| `critical`    | bare boolean                               | No       | Accepted only with `state="proposed"` and `interaction="choose"`.            |
+
+### Children
+
+`Criterion`, `Details`, `Option`, and `Reversibility` are valid directly in `DecisionAnalysis`;
+`Score` is valid directly in an `Option`.
+
+| Element         | Attributes                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `Criterion`     | `title` (required), `impact` from 1 to 5 when scoring is weighted                              |
+| `Option`        | `title` (required), `summary`, `recommended`, `chosen`                                         |
+| `Score`         | `criterion`, `verdict` (required), `tone`, `score` from 1 to 5 when scoring is weighted        |
+| `Reversibility` | `rating` (required); exactly one per analysis                                                  |
+| `Details`       | Optional; at most one                                                                          |
+
+Every `Criterion` and `Score` needs one non-empty flow-level paragraph of at most one sentence —
+the dashed title or value reveals that definition. Keep the body on its own lines. Every option
+must score every criterion. A decided analysis marks exactly one option `chosen`.
+
+The matrix supports seven or more criteria without changing its authoring shape.
+
+## Answering it
+
+With `interaction="choose"` on a proposed analysis, the reader can select an option, confirm it,
+and later change or clear the answer, exactly as on the other decision cards.
+
+[Answer the plan's decisions](/review/) owns the recorded-answer behaviour.

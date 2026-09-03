@@ -3,34 +3,247 @@ title: Big Plan
 description: Review agent plans and reach agreement before an agent acts.
 template: splash
 hero:
-  title: Big Plan
-  tagline: Agree on the plan before the agent acts.
+  title: Agent plans you actually want to read
+  tagline: Big Plan tells your agent how to write nice plans, then renders them directly on your machine. Designed by humans, for humans.
   image:
-    alt: The example plan rendered in the Big Plan viewer, with section navigation and a themed reading column.
-    light: ../../assets/viewer-light.png
-    dark: ../../assets/viewer-dark.png
+    alt: A Big Plan review document with a nine-entry table of contents beside a short slide, showing the capture_attempt table schema with key badges and column notes.
+    light: ../../assets/hero-light.png
+    dark: ../../assets/hero-dark.png
   actions:
     - text: Install now
       link: /intro/installation/
       icon: right-arrow
+      variant: primary
       attrs:
         data-install-prompt-trigger: ""
-    - text: See a rendered plan
-      link: /demo/
-      icon: document
+    - text: Read the docs
+      link: /intro/what-is-big-plan/
+      icon: open-book
+      variant: minimal
 ---
 
+import { Aside } from "@astrojs/starlight/components";
 import InstallPrompt from "../../components/InstallPrompt.astro";
+import ThemeImage from "../../components/ThemeImage.astro";
+import rateLimitingLight from "../../assets/samples/rate-limiting-light.png";
+import rateLimitingDark from "../../assets/samples/rate-limiting-dark.png";
+import retryQueueLight from "../../assets/samples/retry-queue-light.png";
+import retryQueueDark from "../../assets/samples/retry-queue-dark.png";
+import workflowLight from "../../assets/samples/workflow-builder-light.png";
+import workflowDark from "../../assets/samples/workflow-builder-dark.png";
+import allComponentsLight from "../../assets/samples/all-components-light.png";
+import allComponentsDark from "../../assets/samples/all-components-dark.png";
 
 <InstallPrompt prompt="Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it." />
 
-:::caution[Pre-alpha]
-Big Plan has no compatibility contract until an explicit milestone establishes one.
-Commands, document formats, and rendered output may change together as the product finds its cleanest model.
-:::
+<Aside type="caution" title="Big Plan is in alpha">
+  Big Plan is undergoing rapid changes. [Read more about what alpha means](/alpha/).
+</Aside>
 
-Big Plan turns your agent's MDX plan into a document built for review, so you reach real agreement before the agent acts.
+<div class="landing">
 
-Choose **Install now** to give your coding agent the stable setup prompt. The linked [setup guide](/setup.md) stays current as Big Plan evolves.
+<section class="band">
 
-[What is Big Plan?](/intro/what-is-big-plan/) · [Demo](/intro/demo/) · [Architecture](/architecture/) · [Components](/components/)
+<p class="eyebrow">The problem</p>
+
+## The most important document in the workflow is the least readable one.
+
+An agent plan usually arrives as a wall of text. Or maybe if you are lucky, an HTML artifact,
+but there is still no avoiding verbosity, awkward wording, and just plain too much text.
+
+And yet the best big decisions happen in the plan, where they are still cheap to change.
+
+</section>
+
+<section class="band">
+
+<p class="eyebrow">The solution</p>
+
+## Reading agent plans should be enjoyable
+
+<p class="band-lede">
+  A plan is a designed document, not an accident of generation — so design it for the person
+  reading it. Five things make a plan human-friendly.
+</p>
+
+<div class="value-grid">
+  <div>
+    <h3>Easy to navigate</h3>
+    <p>A table of contents, organized by section, summary cards, and first-class rendering for decisions, diffs, schemas, mockups, and more.</p>
+  </div>
+  <div>
+    <h3>Easy to read</h3>
+    <p>Big Plan gives agents special guidance on how to write content that is enjoyable for humans to read.</p>
+  </div>
+  <div>
+    <h3>Add comments</h3>
+    <p>Comment on any part of the plan. Send it to your agent immediately, or in batch with other comments.</p>
+  </div>
+  <div>
+    <h3>Make decisions</h3>
+    <p>The plan can ask you questions. Answer them directly in the plan.</p>
+  </div>
+  <div>
+    <h3>All local</h3>
+    <p>Big Plan requires no account or hosted service so all your plans stay local.</p>
+  </div>
+</div>
+
+</section>
+
+<section class="band band-quiet">
+
+<p class="eyebrow">Set up</p>
+
+## One prompt, and your agent does the rest
+
+Paste this into your coding agent. It needs Node.js 22 or newer and installs nothing globally.
+
+```text
+Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.
+```
+
+</section>
+
+<section class="band">
+
+<p class="eyebrow">First-class rendering</p>
+
+## A library of components for common information patterns
+
+Plans can carry decisions, code changes, schemas, API contracts, mock-ups and more. Big Plan
+renders common information patterns in a first-class way by shipping a growing library of
+components. The agent picks the right component and fills in the content.
+
+<div class="kinds">
+  <div class="kind-group">
+    <h3>Decisions</h3>
+    <a class="kind" href="/components/decision/">
+      <strong>Decision</strong>
+      <span>A tradeoff read option by option, with its considerations</span>
+    </a>
+    <a class="kind" href="/components/decision-analysis/">
+      <strong>DecisionAnalysis</strong>
+      <span>A weighted criteria matrix you can audit</span>
+    </a>
+  </div>
+  <div class="kind-group">
+    <h3>Code and files</h3>
+    <a class="kind" href="/components/code-diff/">
+      <strong>CodeDiff</strong>
+      <span>A change with gutters, counts, and line-anchored notes</span>
+    </a>
+    <a class="kind" href="/components/file-tree-diff/">
+      <strong>FileTreeDiff</strong>
+      <span>Added, modified, removed, and renamed in one tree</span>
+    </a>
+  </div>
+  <div class="kind-group">
+    <h3>Data and contracts</h3>
+    <a class="kind" href="/components/data-table/">
+      <strong>DataTable</strong>
+      <span>A dataset you can sort, filter, group, and reshape</span>
+    </a>
+    <a class="kind" href="/components/database-table-schema/">
+      <strong>DatabaseTableSchema</strong>
+      <span>One table, its keys, indexes, and verbatim DDL</span>
+    </a>
+  </div>
+  <div class="kind-group">
+    <h3>Pictures</h3>
+    <a class="kind" href="/components/wireframe/">
+      <strong>Wireframe</strong>
+      <span>True-size screens, connected into a walkable prototype</span>
+    </a>
+    <a class="kind" href="/components/flow-diagram/">
+      <strong>FlowDiagram</strong>
+      <span>A staged story in cards and labelled connectors</span>
+    </a>
+  </div>
+</div>
+
+<p class="kinds-more">
+  Eight of twenty. <a href="/components/">See the whole library</a> — API contracts, diagrams,
+  code excerpts, callouts, and the structure components that shape the document itself.
+</p>
+
+</section>
+
+<section class="band band-quiet">
+
+<p class="eyebrow">See one</p>
+
+## See sample plans
+
+Rendered by the current CLI from the repository's own examples. Not screenshots — the actual
+documents, with working navigation, copy, and maximize controls.
+
+<div class="samples">
+  <a class="sample" href="/plans/rate-limiting/">
+    <span class="shot">
+      <ThemeImage light={rateLimitingLight} dark={rateLimitingDark} alt="The rate limiting plan open in the Big Plan viewer" />
+    </span>
+    <span class="meta">
+      <strong>Rate limiting for a public API</strong>
+      <span>A short, ordinary plan. Start here.</span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/retry-queue/">
+    <span class="shot">
+      <ThemeImage light={retryQueueLight} dark={retryQueueDark} alt="The payments retry queue plan, structured as a deck of numbered acts" />
+    </span>
+    <span class="meta">
+      <strong>A payments retry queue</strong>
+      <span>The same shape, organised as a deck.</span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/workflow-builder/">
+    <span class="shot">
+      <ThemeImage light={workflowLight} dark={workflowDark} alt="The workflow builder plan, showing a wireframe prototype of eleven screens" />
+    </span>
+    <span class="meta">
+      <strong>A workflow builder surface</strong>
+      <span>Eleven wireframe screens you can click through.</span>
+    </span>
+  </a>
+  <a class="sample" href="/plans/all-components/">
+    <span class="shot">
+      <ThemeImage light={allComponentsLight} dark={allComponentsDark} alt="A plan that renders every Big Plan component in one document" />
+    </span>
+    <span class="meta">
+      <strong>Every component at once</strong>
+      <span>A gallery rather than a plan.</span>
+    </span>
+  </a>
+</div>
+
+</section>
+
+<section class="band">
+
+<p class="eyebrow">Next</p>
+
+## Next Steps
+
+<ul class="next-steps">
+  <li>
+    <a href="/intro/installation/">Install Big Plan</a>
+    <span>One prompt to your agent, or one command yourself.</span>
+  </li>
+  <li>
+    <a href="/intro/what-is-big-plan/">What is Big Plan?</a>
+    <span>What it is, and what it deliberately is not.</span>
+  </li>
+  <li>
+    <a href="/intro/ui-review/">See the UI</a>
+    <span>What it looks like, in real screenshots.</span>
+  </li>
+  <li>
+    <a href="/review/">How it works</a>
+    <span>The whole loop, from guidance to approval.</span>
+  </li>
+</ul>
+
+</section>
+
+</div>

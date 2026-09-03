@@ -3,11 +3,21 @@ title: DataTable
 description: A component for a dataset the reviewer queries in place - sortable columns, optional search, selectable columns, group-by, a table-wide summary, and a text-fit choice instead of a horizontal scrollbar.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import data_tableLight from "../../../assets/components/data-table-light.png";
+import data_tableDark from "../../../assets/components/data-table-dark.png";
+
 `DataTable` renders tabular data a reviewer needs to work with rather than read through: it sorts by any column, narrows to matching rows, hides columns that are not part of the current question, bands rows under a grouping column, and lets the reader choose how cells meet the available width - so a reference grid stays useful instead of becoming a wall the reviewer scrolls past.
 
-## Anatomy
+## How it looks
 
-The figure opens with a header band carrying the table name, a live row count, and the reader's controls: an optional search box, the columns menu, a text-fit menu, reset, and maximize.
+<ThemeImage
+  light={data_tableLight}
+  dark={data_tableDark}
+  alt="A data table grouped by region, with a filter box and sortable columns"
+/>
+
+he figure opens with a header band carrying the table name, a live row count, and the reader's controls: an optional search box, the columns menu, a text-fit menu, reset, and maximize.
 Below it sits the complete grid, every authored row and column present in the served markup.
 
 Column headers are the sort controls. Clicking one cycles ascending, descending, and back to the order the author wrote, because authored order is information and a table that cannot return to it loses that on the first click.
@@ -29,6 +39,10 @@ Use `DataTable` when the grid is a **dataset the reviewer will query** rather th
 - A database table's shape - use [`DatabaseTableSchema`](/components/database-table-schema/), which understands keys, indexes, and DDL
 - Options scored against shared criteria - use [`DecisionAnalysis`](/components/decision-analysis/), which is a decision surface rather than a dataset
 - Anything needing a sentence of explanation per cell - that belongs in the prose around the table
+
+## Compared with
+
+- A plain Markdown table — reach for it by default. `DataTable` earns its place past roughly ten rows or four columns, or when the grid is a reference the reviewer returns to. A prose table cannot wrap, sort, or filter; that is the whole difference.
 
 ## Authoring
 
