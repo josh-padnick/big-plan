@@ -204,9 +204,7 @@ export const restoreOpenPlaces = async ({
         left?.actor === right?.actor;
       const restored = current.decided.filter((entry) => {
         const key = changeVerdictKey(entry);
-        return (
-          previousByKey.has(key) || !same(entry, resultByKey.get(key))
-        );
+        return previousByKey.has(key) || !same(entry, resultByKey.get(key));
       });
       return restored.length === current.decided.length
         ? current

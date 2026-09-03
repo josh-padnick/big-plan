@@ -381,9 +381,7 @@ export const updateReviewState = async (
               (comment) => comment.id,
             ),
           );
-          const unsentDrafts = drafts.filter(
-            (draft) => !sentIds.has(draft.id),
-          );
+          const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
           await writeComments({
             path: lockedStore.draftsPath,
             comments: unsentDrafts,
