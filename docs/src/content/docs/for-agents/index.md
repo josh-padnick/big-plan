@@ -24,8 +24,8 @@ Replace a page's trailing slash with `.md`:
 
 ```text
 https://bigplan.dev/intro/installation/      ->  https://bigplan.dev/intro/installation.md
-https://bigplan.dev/reference/error-codes/   ->  https://bigplan.dev/reference/error-codes.md
-https://bigplan.dev/authoring/slide-types/   ->  https://bigplan.dev/authoring/slide-types.md
+https://bigplan.dev/review/                  ->  https://bigplan.dev/review.md
+https://bigplan.dev/components/              ->  https://bigplan.dev/components.md
 ```
 
 Each `.md` response starts with frontmatter carrying `title`, `description`, and `canonical`,
