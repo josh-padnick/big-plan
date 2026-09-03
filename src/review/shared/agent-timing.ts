@@ -22,7 +22,7 @@ export const AGENT_STALL_WINDOW_LABEL = "75 seconds";
 //
 // This multiplier is the only place the value lives. No runtime string states
 // it, so nothing can interpolate it; the reader-facing statements of the figure
-// are in docs/src/content/docs/for-agents/answer-feedback.md and
-// docs/src/content/docs/review/troubleshooting.md, under "Connect the
-// coding agent", and they have to be edited alongside this line.
+// are in docs/src/content/docs/reference/commands/review.md and
+// docs/src/content/docs/reference/commands/agent.md, and they have to be edited
+// alongside this line.
 export const AGENT_RECOVERY_HORIZON_MS = AGENT_STALL_MS * 24;

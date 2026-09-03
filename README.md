@@ -157,7 +157,7 @@ After building the root package, regenerate the docs' light/dark component scree
 ## Security
 
 To report a vulnerability, follow [SECURITY.md](SECURITY.md).
-The full policy and Big Plan's security model are on the [security page](https://bigplan.dev/concepts/security-policy/).
+The full policy and Big Plan's security model are on the [security page](https://bigplan.dev/security/).
 
 ## License
 
