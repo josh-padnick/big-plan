@@ -90,6 +90,50 @@ describe("agent command adapter", () => {
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
 
+  // One connect call must hand back the whole picture - server, store,
+  // session, role, and how many requests are waiting - so a fresh agent never
+  // reads source or store files to reconstruct where it just attached.
+  it("should return a self-contained connection summary on connect", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-cli-connect-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this question.\n";
+    try {
+      await writeFile(planPath, source);
+      const review = await startReviewRuntime({ planPath });
+      try {
+        await writeAgentRequest({
+          store: review.store,
+          request: messageAgentRequest({
+            kind: "chat",
+            requestId: "dddddddddddddddd",
+            sessionId: review.sessionId,
+            planId: review.planId,
+            premiseSnapshot: deriveSnapshotDigest(source),
+            createdAt: "2026-08-12T12:00:00.000Z",
+            body: "What should we prioritize?",
+          }),
+        });
+        const result = await agentCommand(["connect", planPath]);
+        expect(result["connection_summary"]).toMatchObject({
+          server: review.url,
+          port: review.port,
+          session_id: review.sessionId,
+          role: expect.any(String),
+          pending_requests: expect.any(Number),
+        });
+        const summary = result["connection_summary"] as Record<string, unknown>;
+        expect(typeof summary["store"]).toBe("string");
+        // The summary points the agent at the protocol doc so it can answer
+        // the request without reading Big Plan source.
+        expect(typeof result["protocol"]).toBe("string");
+      } finally {
+        await review.close();
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     { label: "a missing value", tail: ["--agent"] },
     { label: "another flag as its value", tail: ["--agent", "--wait"] },

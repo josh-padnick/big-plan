@@ -9,6 +9,8 @@ import {
   writeSessionHeartbeatValue,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import { fileURLToPath } from "node:url";
+import { quoteShellArgument } from "../shell-quoting/quote.js";
 
 const HEARTBEAT_READ_ATTEMPTS = 5;
 const HEARTBEAT_READ_RETRY_MS = 25;
@@ -75,7 +77,12 @@ export class ReviewCustodyHeld extends Error {
   readonly live: ReviewSessionDescriptor;
 
   constructor(live: ReviewSessionDescriptor) {
-    super(`A live review runtime already serves this plan at ${live.url}`);
+    const cli = fileURLToPath(
+      new URL("../../bin/big-plan.mjs", import.meta.url),
+    );
+    super(
+      `A live review runtime already serves this plan at ${live.url}. To connect an agent, run node ${quoteShellArgument(cli)} agent connect ${quoteShellArgument(live.plan)}`,
+    );
     this.name = "ReviewCustodyHeld";
     this.live = live;
   }

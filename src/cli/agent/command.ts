@@ -12,6 +12,7 @@ import type { AgentWorkLoopAction } from "../../review/agent-work-loop.js";
 const USAGE = [
   "Usage:",
   "  big-plan agent <input.mdx>",
+  "  big-plan agent connect <input.mdx>",
   "  big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]",
   '  big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]',
   '  big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]',
@@ -33,7 +34,13 @@ const invalidArguments = (): never => {
 const executablePath = (): string =>
   resolve(process.argv[1] ?? "bin/big-plan.mjs");
 
-const RESERVED_ACTIONS = new Set(["next", "push", "note", "respond"]);
+const RESERVED_ACTIONS = new Set([
+  "connect",
+  "next",
+  "push",
+  "note",
+  "respond",
+]);
 const AGENT_TOKEN = /^[a-f0-9]{16}$/;
 
 // The connector's own report of which model is running it, e.g. "Grok 4.6".
@@ -142,6 +149,35 @@ const parseAction = (
   agentToken: string | undefined,
   connectionToken: string | undefined,
 ): AgentWorkLoopAction => {
+  if (
+    args[0] === "connect" &&
+    args.length === 2 &&
+    agentToken === undefined &&
+    connectionToken === undefined
+  ) {
+    return {
+      kind: "next",
+      planPath: args[1] ?? "",
+      shouldWait: true,
+      connectionSummary: true,
+      executablePath: executablePath(),
+      ...(connectorModelName() === undefined
+        ? {}
+        : { modelName: connectorModelName() }),
+      ...(connectorModelEffort() === undefined
+        ? {}
+        : { modelEffort: connectorModelEffort() }),
+      ...(connectorClient() === undefined
+        ? {}
+        : { modelClient: connectorClient() }),
+      ...(connectorSessionUrl() === undefined
+        ? {}
+        : { sessionUrl: connectorSessionUrl() }),
+      ...(connectorSessionId() === undefined
+        ? {}
+        : { sessionId: connectorSessionId() }),
+    };
+  }
   if (
     args.length === 1 &&
     agentToken === undefined &&

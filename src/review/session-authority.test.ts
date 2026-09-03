@@ -11,6 +11,7 @@ import {
   liveReviewSessionForPlan,
   readCurrentReviewSession,
   refreshReviewSessionHeartbeat,
+  ReviewCustodyHeld,
   reviewSessionIsRunning,
   reviewSessionOwnsMailbox,
   reviewSessionView,
@@ -383,6 +384,23 @@ describe("session authority", () => {
       activateReviewSession({ store, descriptor: challenger, now: 11_000 }),
     ).resolves.toEqual({ activated: false, live: holder });
     await expect(readCurrentReviewSession({ store })).resolves.toEqual(holder);
+  });
+
+  // The agent that reused a serving executable (e.g. a preview's serve.mjs)
+  // lands here with an opaque refusal. The message must name the real agent
+  // CLI and the connect command, so the reader recovers without reading source.
+  it("should name the agent connect command when custody is held", () => {
+    const held = new ReviewCustodyHeld(
+      descriptor({
+        sessionId: "2222222222222222",
+        url: "http://127.0.0.1:61000/",
+      }),
+    );
+
+    expect(held.message).toContain("agent connect");
+    expect(held.message).toContain("/tmp/plan.mdx");
+    expect(held.message).toContain("bin/big-plan.mjs");
+    expect(held.message).toContain("http://127.0.0.1:61000/");
   });
 
   it("should take custody once the holder's heartbeat has gone stale", async () => {

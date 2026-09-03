@@ -222,7 +222,7 @@ export const reviewCommand = async (
             `Took custody with --takeover from the live session ${runtime.replacedSession.sessionId} at ${runtime.replacedSession.url}; that session's open page and connected agent are now read-only until each reloads`,
           ]),
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
-      `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
+      `In another terminal, run \`big-plan agent connect ${quoteShellArgument(runtime.planPath)}\`; it waits in the foreground and returns each reviewer request with the exact response template and submit command`,
       "Press Ctrl+C to stop the review runtime",
       parsedArguments.idleTimeoutMs === 0
         ? "This review stays up until you stop it; pass --idle-timeout <minutes> to close it after a spell of inactivity"

@@ -47,7 +47,7 @@ Usage:
                                              links: status, start, stop, restart
   big-plan agent <input.mdx>                  Print the ready-to-paste prompt
                                              for a real coding-agent review
-                                             session; agent next, push, and
+                                             session; agent connect, next, push, and
                                              respond drive its loop
 `;
 
