@@ -17,8 +17,8 @@ Use `changed` only when you made a real revision to `candidate_plan`; it require
 `changeTargets` naming every rendered block actually changed, in presentation
 order. A block id begins with a lowercase letter or digit, contains only lowercase
 letters, digits, `/`, `_`, `.`, or `-`, and is at most 300 characters. Other
-outcomes do not carry `changeTargets`. A warning also requires an 80-character
-`summary` naming the boundary it would cross.
+outcomes do not carry `changeTargets`. A warning also requires a `summary` of
+at most 80 characters naming the boundary it would cross.
 
 If submission is rejected, correct `response_file` as requested and retry the
 same returned `respond_command`. After success, run the returned `next_command`
