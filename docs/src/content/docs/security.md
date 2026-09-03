@@ -21,8 +21,12 @@ Three assumptions decide everything else:
    claim to defend against that. Where a mitigation would be theatre against such an attacker, it
    is documented as an accepted limit instead of implemented.
 
-Nothing leaves your machine. There is no account, no hosted service, and no outbound request from
-the CLI or from a rendered document.
+There is no account or hosted service, and a rendered document makes no external requests. An
+installed copy of the CLI makes exactly one kind of outbound request: after the command has printed
+its output, a detached worker asks the npm registry only for the latest published version of the
+`big-plan` package, so no command waits on the network. A successful check is cached for 24 hours,
+and each registry request times out after two seconds. The check sends no plan content, file path,
+or review data, and it is skipped entirely for the recommended `npx -y big-plan@latest` path.
 
 ## Threat vectors
 
