@@ -9,7 +9,10 @@ import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
-import { agentSessionAffordance } from "../shared/agent-session-link.js";
+import {
+  agentSessionAffordance,
+  agentSessionReference,
+} from "../shared/agent-session-link.js";
 import {
   AGENT_SESSION_ENDED_REASON,
   agentActivityIsAttached,
@@ -464,9 +467,15 @@ const CurrentActivityCard = ({
     ...(sessionUrl === undefined ? {} : { sessionUrl }),
     ...(sessionId === undefined ? {} : { sessionId }),
   });
-  /* The handle the fact row states. A declared session is the answer; an agent
-     that declared none is named by its roster id, the only name it has. */
-  const sessionHandle = sessionId ?? writerId;
+  /* What the fact row states and copies. The bare session id is the answer - the
+     one the connector declared, or the one its URL carries - and the reviewer
+     copies the whole id, never the URL that wraps it; an agent that declared no
+     session is named by its roster id, the only name it has (BIG-281). */
+  const sessionReference = agentSessionReference({
+    ...(sessionUrl === undefined ? {} : { sessionUrl }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+    ...(writerId === undefined ? {} : { writerId }),
+  });
   // Since and Events describe a connection at rest; the session identifies the
   // agent whatever it is doing. The working card carries the second without the
   // first, and every other state carries both.
@@ -475,7 +484,7 @@ const CurrentActivityCard = ({
     connection.sinceAtMs !== undefined &&
     connection.everConnected;
   const showsConnectionFacts =
-    showsSinceAndEvents || sessionHandle !== undefined;
+    showsSinceAndEvents || sessionReference !== undefined;
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
   /*
@@ -601,14 +610,16 @@ const CurrentActivityCard = ({
               </dd>
             </div>
           ) : null}
-          {sessionHandle === undefined ? null : (
-            /* The one place a session identifier is offered. It cannot be
-               followed, so it belongs with the facts a reader consults rather
-               than beside the state they are reading - and having it here is
-               what lets the identity line above it carry no session at all. */
+          {sessionReference === undefined ? null : (
+            /* The one place a session identifier is offered to copy. The link
+               above opens it where it can be opened; this hands over the whole
+               of it for anything else, and having it here is what lets the
+               identity line above carry no session at all. */
             <AgentSessionFact
-              handle={sessionHandle}
-              isCopyable={sessionId !== undefined}
+              handle={sessionReference.handle}
+              {...(sessionReference.copyValue === undefined
+                ? {}
+                : { copyValue: sessionReference.copyValue })}
             />
           )}
           {showsSinceAndEvents ? (

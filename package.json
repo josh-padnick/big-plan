@@ -84,6 +84,9 @@
     "typescript-eslint": "^8.63.0",
     "vitest": "^3.2.0"
   },
+  "overrides": {
+    "@toon-format/toon": "2.3.1"
+  },
   "keywords": [
     "agent",
     "plan",

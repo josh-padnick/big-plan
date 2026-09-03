@@ -106,6 +106,12 @@ shows, with a session declared either as an address or as an id:
 
 All are optional and independent: declare only the ones you can answer, and the
 reviewer is shown exactly those.
+
+**Agent Status** shows a copy control beside every declared session whose bare
+id Big Plan can resolve. It copies `BIG_PLAN_AGENT_SESSION` when present,
+otherwise the last non-empty path segment of `BIG_PLAN_AGENT_SESSION_URL`. A
+recognized session URL also keeps its separate **Open the agent's chat** link.
+
 Terminal escape and control sequences are removed before the values are shown,
 because they are terminal formatting rather than part of the declaration.
 Beyond that cleanup, Big Plan does not guess missing facts or re-case an
