@@ -106,4 +106,4 @@ A scoped child component is valid only in its declared hierarchy: `Annotation` i
 
 ## Next
 
-[Choose the right component](/components/) — which of these to reach for.
+[Start a review](/intro/first-review/) — see these components in a complete plan review.

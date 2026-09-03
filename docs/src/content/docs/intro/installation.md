@@ -53,7 +53,7 @@ working directory.
 npx -y big-plan@latest --version
 ```
 
-It prints a version. Then take one plan all the way through:
+It prints a version. Then verify that Big Plan can render a plan:
 
 ```sh
 curl -o plan.mdx https://bigplan.dev/demo/example-plan.md

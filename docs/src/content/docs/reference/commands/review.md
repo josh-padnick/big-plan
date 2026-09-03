@@ -100,11 +100,11 @@ writes, and current growth counts to the review command's standard error output.
   the session's direct address. `BIG_PLAN_PORT` chooses a different port, remembering that
   links saved at the old one stop resolving.
 - **The page stopped accepting changes.** See
-  [When a review goes wrong](/reference/commands/review/).
+  [When a review goes wrong](#troubleshooting).
 - **A saved link stopped opening.** The small local service answers those;
   [`big-plan service`](/reference/commands/service/) inspects and restarts it.
 
 ## Related
 
 - [Start a review](/intro/first-review/) — the task page for this command.
-- [When a review goes wrong](/reference/commands/review/) — every review failure.
+- [When a review goes wrong](#troubleshooting) — every review failure.

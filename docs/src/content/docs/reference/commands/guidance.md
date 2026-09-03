@@ -30,7 +30,7 @@ The line points to the installation guide and asks the user to update with the p
 The check refreshes silently after command output and is cached, so a slow or unavailable registry never delays or fails guidance; a failed check produces no line.
 Ephemeral `npx` runs skip the check and notice because `npx -y big-plan@latest` already selects the current release.
 
-`validate`, `render`, and `review` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
+When acknowledgment state is writable, `validate`, `render`, and `review` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run. If no state directory accepts writes, they continue with a warning instead.
 An acknowledgment is current when it was recorded for the same working directory within the last 24 hours against the guidance content the installed CLI ships.
 Updating Big Plan to a release with changed guidance therefore re-locks all three commands until `guidance` is read again.
 `compile`, `skill`, and `agent` are not gated, so machine tooling, skill install, and an already-live agent loop can run without the authoring workflow.

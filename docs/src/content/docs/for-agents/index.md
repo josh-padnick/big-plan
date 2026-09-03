@@ -47,9 +47,10 @@ project `AGENTS.md`, or a hand-maintained skill fork.
 | `big-plan guidance Slide`       | The complete slide-type catalog, in one call                                | Changes with the catalog          |
 
 Reading `guidance` records an acknowledgment **for the current working directory**, valid for 24
-hours against the guidance content your installed CLI ships. `validate`, `render`, and `review`
-fail with `GUIDANCE_REQUIRED` until it has been read. `compile`, `skill`, and `agent` are not
-gated, so machine tooling and an already-live loop keep working.
+hours against the guidance content your installed CLI ships. When acknowledgment state is
+writable, `validate`, `render`, and `review` fail with `GUIDANCE_REQUIRED` until guidance has been
+read. If no state directory is writable, they continue with a warning instead. `compile`, `skill`,
+and `agent` are not gated, so machine tooling and an already-live loop keep working.
 
 ## Set Big Plan up for your human
 
@@ -271,9 +272,9 @@ big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeo
 big-plan service status|start|stop|restart
 big-plan agent <input.mdx>
 big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
-big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>]
-big-plan agent note <input.mdx> "<progress>" --agent <token>
-big-plan agent respond <input.mdx> <response.json> --agent <token>
+big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]
+big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
+big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection <token>]
 ```
 
 Every failure is a structured result, not a stack trace. `VALIDATION_ERROR` exits `2`; success

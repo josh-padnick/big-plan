@@ -31,7 +31,7 @@ positional argument.
 ## What it writes
 
 The JSON written by `compile` is Big Plan's **compiled plan model**: a structured representation intended for agents and tools.
-`compile` validates the plan exactly as `render` does - every diagnostic hard-fails both commands identically - and writes that representation as pretty-printed JSON:
+`compile` applies the same structural validation as `render` and writes that representation as pretty-printed JSON. Unlike `render`, it does not apply authoring lint:
 
 - `title`: the document title.
 - `sections`: the level-two section outline with `id`, structural `name`, h2 `title`, and optional registered `type`.

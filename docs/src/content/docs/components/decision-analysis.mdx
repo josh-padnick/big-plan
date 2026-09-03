@@ -46,12 +46,18 @@ ceremony.
 
 ```mdx
 <DecisionAnalysis question="Which store?" state="proposed" interaction="choose" scoring="weighted">
-  <Criterion title="Reliability" impact="5">How safely the store preserves review state.</Criterion>
+  <Criterion title="Reliability" impact="5">
+    How safely the store preserves review state.
+  </Criterion>
   <Option title="PostgreSQL" recommended>
-    <Score criterion="Reliability" verdict="Strong" tone="good" score="5">Transactions preserve related state atomically.</Score>
+    <Score criterion="Reliability" verdict="Strong" tone="good" score="5">
+      Transactions preserve related state atomically.
+    </Score>
   </Option>
   <Option title="SQLite">
-    <Score criterion="Reliability" verdict="Good" tone="good" score="4">A local transaction protects each write.</Score>
+    <Score criterion="Reliability" verdict="Good" tone="good" score="4">
+      A local transaction protects each write.
+    </Score>
   </Option>
   <Reversibility rating="somewhat-hard">Changing stores requires a data migration.</Reversibility>
 </DecisionAnalysis>
@@ -82,9 +88,9 @@ ceremony.
 | `Reversibility` | `rating` (required); exactly one per analysis                                                  |
 | `Details`       | Optional; at most one                                                                          |
 
-Every `Criterion` and `Score` needs a one-sentence body — the dashed title or value reveals that
-definition. Every option must score every criterion. A decided analysis marks exactly one option
-`chosen`.
+Every `Criterion` and `Score` needs one non-empty flow-level paragraph of at most one sentence —
+the dashed title or value reveals that definition. Keep the body on its own lines. Every option
+must score every criterion. A decided analysis marks exactly one option `chosen`.
 
 The matrix supports seven or more criteria without changing its authoring shape.
 
