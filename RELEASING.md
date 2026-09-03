@@ -80,6 +80,12 @@ Two consequences of promoting a prerelease to `latest` are deliberate and worth 
 
 Nothing else changes. Tags named `v0.1.0-alpha.1` match the `v*.*.*` filter that triggers `publish.yml` and that the `npm-release` environment allows, the workflow's tag-equals-package-version check is a string comparison, and the CLI's update notice compares prerelease identifiers by semver precedence rather than lexically.
 
+## Before the launch tag
+
+The tag must be cut from a tree with no ambiguous in-flight work, and the release checklist below assumes that is already true. [RELEASING-pr-hygiene.md](RELEASING-pr-hygiene.md) is the record that makes it true: every open pull request and every remote branch not merged into `main` carries a disposition there, with the evidence it rests on.
+
+Confirm before step 1 that the record names no open decision and no live lane still outstanding. A branch nobody has ruled on is indistinguishable from one somebody is still working on, and the difference stops being recoverable once the tag is published.
+
 ## Release checklist
 
 Set the release version once and use it throughout these commands:
