@@ -484,7 +484,8 @@ A page that cannot record review state, such as a read-only review session or a 
 If Big Plan cannot reach the runtime while reading recorded verdicts, it warns that the page may show an incomplete count and keeps retrying.
 If recording a verdict fails, Big Plan says it is not saved yet and keeps retrying; keep the review open until the change set reports the decision.
 If the runtime refuses the verdict outright, the mark comes back off and the review says so, so the page never claims work that nothing recorded.
-After deciding the set, choose **Keep chatting**; a comment thread also offers **Resolve thread**.
+Choose **Keep chatting** to continue the conversation; a comment thread also offers **Resolve thread**.
+Resolving accepts every change in that thread that is still undecided in one recorded verdict update. Changes you already accepted or rejected keep those decisions, and unresolving the thread does not undo any acceptance; use **Unaccept** or **Undo** when you want to take a verdict back.
 Resolving never cancels a message the thread is still waiting on: while the agent owes that thread an answer, the review runtime refuses the resolve and says so, so cancel the waiting message or wait for its answer first.
 A resolved thread will not accept a reply or new feedback until you unresolve it: a reply you have already typed is kept, and unresolving the thread clears the message so you can send it.
 **Revert response** restores only that response's claim-time baseline, leaves earlier changes in place, and becomes unavailable after the plan changes again.
