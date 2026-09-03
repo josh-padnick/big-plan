@@ -654,6 +654,7 @@ const legacyExecCopy = (value: string): boolean => {
     selection !== null && selection.rangeCount > 0
       ? selection.getRangeAt(0)
       : null;
+  const priorActiveElement = document.activeElement;
   document.body.appendChild(textarea);
   textarea.focus();
   textarea.select();
@@ -664,6 +665,12 @@ const legacyExecCopy = (value: string): boolean => {
     copied = false;
   }
   document.body.removeChild(textarea);
+  if (
+    priorActiveElement instanceof HTMLElement &&
+    priorActiveElement.isConnected
+  ) {
+    priorActiveElement.focus();
+  }
   // Leave the reader's own selection as it was, not collapsed onto our textarea.
   if (priorRange !== null && selection !== null) {
     selection.removeAllRanges();

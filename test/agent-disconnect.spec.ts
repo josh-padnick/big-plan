@@ -334,7 +334,8 @@ test("should offer to copy a stalled agent's session address (BIG-281)", async (
       "data-review-agent-session-copy",
       bareSessionId,
     );
-    await copy.click();
+    await copy.focus();
+    await copy.press("Enter");
     // The fallback copied the bare id...
     await expect
       .poll(() =>
@@ -351,6 +352,7 @@ test("should offer to copy a stalled agent's session address (BIG-281)", async (
       "aria-label",
       "agent session identifier copied",
     );
+    await expect(copy).toBeFocused();
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
