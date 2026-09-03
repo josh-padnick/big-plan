@@ -1,8 +1,9 @@
 // Keeps the two hand-authored slide-type surfaces aligned with the executable
-// catalog: the Slide component's id-and-name table, and the authoring
-// section's per-type reference. Both drift silently otherwise, because a new
-// type is a new file under src/plan-vocabulary/slide-types/definitions/ and
-// nothing else fails when the docs miss it.
+// catalog: the Slide component's id-and-name table, and the catalog table on
+// the For agents page, which is where an agent is told what it may author.
+// Both drift silently otherwise, because a new type is a new file under
+// src/plan-vocabulary/slide-types/definitions/ and nothing else fails when
+// the docs miss it.
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -25,21 +26,17 @@ describe("Slide catalog documentation", () => {
     );
   });
 
-  it("should give every catalog type its own authoring reference", () => {
+  it("should list every catalog type where agents are told to author", () => {
     const reference = readFileSync(
-      new URL("./content/docs/authoring/slide-types.md", import.meta.url),
+      new URL("./content/docs/for-agents/index.md", import.meta.url),
       "utf8",
     );
     const catalogSection =
-      reference.split("## The catalog\n")[1]?.split("\n## ")[0] ?? "";
-    const documentedNames = [...catalogSection.matchAll(/^### (.+)$/gm)].map(
-      ([, name]) => name,
-    );
+      reference.split("## Slide types\n")[1]?.split("\n## ")[0] ?? "";
+    const documentedIds = [
+      ...catalogSection.matchAll(/^\| `([a-z-]+)`\s+\|/gm),
+    ].map(([, id]) => id);
 
-    expect(documentedNames).toEqual(SLIDE_TYPES.map(({ name }) => name));
-
-    for (const { id } of SLIDE_TYPES) {
-      expect(catalogSection).toContain(`type="${id}"`);
-    }
+    expect(documentedIds).toEqual(SLIDE_TYPES.map(({ id }) => id));
   });
 });
