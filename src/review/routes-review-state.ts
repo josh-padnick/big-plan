@@ -46,6 +46,12 @@ import {
   revertPlanSource,
   settleInterruptedCommitsFor,
 } from "./staged-plan-mutation.js";
+import {
+  acceptOpenPlaces,
+  restoreOpenPlaces,
+  type AcceptedOpenPlaces,
+} from "./change-set-closure.js";
+import { closuresForResolvedThreads } from "./resolved-thread-acceptance.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import {
   anchorReviewStore,
@@ -306,7 +312,7 @@ export const updateReviewState = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planId, sessionId, planRenderer } = context;
+  const { store, planId, sessionId, resolvedPlanPath, planRenderer } = context;
   const payload = payloadOf(body);
   const versionRefusal = await conditionalReviewStateRefusal({
     context,
@@ -323,15 +329,23 @@ export const updateReviewState = async (
   // creation, so a refusal leaves the whole review state untouched and a
   // concurrent create cannot sneak onto the thread.
   try {
-    await withResolvedCommentLock({
+    const lockedVersionRefusal = await withResolvedCommentLock({
       store,
       change: async (lockedStore) => {
+        const refusal = await conditionalReviewStateRefusal({
+          context,
+          store: lockedStore,
+          payload,
+          operation: "A drafts write",
+        });
+        if (refusal !== undefined) return refusal;
         const alreadyResolved = new Set(
           await readResolvedCommentIds({
             store: lockedStore,
             validate: validateResolvedCommentIds,
           }),
         );
+        const newlyResolved: Array<string> = [];
         for (const commentId of resolvedCommentIds) {
           if (alreadyResolved.has(commentId)) continue;
           await assertResolvableComment({
@@ -340,23 +354,52 @@ export const updateReviewState = async (
             planId,
             commentId,
           });
+          newlyResolved.push(commentId);
         }
-        const sentIds = new Set(
-          (await planRenderer.readStoredComments(lockedStore.sentPath)).map(
-            (comment) => comment.id,
-          ),
-        );
-        const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
-        await writeComments({
-          path: lockedStore.draftsPath,
-          comments: unsentDrafts,
-        });
-        await writeResolvedCommentIds({
+        // Resolving answers the changes the thread left open, and it does so
+        // before the thread is recorded as resolved: a reviewer never sees a
+        // closed thread that still owes an answer, and a repeat of this write
+        // re-selects nothing because the places are decided by then.
+        const closures = await closuresForResolvedThreads({
           store: lockedStore,
-          ids: resolvedCommentIds,
+          planPath: resolvedPlanPath,
+          sessionId,
+          planId,
+          commentIds: newlyResolved,
         });
+        let acceptance: AcceptedOpenPlaces | undefined;
+        if (closures.length > 0) {
+          acceptance = await acceptOpenPlaces({
+            store: lockedStore,
+            closures,
+            decidedAt: new Date().toISOString(),
+          });
+        }
+        try {
+          const sentIds = new Set(
+            (await planRenderer.readStoredComments(lockedStore.sentPath)).map(
+              (comment) => comment.id,
+            ),
+          );
+          const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
+          await writeComments({
+            path: lockedStore.draftsPath,
+            comments: unsentDrafts,
+          });
+          await writeResolvedCommentIds({
+            store: lockedStore,
+            ids: resolvedCommentIds,
+          });
+        } catch (error: unknown) {
+          if (acceptance !== undefined) {
+            await restoreOpenPlaces({ store: lockedStore, acceptance });
+          }
+          throw error;
+        }
+        return undefined;
       },
     });
+    if (lockedVersionRefusal !== undefined) return lockedVersionRefusal;
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return refusal({ status: 409, reason: error.message });
