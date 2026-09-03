@@ -476,6 +476,8 @@ Choose **Accept change** to mark the current place accepted and advance to the n
 Acceptance is a review checklist rather than an edit: it does not change the plan or resolve the comment thread.
 An accepted place leaves the **What changed** presentation and returns to the plan's ordinary content. Use **View changes** to bring its comparison back temporarily, **Hide changes** to return to the plan, or **Unaccept** to reopen the place in its pre-accept state.
 A rejected place instead restores that change to the thread's baseline bytes. The proposal and its diff disappear from that place, while the change digest marks it with a red X, and **Undo** returns it to undecided.
+Big Plan records that write as a revision of its own, so the plan's history stays continuous across your decisions and later comparisons still know which thread proposed which change.
+Reverting a whole response is recorded the same way, and approval no longer counts a reverted response as a change set awaiting your verdict.
 **Undo** removes either verdict, returns the place to undecided, and allows it to be accepted or rejected next.
 When the changed content no longer exists in the current plan, or the plan has moved beyond the reviewed revision, Big Plan keeps the archived comparison as the only surviving evidence.
 Verdicts are recorded with the review, so they survive a reload and a runtime restart, and every place they are counted - the change digest on the agent's message and the navigator touring that same set - reports the same standing. The page polls the record so verdicts written elsewhere, including acceptances that do not move plan bytes, appear without waiting for another plan revision.

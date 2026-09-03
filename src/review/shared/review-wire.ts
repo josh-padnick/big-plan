@@ -545,6 +545,9 @@ export type CommittedChangeSetState = {
 // A change set is keyed by an ordinary comment thread's short id or by an
 // immutable transaction's request id, so the wire accepts both widths.
 
+// Neither of the reviewer's own writes ever reaches a browser as a change set,
+// because neither proposes anything, which is why the four agent kinds are the
+// whole of what a change set may arrive as.
 const CHANGE_SET_PROVENANCE: ReadonlySet<string> = new Set<ChangeSetProvenance>(
   ["feedback", "reply", "chat", "push"],
 );

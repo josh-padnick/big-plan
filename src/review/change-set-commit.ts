@@ -12,15 +12,32 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentResponse } from "./agent-exchange.js";
-import { readStoreJson, writeStoreJson } from "./store.js";
+import { randomId, readStoreJson, writeStoreJson } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { CHANGE_SET_ID, SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 const COMMITTED_REVISION_VERSION = 1;
 
-/** What caused the change set the committed revision belongs to. */
+/**
+ * What caused the change set a committed revision belongs to. Only an agent
+ * proposes one, which is why the reviewer's own writes are absent here rather
+ * than listed and then filtered: a change set with a reviewer's provenance is
+ * a state the fold cannot reach.
+ */
 export type ChangeSetProvenance = "feedback" | "reply" | "chat" | "push";
+
+/**
+ * What caused the committed revision.
+ *
+ * The four change-set kinds name work an agent proposed. The last two name the
+ * reviewer's own answer carried into the bytes, and they are two rather than
+ * one because the gestures behind them end differently. `reject` takes some
+ * places of a proposal back out while the rest of it stays under review.
+ * `revert` takes a whole response back out, which leaves nothing of it to
+ * review at all.
+ */
+export type PlanRevisionProvenance = ChangeSetProvenance | "reject" | "revert";
 
 /** One published revision, addressed to the change sets it advances. */
 export type CommittedPlanRevision = {
@@ -28,7 +45,7 @@ export type CommittedPlanRevision = {
   readonly changeSetIds: ReadonlyArray<string>;
   readonly baseSnapshot: string;
   readonly resultSnapshot: string;
-  readonly provenance: ChangeSetProvenance;
+  readonly provenance: PlanRevisionProvenance;
   readonly committedAt: string;
 };
 
@@ -127,7 +144,9 @@ const validateRevision = (value: unknown): CommittedPlanRevision => {
     provenance !== "feedback" &&
     provenance !== "reply" &&
     provenance !== "chat" &&
-    provenance !== "push"
+    provenance !== "push" &&
+    provenance !== "reject" &&
+    provenance !== "revert"
   ) {
     throw new CommittedRevisionRejected(
       "A committed revision needs a known provenance",
@@ -169,6 +188,54 @@ export const recordCommittedRevision = async ({
   await writeStoreJson({
     path: revisionPath({ store, requestId: revision.requestId }),
     value: stored,
+  });
+};
+
+/**
+ * Records the revision a reviewer's own decision published.
+ *
+ * Rejecting a change moves bytes, and until this existed the log never learned
+ * it: the plan's digest stopped being any recorded revision's result, so the
+ * chain from a thread's baseline to what the reader is looking at simply ended
+ * there, and everything derived by walking that chain - which change set
+ * declared which block, above all - was lost for every span crossing it.
+ *
+ * It is addressed by a fresh id rather than a request id because no request
+ * made it. The change sets it names are the ones whose proposed content it took
+ * back out, which is what lets a later reader say why the plan moved without
+ * having to treat the reviewer's refusal as a proposal.
+ */
+export const recordRejectRevision = async ({
+  store,
+  changeSetIds,
+  baseSnapshot,
+  resultSnapshot,
+  committedAt,
+  provenance = "reject",
+}: {
+  readonly store: ReviewStore;
+  readonly changeSetIds: ReadonlyArray<string>;
+  readonly baseSnapshot: string;
+  readonly resultSnapshot: string;
+  readonly committedAt: string;
+  /** `revert` only where the whole response was taken back out. */
+  readonly provenance?: "reject" | "revert";
+}): Promise<void> => {
+  // A rejection that left the plan where it found it published nothing, and a
+  // revision from a digest to itself would be a cycle in the chain.
+  if (baseSnapshot === resultSnapshot) return;
+  const named = changeSetIds.filter((id) => CHANGE_SET_ID.test(id));
+  if (named.length === 0) return;
+  await recordCommittedRevision({
+    store,
+    revision: {
+      requestId: randomId(8),
+      changeSetIds: named,
+      baseSnapshot,
+      resultSnapshot,
+      provenance,
+      committedAt,
+    },
   });
 };
 
@@ -255,6 +322,24 @@ export const readCommittedRevisionsToObserve = async ({
  * from the change set's first committed revision and stay put, so a thread's
  * Was keeps naming where the thread started rather than where its latest
  * reply started.
+ *
+ * The reviewer's own writes are in the log for a reason the fold cannot
+ * supply: the log is what says how the plan got from one digest to the next,
+ * and a revision missing from that chain ends it at the point a reviewer
+ * acted, taking every later span's ownership with it.
+ *
+ * Neither of them opens a change set. A change set is what an agent proposed,
+ * and neither gesture proposes anything; opening one would ask the reviewer to
+ * accept their own refusal.
+ *
+ * They differ in what they leave standing. A `reject` takes some places out
+ * and leaves the rest of the proposal under review, so the set keeps ending
+ * where the agent left it - advancing it would move the set past the very
+ * places its own verdicts are addressed to, which is where an undo goes
+ * looking for them. A `revert` takes a whole response back out, so the set
+ * ends where that response started; when that is the set's own baseline it
+ * proposes nothing any more, which is what stops approval from later accepting
+ * a revision the plan no longer holds.
  */
 export const changeSetsFrom = (
   revisions: ReadonlyArray<CommittedPlanRevision>,
@@ -263,6 +348,16 @@ export const changeSetsFrom = (
   for (const revision of revisions) {
     for (const changeSetId of revision.changeSetIds) {
       const existing = changeSets.get(changeSetId);
+      if (revision.provenance === "reject") continue;
+      if (revision.provenance === "revert") {
+        if (existing === undefined) continue;
+        changeSets.set(changeSetId, {
+          ...existing,
+          resultSnapshot: revision.resultSnapshot,
+          committedAt: revision.committedAt,
+        });
+        continue;
+      }
       changeSets.set(changeSetId, {
         changeSetId,
         provenance: existing?.provenance ?? revision.provenance,

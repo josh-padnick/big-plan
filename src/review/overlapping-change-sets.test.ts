@@ -16,7 +16,11 @@
 import { describe, expect, it } from "vitest";
 import { changeOwnershipFrom, revisionChainFor } from "./change-ownership.js";
 import type { AgentResponse } from "./agent-exchange.js";
-import type { CommittedPlanRevision } from "./change-set-commit.js";
+import {
+  changeSetsFrom,
+  type CommittedPlanRevision,
+} from "./change-set-commit.js";
+import { changeSetsFromCommitted } from "./shared/open-items.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import { attributeDiffPlaces } from "./shared/change-attribution.js";
 import {
@@ -318,5 +322,87 @@ describe("overlapping change sets", () => {
     expect(
       changeOwnershipFrom({ revisions, responses: [], from: S0, to: S2 }),
     ).toEqual(new Map());
+  });
+});
+
+// M5: a rejection moves plan bytes, so the log has to say so. Until it did,
+// the plan's digest stopped being any recorded revision's result the moment a
+// reviewer rejected anything, and every span crossing that point lost the
+// ownership partition that keeps two threads' acceptances apart.
+describe("a rejection in the committed revision log", () => {
+  const REJECTED = "e".repeat(16);
+  const proposal = revision({
+    requestId: "1".repeat(16),
+    changeSetIds: [THREAD_A],
+    baseSnapshot: S0,
+    resultSnapshot: S1,
+    committedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const rejection: CommittedPlanRevision = {
+    requestId: "9".repeat(16),
+    changeSetIds: [THREAD_A],
+    baseSnapshot: S1,
+    resultSnapshot: REJECTED,
+    provenance: "reject",
+    committedAt: "2026-01-01T00:05:00.000Z",
+  };
+
+  it("keeps the chain walkable across the reviewer's own write", () => {
+    expect(
+      revisionChainFor({
+        revisions: [proposal, rejection],
+        from: S0,
+        to: REJECTED,
+      }).map((entry) => entry.resultSnapshot),
+    ).toEqual([S1, REJECTED]);
+  });
+
+  it("leaves the thread's proposal where the agent left it", () => {
+    // A rejection takes some places out; the rest of the proposal is still the
+    // reviewer's to decide.
+    // The reviewer took out some of the proposal, not all of it, so the rest
+    // is still theirs to decide - and their verdicts stay addressed to the
+    // span those places were minted under, which is where an undo looks.
+    expect(changeSetsFrom([proposal, rejection])).toEqual([
+      {
+        changeSetId: THREAD_A,
+        provenance: "feedback",
+        baseSnapshot: S0,
+        resultSnapshot: S1,
+        committedAt: proposal.committedAt,
+      },
+    ]);
+  });
+
+  it("ends a set whose whole response was taken back out", () => {
+    const reverted: CommittedPlanRevision = {
+      ...rejection,
+      provenance: "revert",
+      resultSnapshot: S0,
+    };
+    // Approval reads the fold, and a set that starts and ends in the same
+    // place proposes nothing, so there is no longer anything for approval to
+    // auto-accept. That is the defect: a reverted response used to arrive at
+    // approval as work still awaiting a verdict.
+    expect(changeSetsFrom([proposal, reverted])).toEqual([
+      {
+        changeSetId: THREAD_A,
+        provenance: "feedback",
+        baseSnapshot: S0,
+        resultSnapshot: S0,
+        committedAt: reverted.committedAt,
+      },
+    ]);
+    expect(
+      changeSetsFromCommitted({
+        committed: changeSetsFrom([proposal, reverted]),
+        requests: [],
+        placeIdsByRevision: new Map(),
+      }),
+    ).toEqual([]);
+  });
+
+  it("never opens a change set of its own", () => {
+    expect(changeSetsFrom([rejection])).toEqual([]);
   });
 });

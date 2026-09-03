@@ -39,7 +39,10 @@ import {
   ChangeRestoreRejected,
   restoreRejectedPlaces,
 } from "./change-restore.js";
-import { readCommittedChangeSets } from "./change-set-commit.js";
+import {
+  readCommittedChangeSets,
+  recordRejectRevision,
+} from "./change-set-commit.js";
 import { readChangeOwnership } from "./change-ownership.js";
 import { carryForwardChangeVerdicts } from "./change-carry-forward.js";
 import { settlementRefusal } from "./review-route-settlement.js";
@@ -75,12 +78,15 @@ const verdictState = (verdicts: StoredChangeVerdicts): ReviewRouteResponse =>
  */
 const reconcilePlanSource = async ({
   context,
+  changeSetId,
   from,
   to,
   before,
   after,
 }: {
   readonly context: ReviewRouteContext;
+  /** The set whose proposed content this write takes back out, or puts back. */
+  readonly changeSetId?: string;
   readonly from: string;
   readonly to: string;
   readonly before: ReadonlyArray<string>;
@@ -130,6 +136,19 @@ const reconcilePlanSource = async ({
     expectedSnapshot,
     source: nextSource,
   });
+  // The write landed, so the log is told how the plan got from the digest it
+  // held to the one it holds now. An unrecorded move leaves the chain broken
+  // at exactly the point a reviewer acted, and everything derived by walking
+  // that chain goes with it.
+  if (changeSetId !== undefined) {
+    await recordRejectRevision({
+      store,
+      changeSetIds: [changeSetId],
+      baseSnapshot: expectedSnapshot,
+      resultSnapshot: nextSnapshot,
+      committedAt: new Date().toISOString(),
+    });
+  }
   readerProgress.accept(nextSnapshot);
 };
 
@@ -141,25 +160,36 @@ const reconcileRecordedRejections = async ({
   readonly context: ReviewRouteContext;
   readonly verdicts: StoredChangeVerdicts;
 }): Promise<void> => {
-  const revisions = new Map<string, { from: string; to: string }>();
+  const revisions = new Map<
+    string,
+    { from: string; to: string; changeSetId?: string }
+  >();
   for (const changeSet of await readCommittedChangeSets({
     store: context.store,
   })) {
     revisions.set(`${changeSet.baseSnapshot}:${changeSet.resultSnapshot}`, {
       from: changeSet.baseSnapshot,
       to: changeSet.resultSnapshot,
+      changeSetId: changeSet.changeSetId,
     });
   }
   for (const entry of verdicts.decided) {
     revisions.set(`${entry.from}:${entry.to}`, {
       from: entry.from,
       to: entry.to,
+      changeSetId: entry.changeSetId,
     });
   }
   const { store, resolvedPlanPath, readerProgress } = context;
   const currentSource = await readFile(resolvedPlanPath, "utf8");
-  const matches: Array<string> = [];
-  for (const { from, to } of revisions.values()) {
+  const matches: Array<{
+    readonly source: string;
+    readonly changeSetId?: string;
+  }> = [];
+  for (const { from, to, changeSetId } of revisions.values()) {
+    // A revision from a digest to itself describes no change, so there is
+    // nothing for a rejection to have been interrupted in the middle of.
+    if (from === to) continue;
     const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
     const [baselineSource, proposedSource, ownership] = await Promise.all([
       readSnapshot({ store, snapshot: from }),
@@ -207,11 +237,17 @@ const reconcileRecordedRejections = async ({
         if (!(error instanceof ChangeRestoreRejected)) throw error;
       }
     }
-    if (matchingNeighbors === 1) matches.push(intendedSource);
+    if (matchingNeighbors === 1) {
+      matches.push({
+        source: intendedSource,
+        ...(changeSetId === undefined ? {} : { changeSetId }),
+      });
+    }
   }
   if (matches.length !== 1) return;
-  const intendedSource = matches[0];
-  if (intendedSource === undefined) return;
+  const match = matches[0];
+  if (match === undefined) return;
+  const intendedSource = match.source;
   const expectedSnapshot = deriveSnapshotDigest(currentSource);
   const nextSnapshot = deriveSnapshotDigest(intendedSource);
   await writeSnapshot({
@@ -225,6 +261,17 @@ const reconcileRecordedRejections = async ({
     expectedSnapshot,
     source: intendedSource,
   });
+  // The repair completes a write the reviewer's decision started, so the log
+  // records it for the same reason the decision itself does.
+  if (match.changeSetId !== undefined) {
+    await recordRejectRevision({
+      store,
+      changeSetIds: [match.changeSetId],
+      baseSnapshot: expectedSnapshot,
+      resultSnapshot: nextSnapshot,
+      committedAt: new Date().toISOString(),
+    });
+  }
   readerProgress.accept(nextSnapshot);
 };
 
@@ -392,6 +439,7 @@ export const recordChangeVerdicts = async (
   try {
     await reconcilePlanSource({
       context,
+      changeSetId: mutation.changeSetId,
       from: mutation.from,
       to: mutation.to,
       before,
