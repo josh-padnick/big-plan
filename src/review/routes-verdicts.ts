@@ -41,6 +41,7 @@ import {
 } from "./change-restore.js";
 import { readCommittedChangeSets } from "./change-set-commit.js";
 import { readChangeOwnership } from "./change-ownership.js";
+import { carryForwardChangeVerdicts } from "./change-carry-forward.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
 import { revertPlanSource } from "./staged-plan-mutation.js";
@@ -227,10 +228,27 @@ const reconcileRecordedRejections = async ({
   readerProgress.accept(nextSnapshot);
 };
 
-/** Reads the recorded verdicts and repairs an interrupted rejection publish. */
+/**
+ * Reads the recorded verdicts, carries any that a committed round left behind
+ * onto the span their change set now spans, and repairs an interrupted
+ * rejection publish.
+ *
+ * Carrying here as well as at the commit itself is what closes the race the
+ * commit alone cannot: a reviewer deciding a change while the next round is
+ * landing writes at the span that was current when they started, and only a
+ * later pass can see both that write and the round that superseded it. It
+ * answers from the record alone when nothing is behind, so the ordinary read
+ * costs no reading of plan sources at all.
+ */
 export const readChangeVerdictState = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
+  await carryForwardChangeVerdicts({
+    store: context.store,
+    sessionId: context.sessionId,
+    planId: context.planId,
+    planPath: context.resolvedPlanPath,
+  });
   const verdicts = await context.changeVerdicts.read();
   await reconcileRecordedRejections({ context, verdicts });
   return verdictState(verdicts);
@@ -282,7 +300,7 @@ const restorePreviousVerdicts = ({
     left?.decidedAt === right?.decidedAt &&
     left?.actor === right?.actor;
   const eligible = new Set<string>();
-  for (const placeId of mutation.placeIds) {
+  for (const { placeId } of mutation.places) {
     const expected = resultByPlace.get(placeId);
     if (same(currentByPlace.get(placeId), expected)) eligible.add(placeId);
   }
@@ -290,7 +308,7 @@ const restorePreviousVerdicts = ({
   const restored = current.decided.filter(
     (entry) => !ownedByMutation(entry) || !eligible.has(entry.placeId),
   );
-  for (const placeId of mutation.placeIds) {
+  for (const { placeId } of mutation.places) {
     if (!eligible.has(placeId)) continue;
     const prior = previousByPlace.get(placeId);
     if (prior !== undefined) restored.push(prior);

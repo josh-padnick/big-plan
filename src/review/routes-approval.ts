@@ -323,7 +323,7 @@ const acceptChangeSets = async ({
           changeSetId: changeSet.id,
           from: changeSet.from,
           to: changeSet.to,
-          placeIds,
+          places: placeIds.map((placeId) => ({ placeId })),
           decidedAt,
           actor: "reviewer",
         },

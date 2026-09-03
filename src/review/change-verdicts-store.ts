@@ -13,6 +13,7 @@
 import { join } from "node:path";
 import {
   CHANGE_SET_ID,
+  CONTENT_DIGEST,
   DECIDED_CHANGE_LIMIT,
   VERDICT_BATCH_LIMIT,
   PLACE_ID_LIMIT,
@@ -20,6 +21,7 @@ import {
   changeVerdictKey,
   type ChangeVerdict,
   type ChangeVerdictActor,
+  type ChangeVerdictPlace,
   type ChangeVerdictOutcome,
   type ChangeVerdictState,
 } from "./shared/change-verdict.js";
@@ -52,7 +54,13 @@ export type ChangeVerdictMutation = {
   readonly changeSetId: string;
   readonly from: string;
   readonly to: string;
-  readonly placeIds: ReadonlyArray<string>;
+  /**
+   * The places this decides, each with the content it is being decided over.
+   * The digest comes from the diff the reviewer is looking at, for the same
+   * reason the place id does: the record's job is to hold what was decided,
+   * not to re-derive the change in order to name it.
+   */
+  readonly places: ReadonlyArray<ChangeVerdictPlace>;
   /** The server's own clock, so a browser cannot backdate a verdict. */
   readonly decidedAt: string;
   /** The trusted boundary that created this mutation, never browser input. */
@@ -136,6 +144,20 @@ const placeId = (value: unknown): string => {
   return value;
 };
 
+// A content digest says what the reviewer decided over. It is optional at the
+// boundary because a surface that cannot say is honest to leave it out; what
+// it may not be is malformed, since a digest nothing minted would report a
+// live verdict as stale forever.
+const contentDigest = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !CONTENT_DIGEST.test(value)) {
+    throw new ChangeVerdictsRejected(
+      '"contentDigest" must be a hexadecimal digest',
+    );
+  }
+  return value;
+};
+
 const timestamp = ({
   value,
   field,
@@ -187,6 +209,7 @@ const outcome = (value: unknown): ChangeVerdictOutcome => {
 const verdict = (value: unknown): ChangeVerdict => {
   const candidate = record({ value, field: "verdict" });
   const decidedBy = actor(candidate.actor);
+  const decidedOver = contentDigest(candidate.contentDigest);
   return {
     changeSetId: changeSetId(candidate.changeSetId),
     from: digest({ value: candidate.from, field: "from" }),
@@ -198,6 +221,7 @@ const verdict = (value: unknown): ChangeVerdict => {
       field: "decidedAt",
     }),
     ...(decidedBy === undefined ? {} : { actor: decidedBy }),
+    ...(decidedOver === undefined ? {} : { contentDigest: decidedOver }),
   };
 };
 
@@ -254,17 +278,24 @@ export const validateChangeVerdictMutation = ({
       '"op" must be "accept", "reject" or "undo"',
     );
   }
-  if (!Array.isArray(candidate.placeIds) || candidate.placeIds.length === 0) {
-    throw new ChangeVerdictsRejected('"placeIds" must name a change');
+  if (!Array.isArray(candidate.places) || candidate.places.length === 0) {
+    throw new ChangeVerdictsRejected('"places" must name a change');
   }
-  if (candidate.placeIds.length > VERDICT_BATCH_LIMIT) {
+  if (candidate.places.length > VERDICT_BATCH_LIMIT) {
     throw new ChangeVerdictsRejected(
-      `"placeIds" names more than ${VERDICT_BATCH_LIMIT} changes`,
+      `"places" names more than ${VERDICT_BATCH_LIMIT} changes`,
     );
   }
-  const placeIds = candidate.placeIds.map(placeId);
-  if (new Set(placeIds).size !== placeIds.length) {
-    throw new ChangeVerdictsRejected('"placeIds" repeats a change');
+  const places = candidate.places.map((value): ChangeVerdictPlace => {
+    const entry = record({ value, field: "place" });
+    const decidedOver = contentDigest(entry.contentDigest);
+    return {
+      placeId: placeId(entry.placeId),
+      ...(decidedOver === undefined ? {} : { contentDigest: decidedOver }),
+    };
+  });
+  if (new Set(places.map((place) => place.placeId)).size !== places.length) {
+    throw new ChangeVerdictsRejected('"places" repeats a change');
   }
   if (
     candidate.onlyUndecided !== undefined &&
@@ -279,7 +310,7 @@ export const validateChangeVerdictMutation = ({
     changeSetId: changeSetId(candidate.changeSetId),
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
-    placeIds,
+    places,
     decidedAt: now,
     actor: "reviewer",
     ...(candidate.onlyUndecided === undefined
@@ -303,24 +334,24 @@ export const applyChangeVerdictMutation = ({
 }): StoredChangeVerdicts => {
   const revision = verdicts.revision + 1;
   const touched = new Set(
-    mutation.placeIds
+    mutation.places
       .filter(
-        (placeId) =>
+        (place) =>
           !mutation.onlyUndecided ||
           !verdicts.decided.some(
             (entry) =>
               entry.changeSetId === mutation.changeSetId &&
               entry.from === mutation.from &&
               entry.to === mutation.to &&
-              entry.placeId === placeId,
+              entry.placeId === place.placeId,
           ),
       )
-      .map((placeId) =>
+      .map((place) =>
         changeVerdictKey({
           changeSetId: mutation.changeSetId,
           from: mutation.from,
           to: mutation.to,
-          placeId,
+          placeId: place.placeId,
         }),
       ),
   );
@@ -337,25 +368,28 @@ export const applyChangeVerdictMutation = ({
   }
   const decided = [
     ...kept,
-    ...mutation.placeIds
-      .filter((placeId) =>
+    ...mutation.places
+      .filter((place) =>
         touched.has(
           changeVerdictKey({
             changeSetId: mutation.changeSetId,
             from: mutation.from,
             to: mutation.to,
-            placeId,
+            placeId: place.placeId,
           }),
         ),
       )
-      .map((placeId) => ({
+      .map((place) => ({
         changeSetId: mutation.changeSetId,
         from: mutation.from,
         to: mutation.to,
-        placeId,
+        placeId: place.placeId,
         verdict: recorded,
         decidedAt: mutation.decidedAt,
         actor: mutation.actor,
+        ...(place.contentDigest === undefined
+          ? {}
+          : { contentDigest: place.contentDigest }),
       })),
   ];
   if (decided.length > DECIDED_CHANGE_LIMIT) {

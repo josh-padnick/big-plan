@@ -569,6 +569,34 @@ const placeLabel = (locations: ReadonlyArray<SnapshotDiffLocation>): string => {
   return truncatedLabel(locations[0]?.label ?? "Change");
 };
 
+/**
+ * A digest of what one place actually shows, independent of the bounds it was
+ * minted under.
+ *
+ * A place id is deliberately bound to its revision, so it renames whenever the
+ * change set's span advances; that is what makes it a safe address and what
+ * makes it useless for asking "is this still the same change". This answers
+ * that question instead. It reads the words on both sides rather than the
+ * block ids, because a round that leaves a change alone leaves both sides of
+ * it identical while renaming everything around it.
+ */
+const contentDigest = (
+  locations: ReadonlyArray<SnapshotDiffLocation>,
+): string =>
+  createHash("sha256")
+    .update(
+      locations
+        .flatMap((location) => [
+          location.status,
+          location.kind,
+          location.oldText,
+          location.newText,
+        ])
+        .join("\u0000"),
+    )
+    .digest("hex")
+    .slice(0, 16);
+
 const placeId = ({
   from,
   to,
@@ -777,6 +805,7 @@ export const buildSnapshotDiff = ({
       ];
       return {
         placeId: placeId({ from, to, locations: groupedLocations }),
+        contentDigest: contentDigest(groupedLocations),
         status: statuses.size === 1 ? first.status : "changed",
         label: placeLabel(groupedLocations),
         section: first.section,

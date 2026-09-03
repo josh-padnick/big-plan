@@ -4,6 +4,7 @@
 import { isStoredCommentTarget, type ReviewComment } from "./comment.js";
 import {
   CHANGE_SET_ID,
+  CONTENT_DIGEST,
   PLACE_ID_LIMIT,
   SNAPSHOT_DIGEST,
   type ChangeVerdict,
@@ -243,6 +244,13 @@ export type DiffLocation = {
 
 export type DiffPlace = {
   readonly placeId: string;
+  /**
+   * What this place shows, independent of the revision it was minted under. A
+   * verdict carried onto a later round compares this with what it was decided
+   * over, which is how a change that moved again reads as re-opened rather
+   * than as one nobody has seen.
+   */
+  readonly contentDigest: string;
   readonly status: "changed" | "added" | "removed";
   readonly label: string;
   readonly section: string;
@@ -490,7 +498,10 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
       typeof entry.decidedAt === "string" &&
       (entry.actor === undefined ||
         entry.actor === "reviewer" ||
-        entry.actor === "auto-accept")
+        entry.actor === "auto-accept") &&
+      (entry.contentDigest === undefined ||
+        (typeof entry.contentDigest === "string" &&
+          CONTENT_DIGEST.test(entry.contentDigest)))
         ? [
             {
               changeSetId: entry.changeSetId,
@@ -500,6 +511,9 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
               verdict: entry.verdict,
               decidedAt: entry.decidedAt,
               ...(entry.actor === undefined ? {} : { actor: entry.actor }),
+              ...(typeof entry.contentDigest === "string"
+                ? { contentDigest: entry.contentDigest }
+                : {}),
             },
           ]
         : [],
@@ -1336,6 +1350,8 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
     if (
       !isReviewWireRecord(place) ||
       typeof place.placeId !== "string" ||
+      typeof place.contentDigest !== "string" ||
+      !CONTENT_DIGEST.test(place.contentDigest) ||
       (place.status !== "changed" &&
         place.status !== "added" &&
         place.status !== "removed") ||
@@ -1367,6 +1383,7 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
     return [
       {
         placeId: place.placeId,
+        contentDigest: place.contentDigest,
         status: place.status,
         label: place.label,
         section: place.section,

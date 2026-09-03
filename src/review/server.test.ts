@@ -1569,7 +1569,13 @@ Two workers drain the queue every two seconds.
       sessionToken,
       path: "/api/change-verdicts",
       method: "POST",
-      body: { op, changeSetId, from: FROM, to: TO, placeIds },
+      body: {
+        op,
+        changeSetId,
+        from: FROM,
+        to: TO,
+        places: placeIds.map((placeId) => ({ placeId })),
+      },
     });
 
   const placeFor = (

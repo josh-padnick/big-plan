@@ -29,7 +29,9 @@ import {
   acceptedChangeKeys,
   changeVerdictBatches,
   changeVerdictKey,
+  decidedContentDigests,
   rejectedChangeKeys,
+  type ChangeVerdictPlace,
   type ChangeVerdictScope,
   type ChangeVerdictState,
 } from "../shared/change-verdict.js";
@@ -77,7 +79,7 @@ export const PLAN_SOURCE_MOVED_EVENT = "bigplan:plan-source-moved";
 /** One gesture on its way to the record. */
 export type PendingVerdict = ChangeVerdictScope & {
   readonly op: "accept" | "reject" | "undo";
-  readonly placeIds: ReadonlyArray<string>;
+  readonly places: ReadonlyArray<ChangeVerdictPlace>;
   readonly onlyUndecided?: boolean;
   /**
    * Whether recording this gesture rewrites the plan source. Rejecting does,
@@ -99,6 +101,18 @@ export type ChangeVerdictsValue = {
   readonly rejected: ReadonlySet<string>;
   /** Stored acceptances made by the session's auto-accept mode. */
   readonly autoAccepted: ReadonlySet<string>;
+  /**
+   * What each decided address was decided over, so a surface holding the diff
+   * can tell a verdict that still applies from one the content moved out from
+   * under.
+   */
+  readonly decidedDigests: ReadonlyMap<string, string>;
+  /**
+   * True while a gesture is still on its way to the record. A change set that
+   * advanced mid-gesture waits for this to clear before the page re-derives
+   * it, so a reviewer is never moved off the change they are deciding.
+   */
+  readonly isRecording: boolean;
   /** False while the runtime has told this page it may not record anything. */
   readonly canRecord: boolean;
   /**
@@ -131,12 +145,12 @@ const overlay = ({
     op === "accept" ? acceptedChangeKeys(stored) : rejectedChangeKeys(stored),
   );
   for (const mutation of pending) {
-    for (const placeId of mutation.placeIds) {
+    for (const place of mutation.places) {
       const key = changeVerdictKey({
         changeSetId: mutation.changeSetId,
         from: mutation.from,
         to: mutation.to,
-        placeId,
+        placeId: place.placeId,
       });
       if (mutation.op === op) keys.add(key);
       else keys.delete(key);
@@ -227,7 +241,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
                 changeSetId: head.changeSetId,
                 from: head.from,
                 to: head.to,
-                placeIds: head.placeIds,
+                places: head.places,
               },
             }),
           );
@@ -283,12 +297,12 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
 
   const recordChangeVerdicts = useCallback(
     (input: PendingVerdict): Promise<VerdictWriteResult> => {
-      if (input.placeIds.length === 0) return Promise.resolve("recorded");
+      if (input.places.length === 0) return Promise.resolve("recorded");
       // One gesture can name more places than a single mutation may carry, so
       // it is queued as successive batches. The overlay reads the whole queue,
       // so every place stays shown while its own batch is still in flight, and
       // a refusal takes back only the batch the runtime refused.
-      const batches = changeVerdictBatches(input.placeIds);
+      const batches = changeVerdictBatches(input.places);
       // The gesture is one answer to its caller even though it is several
       // writes, so it settles when the last of its batches has left the queue.
       let outstanding = batches.length;
@@ -304,12 +318,12 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
       };
       queue.current = [
         ...queue.current,
-        ...batches.map((placeIds) => ({
+        ...batches.map((places) => ({
           op: input.op,
           changeSetId: input.changeSetId,
           from: input.from,
           to: input.to,
-          placeIds,
+          places,
           settle,
           ...(input.movesPlanSource === undefined
             ? {}
@@ -405,6 +419,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
       ),
     [stored],
   );
+  const decidedDigests = useMemo(() => decidedContentDigests(stored), [stored]);
   const refresh = useCallback(
     () => setRefreshVersion((value) => value + 1),
     [],
@@ -414,6 +429,8 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
       accepted,
       rejected,
       autoAccepted,
+      decidedDigests,
+      isRecording: pending.length > 0,
       canRecord,
       recordChangeVerdicts,
       refresh,
@@ -422,6 +439,8 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
       accepted,
       autoAccepted,
       canRecord,
+      decidedDigests,
+      pending.length,
       recordChangeVerdicts,
       refresh,
       rejected,

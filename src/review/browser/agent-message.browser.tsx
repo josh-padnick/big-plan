@@ -589,6 +589,7 @@ export const AgentChangeDigest = ({
     activeChangeSetId,
     activeIsSuperseded,
     activePlaceId,
+    isRecordingVerdict,
     isPlaceAccepted,
     dispositionOf,
     standingOf,
@@ -654,7 +655,13 @@ export const AgentChangeDigest = ({
     // stands rather than the round it opened on. It stays on the change the
     // reviewer was reading: the round renamed every place, so the change is
     // found again by the block it is about rather than by its id.
-    if (!isBehind || diff === null) return;
+    //
+    // Not while their hand is still on it, though. A verdict on its way to the
+    // record was given for the round in view, and swapping the set underneath
+    // it would move the reviewer off the change they were answering and leave
+    // the answer addressed to a span nothing shows. The effect re-runs when
+    // the write lands, so the set is handed over on the next idle instead.
+    if (!isBehind || isRecordingVerdict || diff === null) return;
     const startPlaceId = advancedTourPlaceId({
       activeDiff,
       activePlaceId,
@@ -679,6 +686,7 @@ export const AgentChangeDigest = ({
     changeSetId,
     diff,
     isBehind,
+    isRecordingVerdict,
     isSuperseded,
     isPremiseView,
     chatThreadId,
@@ -710,10 +718,7 @@ export const AgentChangeDigest = ({
   const scope = { changeSetId, from: diff.from, to: diff.to };
   // The digest and the stepper reviewing this same set both ask the selector,
   // so the two can never disagree about how much is still open.
-  const standing = standingOf(
-    scope,
-    available.map((place) => place.placeId),
-  );
+  const standing = standingOf(scope, available);
   const allAccepted = standing.isAccepted;
   // A rejected change is decided, so it counts towards the set being finished
   // while staying separate from what was kept: reporting a set with rejections
@@ -823,7 +828,7 @@ export const AgentChangeDigest = ({
                   <span className="min-w-0 [overflow-wrap:anywhere]">
                     {entry.label}
                   </span>
-                  {isPlaceAccepted(scope, entry.placeId) ? (
+                  {isPlaceAccepted(scope, entry) ? (
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-accent [&>svg]:size-3.5"
                       aria-label="Accepted"
@@ -831,7 +836,7 @@ export const AgentChangeDigest = ({
                     >
                       <Icon icon={CHECK_ICON} />
                     </span>
-                  ) : dispositionOf(scope, entry.placeId) === "rejected" ? (
+                  ) : dispositionOf(scope, entry) === "rejected" ? (
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-danger [&>svg]:size-3.5"
                       aria-label="Rejected"
@@ -839,6 +844,19 @@ export const AgentChangeDigest = ({
                     >
                       <Icon icon={X_ICON} />
                     </span>
+                  ) : dispositionOf(scope, entry) === "stale" ? (
+                    // A change the reviewer already decided, which the agent
+                    // then changed again. It is owed an answer like any open
+                    // change; what the badge adds is that they have seen it
+                    // before, so they are not asked to treat it as new work.
+                    <Badge
+                      className="row-span-2 self-center"
+                      size="status"
+                      tone="statusNeutral"
+                      data-review-place-verdict="stale"
+                    >
+                      Changed again
+                    </Badge>
                   ) : null}
                   <em className="col-start-1 text-2xs font-normal text-muted capitalize">
                     {entry.note}
@@ -872,6 +890,12 @@ export const AgentChangeDigest = ({
             </ul>
           )}
         </div>
+      )}
+      {standing.stale === 0 ? null : (
+        <p className="m-0 text-2xs text-muted" data-review-changes-stale="">
+          {standing.stale} change{standing.stale === 1 ? "" : "s"} you decided
+          changed again in a later round
+        </p>
       )}
       {allAccepted ? (
         <p

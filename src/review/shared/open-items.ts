@@ -234,7 +234,12 @@ export const deriveOpenItems = ({
       changeSetId: changeSet.id,
       from: changeSet.from,
       to: changeSet.to,
-      placeIds: changeSet.placeIds,
+      // The approve dialog counts what is owed, not what the reviewer is
+      // looking at, and a stale place is owed exactly as an undecided one is.
+      // It therefore counts places without the content digests that would tell
+      // the two apart, and leaves that distinction to the surfaces showing the
+      // change.
+      places: changeSet.placeIds.map((placeId) => ({ placeId })),
       accepted,
       rejected,
     }),

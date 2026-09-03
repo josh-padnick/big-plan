@@ -778,6 +778,7 @@ describe("review wire contract", () => {
       places: [
         {
           placeId: "c".repeat(16),
+          contentDigest: "d".repeat(16),
           status: "changed",
           label: "Retry dashboard",
           section: "System shape",

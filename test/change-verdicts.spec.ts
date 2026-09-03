@@ -342,21 +342,29 @@ test("should show a rejected change and let the reviewer undo it", async ({
       } = await (await fetch("api/change-sets", { headers })).json();
       const set = sets.changeSets[0];
       if (set === undefined) return false;
-      const diff: { readonly places: ReadonlyArray<{ placeId: string }> } =
-        await (
-          await fetch(
-            `api/snapshot-diff?from=${set.baseSnapshot}&to=${set.resultSnapshot}`,
-            { headers },
-          )
-        ).json();
+      const diff: {
+        readonly places: ReadonlyArray<{
+          placeId: string;
+          contentDigest: string;
+        }>;
+      } = await (
+        await fetch(
+          `api/snapshot-diff?from=${set.baseSnapshot}&to=${set.resultSnapshot}`,
+          { headers },
+        )
+      ).json();
       const response = await fetch("api/change-verdicts", {
         method: "POST",
         headers: { ...headers, "content-type": "application/json" },
         body: JSON.stringify({
           op: "reject",
+          changeSetId: set.changeSetId,
           from: set.baseSnapshot,
           to: set.resultSnapshot,
-          placeIds: diff.places.map((place) => place.placeId),
+          places: diff.places.map((place) => ({
+            placeId: place.placeId,
+            contentDigest: place.contentDigest,
+          })),
         }),
       });
       return response.ok;

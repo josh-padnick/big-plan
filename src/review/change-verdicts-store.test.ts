@@ -61,7 +61,13 @@ const mutate = (
   changeSetId = SET,
 ) =>
   validateChangeVerdictMutation({
-    value: { op, changeSetId, from: FROM, to, placeIds },
+    value: {
+      op,
+      changeSetId,
+      from: FROM,
+      to,
+      places: placeIds.map((placeId) => ({ placeId })),
+    },
     now: NOW,
   });
 
@@ -160,7 +166,7 @@ describe("validateChangeVerdictMutation", () => {
         changeSetId: SET,
         from: FROM,
         to: TO,
-        placeIds: ["p1"],
+        places: [{ placeId: "p1" }],
         decidedAt: "1999-01-01T00:00:00.000Z",
         actor: "auto-accept",
       },
@@ -179,7 +185,13 @@ describe("validateChangeVerdictMutation", () => {
   it("refuses an unknown operation", () => {
     expect(() =>
       validateChangeVerdictMutation({
-        value: { op: "withdraw", from: FROM, to: TO, placeIds: ["p1"] },
+        value: {
+          op: "withdraw",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [{ placeId: "p1" }],
+        },
         now: NOW,
       }),
     ).toThrow(/"accept", "reject" or "undo"/u);
@@ -195,17 +207,23 @@ describe("validateChangeVerdictMutation", () => {
           changeSetId: SET,
           from: FROM,
           to: TO,
-          placeIds: [" p1 "],
+          places: [{ placeId: " p1 " }],
         },
         now: NOW,
-      }).placeIds,
-    ).toEqual([" p1 "]);
+      }).places,
+    ).toEqual([{ placeId: " p1 " }]);
   });
 
   it("refuses a place id that is only whitespace", () => {
     expect(() =>
       validateChangeVerdictMutation({
-        value: { op: "accept", from: FROM, to: TO, placeIds: ["   "] },
+        value: {
+          op: "accept",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [{ placeId: "   " }],
+        },
         now: NOW,
       }),
     ).toThrow(/non-empty text/u);
@@ -224,7 +242,7 @@ describe("validateChangeVerdictMutation", () => {
             ...(changeSetId === undefined ? {} : { changeSetId }),
             from: FROM,
             to: TO,
-            placeIds: ["p1"],
+            places: [{ placeId: "p1" }],
           },
           now: NOW,
         }),
@@ -235,7 +253,13 @@ describe("validateChangeVerdictMutation", () => {
   it("refuses a mutation that names no change", () => {
     expect(() =>
       validateChangeVerdictMutation({
-        value: { op: "accept", from: FROM, to: TO, placeIds: [] },
+        value: {
+          op: "accept",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [],
+        },
         now: NOW,
       }),
     ).toThrow(/must name a change/u);
@@ -246,11 +270,12 @@ describe("validateChangeVerdictMutation", () => {
       validateChangeVerdictMutation({
         value: {
           op: "accept",
+          changeSetId: SET,
           from: FROM,
           to: TO,
-          placeIds: Array.from(
+          places: Array.from(
             { length: VERDICT_BATCH_LIMIT + 1 },
-            (_, index) => `p${index}`,
+            (_, index) => ({ placeId: `p${index}` }),
           ),
         },
         now: NOW,
@@ -261,7 +286,13 @@ describe("validateChangeVerdictMutation", () => {
   it("refuses a batch that repeats one change", () => {
     expect(() =>
       validateChangeVerdictMutation({
-        value: { op: "accept", from: FROM, to: TO, placeIds: ["p1", "p1"] },
+        value: {
+          op: "accept",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [{ placeId: "p1" }, { placeId: "p1" }],
+        },
         now: NOW,
       }),
     ).toThrow(/repeats a change/u);
@@ -276,7 +307,14 @@ describe("validateChangeVerdictMutation", () => {
     ({ op, onlyUndecided }) => {
       expect(() =>
         validateChangeVerdictMutation({
-          value: { op, from: FROM, to: TO, placeIds: ["p1"], onlyUndecided },
+          value: {
+            op,
+            changeSetId: SET,
+            from: FROM,
+            to: TO,
+            places: [{ placeId: "p1" }],
+            onlyUndecided,
+          },
           now: NOW,
         }),
       ).toThrow(/may only be true for an "accept" mutation/u);

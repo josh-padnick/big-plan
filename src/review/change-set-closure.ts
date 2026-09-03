@@ -24,6 +24,7 @@ import {
   changeVerdictBatches,
   changeVerdictKey,
   rejectedChangeKeys,
+  type ChangeVerdictPlace,
 } from "./shared/change-verdict.js";
 
 export type ChangeSetTransaction = {
@@ -34,7 +35,7 @@ export type ChangeSetTransaction = {
 };
 
 export type ChangeSetClosure = ChangeSetTransaction & {
-  readonly placeIds: ReadonlyArray<string>;
+  readonly places: ReadonlyArray<ChangeVerdictPlace>;
 };
 
 export type AcceptedOpenPlaces = {
@@ -126,8 +127,15 @@ const closuresFor = async ({
         changeSetId,
         from,
         to,
-        placeIds:
-          diff === undefined ? [] : diff.places.map((place) => place.placeId),
+        // The closure records what it closed over as well as which place, so a
+        // later round can tell a change it left alone from one it rewrote.
+        places:
+          diff === undefined
+            ? []
+            : diff.places.map((place) => ({
+                placeId: place.placeId,
+                contentDigest: place.contentDigest,
+              })),
       };
     }),
   );
@@ -164,12 +172,12 @@ export const acceptOpenPlaces = async ({
       const accepted = new Set(acceptedChangeKeys(current));
       const rejected = rejectedChangeKeys(current);
       for (const closure of closures) {
-        const open = closure.placeIds.filter((placeId) => {
+        const open = closure.places.filter((place) => {
           const key = changeVerdictKey({
             changeSetId: closure.changeSetId,
             from: closure.from,
             to: closure.to,
-            placeId,
+            placeId: place.placeId,
           });
           return !accepted.has(key) && !rejected.has(key);
         });
@@ -181,18 +189,18 @@ export const acceptOpenPlaces = async ({
               changeSetId: closure.changeSetId,
               from: closure.from,
               to: closure.to,
-              placeIds: batch,
+              places: batch,
               decidedAt,
               actor: "auto-accept",
             },
           });
-          for (const placeId of batch) {
+          for (const place of batch) {
             accepted.add(
               changeVerdictKey({
                 changeSetId: closure.changeSetId,
                 from: closure.from,
                 to: closure.to,
-                placeId,
+                placeId: place.placeId,
               }),
             );
           }

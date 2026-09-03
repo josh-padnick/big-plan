@@ -46,6 +46,7 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   changeVerdictKey,
+  type ChangeVerdictPlace,
   type ChangeVerdictScope,
 } from "../shared/change-verdict.js";
 import {
@@ -1127,13 +1128,13 @@ const useThreadDeleteLoss = ({
   readonly to: string | undefined;
   readonly dispositionOf: (
     scope: ChangeVerdictScope,
-    placeId: string,
+    place: ChangeVerdictPlace,
   ) => string;
   readonly active: boolean;
 }): {
   readonly diff: SnapshotDiff | null;
   readonly loadError: boolean;
-  readonly undecidedPlaceIds: ReadonlyArray<string>;
+  readonly undecidedPlaces: ReadonlyArray<ChangeVerdictPlace>;
   readonly slides: ReadonlyArray<PlanSlideLoss> | undefined;
 } => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
@@ -1166,31 +1167,32 @@ const useThreadDeleteLoss = ({
       setLoadError(false);
     }
   }, [active]);
-  const undecidedPlaceIds = useMemo(
+  const undecidedPlaces = useMemo(
     () =>
       diff === null || changeSetId === undefined
         ? []
-        : diff.places
-            .filter(
-              (place) =>
-                dispositionOf(
-                  { changeSetId, from: diff.from, to: diff.to },
-                  place.placeId,
-                ) === "undecided",
-            )
-            .map((place) => place.placeId),
+        : diff.places.filter(
+            (place) =>
+              dispositionOf(
+                { changeSetId, from: diff.from, to: diff.to },
+                place,
+              ) === "undecided",
+          ),
     [changeSetId, diff, dispositionOf],
   );
   return {
     diff,
     loadError,
-    undecidedPlaceIds,
+    undecidedPlaces,
     slides: useMemo(
       () =>
         diff === null
           ? undefined
-          : projectPlanLoss({ diff, placeIds: undecidedPlaceIds }),
-      [diff, undecidedPlaceIds],
+          : projectPlanLoss({
+              diff,
+              placeIds: undecidedPlaces.map((place) => place.placeId),
+            }),
+      [diff, undecidedPlaces],
     ),
   };
 };
@@ -7457,12 +7459,12 @@ export const ReviewController = () => {
    * exactly why they stay.
    */
   const deleteThread = async (commentId: string) => {
-    const { diff, undecidedPlaceIds } = threadDelete;
+    const { diff, undecidedPlaces } = threadDelete;
     if (diff === null) return;
     // The confirmation is answered, so it comes down before the two writes it
     // authorized rather than sitting there looking like a dead button.
     setPendingDelete(null);
-    if (undecidedPlaceIds.length > 0) {
+    if (undecidedPlaces.length > 0) {
       setStatus("Rejecting the changes this thread left undecided…");
       // The stepper is narrating this change set, and both its content and its
       // thread are about to go.
@@ -7471,7 +7473,7 @@ export const ReviewController = () => {
         // The rejections are this thread's own, so they are recorded against
         // its change set rather than against whatever else shares the bounds.
         { changeSetId: commentId, from: diff.from, to: diff.to },
-        undecidedPlaceIds,
+        undecidedPlaces,
         "rejected",
         {
           onlyUndecided: true,
@@ -8192,16 +8194,17 @@ export const ReviewController = () => {
       for (const changeSet of sets) {
         const diff = changeSetDiffs.get(changeSet.changeSetId);
         if (diff === undefined) continue;
-        const placeIds = diff.places.map((place) => place.placeId);
         const scope = {
           changeSetId: changeSet.changeSetId,
           from: diff.from,
           to: diff.to,
         };
-        if (!standingOf(scope, placeIds).isAccepted) allClosed = false;
+        if (!standingOf(scope, diff.places).isAccepted) allClosed = false;
         if (
-          placeIds.some((placeId) =>
-            autoAccepted.has(changeVerdictKey({ ...scope, placeId })),
+          diff.places.some((place) =>
+            autoAccepted.has(
+              changeVerdictKey({ ...scope, placeId: place.placeId }),
+            ),
           )
         ) {
           hasModeVerdict = true;
@@ -8245,7 +8248,7 @@ export const ReviewController = () => {
             from: diff.from,
             to: diff.to,
           },
-          diff.places.map((place) => place.placeId),
+          diff.places,
         ).open;
       }
     }

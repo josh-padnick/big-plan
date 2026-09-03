@@ -222,7 +222,7 @@ describe("resolving a thread", () => {
           changeSetId: THREAD,
           from,
           to,
-          placeIds: [rejected],
+          places: [{ placeId: rejected }],
         },
       });
       expect(rejection.status).toBe(200);
@@ -235,7 +235,7 @@ describe("resolving a thread", () => {
           changeSetId: THREAD,
           from,
           to,
-          placeIds: [accepted],
+          places: [{ placeId: accepted }],
         },
       });
       expect(acceptance.status).toBe(200);
@@ -295,7 +295,7 @@ describe("resolving a thread", () => {
           changeSetId: THREAD,
           from,
           to,
-          placeIds: places,
+          places: places.map((placeId) => ({ placeId })),
           accepted: acceptedChangeKeys(verdicts),
           rejected: rejectedChangeKeys(verdicts),
         }),

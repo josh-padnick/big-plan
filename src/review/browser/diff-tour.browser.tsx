@@ -23,11 +23,12 @@ import { BAN_ICON } from "../../icons/lucide/ban.js";
 import { CIRCLE_CHECK_ICON } from "../../icons/lucide/circle-check.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
-import type { SnapshotDiff } from "../shared/review-wire.js";
+import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
 import {
   changeDispositionOf,
   changeSetStanding,
   type ChangeDisposition,
+  type ChangeVerdictPlace,
   type ChangeVerdictScope,
   type ChangeSetStanding,
 } from "../shared/change-verdict.js";
@@ -109,7 +110,7 @@ type DiffTourValue = {
   readonly activePlaceId: string | null;
   readonly isPlaceAccepted: (
     scope: ChangeVerdictScope,
-    placeId: string,
+    place: ChangeVerdictPlace,
   ) => boolean;
   /**
    * What the review has decided about one place. Every surface that presents a
@@ -119,12 +120,12 @@ type DiffTourValue = {
    */
   readonly dispositionOf: (
     scope: ChangeVerdictScope,
-    placeId: string,
+    place: ChangeVerdictPlace,
   ) => ChangeDisposition;
   /** How much of one change set is closed, from the one selector that decides. */
   readonly standingOf: (
     scope: ChangeVerdictScope,
-    placeIds: ReadonlyArray<string>,
+    places: ReadonlyArray<ChangeVerdictPlace>,
   ) => ChangeSetStanding;
   /**
    * Records one verdict over the named places, or takes back whatever verdict
@@ -134,7 +135,7 @@ type DiffTourValue = {
    */
   readonly setPlacesDecided: (
     scope: ChangeVerdictScope,
-    placeIds: ReadonlyArray<string>,
+    places: ReadonlyArray<ChangeVerdictPlace>,
     verdict: "accepted" | "rejected" | undefined,
     options?: { readonly onlyUndecided: boolean },
   ) => Promise<VerdictWriteResult>;
@@ -142,6 +143,11 @@ type DiffTourValue = {
   readonly canRecordAcceptance: boolean;
   /** Keys closed specifically by the session's auto-accept mode. */
   readonly autoAccepted: ReadonlySet<string>;
+  /**
+   * True while a verdict is still on its way to the record, which is what
+   * holds a change set's re-derivation until the reviewer's hand is off it.
+   */
+  readonly isRecordingVerdict: boolean;
   /** Re-read verdicts after arming auto-accept closes the current thread. */
   readonly refreshVerdicts: () => void;
   readonly openTour: (tour: OpenTour) => void;
@@ -236,6 +242,8 @@ export const DiffTourProvider = ({
     accepted,
     rejected,
     autoAccepted,
+    decidedDigests,
+    isRecording,
     canRecord,
     recordChangeVerdicts,
     refresh,
@@ -305,41 +313,47 @@ export const DiffTourProvider = ({
     // what let one thread's acceptance close the other's work.
     const dispositionOf = (
       scope: ChangeVerdictScope,
-      placeId: string,
+      place: ChangeVerdictPlace,
     ): ChangeDisposition =>
       changeDispositionOf({
-        address: { ...scope, placeId },
+        address: { ...scope, placeId: place.placeId },
         accepted,
         rejected,
+        decidedDigests,
+        ...(place.contentDigest === undefined
+          ? {}
+          : { contentDigest: place.contentDigest }),
       });
     const isPlaceAccepted = (
       scope: ChangeVerdictScope,
-      placeId: string,
-    ): boolean => dispositionOf(scope, placeId) === "accepted";
+      place: ChangeVerdictPlace,
+    ): boolean => dispositionOf(scope, place) === "accepted";
     return {
       isPlaceAccepted,
       dispositionOf,
       standingOf: (
         scope: ChangeVerdictScope,
-        placeIds: ReadonlyArray<string>,
+        places: ReadonlyArray<ChangeVerdictPlace>,
       ): ChangeSetStanding =>
         changeSetStanding({
           ...scope,
-          placeIds,
+          places,
           accepted,
           rejected,
+          decidedDigests,
         }),
       setPlacesDecided: (
         scope: ChangeVerdictScope,
-        placeIds: ReadonlyArray<string>,
+        places: ReadonlyArray<ChangeVerdictPlace>,
         verdict: "accepted" | "rejected" | undefined,
         options?: { readonly onlyUndecided: boolean },
       ): Promise<VerdictWriteResult> => {
         // A gesture that would record what the store already holds is not a
-        // write; sending one would advance the revision for nothing.
-        const changing = placeIds.filter(
-          (placeId) =>
-            dispositionOf(scope, placeId) !== (verdict ?? "undecided"),
+        // write; sending one would advance the revision for nothing. A stale
+        // verdict is not what the store holds for this content, so re-deciding
+        // one is a real write even where the answer is the same word.
+        const changing = places.filter(
+          (place) => dispositionOf(scope, place) !== (verdict ?? "undecided"),
         );
         // Only two of the four gestures move bytes: rejecting takes a change
         // back out of the plan, and undoing a rejection puts it back. The
@@ -359,13 +373,13 @@ export const DiffTourProvider = ({
                 ? "reject"
                 : "undo",
           ...scope,
-          placeIds: changing,
+          places: changing,
           movesPlanSource,
           ...(options === undefined ? {} : options),
         });
       },
     };
-  }, [accepted, recordChangeVerdicts, rejected]);
+  }, [accepted, decidedDigests, recordChangeVerdicts, rejected]);
   const { dispositionOf, standingOf, setPlacesDecided } = tourValue;
   // Replacing only the conversation leaves every other thing the tour is
   // holding - which change, which verdict, where the reader is - untouched.
@@ -468,6 +482,7 @@ export const DiffTourProvider = ({
       activePlaceId: active?.placeId ?? null,
       canRecordAcceptance: canRecord,
       autoAccepted,
+      isRecordingVerdict: isRecording,
       refreshVerdicts: refresh,
       ...tourValue,
       openTour,
@@ -480,6 +495,7 @@ export const DiffTourProvider = ({
       activeChangeBlockId,
       autoAccepted,
       canRecord,
+      isRecording,
       refresh,
       tourValue,
       tour,
@@ -498,7 +514,7 @@ export const DiffTourProvider = ({
   const activeDisposition =
     tourScope === null || active === undefined
       ? null
-      : dispositionOf(tourScope, active.placeId);
+      : dispositionOf(tourScope, active);
   const isActiveAccepted = activeDisposition === "accepted";
   const isActiveRejected = activeDisposition === "rejected";
   // Whether the current change is one the reviewer has already answered. A
@@ -510,15 +526,15 @@ export const DiffTourProvider = ({
   const isPremiseView = tour?.isPremiseView === true;
   const isActiveDecided =
     !isPremiseView && (isActiveAccepted || isActiveRejected);
+  // A change this reviewer already decided, which a later round then changed.
+  // It is owed an answer again, so it reads as open here; the badge is what
+  // keeps it from arriving as work they have never seen.
+  const isActiveStale = activeDisposition === "stale";
   const isShowingActiveChanges =
     active !== undefined && shownChangesPlaceId === active.placeId;
-  const standing =
-    tourScope === null
-      ? null
-      : standingOf(
-          tourScope,
-          places.map((place) => place.placeId),
-        );
+  // The evidence a rejected change no longer shows is reachable from the
+  // decided bar, so nothing clears the reader's ask here any more.
+  const standing = tourScope === null ? null : standingOf(tourScope, places);
   const allDecided = standing?.isSettled === true;
   const openCount = standing?.open ?? 0;
   useEffect(() => {
@@ -536,16 +552,16 @@ export const DiffTourProvider = ({
   }, [isChatOpen]);
 
   /** The places in this set nobody has decided, in document order. */
-  const undecidedPlaceIds = (): ReadonlyArray<string> =>
+  // The places, not just their ids: a verdict is recorded over the content it
+  // was given for, so what is decided has to carry that content with it.
+  const undecidedPlaces = (): ReadonlyArray<DiffPlace> =>
     tour === null
       ? []
-      : places
-          .filter(
-            (place) =>
-              tourScope !== null &&
-              dispositionOf(tourScope, place.placeId) === "undecided",
-          )
-          .map((place) => place.placeId);
+      : places.filter(
+          (place) =>
+            tourScope !== null &&
+            dispositionOf(tourScope, place) === "undecided",
+        );
 
   /** Takes back whatever verdict the current change holds. */
   const undoActivePlace = (): void => {
@@ -556,7 +572,7 @@ export const DiffTourProvider = ({
     // they can decide.
     setShownChangesPlaceId(null);
     setRevealCount((count) => count + 1);
-    void setPlacesDecided(tourScope, [active.placeId], undefined);
+    void setPlacesDecided(tourScope, [active], undefined);
   };
 
   /** Answers the current change and advances to the next open decision. */
@@ -571,12 +587,14 @@ export const DiffTourProvider = ({
     // reviewer this drawer is about the one change in front of them. Answering
     // that change ends what the drawer was for, so it closes with the answer.
     setIsChatOpen(false);
-    void setPlacesDecided(tourScope, [active.placeId], verdict);
-    const nextIndex = places.findIndex(
-      (place, placeIndex) =>
-        placeIndex > index &&
-        dispositionOf(tourScope, place.placeId) === "undecided",
-    );
+    void setPlacesDecided(tourScope, [active], verdict);
+    // A stale place is owed an answer again, so the stepper advances onto it
+    // exactly as it does onto one nobody has decided.
+    const nextIndex = places.findIndex((place, placeIndex) => {
+      if (placeIndex <= index) return false;
+      const disposition = dispositionOf(tourScope, place);
+      return disposition === "undecided" || disposition === "stale";
+    });
     if (nextIndex >= 0) {
       setIndex(nextIndex);
     }
@@ -585,7 +603,7 @@ export const DiffTourProvider = ({
   /** Records one verdict over everything in the set nobody has decided yet. */
   const decideEveryOpenPlace = (verdict: "accepted" | "rejected"): void => {
     if (tourScope === null) return;
-    const undecided = undecidedPlaceIds();
+    const undecided = undecidedPlaces();
     if (undecided.length === 0) return;
     setShownChangesPlaceId(null);
     void setPlacesDecided(tourScope, undecided, verdict, {
@@ -819,6 +837,15 @@ export const DiffTourProvider = ({
                     </>
                   ) : (
                     <>
+                      {isActiveStale ? (
+                        <Badge
+                          tone="statusNeutral"
+                          size="status"
+                          data-review-place-verdict="stale"
+                        >
+                          Changed again since you decided it
+                        </Badge>
+                      ) : null}
                       <Button
                         variant="outline"
                         size="micro"
@@ -839,7 +866,9 @@ export const DiffTourProvider = ({
                         disabled={!canRecord}
                         aria-label={
                           canRecord
-                            ? "Accept this change"
+                            ? isActiveStale
+                              ? "Accept this change again"
+                              : "Accept this change"
                             : UNRECORDABLE_ACCEPTANCE_LABEL
                         }
                         onClick={() => decideActivePlace("accepted")}

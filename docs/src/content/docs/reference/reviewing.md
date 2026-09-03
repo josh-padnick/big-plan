@@ -479,8 +479,14 @@ A rejected place instead restores that change to the thread's baseline bytes. Th
 **Undo** removes either verdict, returns the place to undecided, and allows it to be accepted or rejected next.
 When the changed content no longer exists in the current plan, or the plan has moved beyond the reviewed revision, Big Plan keeps the archived comparison as the only surviving evidence.
 Verdicts are recorded with the review, so they survive a reload and a runtime restart, and every place they are counted - the change digest on the agent's message and the navigator touring that same set - reports the same standing. The page polls the record so verdicts written elsewhere, including acceptances that do not move plan bytes, appear without waiting for another plan revision.
-Verdicts are recorded against the change set that proposed the work and the two snapshots it compares, so a later revision arrives as its own set to review rather than inheriting what you already decided, and a decision in one thread never closes another thread's change set.
+Verdicts are recorded against the change set that proposed the work and the two snapshots it compares, so a decision in one thread never closes another thread's change set.
 Two threads answered by one revision keep separate review stops even where their changes sit side by side, and each thread's change digest names the other change sets whose work its comparison also carries rather than only counting them.
+
+When the thread replies again, its change set grows to cover the new round and your decisions come with it.
+A change the round left alone keeps the verdict you gave it.
+A change the round rewrote is marked **Changed again** and asks for a decision a second time, so what re-opens is only what actually moved, and it arrives as work you have seen rather than as something new.
+Restoring the earlier wording restores the verdict you gave it.
+Big Plan does not swap a change set underneath a decision you are still making: while a verdict is on its way to the record, the new round waits and is applied once that write lands.
 A page that cannot record review state, such as a read-only review session or a standalone rendered document, disables its verdict controls and says why.
 If Big Plan cannot reach the runtime while reading recorded verdicts, it warns that the page may show an incomplete count and keeps retrying.
 If recording a verdict fails, Big Plan says it is not saved yet and keeps retrying; keep the review open until the change set reports the decision.

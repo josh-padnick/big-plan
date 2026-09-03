@@ -92,7 +92,7 @@ describe("recordChangeVerdicts", () => {
         changeSetId: CHANGE_SET_ID,
         from,
         to,
-        placeIds: [placeId],
+        places: [placeId].map((placeId) => ({ placeId })),
       },
     });
 
@@ -170,7 +170,7 @@ describe("recordChangeVerdicts", () => {
                 changeSetId: CHANGE_SET_ID,
                 from,
                 to,
-                placeIds: [placeId],
+                places: [placeId].map((placeId) => ({ placeId })),
                 decidedAt: "2026-09-02T12:01:00.000Z",
                 actor: "auto-accept",
               },
@@ -191,7 +191,7 @@ describe("recordChangeVerdicts", () => {
         changeSetId: CHANGE_SET_ID,
         from,
         to,
-        placeIds: [placeId],
+        places: [placeId].map((placeId) => ({ placeId })),
       },
     });
 
@@ -278,7 +278,7 @@ describe("recordChangeVerdicts", () => {
         changeSetId: CHANGE_SET_ID,
         from,
         to,
-        placeIds: [acceptedPlace, undecidedPlace],
+        places: [acceptedPlace, undecidedPlace].map((placeId) => ({ placeId })),
       },
     });
 
