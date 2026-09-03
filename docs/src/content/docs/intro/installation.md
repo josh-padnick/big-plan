@@ -1,19 +1,13 @@
 ---
 title: Install Big Plan
-description: Get the Big Plan CLI running, prove it runs, and know what to do when it does not.
+description: Get the Big Plan CLI running, either by asking your agent or by running it yourself.
 ---
-
-**Goal.** A working `big-plan` you can run, and a rendered plan open in your browser to prove
-it.
 
 ## Before you start
 
-- **Node.js 22 or newer.** Check with `node --version`. The published package runs under plain
-  Node.js, so Bun is not required.
-- Nothing else. There is no account, no service to sign up for, and no global install unless
-  you want one.
+Node.js 22 or newer. No account, no service, no global install.
 
-## The fastest install is the one you don't do yourself
+## Install it with your agent
 
 Copy this prompt into your coding agent:
 
@@ -28,7 +22,7 @@ rule to your project's agent instructions so every future session keeps it.
 Authoring principles stay in `big-plan guidance`, so package upgrades refresh them without
 hand-editing skill files.
 
-## Or install it yourself
+## Install it manually
 
 Run it with no install at all:
 
@@ -67,22 +61,8 @@ npx -y big-plan@latest guidance
 npx -y big-plan@latest render plan.mdx
 ```
 
-Open `plan.html` in your browser, and you should see this:
-
-![The example plan rendered in the Big Plan viewer, with section navigation, a comparison table, and themed reading column.](../../../assets/viewer-light.png)
-
-The output is one self-contained HTML file with embedded assets, no external requests, and a
-complete reading experience when scripts are disabled.
-
-## If it goes wrong
-
-| What you see                                      | What it means                                                                 | What to do                                                                                                   |
-| ------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `GUIDANCE_REQUIRED`                               | `render`, `validate`, and `review` are gated                                  | Run `npx -y big-plan@latest guidance` in the same working directory                                          |
-| A syntax error from Node                          | Your Node.js is older than 22                                                 | Upgrade Node; check with `node --version`                                                                    |
-| `npx big-plan` runs an unexpected version         | An unversioned `npx` run may use a matching package already installed locally | Use `npx -y big-plan@latest`, or pin an exact version                                                        |
-| `Cannot render document with invalid MDX`         | The plan has authoring errors                                                 | Every diagnostic is in the `help` entries; see [Fix a validation error](/for-agents/#fix-a-validation-error) |
-| The download wrote an HTML page instead of a plan | `curl` followed a redirect or an error page                                   | Check the file starts with `#`, and re-download                                                              |
+Open `plan.html` in your browser. You get one self-contained HTML file with embedded assets, no
+external requests, and a complete reading experience even with scripts disabled.
 
 ## Next
 

@@ -361,6 +361,45 @@ a.site-title img {
   justify-content: center;
 }
 
+/* Starlight gives its primary action a hover state and its minimal one none at
+   all, so the second hero action reads as static text until it is clicked.
+   The underline reveal is the link idiom the design principles ask for, and the
+   icon carries the only movement so the label itself never shifts. */
+.hero .actions .sl-link-button.minimal {
+  text-decoration: underline solid transparent;
+  text-underline-offset: 0.35em;
+  transition:
+    color 0.15s ease,
+    text-decoration-color 0.15s ease;
+}
+
+.hero .actions .sl-link-button.minimal:hover,
+.hero .actions .sl-link-button.minimal:focus-visible {
+  color: var(--sl-color-text-accent);
+  text-decoration-color: currentColor;
+}
+
+.hero .actions .sl-link-button.minimal svg {
+  transition: transform 0.15s ease;
+}
+
+.hero .actions .sl-link-button.minimal:hover svg,
+.hero .actions .sl-link-button.minimal:focus-visible svg {
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero .actions .sl-link-button.minimal,
+  .hero .actions .sl-link-button.minimal svg {
+    transition: none;
+  }
+
+  .hero .actions .sl-link-button.minimal:hover svg,
+  .hero .actions .sl-link-button.minimal:focus-visible svg {
+    transform: none;
+  }
+}
+
 /* The screenshot: straight, full width, and captured at twice its displayed
    size so it stays crisp. No angle, no float. */
 .hero > img,

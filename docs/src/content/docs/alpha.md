@@ -1,13 +1,14 @@
 ---
 title: Big Plan is in alpha
-description: Three things to know before you use Big Plan - it is early, it is shipping anyway to earn feedback, and breaking changes are expected.
+description: Three things to know before you use Big Plan - we are still exploring, still fixing the UX, and still making breaking changes.
 ---
 
-**This is a very early implementation of an idea we are actively exploring.**
-The tool will likely have significant changes between releases.
+**We are actively exploring the right solution.** Big plan will likely have significant changes
+between releases.
 
-**The current tool does not meet our standards of usability or delight.**
-We are releasing it early anyway, so we can get user feedback.
+**We are still working on the UX.** We know there are a few papercuts in Big Plan today. We are
+releasing it early anyway so that we can get fast user feedback, so please do not be shy about
+sharing your thoughts!
 
-**We will be liberal with making breaking changes.**
-It should not affect anything, since your agent will know how to do the updates anyway.
+**We will make breaking changes.** It should not affect anything, since your agent will know how
+to do the updates anyway, but we do not currently make guarantees around backward-compatibility.
