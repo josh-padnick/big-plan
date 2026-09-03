@@ -2,6 +2,8 @@
 // Starlight's own hero renders its image at a hardcoded 400x400, which crops a
 // landscape screenshot to a square and then serves it at a quarter of the size
 // it is displayed at - so a real product screenshot arrives cropped and soft.
+// The homepage shows the review surface as it is, full width and straight, so
+// that cropping is the one thing this override exists to undo.
 // This override changes exactly that: the image keeps its own aspect ratio and
 // Astro emits a srcset wide enough to stay crisp on a high-density screen.
 // Everything else - title, tagline, actions, markup, class names - matches the
@@ -29,10 +31,10 @@ if (image) {
   }
 }
 
-// Two candidate widths so a 1x screen downloads half the bytes and a 2x screen
-// still gets a pixel per pixel.
-const widths = [760, 1520];
-const sizes = "(min-width: 65rem) 46vw, 90vw";
+// The screenshot spans the content column, so the candidates are sized for a
+// full-width picture: one for a 1x screen and one for a 2x screen.
+const widths = [1360, 2560];
+const sizes = "(min-width: 50rem) 68rem, 100vw";
 const imageAttrs = {
   loading: "eager" as const,
   decoding: "async" as const,

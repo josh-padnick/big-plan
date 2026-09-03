@@ -296,57 +296,63 @@ a.site-title img {
 
 /* --- Hero ---------------------------------------------------------------- */
 
-/* The hero component is overridden so the screenshot keeps its own aspect
-   ratio and full resolution; Starlight's hero layout is scoped to its own
-   component, so the layout it would have supplied is restated here, with the
-   picture given the larger share because the picture is the argument.
-   See src/components/Hero.astro for why the override exists. */
+/* The hero is one centred stack - headline, then subtitle, then the two
+   actions - with a straight, full-width screenshot of the real review surface
+   underneath it. The picture is the product, so it is shown as it is rather
+   than turned into an object floating beside the copy.
+   The component is overridden because Starlight's own Hero renders its image
+   at a hardcoded 400x400, which crops a landscape screenshot to a square and
+   serves it at a quarter of its displayed size; see src/components/Hero.astro.
+   Starlight scopes its hero layout to that component, so the layout is
+   restated here. */
 .hero {
   display: grid;
   grid-template-columns: 100%;
-  align-items: center;
-  gap: 1rem;
-  padding-bottom: 1rem;
-}
-
-.hero > img,
-.hero > .hero-html {
-  object-fit: contain;
-  width: min(88%, 30rem);
-  height: auto;
-  margin-inline: auto;
+  gap: clamp(2rem, 4vw, 3.5rem);
+  padding-block: clamp(2rem, calc(1rem + 6vmin), 5rem) 1rem;
 }
 
 .hero .stack {
+  order: 1;
   flex-direction: column;
+  align-items: center;
   gap: clamp(1.5rem, calc(1.5rem + 1vw), 2rem);
   text-align: center;
 }
 
 .hero .copy {
   flex-direction: column;
-  gap: 1rem;
   align-items: center;
+  gap: 1rem;
+  text-align: center;
 }
 
 .hero .copy > * {
-  max-width: 50ch;
+  margin-inline: auto;
 }
 
 .hero h1 {
-  font-size: clamp(var(--sl-text-3xl), calc(0.25rem + 5vw), var(--sl-text-6xl));
-  line-height: var(--sl-line-height-headings);
-  font-weight: 600;
-  color: var(--sl-color-white);
+  max-width: 18ch;
+  text-wrap: balance;
 }
 
 .hero .tagline {
+  max-width: 52ch;
+  text-wrap: pretty;
   font-size: clamp(
     var(--sl-text-base),
-    calc(0.0625rem + 2vw),
-    var(--sl-text-xl)
+    calc(0.0625rem + 1vw),
+    var(--sl-text-lg)
   );
   color: var(--sl-color-gray-2);
+}
+
+.hero h1 {
+  font-size: clamp(var(--sl-text-3xl), calc(0.5rem + 4vw), var(--sl-text-5xl));
+  line-height: var(--sl-line-height-headings);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
 }
 
 .hero .actions {
@@ -355,57 +361,31 @@ a.site-title img {
   justify-content: center;
 }
 
-@media (min-width: 50rem) {
-  .hero {
-    grid-template-columns: 5fr 6fr;
-    gap: 4%;
-    padding-block: clamp(2.5rem, calc(1rem + 8vmin), 8rem);
-  }
-
-  .hero > img,
-  .hero > .hero-html {
-    order: 2;
-    width: 100%;
-    margin-inline: 0;
-  }
-
-  .hero .stack {
-    text-align: start;
-  }
-
-  .hero .copy {
-    align-items: flex-start;
-  }
-
-  .hero .actions {
-    justify-content: flex-start;
-  }
-}
-
-/* The screenshot is one real slide - prose and a database schema together -
-   captured at twice its displayed size. It is turned a few degrees and lifted
-   so it reads as an object on the page rather than a flat inset. */
-.hero img {
+/* The screenshot: straight, full width, and captured at twice its displayed
+   size so it stays crisp. No angle, no float. */
+.hero > img,
+.hero > .hero-html {
+  order: 2;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-inline: 0;
+  object-fit: contain;
   border: 1px solid var(--rule, var(--sl-color-gray-5));
-  border-radius: 0.9rem;
+  border-radius: 0.75rem;
   box-shadow:
     0 1px 2px rgb(0 0 0 / 6%),
-    0 2px 8px rgb(0 0 0 / 6%),
-    -26px 34px 64px -22px rgb(0 0 0 / 30%);
-  transform: perspective(2400px) rotateY(-7deg) rotateX(1.5deg) rotate(-0.7deg);
-  transform-origin: center center;
+    0 10px 30px -12px rgb(0 0 0 / 22%);
 }
 
-@media (max-width: 50rem) {
-  .hero img {
-    transform: none;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero img {
-    transform: none;
+/* The picture is worth more width than the reading column allows, so it runs
+   to the edges of the page while the copy above it stays centred and narrow. */
+@media (min-width: 50rem) {
+  .hero > img,
+  .hero > .hero-html {
+    width: calc(100% + 2 * var(--sl-content-pad-x, 1.5rem));
+    margin-inline: calc(-1 * var(--sl-content-pad-x, 1.5rem));
+    max-width: none;
   }
 }
 
