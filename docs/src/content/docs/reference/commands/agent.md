@@ -19,9 +19,10 @@ big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection
 `agent connect <input.mdx>` is the coding agent's foreground entry point. It
 waits for work and returns the connection summary and oldest pending request in
 one result. The summary names the review server and port, store, session id,
-agent role, pending-request count, and packaged review-protocol document. The
-request carries its response template, private candidate and response paths,
-validation rules, tokens, and exact progress, response, and next commands.
+agent role, and pending-request count. The result also names the packaged
+review-protocol document, while the request carries its response template,
+private candidate and response paths, validation rules, tokens, and exact
+progress, response, and next commands.
 
 Keep the returned `next_command` in the foreground after each successful
 response. It preserves the same connection while waiting for the next feedback,
@@ -104,8 +105,8 @@ The agent also leaves the roster of attached agents, so the seat it held is empt
 A response that finds the plan changed underneath it is refused with the `SOURCE_MOVED` code rather than applied, so the agent takes the work again from the current plan.
 If the process dies mid-publish, the next `agent` command and the next `big-plan review` settle the interrupted commit before serving anything: the answer completes if the swap won, the request stays open if it did not, and a plan matching neither revision stops agent edits with a conflict naming both digests instead of overwriting the file.
 
-Export any of these environment variables before running `agent next`, `agent
-push`, or `agent note` to report who is connected. They carry the four facts **Agent Status**
+Export any of these environment variables before running `agent connect`, `agent
+next`, `agent push`, or `agent note` to report who is connected. They carry the four facts **Agent Status**
 shows, with a session declared either as an address or as an id:
 
 | Variable                     | What it declares                                                         | Limit       |

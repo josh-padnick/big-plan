@@ -21,5 +21,5 @@ outcomes do not carry `changeTargets`. A warning also requires an 80-character
 `summary` naming the boundary it would cross.
 
 If submission is rejected, correct `response_file` as requested and retry the
-same returned `respond_command`. After success, run the returned `next` command
+same returned `respond_command`. After success, run the returned `next_command`
 in the foreground to wait for another request.

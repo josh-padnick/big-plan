@@ -1,7 +1,7 @@
 // Keeps the public CLI adapter responsible for rejecting malformed argument
 // shapes before they reach the review-owned work loop.
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -195,16 +195,16 @@ deliberately leaves alone.
 
 ## Answering reviewer feedback
 
-Your human runs `big-plan agent <plan.mdx>` and starts one of the pasteable commands it returns.
-From there:
+Connect with the foreground command shown by the review:
 
 ```sh
-npx -y big-plan@latest agent next plan.mdx --wait
+npx -y big-plan@latest agent connect plan.mdx
 ```
 
-It hands back the oldest pending request, its prior conversation, a validated response template,
-`candidate_plan` — **this claim's own copy of the plan, and the only repository file you edit** —
-and ready-to-run `note_command`, `respond_command`, and `next_command` strings.
+It waits for work, then hands back a self-contained connection summary and the oldest pending
+request together. The result includes the review protocol, prior conversation, a validated
+response template, `candidate_plan` — **this claim's own copy of the plan, and the only repository
+file you edit** — and ready-to-run `note_command`, `respond_command`, and `next_command` strings.
 
 **Run the returned command strings unchanged.** They carry the `--agent` and `--connection`
 tokens back, which is what lets the reviewer see one agent across a whole conversation instead of
@@ -271,6 +271,7 @@ big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
 big-plan service status|start|stop|restart
 big-plan agent <input.mdx>
+big-plan agent connect <input.mdx>
 big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
 big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]
 big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
