@@ -31,12 +31,13 @@ A branch whose tip is **newer than its own squash commit** is treated as suspect
 
 Do not close or delete these.
 
-| Item                                                                                                                                                  | Disposition | Note                                                 |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------- |
-| PR [#241](https://github.com/josh-padnick/big-plan/pull/241) — docs site reorganized around the reader's job (BIG-270), branch `bp-big270-docs-build` | **LIVE**    | Draft; the only open pull request as of this record. |
-| BIG-19 (review bar)                                                                                                                                   | **LIVE**    | In flight; no pull request open yet.                 |
-| BIG-168 (resolve-thread auto-accept)                                                                                                                  | **LIVE**    | In flight; no pull request open yet.                 |
-| BIG-153 (ownership-scoped acceptance)                                                                                                                 | **LIVE**    | In flight; no pull request open yet.                 |
+| Item                                                                                                                                                  | Disposition | Note                                                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PR [#241](https://github.com/josh-padnick/big-plan/pull/241) — docs site reorganized around the reader's job (BIG-270), branch `bp-big270-docs-build` | **LIVE**    | Draft.                                                                                                                                                                             |
+| PR [#246](https://github.com/josh-padnick/big-plan/pull/246) — this record (BIG-277), branch `fm/bp-big277-hygiene`                                   | **LIVE**    | The record is itself an open pull request, so it appears in its own inventory. It stays open and is updated as the lanes above land; it is the last thing to merge before the tag. |
+| BIG-19 (review bar)                                                                                                                                   | **LIVE**    | In flight; no pull request open yet.                                                                                                                                               |
+| BIG-168 (resolve-thread auto-accept)                                                                                                                  | **LIVE**    | In flight; no pull request open yet.                                                                                                                                               |
+| BIG-153 (ownership-scoped acceptance)                                                                                                                 | **LIVE**    | In flight; no pull request open yet.                                                                                                                                               |
 
 When each opens a pull request, add its row here rather than leaving it unrecorded.
 
@@ -54,7 +55,9 @@ The first two carry commits whose content is demonstrably **not** on `main` and 
 
 ## Closed or superseded — branch left in place
 
-These pull requests were closed by their author, which is itself the disposition; the branches are residue from before the sweep began. Each row names where the work actually landed. They are left in place rather than deleted because no pull request proves their commits landed, and a wrong deletion here destroys the only copy.
+Two kinds of row sit here. Some had a pull request their author closed, which is itself the disposition. The rest never had one at all: they are exploration and working branches from a line that was later rebuilt and landed under different pull requests. Both kinds are residue from before the sweep began, and each row names where the work actually landed.
+
+They are left in place rather than deleted because nothing proves their individual commits landed — a closed pull request records only that this attempt stopped — and a wrong deletion here destroys the only copy.
 
 | Branch                                         | Tip            | Disposition             | Reason                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------------------------------------------- | -------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -89,7 +92,7 @@ These pull requests were closed by their author, which is itself the disposition
 
 ## Landed and deleted
 
-103 remote branches whose work is on `main` were deleted on 2026-09-02. Seven of them had a closed pull request superseded by a merged one; the rest had their own merged pull request.
+103 remote branches whose work is on `main` were deleted on 2026-09-02. Nearly all had their own merged pull request. The exceptions are named in their rows: seven had a closed pull request superseded by a merged one, `fm/bp-pr64-captain-feedback` merged into a stack rather than into `main`, and `fm/commenting-pr1-foundation` had no pull request at all and qualified on tip reachability alone.
 
 Every tip is recorded so any row is recoverable — see [Restoring a deleted branch](#restoring-a-deleted-branch).
 
@@ -211,7 +214,7 @@ GitHub also offers **Restore branch** on the pull request page of every branch t
 
 ## Not in scope
 
-The `no-mistakes` remote is a **local** bare mirror (`/Users/agent1/.no-mistakes/repos/…`), not GitHub. Its branches are pipeline staging state, they are not part of the repository the tag is cut from, and they are deliberately untouched.
+The `no-mistakes` remote is a **local** bare mirror (`~/.no-mistakes/repos/…`), not GitHub. Its branches are pipeline staging state, they are not part of the repository the tag is cut from, and they are deliberately untouched.
 
 ## Record
 
@@ -219,7 +222,7 @@ The `no-mistakes` remote is a **local** bare mirror (`/Users/agent1/.no-mistakes
 | -------------------------------------- | ------------------------------------------------------- |
 | Recorded                               | 2026-09-02                                              |
 | `main` at the time                     | `66748411`                                              |
-| Open pull requests                     | 1 (#241, live)                                          |
+| Open pull requests                     | 2 (#241 and #246, both live)                            |
 | Remote branches besides `main`, before | 135                                                     |
 | Remote branches besides `main`, after  | 32                                                      |
 | Deleted                                | 103                                                     |

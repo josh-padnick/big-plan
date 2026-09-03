@@ -86,6 +86,8 @@ The tag must be cut from a tree with no ambiguous in-flight work, and the releas
 
 Confirm before step 1 that the record names no open decision and no live lane still outstanding. A branch nobody has ruled on is indistinguishable from one somebody is still working on, and the difference stops being recoverable once the tag is published.
 
+Confirm it a second time immediately before step 4, the tag itself. Step 1 merges a pull request and the steps between can change branch and pull-request state, so a record checked only at the start can be stale by the time the tag is cut. The release pull request is the one exemption: it is expected to be open at the first check and merged by the second.
+
 ## Release checklist
 
 Set the release version once and use it throughout these commands:
