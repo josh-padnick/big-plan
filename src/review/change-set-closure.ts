@@ -34,6 +34,11 @@ export type ChangeSetClosure = ChangeSetTransaction & {
   readonly placeIds: ReadonlyArray<string>;
 };
 
+export type AcceptedOpenPlaces = {
+  readonly previous: StoredChangeVerdicts;
+  readonly verdicts: StoredChangeVerdicts;
+};
+
 /**
  * Builds the diff the reader counts for one transaction, or nothing when the
  * transaction moved the plan nowhere.
@@ -117,10 +122,12 @@ export const acceptOpenPlaces = async ({
   readonly store: ReviewStore;
   readonly closures: ReadonlyArray<ChangeSetClosure>;
   readonly decidedAt: string;
-}): Promise<StoredChangeVerdicts> =>
-  updateStoredChangeVerdicts({
+}): Promise<AcceptedOpenPlaces> => {
+  let previous: StoredChangeVerdicts | undefined;
+  const verdicts = await updateStoredChangeVerdicts({
     store,
     change: (current) => {
+      previous = current;
       let next = current;
       const accepted = new Set(acceptedChangeKeys(current));
       const rejected = rejectedChangeKeys(current);
@@ -159,6 +166,53 @@ export const acceptOpenPlaces = async ({
       return next;
     },
   });
+  if (previous === undefined) {
+    throw new Error("The verdict update did not inspect the stored record");
+  }
+  return { previous, verdicts };
+};
+
+/** Takes back only rows that one open-place acceptance added and still owns. */
+export const restoreOpenPlaces = async ({
+  store,
+  acceptance,
+}: {
+  readonly store: ReviewStore;
+  readonly acceptance: AcceptedOpenPlaces;
+}): Promise<StoredChangeVerdicts> =>
+  updateStoredChangeVerdicts({
+    store,
+    change: (current) => {
+      const previousByKey = new Map(
+        acceptance.previous.decided.map((entry) => [
+          changeVerdictKey(entry),
+          entry,
+        ]),
+      );
+      const resultByKey = new Map(
+        acceptance.verdicts.decided.map((entry) => [
+          changeVerdictKey(entry),
+          entry,
+        ]),
+      );
+      const same = (
+        left: (typeof current.decided)[number] | undefined,
+        right: (typeof current.decided)[number] | undefined,
+      ): boolean =>
+        left?.verdict === right?.verdict &&
+        left?.decidedAt === right?.decidedAt &&
+        left?.actor === right?.actor;
+      const restored = current.decided.filter((entry) => {
+        const key = changeVerdictKey(entry);
+        return (
+          previousByKey.has(key) || !same(entry, resultByKey.get(key))
+        );
+      });
+      return restored.length === current.decided.length
+        ? current
+        : { ...current, revision: current.revision + 1, decided: restored };
+    },
+  });
 
 /**
  * Records auto-accept verdicts for every still-open place in the transactions,
@@ -179,8 +233,9 @@ export const autoAcceptChangeSets = async ({
   readonly closures: ReadonlyArray<ChangeSetClosure>;
 }> => {
   const closures = await closuresFor({ store, planPath, transactions });
+  const acceptance = await acceptOpenPlaces({ store, closures, decidedAt });
   return {
-    verdicts: await acceptOpenPlaces({ store, closures, decidedAt }),
+    verdicts: acceptance.verdicts,
     closures,
   };
 };

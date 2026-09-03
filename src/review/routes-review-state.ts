@@ -46,7 +46,11 @@ import {
   revertPlanSource,
   settleInterruptedCommitsFor,
 } from "./staged-plan-mutation.js";
-import { acceptOpenPlaces } from "./change-set-closure.js";
+import {
+  acceptOpenPlaces,
+  restoreOpenPlaces,
+  type AcceptedOpenPlaces,
+} from "./change-set-closure.js";
 import { closuresForResolvedThreads } from "./resolved-thread-acceptance.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import {
@@ -356,27 +360,37 @@ export const updateReviewState = async (
           planId,
           commentIds: newlyResolved,
         });
+        let acceptance: AcceptedOpenPlaces | undefined;
         if (closures.length > 0) {
-          await acceptOpenPlaces({
+          acceptance = await acceptOpenPlaces({
             store: lockedStore,
             closures,
             decidedAt: new Date().toISOString(),
           });
         }
-        const sentIds = new Set(
-          (await planRenderer.readStoredComments(lockedStore.sentPath)).map(
-            (comment) => comment.id,
-          ),
-        );
-        const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
-        await writeComments({
-          path: lockedStore.draftsPath,
-          comments: unsentDrafts,
-        });
-        await writeResolvedCommentIds({
-          store: lockedStore,
-          ids: resolvedCommentIds,
-        });
+        try {
+          const sentIds = new Set(
+            (await planRenderer.readStoredComments(lockedStore.sentPath)).map(
+              (comment) => comment.id,
+            ),
+          );
+          const unsentDrafts = drafts.filter(
+            (draft) => !sentIds.has(draft.id),
+          );
+          await writeComments({
+            path: lockedStore.draftsPath,
+            comments: unsentDrafts,
+          });
+          await writeResolvedCommentIds({
+            store: lockedStore,
+            ids: resolvedCommentIds,
+          });
+        } catch (error: unknown) {
+          if (acceptance !== undefined) {
+            await restoreOpenPlaces({ store: lockedStore, acceptance });
+          }
+          throw error;
+        }
       },
     });
   } catch (error: unknown) {

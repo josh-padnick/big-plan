@@ -3,7 +3,7 @@
 // part of resolving, and the ones the reviewer already answered are left
 // exactly as they answered them.
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -236,6 +236,26 @@ describe("resolving a thread", () => {
       );
 
       const state = await reviewState(runtime);
+      await mkdir(runtime.store.draftsPath);
+      const interrupted = await callRuntime({
+        runtime,
+        path: "/api/drafts",
+        method: "PUT",
+        body: {
+          drafts: [],
+          resolvedCommentIds: [THREAD],
+          version: state.version,
+        },
+      });
+      expect(interrupted.status).toBe(500);
+      const afterInterrupted = await readChangeVerdicts({
+        store: runtime.store,
+        validate: validateChangeVerdicts,
+      });
+      expect(afterInterrupted.decided).toEqual(decidedBefore.decided);
+      expect((await reviewState(runtime)).resolvedCommentIds).toEqual([]);
+      await rm(runtime.store.draftsPath, { recursive: true });
+
       const resolved = await callRuntime({
         runtime,
         path: "/api/drafts",
@@ -254,7 +274,7 @@ describe("resolving a thread", () => {
       });
       // Every still-open change is answered, and answering all of them is one
       // ledger revision rather than one per change.
-      expect(verdicts.revision).toBe(decidedBefore.revision + 1);
+      expect(verdicts.revision).toBe(afterInterrupted.revision + 1);
       expect(
         changeSetStanding({
           from,
