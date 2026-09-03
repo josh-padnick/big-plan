@@ -3,13 +3,17 @@ title: How it works
 description: The whole Big Plan loop in one page, from your agent writing a plan to you approving it.
 ---
 
-You ask your agent for a plan. A few minutes later it hands you a link, you read a real
-document instead of a wall of terminal text, you leave notes on the parts you disagree with,
-and when you are happy you approve it. That is the whole product.
+## TL;DR
 
-This page is the big picture, including what your agent runs at each step. For the same loop
-told purely from your side of it, in four short steps, see [Your first
-review](/intro/first-review/).
+1. You ask your agent for a plan. A few minutes later it hands you a link.
+2. You engage with a visual document designed for human readability.
+3. You request changes or ask for feedback on specific parts. The agent updates the plan in
+   place. You keep iterating as needed.
+4. When you are happy, you approve it.
+
+To understand how that works in depth, let's keep reading!
+
+---
 
 ## The loop
 

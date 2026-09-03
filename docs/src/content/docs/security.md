@@ -3,10 +3,9 @@ title: Security
 description: Big Plan's security posture - the trust model, the ways it could be attacked, what stops each one, and the limits it accepts rather than hides.
 ---
 
-Big Plan takes a document written by an AI agent, renders it into HTML, serves it from a local
-web server, and lets that agent write to a file on your disk. Every one of those steps is a place
-something could go wrong, so this page is not a policy list. It is the actual posture: what Big
-Plan assumes, how it could be attacked, and what stops each attack.
+Fundamentally, Big Plan takes a document written by an AI agent, renders it into HTML, serves it
+from a local web server, and lets that agent write to a file on your disk. Now let's dig in to the
+security implications of that setup, and how we mitigate any threats.
 
 ## The trust model
 
@@ -191,14 +190,6 @@ Report privately through GitHub, never in a public issue:
 
 Please do not open a public issue, pull request, or discussion for a suspected vulnerability, and
 please do not publish a working exploit before a fix ships.
-
-:::caution[Private reporting is still being switched on]
-GitHub's private vulnerability reporting is not yet enabled for this repository, so the advisory
-link above returns a 404 until the maintainer turns it on. If that happens, **do not describe the
-issue in a public issue, pull request, or discussion.** Ask the maintainer to enable private
-vulnerability reporting, saying only that you have a security report and nothing about what it is,
-then send the details once the form opens.
-:::
 
 **In scope:** anything that lets a plan, a web page, or a remote party read or write your files,
 reach the review runtime's API, or execute code through Big Plan. A defect in Node.js, npm, or a
