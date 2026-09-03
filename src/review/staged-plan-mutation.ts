@@ -437,14 +437,14 @@ const autoAcceptPushIfArmed = async ({
   response,
   baseSnapshot,
   resultSnapshot,
-  acceptedAt,
+  decidedAt,
 }: {
   readonly store: ReviewStore;
   readonly planPath: string;
   readonly response: AgentResponse;
   readonly baseSnapshot: string;
   readonly resultSnapshot: string;
-  readonly acceptedAt: string;
+  readonly decidedAt: string;
 }): Promise<void> => {
   if (response.kind !== "push") return;
   const armed = await readActiveArmedReviewMode({ store });
@@ -453,7 +453,7 @@ const autoAcceptPushIfArmed = async ({
     store,
     planPath,
     transactions: [{ from: baseSnapshot, to: resultSnapshot }],
-    acceptedAt,
+    decidedAt,
   });
 };
 
@@ -610,7 +610,7 @@ export const recoverStagedPlanMutations = async ({
               response: journal.response,
               baseSnapshot: journal.baseSnapshot,
               resultSnapshot: journal.resultSnapshot,
-              acceptedAt: journal.answeredAt,
+              decidedAt: journal.answeredAt,
             });
             await completeRequestTerminal({
               store: lockedStore,
@@ -954,7 +954,7 @@ export const commitStagedPlanMutation = async ({
             response: committedResponse,
             baseSnapshot,
             resultSnapshot,
-            acceptedAt: now,
+            decidedAt: now,
           });
         },
       });

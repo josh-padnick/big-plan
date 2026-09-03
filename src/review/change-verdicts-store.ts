@@ -6,19 +6,20 @@
 // module only enforces them.
 //
 // What this does own is refusal. The record is bounded, and a mutation past the
-// bound is refused rather than trimmed to fit: dropping the oldest acceptance
+// bound is refused rather than trimmed to fit: dropping the oldest verdict
 // would silently reopen a change set the reviewer had already closed, and the
 // open-items count would then be wrong in the direction nobody checks.
 
 import { join } from "node:path";
 import {
-  ACCEPTED_CHANGE_LIMIT,
+  DECIDED_CHANGE_LIMIT,
   VERDICT_BATCH_LIMIT,
   PLACE_ID_LIMIT,
   SNAPSHOT_DIGEST,
   changeVerdictKey,
   type ChangeVerdict,
   type ChangeVerdictActor,
+  type ChangeVerdictOutcome,
   type ChangeVerdictState,
 } from "./shared/change-verdict.js";
 import {
@@ -35,16 +36,34 @@ export type StoredChangeVerdicts = ChangeVerdictState & {
   readonly version: 1;
 };
 
-/** One browser mutation over the verdict record. */
+/**
+ * One browser mutation over the verdict record.
+ *
+ * `undo` is one operation rather than one per verdict because it returns the
+ * change to undecided whichever way it had been decided: the reviewer who
+ * undoes a change does not have to know what they are undoing, and a record
+ * that answered differently for the two would make an undo that arrived after
+ * a re-decision silently do nothing.
+ */
 export type ChangeVerdictMutation = {
-  readonly op: "accept" | "withdraw";
+  readonly op: "accept" | "reject" | "undo";
   readonly from: string;
   readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
-  /** The server's own clock, so a browser cannot backdate an acceptance. */
-  readonly acceptedAt: string;
+  /** The server's own clock, so a browser cannot backdate a verdict. */
+  readonly decidedAt: string;
   /** The trusted boundary that created this mutation, never browser input. */
   readonly actor: ChangeVerdictActor;
+  /** Bulk acceptance may decide only places that are still undecided. */
+  readonly onlyUndecided?: boolean;
+};
+
+/** The verdict an operation records, or `undefined` when it records none. */
+export const verdictOfMutationOp = (
+  op: ChangeVerdictMutation["op"],
+): ChangeVerdictOutcome | undefined => {
+  if (op === "accept") return "accepted";
+  return op === "reject" ? "rejected" : undefined;
 };
 
 export class ChangeVerdictsRejected extends Error {
@@ -90,7 +109,7 @@ const placeId = (value: unknown): string => {
     throw new ChangeVerdictsRejected('"placeId" must be non-empty text');
   }
   // Blank text names nothing, but the id itself is returned exactly as the
-  // caller gave it: trimming would store an acceptance under an address the
+  // caller gave it: trimming would store a verdict under an address the
   // browser never asked for, and the record would then answer for a different
   // place than the one the reviewer closed.
   if (value.length > PLACE_ID_LIMIT) {
@@ -140,18 +159,28 @@ const actor = (value: unknown): ChangeVerdictActor | undefined => {
   return value;
 };
 
+const outcome = (value: unknown): ChangeVerdictOutcome => {
+  if (value !== "accepted" && value !== "rejected") {
+    throw new ChangeVerdictsRejected(
+      '"verdict" must be "accepted" or "rejected"',
+    );
+  }
+  return value;
+};
+
 const verdict = (value: unknown): ChangeVerdict => {
   const candidate = record({ value, field: "verdict" });
-  const acceptedBy = actor(candidate.actor);
+  const decidedBy = actor(candidate.actor);
   return {
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
     placeId: placeId(candidate.placeId),
-    acceptedAt: timestamp({
-      value: candidate.acceptedAt,
-      field: "acceptedAt",
+    verdict: outcome(candidate.verdict),
+    decidedAt: timestamp({
+      value: candidate.decidedAt,
+      field: "decidedAt",
     }),
-    ...(acceptedBy === undefined ? {} : { actor: acceptedBy }),
+    ...(decidedBy === undefined ? {} : { actor: decidedBy }),
   };
 };
 
@@ -159,22 +188,22 @@ const verdict = (value: unknown): ChangeVerdict => {
 export const validateChangeVerdicts = (
   value: unknown,
 ): StoredChangeVerdicts => {
-  if (value === undefined) return { version: 1, revision: 0, accepted: [] };
+  if (value === undefined) return { version: 1, revision: 0, decided: [] };
   const candidate = record({ value, field: "verdicts" });
-  if (candidate.version !== 1 || !Array.isArray(candidate.accepted)) {
+  if (candidate.version !== 1 || !Array.isArray(candidate.decided)) {
     throw new ChangeVerdictsRejected(
       "Change verdicts must be a version 1 record",
     );
   }
-  if (candidate.accepted.length > ACCEPTED_CHANGE_LIMIT) {
+  if (candidate.decided.length > DECIDED_CHANGE_LIMIT) {
     throw new ChangeVerdictsRejected(
-      `Change verdicts hold more than ${ACCEPTED_CHANGE_LIMIT} accepted changes`,
+      `Change verdicts hold more than ${DECIDED_CHANGE_LIMIT} decided changes`,
     );
   }
-  const accepted = candidate.accepted.map(verdict);
+  const decided = candidate.decided.map(verdict);
   if (
-    new Set(accepted.map((entry) => changeVerdictKey(entry))).size !==
-    accepted.length
+    new Set(decided.map((entry) => changeVerdictKey(entry))).size !==
+    decided.length
   ) {
     throw new ChangeVerdictsRejected(
       "Change verdicts may hold only one entry per change",
@@ -183,12 +212,12 @@ export const validateChangeVerdicts = (
   return {
     version: 1,
     revision: revisionNumber(candidate.revision),
-    accepted,
+    decided,
   };
 };
 
 /**
- * Validates one browser mutation. The server stamps the acceptance time, so a
+ * Validates one browser mutation. The server stamps the decision time, so a
  * browser can name which changes receive a verdict but never when.
  */
 export const validateChangeVerdictMutation = ({
@@ -199,8 +228,14 @@ export const validateChangeVerdictMutation = ({
   readonly now: string;
 }): ChangeVerdictMutation => {
   const candidate = record({ value, field: "verdict mutation" });
-  if (candidate.op !== "accept" && candidate.op !== "withdraw") {
-    throw new ChangeVerdictsRejected('"op" must be "accept" or "withdraw"');
+  if (
+    candidate.op !== "accept" &&
+    candidate.op !== "reject" &&
+    candidate.op !== "undo"
+  ) {
+    throw new ChangeVerdictsRejected(
+      '"op" must be "accept", "reject" or "undo"',
+    );
   }
   if (!Array.isArray(candidate.placeIds) || candidate.placeIds.length === 0) {
     throw new ChangeVerdictsRejected('"placeIds" must name a change');
@@ -214,20 +249,31 @@ export const validateChangeVerdictMutation = ({
   if (new Set(placeIds).size !== placeIds.length) {
     throw new ChangeVerdictsRejected('"placeIds" repeats a change');
   }
+  if (
+    candidate.onlyUndecided !== undefined &&
+    (candidate.op !== "accept" || candidate.onlyUndecided !== true)
+  ) {
+    throw new ChangeVerdictsRejected(
+      '"onlyUndecided" may only be true for an "accept" mutation',
+    );
+  }
   return {
     op: candidate.op,
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
     placeIds,
-    acceptedAt: now,
+    decidedAt: now,
     actor: "reviewer",
+    ...(candidate.onlyUndecided === undefined
+      ? {}
+      : { onlyUndecided: candidate.onlyUndecided }),
   };
 };
 
 /**
  * Applies one validated mutation without changing the stored array in place.
- * Every accepted mutation advances the revision, including one that withdraws
- * an acceptance and one that records nothing new, because the revision orders
+ * Every accepted mutation advances the revision, including one that undoes a
+ * verdict and one that records nothing new, because the revision orders
  * responses rather than counting content.
  */
 export const applyChangeVerdictMutation = ({
@@ -239,39 +285,85 @@ export const applyChangeVerdictMutation = ({
 }): StoredChangeVerdicts => {
   const revision = verdicts.revision + 1;
   const touched = new Set(
-    mutation.placeIds.map((placeId) =>
-      changeVerdictKey({
+    mutation.placeIds
+      .filter(
+        (placeId) =>
+          !mutation.onlyUndecided ||
+          !verdicts.decided.some(
+            (entry) =>
+              entry.from === mutation.from &&
+              entry.to === mutation.to &&
+              entry.placeId === placeId,
+          ),
+      )
+      .map((placeId) =>
+        changeVerdictKey({
+          from: mutation.from,
+          to: mutation.to,
+          placeId,
+        }),
+      ),
+  );
+  // Every operation clears the addresses it names first, so re-deciding a
+  // change replaces its row rather than adding a second one, and undo is that
+  // clearing on its own: the address is left undecided and open to either
+  // verdict again, exactly as it was before the first decision.
+  const kept = verdicts.decided.filter(
+    (entry) => !touched.has(changeVerdictKey(entry)),
+  );
+  const recorded = verdictOfMutationOp(mutation.op);
+  if (recorded === undefined) {
+    return { version: 1, revision, decided: kept };
+  }
+  const decided = [
+    ...kept,
+    ...mutation.placeIds
+      .filter((placeId) =>
+        touched.has(
+          changeVerdictKey({ from: mutation.from, to: mutation.to, placeId }),
+        ),
+      )
+      .map((placeId) => ({
         from: mutation.from,
         to: mutation.to,
         placeId,
-      }),
-    ),
-  );
-  const kept = verdicts.accepted.filter(
-    (entry) => !touched.has(changeVerdictKey(entry)),
-  );
-  if (mutation.op === "withdraw") {
-    return { version: 1, revision, accepted: kept };
-  }
-  const accepted = [
-    ...kept,
-    ...mutation.placeIds.map((placeId) => ({
-      from: mutation.from,
-      to: mutation.to,
-      placeId,
-      acceptedAt: mutation.acceptedAt,
-      actor: mutation.actor,
-    })),
+        verdict: recorded,
+        decidedAt: mutation.decidedAt,
+        actor: mutation.actor,
+      })),
   ];
-  if (accepted.length > ACCEPTED_CHANGE_LIMIT) {
+  if (decided.length > DECIDED_CHANGE_LIMIT) {
     throw new ChangeVerdictsRejected(
-      `A review may record at most ${ACCEPTED_CHANGE_LIMIT} accepted changes`,
+      `A review may record at most ${DECIDED_CHANGE_LIMIT} decided changes`,
     );
   }
-  return { version: 1, revision, accepted };
+  return { version: 1, revision, decided };
 };
 
-/** Merges an approval's accepted places into the latest locked record. */
+/**
+ * The places of one revision the record has rejected, in stored order.
+ *
+ * A rejected place is the one verdict that also owns bytes, so the set of them
+ * is what the plan source has to agree with. Deriving it here keeps that
+ * question answerable from the record alone.
+ */
+export const rejectedPlaceIdsFor = ({
+  verdicts,
+  from,
+  to,
+}: {
+  readonly verdicts: ChangeVerdictState;
+  readonly from: string;
+  readonly to: string;
+}): ReadonlyArray<string> =>
+  verdicts.decided
+    .filter(
+      (entry) =>
+        entry.verdict === "rejected" && entry.from === from && entry.to === to,
+    )
+    .map((entry) => entry.placeId);
+
+/** Merges an approval's decided places into the latest locked record. */
 export const mergeFinalizedChangeVerdicts = ({
   current,
   finalized,
@@ -280,31 +372,33 @@ export const mergeFinalizedChangeVerdicts = ({
   readonly finalized: StoredChangeVerdicts;
 }): StoredChangeVerdicts => {
   const currentByKey = new Map(
-    current.accepted.map((entry) => [changeVerdictKey(entry), entry]),
+    current.decided.map((entry) => [changeVerdictKey(entry), entry]),
   );
-  const isAlreadyFinalized = finalized.accepted.every((entry) => {
+  const isAlreadyFinalized = finalized.decided.every((entry) => {
     const stored = currentByKey.get(changeVerdictKey(entry));
     return (
-      stored?.acceptedAt === entry.acceptedAt && stored.actor === entry.actor
+      stored?.decidedAt === entry.decidedAt &&
+      stored.verdict === entry.verdict &&
+      stored.actor === entry.actor
     );
   });
   if (isAlreadyFinalized) return current;
-  const finalizedKeys = new Set(finalized.accepted.map(changeVerdictKey));
-  const accepted = [
-    ...current.accepted.filter(
+  const finalizedKeys = new Set(finalized.decided.map(changeVerdictKey));
+  const decided = [
+    ...current.decided.filter(
       (entry) => !finalizedKeys.has(changeVerdictKey(entry)),
     ),
-    ...finalized.accepted,
+    ...finalized.decided,
   ];
-  if (accepted.length > ACCEPTED_CHANGE_LIMIT) {
+  if (decided.length > DECIDED_CHANGE_LIMIT) {
     throw new ChangeVerdictsRejected(
-      `A review may record at most ${ACCEPTED_CHANGE_LIMIT} accepted changes`,
+      `A review may record at most ${DECIDED_CHANGE_LIMIT} decided changes`,
     );
   }
   return {
     version: 1,
     revision: Math.max(current.revision, finalized.revision) + 1,
-    accepted,
+    decided,
   };
 };
 
@@ -314,7 +408,7 @@ export const mergeFinalizedChangeVerdicts = ({
  * Auto-accept commits run in the agent process while reviewer mutations run in
  * the review runtime, so a runtime-local write gate cannot serialize them.
  * The read and replacement stay together here so neither writer can erase the
- * other's accepted places.
+ * other's decided places.
  */
 export const updateStoredChangeVerdicts = async ({
   store,

@@ -53,6 +53,7 @@ import {
   writeAgentHeartbeat,
   writeAgentHeartbeatEnded,
   writeAgentResponseValue,
+  writeSnapshot,
   writeStoreJson,
   withReviewStoreLock,
 } from "./store.js";
@@ -89,6 +90,7 @@ import {
   publishReviewImage,
   readProgress,
   writeComments,
+  writeChangeVerdicts,
   writeResolvedCommentIds,
   writeSnapshot,
 } from "./store.js";
@@ -1456,6 +1458,446 @@ describe("review runtime committed change sets", () => {
           committedAt: "2026-08-21T12:10:00.000Z",
         },
       ]);
+    });
+  });
+});
+
+describe("review runtime change verdicts", () => {
+  const BASELINE = `# Retry the failed checkout
+
+## The retry queue
+
+Failed checkouts wait in a durable queue.
+
+## The worker
+
+One worker drains the queue every ten seconds.
+`;
+  const PROPOSED = `# Retry the failed checkout
+
+## The retry queue
+
+Failed checkouts wait in a durable Postgres queue.
+
+## The worker
+
+Two workers drain the queue every two seconds.
+`;
+  const FROM = deriveSnapshotDigest(BASELINE);
+  const TO = deriveSnapshotDigest(PROPOSED);
+
+  /**
+   * A runtime whose plan already holds one agent proposal, with both of that
+   * proposal's revisions stored. That is the state a reviewer decides from, and
+   * the smallest one in which a rejection has bytes to put back.
+   */
+  const withProposal = async (
+    work: (context: {
+      readonly target: ReviewRuntime;
+      readonly sessionToken: string;
+      readonly planPath: string;
+      readonly places: ReadonlyArray<{
+        readonly placeId: string;
+        readonly label: string;
+      }>;
+    }) => Promise<void>,
+  ): Promise<void> => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-verdicts-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PROPOSED);
+    const target = await startReviewRuntime({ planPath });
+    try {
+      await recordCommittedRevision({
+        store: target.store,
+        revision: {
+          requestId: "a".repeat(16),
+          changeSetIds: ["b".repeat(16)],
+          baseSnapshot: FROM,
+          resultSnapshot: TO,
+          provenance: "feedback",
+          committedAt: "2026-09-02T11:00:00.000Z",
+        },
+      });
+      await writeSnapshot({
+        store: target.store,
+        snapshot: FROM,
+        source: BASELINE,
+      });
+      await writeSnapshot({
+        store: target.store,
+        snapshot: TO,
+        source: PROPOSED,
+      });
+      const sessionToken = await runtimeToken(target);
+      const diff = await callRuntime({
+        target,
+        sessionToken,
+        path: `/api/snapshot-diff?from=${FROM}&to=${TO}`,
+      });
+      expect(diff.status).toBe(200);
+      const { places } = (await diff.json()) as {
+        readonly places: ReadonlyArray<{
+          readonly placeId: string;
+          readonly label: string;
+        }>;
+      };
+      await work({ target, sessionToken, planPath, places });
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  };
+
+  const decide = ({
+    target,
+    sessionToken,
+    op,
+    placeIds,
+  }: {
+    readonly target: ReviewRuntime;
+    readonly sessionToken: string;
+    readonly op: "accept" | "reject" | "undo";
+    readonly placeIds: ReadonlyArray<string>;
+  }): Promise<Response> =>
+    callRuntime({
+      target,
+      sessionToken,
+      path: "/api/change-verdicts",
+      method: "POST",
+      body: { op, from: FROM, to: TO, placeIds },
+    });
+
+  const placeFor = (
+    places: ReadonlyArray<{ readonly placeId: string; readonly label: string }>,
+    label: string,
+  ): string => {
+    const place = places.find((candidate) => candidate.label.includes(label));
+    if (place === undefined) {
+      throw new Error(`No diff place labelled ${label}`);
+    }
+    return place.placeId;
+  };
+
+  it("should record a rejection and put that change back to the baseline bytes", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const response = await decide({
+        target,
+        sessionToken,
+        op: "reject",
+        placeIds: [placeFor(places, "durable")],
+      });
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        decided: [
+          expect.objectContaining({ from: FROM, to: TO, verdict: "rejected" }),
+        ],
+      });
+      const source = await readFile(planPath, "utf8");
+      expect(source).toContain("wait in a durable queue.");
+      expect(source).not.toContain("durable Postgres queue");
+      // The change the reviewer said nothing about is still the agent's.
+      expect(source).toContain(
+        "Two workers drain the queue every two seconds.",
+      );
+    });
+  });
+
+  it("should reconcile persisted rejection bytes when verdict state is read", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const placeId = placeFor(places, "durable");
+      await writeChangeVerdicts({
+        store: target.store,
+        verdicts: {
+          version: 1,
+          revision: 1,
+          decided: [
+            {
+              from: FROM,
+              to: TO,
+              placeId,
+              verdict: "rejected",
+              decidedAt: "2026-09-02T12:00:00.000Z",
+              actor: "reviewer",
+            },
+          ],
+        },
+      });
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+
+      expect(response.status).toBe(200);
+      const source = await readFile(planPath, "utf8");
+      expect(source).toContain("wait in a durable queue.");
+      expect(source).not.toContain("durable Postgres queue");
+    });
+  });
+
+  it("should leave an unexplainable plan untouched when verdict state is read", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const moved = `${PROPOSED}\nA later revision landed.\n`;
+      await writeFile(planPath, moved);
+      await writeChangeVerdicts({
+        store: target.store,
+        verdicts: {
+          version: 1,
+          revision: 1,
+          decided: [
+            {
+              from: FROM,
+              to: TO,
+              placeId: placeFor(places, "durable"),
+              verdict: "rejected",
+              decidedAt: "2026-09-02T12:00:00.000Z",
+              actor: "reviewer",
+            },
+          ],
+        },
+      });
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
+    });
+  });
+
+  it("should reconcile an interrupted undo when another rejection survives", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const durable = placeFor(places, "durable");
+      const workers = placeFor(places, "workers");
+      await decide({
+        target,
+        sessionToken,
+        op: "reject",
+        placeIds: [durable, workers],
+      });
+      await writeChangeVerdicts({
+        store: target.store,
+        verdicts: {
+          version: 1,
+          revision: 2,
+          decided: [
+            {
+              from: FROM,
+              to: TO,
+              placeId: durable,
+              verdict: "rejected",
+              decidedAt: "2026-09-02T12:00:00.000Z",
+              actor: "reviewer",
+            },
+          ],
+        },
+      });
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+
+      expect(response.status).toBe(200);
+      const source = await readFile(planPath, "utf8");
+      expect(source).toContain("wait in a durable queue.");
+      expect(source).toContain(
+        "Two workers drain the queue every two seconds.",
+      );
+    });
+  });
+
+  it("should reconcile an interrupted undo of the sole rejection", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const durable = placeFor(places, "durable");
+      await decide({
+        target,
+        sessionToken,
+        op: "reject",
+        placeIds: [durable],
+      });
+      await writeChangeVerdicts({
+        store: target.store,
+        verdicts: { version: 1, revision: 2, decided: [] },
+      });
+
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(PROPOSED);
+    });
+  });
+
+  it("should undo a rejection back to the exact bytes the agent published", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const placeId = placeFor(places, "durable");
+      expect(
+        (
+          await decide({
+            target,
+            sessionToken,
+            op: "reject",
+            placeIds: [placeId],
+          })
+        ).status,
+      ).toBe(200);
+      const undone = await decide({
+        target,
+        sessionToken,
+        op: "undo",
+        placeIds: [placeId],
+      });
+      expect(undone.status).toBe(200);
+      await expect(undone.json()).resolves.toMatchObject({ decided: [] });
+      await expect(readFile(planPath, "utf8")).resolves.toBe(PROPOSED);
+    });
+  });
+
+  // Rejections compose because the plan is derived from the whole set rather
+  // than edited once per gesture, so the second one lands on a plan the first
+  // one already moved.
+  it("should reject a second change without disturbing the first rejection", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      for (const label of ["durable", "workers"]) {
+        expect(
+          (
+            await decide({
+              target,
+              sessionToken,
+              op: "reject",
+              placeIds: [placeFor(places, label)],
+            })
+          ).status,
+        ).toBe(200);
+      }
+      await expect(readFile(planPath, "utf8")).resolves.toBe(BASELINE);
+    });
+  });
+
+  // Accepting is the reviewer agreeing with what the agent published, so it has
+  // no bytes of its own to write.
+  it("should leave the plan exactly as published when a change is accepted", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const response = await decide({
+        target,
+        sessionToken,
+        op: "accept",
+        placeIds: [placeFor(places, "durable")],
+      });
+      expect(response.status).toBe(200);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(PROPOSED);
+    });
+  });
+
+  // Re-deciding a rejected change the other way has to take its bytes back out
+  // of the plan, or the record would say accepted over restored content.
+  it("should put the agent's change back when a rejection becomes an acceptance", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const placeId = placeFor(places, "durable");
+      await decide({ target, sessionToken, op: "reject", placeIds: [placeId] });
+      const accepted = await decide({
+        target,
+        sessionToken,
+        op: "accept",
+        placeIds: [placeId],
+      });
+      expect(accepted.status).toBe(200);
+      await expect(accepted.json()).resolves.toMatchObject({
+        decided: [expect.objectContaining({ verdict: "accepted" })],
+      });
+      await expect(readFile(planPath, "utf8")).resolves.toBe(PROPOSED);
+    });
+  });
+
+  // Undecided is a live state, not an ending. A reviewer who undoes a rejection
+  // is asking to decide again, so both answers have to still be available and
+  // the plan has to follow whichever one they give.
+  it("should leave an undone change open to either verdict, with the plan following", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      const placeId = placeFor(places, "durable");
+      const cycle = async (
+        op: "accept" | "reject",
+      ): Promise<{ readonly verdict: string; readonly source: string }> => {
+        await decide({
+          target,
+          sessionToken,
+          op: "reject",
+          placeIds: [placeId],
+        });
+        await decide({ target, sessionToken, op: "undo", placeIds: [placeId] });
+        const response = await decide({
+          target,
+          sessionToken,
+          op,
+          placeIds: [placeId],
+        });
+        expect(response.status).toBe(200);
+        const { decided } = (await response.json()) as {
+          readonly decided: ReadonlyArray<{ readonly verdict: string }>;
+        };
+        expect(decided).toHaveLength(1);
+        return {
+          verdict: decided[0]?.verdict ?? "",
+          source: await readFile(planPath, "utf8"),
+        };
+      };
+      // Accepting after the undo keeps the agent's revision; rejecting again
+      // takes it back out, and the same place answers both ways in turn.
+      const accepted = await cycle("accept");
+      expect(accepted.verdict).toBe("accepted");
+      expect(accepted.source).toBe(PROPOSED);
+      const rejected = await cycle("reject");
+      expect(rejected.verdict).toBe("rejected");
+      expect(rejected.source).toContain("wait in a durable queue.");
+    });
+  });
+
+  // Bytes written on a plan that moved would overwrite work nobody reviewed, so
+  // the rejection is refused and its row is taken back rather than left
+  // standing over a decision the plan never followed.
+  it("should refuse a rejection when the plan moved, and record nothing", async () => {
+    await withProposal(async ({ target, sessionToken, planPath, places }) => {
+      await writeFile(planPath, `${PROPOSED}\nA later revision landed.\n`);
+      const response = await decide({
+        target,
+        sessionToken,
+        op: "reject",
+        placeIds: [placeFor(places, "durable")],
+      });
+      expect(response.status).toBe(409);
+      const verdicts = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+      });
+      await expect(verdicts.json()).resolves.toMatchObject({ decided: [] });
+    });
+  });
+
+  it("should refuse an operation the record does not know", async () => {
+    await withProposal(async ({ target, sessionToken, places }) => {
+      const response = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/change-verdicts",
+        method: "POST",
+        body: {
+          op: "withdraw",
+          from: FROM,
+          to: TO,
+          placeIds: [placeFor(places, "durable")],
+        },
+      });
+      expect(response.status).toBe(400);
     });
   });
 });
@@ -7825,8 +8267,12 @@ describe("review runtime approval", () => {
           path: "/api/change-verdicts",
         });
         await expect(verdicts.json()).resolves.toMatchObject({
-          accepted: [
-            expect.objectContaining({ from: digest, to: publishedDigest }),
+          decided: [
+            expect.objectContaining({
+              from: digest,
+              to: publishedDigest,
+              verdict: "accepted",
+            }),
           ],
         });
       },
@@ -7903,8 +8349,12 @@ describe("review runtime approval", () => {
           path: "/api/change-verdicts",
         });
         await expect(verdicts.json()).resolves.toMatchObject({
-          accepted: [
-            expect.objectContaining({ from: digest, to: publishedDigest }),
+          decided: [
+            expect.objectContaining({
+              from: digest,
+              to: publishedDigest,
+              verdict: "accepted",
+            }),
           ],
         });
       },

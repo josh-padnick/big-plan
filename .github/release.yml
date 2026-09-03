@@ -1,0 +1,22 @@
+# Groups GitHub's auto-generated release notes by pull-request label.
+# That generated list is raw material for a CHANGELOG.md entry, never the
+# entry itself: RELEASING.md#changelog owns how an entry is written.
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+    - title: Fixes
+      labels:
+        - bug
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Other changes
+      labels:
+        - "*"

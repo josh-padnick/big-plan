@@ -24,7 +24,6 @@ import type { SnapshotDiff } from "../shared/review-wire.js";
 import {
   changeDispositionOf,
   changeSetStanding,
-  changeVerdictKey,
   type ChangeDisposition,
   type ChangeSetStanding,
 } from "../shared/change-verdict.js";
@@ -60,7 +59,8 @@ type DiffTourValue = {
   /**
    * What the review has decided about one place. Every surface that presents a
    * change asks this rather than reading the record itself, so a verdict added
-   * later reaches all of them through one selector.
+   * later reaches all of them through one selector - which is how the reject
+   * verdict arrives as a third answer here rather than a second question.
    */
   readonly dispositionOf: (
     diff: SnapshotDiff,
@@ -71,10 +71,17 @@ type DiffTourValue = {
     diff: SnapshotDiff,
     placeIds: ReadonlyArray<string>,
   ) => ChangeSetStanding;
-  readonly setPlacesAccepted: (
+  /**
+   * Records one verdict over the named places, or takes back whatever verdict
+   * they hold. `undefined` is undo rather than a third verdict, because the
+   * record stores no such row: a change nobody has decided is a change with no
+   * entry in it.
+   */
+  readonly setPlacesDecided: (
     diff: SnapshotDiff,
     placeIds: ReadonlyArray<string>,
-    accepted: boolean,
+    verdict: "accepted" | "rejected" | undefined,
+    options?: { readonly onlyUndecided: boolean },
   ) => void;
   /** False while this page may not record anything, so no control offers to. */
   readonly canRecordAcceptance: boolean;
@@ -123,8 +130,14 @@ export const DiffTourProvider = ({
   const [shownChangesPlaceId, setShownChangesPlaceId] = useState<string | null>(
     null,
   );
-  const { accepted, autoAccepted, canRecord, recordChangeVerdicts, refresh } =
-    useChangeVerdicts();
+  const {
+    accepted,
+    rejected,
+    autoAccepted,
+    canRecord,
+    recordChangeVerdicts,
+    refresh,
+  } = useChangeVerdicts();
   const places = useMemo(() => {
     if (tour === null) return [];
     const allowed = new Set(tour.placeIds);
@@ -150,15 +163,20 @@ export const DiffTourProvider = ({
     };
   }, [tour]);
   const tourValue = useMemo(() => {
+    const dispositionOf = (
+      diff: SnapshotDiff,
+      placeId: string,
+    ): ChangeDisposition =>
+      changeDispositionOf({
+        address: { from: diff.from, to: diff.to, placeId },
+        accepted,
+        rejected,
+      });
     const isPlaceAccepted = (diff: SnapshotDiff, placeId: string): boolean =>
-      accepted.has(changeVerdictKey({ from: diff.from, to: diff.to, placeId }));
+      dispositionOf(diff, placeId) === "accepted";
     return {
       isPlaceAccepted,
-      dispositionOf: (diff: SnapshotDiff, placeId: string): ChangeDisposition =>
-        changeDispositionOf({
-          address: { from: diff.from, to: diff.to, placeId },
-          accepted,
-        }),
+      dispositionOf,
       standingOf: (
         diff: SnapshotDiff,
         placeIds: ReadonlyArray<string>,
@@ -168,28 +186,36 @@ export const DiffTourProvider = ({
           to: diff.to,
           placeIds,
           accepted,
+          rejected,
         }),
-      setPlacesAccepted: (
+      setPlacesDecided: (
         diff: SnapshotDiff,
         placeIds: ReadonlyArray<string>,
-        isAccepted: boolean,
+        verdict: "accepted" | "rejected" | undefined,
+        options?: { readonly onlyUndecided: boolean },
       ): void => {
         // A gesture that would record what the store already holds is not a
         // write; sending one would advance the revision for nothing.
         const changing = placeIds.filter(
-          (placeId) => isPlaceAccepted(diff, placeId) !== isAccepted,
+          (placeId) =>
+            dispositionOf(diff, placeId) !== (verdict ?? "undecided"),
         );
         recordChangeVerdicts({
-          op: isAccepted ? "accept" : "withdraw",
+          op:
+            verdict === "accepted"
+              ? "accept"
+              : verdict === "rejected"
+                ? "reject"
+                : "undo",
           from: diff.from,
           to: diff.to,
           placeIds: changing,
+          ...(options === undefined ? {} : options),
         });
       },
     };
-  }, [accepted, recordChangeVerdicts]);
-  const { dispositionOf, isPlaceAccepted, standingOf, setPlacesAccepted } =
-    tourValue;
+  }, [accepted, recordChangeVerdicts, rejected]);
+  const { dispositionOf, standingOf, setPlacesDecided } = tourValue;
   const openTour = (next: OpenTour): void => {
     setShownChangesPlaceId(null);
     setTour(next);
@@ -234,8 +260,12 @@ export const DiffTourProvider = ({
       ? null
       : dispositionOf(tour.diff, active.placeId);
   const isActiveAccepted = activeDisposition === "accepted";
+  const isActiveRejected = activeDisposition === "rejected";
   const isShowingActiveChanges =
     active !== undefined && shownChangesPlaceId === active.placeId;
+  useEffect(() => {
+    if (isActiveRejected) setShownChangesPlaceId(null);
+  }, [isActiveRejected]);
   const standing =
     tour === null
       ? null
@@ -244,10 +274,17 @@ export const DiffTourProvider = ({
           places.map((place) => place.placeId),
         );
   const allAccepted = standing?.isAccepted === true;
+  const allDecided = standing?.isSettled === true;
   useEffect(() => {
-    if (!allAccepted) setShowCompletionSummary(false);
+    if (!allDecided) setShowCompletionSummary(false);
     else setShowCompletionSummary(true);
-  }, [allAccepted, tour?.diff.from, tour?.diff.to]);
+  }, [allDecided, tour?.diff.from, tour?.diff.to]);
+
+  /** Takes back whatever verdict the current change holds. */
+  const undoActivePlace = (): void => {
+    if (tour === null || active === undefined) return;
+    setPlacesDecided(tour.diff, [active.placeId], undefined);
+  };
 
   /** Accepts the current evidence and advances to the next open decision. */
   const acceptActivePlace = (): void => {
@@ -258,13 +295,14 @@ export const DiffTourProvider = ({
     // again rather than the card the reviewer last had open.
     setShownChangesPlaceId(null);
     if (isActiveAccepted) {
-      setPlacesAccepted(tour.diff, [active.placeId], false);
+      undoActivePlace();
       return;
     }
-    setPlacesAccepted(tour.diff, [active.placeId], true);
+    setPlacesDecided(tour.diff, [active.placeId], "accepted");
     const nextIndex = places.findIndex(
       (place, placeIndex) =>
-        placeIndex > index && !isPlaceAccepted(tour.diff, place.placeId),
+        placeIndex > index &&
+        dispositionOf(tour.diff, place.placeId) === "undecided",
     );
     if (nextIndex >= 0) {
       setIndex(nextIndex);
@@ -275,14 +313,24 @@ export const DiffTourProvider = ({
       {children}
       {tour === null || active === undefined ? null : (
         <>
-          <DiffLensPortal
-            diff={tour.diff}
-            place={active}
-            isVisible
-            isSuperseded={tour.isSuperseded === true}
-            isAccepted={isActiveAccepted}
-            isShowingChanges={shownChangesPlaceId === active.placeId}
-          />
+          {/* A rejected change has no lens. What it proposed is gone from the
+              plan, so nothing anchors it, and the archive that catches an
+              unanchored lens would put the rejected wording back on the page -
+              at the bottom, outside the section it came from, asserting the
+              very text the reviewer took out. The restored baseline standing
+              in its place is the whole answer, exactly as an accepted change
+              reads as plan content. The lens is left out of the tree rather
+              than asked to render nothing, so no part of it mounts. */}
+          {isActiveRejected ? null : (
+            <DiffLensPortal
+              diff={tour.diff}
+              place={active}
+              isVisible
+              isSuperseded={tour.isSuperseded === true}
+              isAccepted={isActiveAccepted}
+              isShowingChanges={isShowingActiveChanges}
+            />
+          )}
           <div
             // The bar floats clear of the viewport edge rather than hugging
             // it, and holds a wide enough measure that the change it is
@@ -300,8 +348,13 @@ export const DiffTourProvider = ({
                   finished are the same piece of information, so they share one
                   slot beside the title instead of sitting at opposite ends. */}
               {showCompletionSummary && standing !== null ? (
-                <Badge tone="statusAccent" size="status">
-                  All changes accepted ({standing.accepted} of {standing.total})
+                <Badge
+                  tone={allAccepted ? "statusAccent" : "statusNeutral"}
+                  size="status"
+                >
+                  {allAccepted
+                    ? `All changes accepted (${standing.accepted} of ${standing.total})`
+                    : `All changes decided (${standing.accepted} accepted, ${standing.rejected} rejected)`}
                 </Badge>
               ) : (
                 <Badge tone="statusNeutral" size="status">
@@ -408,13 +461,20 @@ export const DiffTourProvider = ({
                           ? "Accept all changes"
                           : UNRECORDABLE_ACCEPTANCE_LABEL
                       }
-                      onClick={() =>
-                        setPlacesAccepted(
-                          tour.diff,
-                          places.map((place) => place.placeId),
-                          true,
-                        )
-                      }
+                      onClick={() => {
+                        const undecided = places
+                          .filter(
+                            (place) =>
+                              dispositionOf(tour.diff, place.placeId) ===
+                              "undecided",
+                          )
+                          .map((place) => place.placeId);
+                        if (undecided.length > 0) {
+                          setPlacesDecided(tour.diff, undecided, "accepted", {
+                            onlyUndecided: true,
+                          });
+                        }
+                      }}
                     >
                       Accept all
                     </Button>
@@ -436,47 +496,58 @@ export const DiffTourProvider = ({
                       Revert
                     </Button>
                   )}
-                  {isActiveAccepted ? (
+                  {isActiveAccepted || isActiveRejected ? (
                     <>
-                      <Badge tone="statusAccent" size="status">
-                        Accepted
+                      <Badge
+                        tone={
+                          isActiveRejected ? "statusDanger" : "statusAccent"
+                        }
+                        size="status"
+                      >
+                        {isActiveRejected ? "Rejected" : "Accepted"}
                       </Badge>
                       {/* The evidence an accepted place no longer shows in the
                           plan is one control away, so the reviewer can check
                           what they accepted - and unaccept against the same
                           view that produced the acceptance. */}
-                      <Button
-                        variant="outline"
-                        size="micro"
-                        aria-pressed={isShowingActiveChanges}
-                        onClick={() =>
-                          setShownChangesPlaceId(
-                            isShowingActiveChanges ? null : active.placeId,
-                          )
-                        }
-                      >
-                        <Icon
-                          icon={
-                            isShowingActiveChanges ? EYE_OFF_ICON : EYE_ICON
+                      {isActiveRejected ? null : (
+                        <Button
+                          variant="outline"
+                          size="micro"
+                          aria-pressed={isShowingActiveChanges}
+                          onClick={() =>
+                            setShownChangesPlaceId(
+                              isShowingActiveChanges ? null : active.placeId,
+                            )
                           }
-                        />
-                        {isShowingActiveChanges
-                          ? "Hide changes"
-                          : "View changes"}
-                      </Button>
+                        >
+                          <Icon
+                            icon={
+                              isShowingActiveChanges ? EYE_OFF_ICON : EYE_ICON
+                            }
+                          />
+                          {isShowingActiveChanges
+                            ? "Hide changes"
+                            : "View changes"}
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="micro"
                         disabled={!canRecord}
                         aria-label={
                           canRecord
-                            ? "Unaccept this change"
+                            ? isActiveRejected
+                              ? "Undo rejection for this change"
+                              : "Unaccept this change"
                             : UNRECORDABLE_ACCEPTANCE_LABEL
                         }
-                        onClick={acceptActivePlace}
+                        onClick={undoActivePlace}
                       >
                         <Icon icon={UNDO_2_ICON} />
-                        Unaccept
+                        {/* One control takes back whichever verdict the change
+                            holds, so it cannot be named for only one of them. */}
+                        {isActiveRejected ? "Undo" : "Unaccept"}
                       </Button>
                     </>
                   ) : (

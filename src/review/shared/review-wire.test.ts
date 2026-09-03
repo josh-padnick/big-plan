@@ -944,29 +944,49 @@ describe("review wire contract", () => {
   it("should drop change verdicts a browser could not act on", () => {
     const decoded = decodeChangeVerdicts({
       revision: 4,
-      accepted: [
+      decided: [
         {
           from: "a".repeat(16),
           to: "b".repeat(16),
           placeId: "place-1",
-          acceptedAt: "2026-08-18T00:00:00.000Z",
+          verdict: "accepted",
+          decidedAt: "2026-08-18T00:00:00.000Z",
           actor: "auto-accept",
         },
-        { from: "not-a-digest", to: "b".repeat(16), placeId: "place-2" },
+        {
+          from: "a".repeat(16),
+          to: "b".repeat(16),
+          placeId: "place-2",
+          verdict: "rejected",
+          decidedAt: "2026-08-18T00:00:00.000Z",
+        },
+        { from: "not-a-digest", to: "b".repeat(16), placeId: "place-3" },
         { from: "a".repeat(16), to: "b".repeat(16), placeId: "" },
         {
           from: "a".repeat(16),
           to: "b".repeat(16),
-          placeId: "place-3",
-          acceptedAt: "2026-08-18T00:00:00.000Z",
+          placeId: "place-4",
+          verdict: "unsure",
+          decidedAt: "2026-08-18T00:00:00.000Z",
+        },
+        {
+          from: "a".repeat(16),
+          to: "b".repeat(16),
+          placeId: "place-5",
+          verdict: "accepted",
+          decidedAt: "2026-08-18T00:00:00.000Z",
           actor: "mode",
         },
         "not a verdict",
       ],
     });
     expect(decoded.revision).toBe(4);
-    expect(decoded.accepted.map((entry) => entry.placeId)).toEqual(["place-1"]);
-    expect(decoded.accepted[0]?.actor).toBe("auto-accept");
+    expect(decoded.decided.map((entry) => entry.placeId)).toEqual([
+      "place-1",
+      "place-2",
+    ]);
+    expect(decoded.decided[0]?.actor).toBe("auto-accept");
+    expect(decoded.decided[1]?.verdict).toBe("rejected");
   });
 
   it("should expose only a usable review mode and armed time", () => {
@@ -1011,9 +1031,7 @@ describe("review wire contract", () => {
       Number.NaN,
       Number.POSITIVE_INFINITY,
     ]) {
-      expect(decodeChangeVerdicts({ accepted: [], revision }).revision).toBe(
-        -1,
-      );
+      expect(decodeChangeVerdicts({ decided: [], revision }).revision).toBe(-1);
       expect(decodeReviewState({ answers: [], revision }).revision).toBe(-1);
       // The contract has no place to put an unorderable revision: it is the
       // one record whose reader starts at -1, so a body carrying one would
@@ -1091,7 +1109,7 @@ describe("review wire contract", () => {
   // predicate that refused it would report a fresh record as unreadable.
   it("should keep a whole write count, including the first one", () => {
     for (const revision of [0, 7]) {
-      expect(decodeChangeVerdicts({ accepted: [], revision }).revision).toBe(
+      expect(decodeChangeVerdicts({ decided: [], revision }).revision).toBe(
         revision,
       );
       expect(decodeReviewState({ answers: [], revision }).revision).toBe(

@@ -122,7 +122,8 @@ thread in the left margin, the far side of the screen from its content.
 One server-side invariant is worth the same treatment, for the same reason.
 The authoritative plan source has exactly one writer, `src/review/staged-plan-mutation.ts`.
 Agent edits go into a claim-scoped stage, and a stage publishes only under the plan-mutation lock, only when the recorded holder, the claim generation, and the source's base digest all still hold, and only through one atomic rename that a journal written beforehand can settle after a crash.
-The reviewer's two writes cross the same boundary. A revert takes that lock and re-proves the digest it was computed against before renaming, so a revision an agent published in the meantime refuses the revert instead of disappearing under it.
+The reviewer's three writes cross the same boundary. A revert takes that lock and re-proves the digest it was computed against before renaming, so a revision an agent published in the meantime refuses the revert instead of disappearing under it.
+Rejecting a change takes the same lock through the same revert, because its bytes are derived rather than edited: the plan is always the agent's proposed revision with the whole rejected set of that revision restored to the thread's baseline, so an undo re-derives the plan the rejection never touched instead of inverting an earlier write.
 Approval stamps the reviewer's answers into the source as decided decisions, and it does so inside the approval commit's own hold of that lock, because an approval that pinned the pre-stamp revision would go stale against its own write.
 Anything that writes the plan outside that boundary reintroduces the failure the boundary exists to remove, and it does so silently: the bytes land, and nothing refuses them until a reviewer notices work they never approved.
 Its record for the Change Engine goes through `src/review/change-set-commit.ts` and nowhere else, which is what keeps a change set describing published revisions only.
@@ -190,6 +191,7 @@ Route by the kind of fact:
 - How the product looks, and the scales and rules a visual decision picks from, live in [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md); token values stay in `src/render/global.css`.
 - Setup, build, run, and shortest-path usage procedures live in the root [README.md](README.md).
 - DCO, branches, pull requests, CI expectations, and other contribution workflow live in [CONTRIBUTING.md](CONTRIBUTING.md).
+- The npm release, promotion, and rollback procedure, and the changelog discipline that release follows, live in [RELEASING.md](RELEASING.md); the release history a reader sees lives in [CHANGELOG.md](CHANGELOG.md).
 - The vulnerability-reporting policy and Big Plan's security posture live on the docs site's Security page; the repo-root [SECURITY.md](SECURITY.md) points there and never restates it, because GitHub reads that file to offer its reporting affordance.
 - A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
 - An architectural decision and its rationale live in an ADR when the decision needs a durable record.

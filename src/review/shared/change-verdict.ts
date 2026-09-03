@@ -1,11 +1,22 @@
 // Owns what it means to record a verdict for a change, including who caused
-// the acceptance, and the one arithmetic that turns a change set plus the
-// stored record into a count.
+// the fact to be recorded, and the one arithmetic that turns a change set plus
+// the stored record into a count.
+//
+// A change has exactly three dispositions - accepted, rejected, undecided - and
+// undecided is the state every change starts in and returns to. The record
+// holds a row only for the two verdicts, so undecided needs no stored value:
+// it is what the record says about an address it holds nothing for.
+//
+// Undo puts a change back into undecided, which is a live state and not an
+// ending. The reviewer who undoes a verdict is asking to decide again, and the
+// change is once more waiting for an answer that may be either accept or
+// reject - so nothing about how the first decision went can survive to
+// constrain the second.
 //
 // A verdict is addressed by the revision it belongs to - the diff's two
 // snapshot digests - plus the place inside it. That address is content-pinned
 // by construction: a later plan revision produces a different result digest, so
-// an acceptance can never migrate onto different content. Nothing here needs a
+// a verdict can never migrate onto different content. Nothing here needs a
 // currency predicate for the same reason.
 //
 // The counting lives here rather than at each surface because a change set's
@@ -21,16 +32,30 @@ export type ChangeVerdictAddress = {
   readonly placeId: string;
 };
 
-/** Who caused an accepted-change fact to be recorded. */
+/** Who caused a decided-change fact to be recorded. */
 export type ChangeVerdictActor = "reviewer" | "auto-accept";
 
+/** The two verdicts a reviewer can record over one change. */
+export type ChangeVerdictOutcome = "accepted" | "rejected";
+
 /**
- * One recorded verdict. Today a record holds only acceptances, so the verdict
- * is implied by membership; the address is the whole of the fact.
+ * What a review has decided about one change place, as every surface that
+ * presents a change asks it.
+ *
+ * It is a named union rather than a boolean because the disposition is what
+ * presentation switches on, and the reject verdict is a third answer to this
+ * one selector rather than a second question beside it - which is what keeps
+ * the stored record a single shape instead of a fork. `undecided` is the
+ * answer for every address the record holds no row for, which is why nothing
+ * ever stores it.
  */
+export type ChangeDisposition = ChangeVerdictOutcome | "undecided";
+
+/** One recorded verdict: the address, the answer, and when it was given. */
 export type ChangeVerdict = ChangeVerdictAddress & {
-  readonly acceptedAt: string;
-  /** Absent on older rows means reviewer. */
+  readonly verdict: ChangeVerdictOutcome;
+  readonly decidedAt: string;
+  /** Absent means reviewer. */
   readonly actor?: ChangeVerdictActor;
 };
 
@@ -40,7 +65,7 @@ export type ChangeVerdict = ChangeVerdictAddress & {
  * inspecting their bodies, exactly as the answers store does.
  */
 export type ChangeVerdictState = {
-  readonly accepted: ReadonlyArray<ChangeVerdict>;
+  readonly decided: ReadonlyArray<ChangeVerdict>;
   readonly revision: number;
 };
 
@@ -51,20 +76,20 @@ export const SNAPSHOT_DIGEST = /^[a-f0-9]{16,64}$/u;
 export const PLACE_ID_LIMIT = 256;
 
 /**
- * How many accepted changes one review may hold. Reached only by a review with
- * more recorded acceptances than a review could reasonably present, and
- * refused rather than trimmed: dropping the oldest entry would silently reopen
- * a change set that was already closed.
+ * How many decided changes one review may hold. Reached only by a review with
+ * more recorded verdicts than a review could reasonably present, and refused
+ * rather than trimmed: dropping the oldest row would silently reopen a change
+ * set that was already closed.
  */
-export const ACCEPTED_CHANGE_LIMIT = 5_000;
+export const DECIDED_CHANGE_LIMIT = 5_000;
 
 /** How many places one mutation may record, so a single request stays bounded. */
 export const VERDICT_BATCH_LIMIT = 500;
 
 /**
- * The places of one acceptance operation split into mutations the record will
+ * The places of one verdict operation split into mutations the record will
  * accept. A change set can hold more places than a single request may name, and
- * closing all of them is one operation either way, so the split belongs beside
+ * deciding all of them is one operation either way, so the split belongs beside
  * the bound that forces it rather than at the surface that trips over it.
  */
 export const changeVerdictBatches = (
@@ -84,67 +109,103 @@ export const changeVerdictKey = ({
   placeId,
 }: ChangeVerdictAddress): string => `${from}:${to}:${placeId}`;
 
+const keysWithVerdict = ({
+  state,
+  verdict,
+}: {
+  readonly state: ChangeVerdictState;
+  readonly verdict: ChangeVerdictOutcome;
+}): ReadonlySet<string> =>
+  new Set(
+    state.decided
+      .filter((entry) => entry.verdict === verdict)
+      .map((entry) => changeVerdictKey(entry)),
+  );
+
 /** The stored acceptances as the key set every surface asks its questions of. */
 export const acceptedChangeKeys = (
   state: ChangeVerdictState,
-): ReadonlySet<string> =>
-  new Set(state.accepted.map((entry) => changeVerdictKey(entry)));
+): ReadonlySet<string> => keysWithVerdict({ state, verdict: "accepted" });
 
-/** How much of one change set is closed, and how much is still open. */
+/** The stored rejections, read the same way acceptances are. */
+export const rejectedChangeKeys = (
+  state: ChangeVerdictState,
+): ReadonlySet<string> => keysWithVerdict({ state, verdict: "rejected" });
+
+/**
+ * What the record says about one address. Every caller that needs the whole
+ * answer rather than one side of it reads this, so nothing has to spell out
+ * that a change in neither set is undecided.
+ */
+export const changeDispositionOf = ({
+  address,
+  accepted,
+  rejected,
+}: {
+  readonly address: ChangeVerdictAddress;
+  readonly accepted: ReadonlySet<string>;
+  readonly rejected: ReadonlySet<string>;
+}): ChangeDisposition => {
+  const key = changeVerdictKey(address);
+  if (accepted.has(key)) return "accepted";
+  return rejected.has(key) ? "rejected" : "undecided";
+};
+
+/** How much of one change set is decided, how it was decided, and what is left. */
 export type ChangeSetStanding = {
   readonly total: number;
   readonly accepted: number;
+  readonly rejected: number;
   readonly open: number;
   readonly isAccepted: boolean;
+  /** Every place has a verdict, whichever way each one went. */
+  readonly isSettled: boolean;
 };
 
 /**
- * The one definition of a change set's standing. `isAccepted` is deliberately
- * false for an empty set: a change set with nothing in it has not been closed
- * by a verdict, and calling it accepted would report work that never happened.
+ * The one definition of a change set's standing. `isAccepted` and `isSettled`
+ * are deliberately false for an empty set: a change set with nothing in it has
+ * not been closed by a verdict, and calling it settled would report work that
+ * never happened.
+ *
+ * `open` counts only the places nobody has decided, so a rejected change stops
+ * asking the reviewer for an answer exactly as an accepted one does. The two
+ * stay separate above that because they leave the plan in opposite states.
  */
 export const changeSetStanding = ({
   from,
   to,
   placeIds,
   accepted,
+  rejected,
 }: {
   readonly from: string;
   readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
   readonly accepted: ReadonlySet<string>;
+  readonly rejected: ReadonlySet<string>;
 }): ChangeSetStanding => {
   const total = placeIds.length;
-  const closed = placeIds.filter((placeId) =>
-    accepted.has(changeVerdictKey({ from, to, placeId })),
+  const dispositions = placeIds.map((placeId) =>
+    changeDispositionOf({
+      address: { from, to, placeId },
+      accepted,
+      rejected,
+    }),
+  );
+  const acceptedCount = dispositions.filter(
+    (disposition) => disposition === "accepted",
   ).length;
+  const rejectedCount = dispositions.filter(
+    (disposition) => disposition === "rejected",
+  ).length;
+  const decided = acceptedCount + rejectedCount;
   return {
     total,
-    accepted: closed,
-    open: total - closed,
-    isAccepted: total > 0 && closed === total,
+    accepted: acceptedCount,
+    rejected: rejectedCount,
+    open: total - decided,
+    isAccepted: total > 0 && acceptedCount === total,
+    isSettled: total > 0 && decided === total,
   };
 };
-
-/**
- * What a review has decided about one change place, as every surface that
- * presents a change asks it.
- *
- * The record itself holds only acceptances, so membership is the whole fact and
- * this union carries exactly what the record can answer: a place is open until
- * a verdict closes it. It is a named union rather than a boolean because the
- * disposition is what presentation switches on, and the reject verdict adds a
- * third answer to this one selector instead of a second question beside it -
- * which is what keeps the stored record a single shape rather than a fork.
- */
-export type ChangeDisposition = "open" | "accepted";
-
-/** The disposition of one place, from the accepted key set. */
-export const changeDispositionOf = ({
-  address,
-  accepted,
-}: {
-  readonly address: ChangeVerdictAddress;
-  readonly accepted: ReadonlySet<string>;
-}): ChangeDisposition =>
-  accepted.has(changeVerdictKey(address)) ? "accepted" : "open";
