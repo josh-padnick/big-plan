@@ -7,6 +7,7 @@ description: "The coding-agent side of a live review: claim work, report progres
 
 ```text
 big-plan agent <input.mdx>
+big-plan agent connect <input.mdx>
 big-plan agent next <input.mdx> [--wait] [--agent <token>] [--connection <token>]
 big-plan agent push <input.mdx> (--prompt "<text>" | --about "<text>") [--thread <id>] [--agent <token>] [--connection <token>]
 big-plan agent note <input.mdx> "<progress>" --agent <token> [--connection <token>]
@@ -15,19 +16,30 @@ big-plan agent respond <input.mdx> <response.json> --agent <token> [--connection
 
 ## What each action does
 
-`agent <input.mdx>` reads the matching live session and returns the owner-only
-prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
-a model provider itself. The launched coding-agent session uses:
+`agent connect <input.mdx>` is the coding agent's foreground entry point. It
+waits for work and returns the connection summary and oldest pending request in
+one result. The summary names the review server and port, store, session id,
+agent role, pending-request count, and packaged review-protocol document. The
+request carries its response template, private candidate and response paths,
+validation rules, tokens, and exact progress, response, and next commands.
 
-- `agent next <input.mdx> --wait` to receive the oldest pending feedback,
-  thread reply, or plan-wide chat question, its prior conversation, a validated
-  response template, the private candidate to edit, and the exact publish command;
+Keep the returned `next_command` in the foreground after each successful
+response. It preserves the same connection while waiting for the next feedback,
+thread reply, plan-wide chat question, or approval request.
+
+The remaining actions support that connected loop:
+
 - `agent push <input.mdx> --prompt "<text>"` to relay the reviewer's own words as an agent-initiated thread, or `--about "<text>"` to open it in the agent's words;
 - `agent note <input.mdx> "<progress>"` to keep the reviewer
   informed as each meaningful work step begins; and
 - `agent respond <input.mdx> <response.json>` to publish one
   complete answer, and the candidate it was written against, after that
   candidate has rendered and passed lint.
+
+`agent <input.mdx>` remains the reviewer-side launcher: it returns the
+owner-only prompt plus pasteable Codex and Claude launch commands. Big Plan does
+not call a model provider itself; the launched session connects with
+`agent connect`.
 
 A claim records the connection that took it, so the agent that is working can be named without ever naming one that is only waiting.
 

@@ -139,6 +139,7 @@ export const reviewCommand = async (
         custody: "held",
         help: [
           ...warnings,
+          error.message,
           `A live review runtime already serves this plan at ${error.live.url} (session ${error.live.sessionId}, process ${error.live.pid})`,
           ...(heldLink.kind === "published"
             ? [
