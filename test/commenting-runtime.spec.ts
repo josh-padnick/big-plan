@@ -5616,6 +5616,17 @@ test("should preview stale, historical, and multi-place causal diffs through the
     const retiredChangeLens = page.locator("main [data-review-diff-lens]");
     await expect(retiredChangeLens).toHaveCount(1);
     await expect(retiredChangeLens).toContainText("Retired experiment");
+    // Standing beside a neighbour is only the right answer because the
+    // neighbour is in the plan. "Somewhere in main" would also be satisfied by
+    // a card appended after the last slide, which is the archive this work
+    // removed and the defect this journey exists to fence, so the place is
+    // asserted rather than merely the presence: a card in exile has no slide
+    // to belong to, because that is exactly what put it outside the plan.
+    expect(
+      await retiredChangeLens.evaluate(
+        (lens) => lens.closest("[data-slide]") !== null,
+      ),
+    ).toBe(true);
     await page.screenshot({
       path: testInfo.outputPath("retired-change.png"),
     });
