@@ -422,10 +422,9 @@ const refuseForeignPlaces = async ({
       readSnapshot({ store, snapshot: mutation.to }),
     ]);
   } catch {
-    // A span this review can no longer read cannot be attributed either way,
-    // and refusing here would block a decision over evidence that is simply
-    // gone rather than over one that is contested.
-    return;
+    throw new ChangeVerdictsRejected(
+      "This change's revision could not be read, so its ownership could not be verified and the decision was not recorded",
+    );
   }
   const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
   const blocksOf = (markdown: string) =>

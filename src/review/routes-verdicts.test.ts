@@ -313,7 +313,7 @@ describe("recordChangeVerdicts ownership", () => {
   const from = deriveSnapshotDigest(baseline);
   const to = deriveSnapshotDigest(proposed);
 
-  it("refuses a verdict for a place another change set owns", async () => {
+  it("refuses unverifiable and foreign ownership claims", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-verdict-own-"));
     directories.push(directory);
     const planPath = join(directory, "plan.mdx");
@@ -446,6 +446,26 @@ describe("recordChangeVerdicts ownership", () => {
     });
     expect(owned).toHaveLength(2);
     const [alphaPlace, bravoPlace] = owned;
+
+    await rm(join(store.snapshotDirectory, `${to}.mdx`));
+    const unverifiable = await recordChangeVerdicts(context, {
+      query: new URLSearchParams(),
+      headers: {},
+      body: {
+        op: "accept",
+        changeSetId: CHANGE_SET_ID,
+        from,
+        to,
+        places: [{ placeId: alphaPlace ?? "" }],
+      },
+    });
+    expect(unverifiable.status).toBe(400);
+    expect(unverifiable.value).toEqual({
+      error:
+        "This change's revision could not be read, so its ownership could not be verified and the decision was not recorded",
+    });
+    expect(stored.decided).toEqual([]);
+    await writeSnapshot({ store, snapshot: to, source: proposed });
 
     // Thread A tries to decide the place thread B owns.
     const refused = await recordChangeVerdicts(context, {
