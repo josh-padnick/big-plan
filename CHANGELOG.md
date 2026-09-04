@@ -8,7 +8,7 @@ It is written by hand, once per release, by the release engineer — never per p
 
 Big Plan is pre-1.0 and has no compatibility contract yet; see [Pre-release compatibility](AGENTS.md#pre-release-compatibility).
 
-## 0.1.0-alpha.1 — unreleased
+## 0.1.0-alpha.1 — 2026-09-04
 
 The first real release of Big Plan, published as an alpha. Version `0.0.1` was a July 2026 placeholder that claimed the npm name and nothing more; everything below shipped after it.
 
