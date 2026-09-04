@@ -119,7 +119,7 @@ element still answers `getBoundingClientRect()` with an all-zero rect that is
 indistinguishable from a real measurement at the document origin and parks the
 thread in the left margin, the far side of the screen from its content.
 Absence is not one fact either, and that is the fourth contract.
-A name missing from the article can mean the plan no longer holds it, or it can mean a write has already moved the plan source and the swap has not arrived, and the two want opposite renderings: the first earns the historical archive at the foot of the page, the second earns waiting.
+A name missing from the article can mean the plan no longer holds it, or it can mean a write has already moved the plan source and the swap has not arrived, and the two want different renderings: the first renders no fallback because the change set and review bar remain its record, while the second waits for the article to catch up.
 The same resolver owns that distinction and reports `plan-dom-behind` for every miss while the article is known to be stale, which `src/review/browser/plan-dom-lag.ts` decides and a plan-moving verdict write announces.
 Anything that renders absence switches on the reason rather than on a boolean, so a caller that has not considered "not yet" fails to compile instead of drawing a change below the whole plan.
 
