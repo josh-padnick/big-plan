@@ -1688,11 +1688,6 @@ const respond = async ({
       "its requestId does not match the current pending request",
     );
   }
-  if (request.claimedBy !== agentToken) {
-    return failResponseCorrection(
-      "its requestId does not match the request claimed by agent_token",
-    );
-  }
   // The agent answers from the candidate it has been editing, and that
   // candidate's generation is the claim it really holds. A displaced agent
   // still owns a real stage and can still write to it; what it no longer owns

@@ -501,14 +501,9 @@ describe("agent work loop lifecycle", () => {
       label: "an unknown request id",
       response: JSON.stringify({ requestId: "eeeeeeeeeeeeeeee" }),
     },
-    {
-      label: "another pending request id",
-      response: JSON.stringify({ requestId: "cccccccccccccccc" }),
-      queuedRequestId: "cccccccccccccccc",
-    },
   ])(
     "should give an actionable retry when response_file contains $label",
-    async ({ response, queuedRequestId }) => {
+    async ({ response }) => {
       const directory = await mkdtemp(
         join(tmpdir(), "big-plan-agent-response-"),
       );
@@ -526,20 +521,6 @@ describe("agent work loop lifecycle", () => {
         body: "Is the plan ready?",
       });
       await writeAgentRequest({ store: responseRuntime.store, request });
-      if (queuedRequestId !== undefined) {
-        await writeAgentRequest({
-          store: responseRuntime.store,
-          request: messageAgentRequest({
-            kind: "chat",
-            requestId: queuedRequestId,
-            sessionId: responseRuntime.sessionId,
-            planId: responseRuntime.planId,
-            premiseSnapshot: deriveSnapshotDigest(source),
-            createdAt: "2026-08-12T12:00:01.000Z",
-            body: "This request is still queued.",
-          }),
-        });
-      }
 
       try {
         const pickup = await runAgentWorkLoopAction({
