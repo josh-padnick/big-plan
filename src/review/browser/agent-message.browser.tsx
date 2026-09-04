@@ -143,8 +143,8 @@ The thread's proposed plan changes, in a bubble of their own.
 
 A change set is what the reviewer decides on, so it is not a footnote on the
 sentence that announced it: it gets the same standing as a turn in the
-conversation, directly under the reply that produced it, and it keeps that
-standing however long the reply above it is.
+conversation. A thread renders this turn once, at the foot of the conversation,
+so later replies never leave the proposed changes floating above them.
 */
 export const ProposedChangesTurn = ({
   children,

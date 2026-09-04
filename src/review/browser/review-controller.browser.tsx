@@ -4573,7 +4573,7 @@ const SentThread = ({
           )}
           {/* One thread, one proposed-change presentation, always at the foot
               of the conversation below every turn. A thread that committed a
-              revision shows its own change set read against the current plan,
+              revision shows its own committed change set,
               with a heads-up when other work has moved the plan since; a thread
               that has committed nothing but sits on a plan that drifted under a
               still-open reply shows that drift in the same place. The two are
