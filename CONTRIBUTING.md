@@ -89,6 +89,46 @@ A failing gate prints exactly what is missing and the next action to take, so re
 These are comment-protocol gates, not source-validation checks: when either one is red because its current-head marker is missing, changing product code, tests, workflow packaging, or lint configuration cannot satisfy it.
 Complete the review or validation work the diagnostic names, then post the required marker in a pull request conversation comment.
 
+### Read the review checks, not the comments
+
+Every review signal on a pull request is a GitHub **check run** on the current head, and that check run is authoritative.
+Read the check run; never infer a review's state from the presence or absence of a comment.
+A comment is how a marker gets written or how a bot renders its findings, but the gate reads the check run, not the raw comment, and a check run reports its own conclusion and output summary that you can query directly.
+
+Three review checks sit side by side, each on the pull request head:
+
+- **`Graphite / AI Reviews`** — Graphite's AI (Diamond) review result. It is a check run, not a comment.
+  Read its output summary: `AI review ran and left N comments` means the review **completed**, and `N` is how many findings it left.
+  `N = 0` is a completed review with **no findings** — a pass — even though Graphite posts no comment in that case.
+  A `skipped` conclusion with a summary such as `AI code review did not run because this PR is too large` means the review did not run; that is the only signal that reads as "not reviewed".
+  Do **not** infer "not reviewed" from the absence of a Graphite comment, do **not** post `@graphite review` mentions to trigger it, and do **not** ask a human to trigger it — the check run already carries the verdict.
+  Inspect it directly:
+
+  ```sh
+  gh api repos/<owner>/<repo>/commits/<head-sha>/check-runs \
+    --jq '.check_runs[] | select(.name | test("Graphite")) | {conclusion, summary: .output.summary}'
+  ```
+
+- **`review-triage`** and **`validation-attestation`** — the two required merge gates from the table above.
+  Each is a head-specific check run satisfied by a sign-off or attestation **marker comment that names the current head SHA**, in the exact forms below.
+  Because they are head-specific, any new commit invalidates them: the marker no longer names the head, so the check turns red and the marker must be re-posted on the final head.
+  The gate reads the check run's conclusion, not the raw comment; the comment is only how the marker reaches the gate.
+  The markers this repository expects:
+
+  ```text
+  review-triage: complete <head-sha>
+  no-mistakes: passed run <run-id> head <head-sha>
+  ```
+
+  See [The comment formats](#the-comment-formats) for the full set of accepted markers (retraction, override, and the adversarial-review attestation) and the rules for where a marker line counts.
+
+Inspect any of the three the same way — read the check run on the head:
+
+```sh
+gh api repos/<owner>/<repo>/commits/<head-sha>/check-runs \
+  --jq '.check_runs[] | select(.name | test("Graphite|review-triage|validation-attestation")) | {name, conclusion, summary: .output.summary}'
+```
+
 ### The comment formats
 
 Post each marker as a plain line in a comment on the pull request conversation.

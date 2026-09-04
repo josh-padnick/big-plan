@@ -319,6 +319,7 @@ The root README owns generation commands; CI detects drift.
 
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the normal branch, commit, pull-request, and verification workflow.
 Two CI gates decide whether a pull request may merge, and both are satisfied by structured comments rather than by pushing: see [Merge gates](CONTRIBUTING.md#merge-gates) for the exact formats and when to post them.
+Read every review signal — including Graphite's AI review — as the GitHub check run on the pull request head, never from the presence or absence of a comment: see [Read the review checks, not the comments](CONTRIBUTING.md#read-the-review-checks-not-the-comments).
 Before editing, inspect the working tree and preserve changes you did not create.
 Keep each change scoped to its approved purpose, and never repair unrelated work as a side effect.
 
