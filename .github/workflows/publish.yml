@@ -56,6 +56,14 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      # The merge-guard contract tests in `bun run test` build commits with
+      # `git commit-tree`, which aborts with "empty ident name" on a runner with
+      # no git identity. The self-hosted CI runner has an ambient global
+      # identity; this clean GitHub-hosted runner has none, so set one.
+      - name: Configure a git identity for tests that build commits
+        run: |
+          git config --global user.email "ci@big-plan.invalid"
+          git config --global user.name "Big Plan CI"
       - run: bun run lint
       - run: bun run build
       - name: Generated files must not drift from their sources
@@ -108,6 +116,12 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      # Mirror the verify job: the merge-guard contract tests build commits with
+      # `git commit-tree`, which needs a git identity this clean runner lacks.
+      - name: Configure a git identity for tests that build commits
+        run: |
+          git config --global user.email "ci@big-plan.invalid"
+          git config --global user.name "Big Plan CI"
       # Mirror the verify job's order faithfully: `bun run test` shells out to
       # the built CLI (`dist/cli/main.js`) for the agent-loop tests, so the
       # package must be built first, and the Mermaid renderer tests need the
