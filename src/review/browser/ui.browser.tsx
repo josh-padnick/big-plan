@@ -252,8 +252,7 @@ const BADGE_TONES = {
   // family ink, so a rejected state reads as a soft-red pill exactly the way an
   // accepted one reads as soft green. The wash and the ink share one colour
   // (`--callout-danger-c`, which `text-danger` also resolves to), mirroring
-  // statusAccent and statusWarning; an earlier undefined `--danger-c` collapsed
-  // the wash to nothing and left the word floating with no fill.
+  // statusAccent and statusWarning.
   statusDanger:
     "bg-[color-mix(in_srgb,var(--callout-danger-c)_14%,var(--bg))] text-danger",
 } as const;

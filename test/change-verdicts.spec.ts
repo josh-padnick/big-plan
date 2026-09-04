@@ -1169,7 +1169,7 @@ test("should lay out the review bar differently before and after a change is dec
       ).toHaveCount(0);
     });
 
-    await test.step("decided by accepting: View changes and Undo, then the overflow, then the badge", async () => {
+    await test.step("decided by accepting: View changes, Undo, badge, then overflow", async () => {
       await stepper(page)
         .getByRole("button", { name: "Undo rejection for this change" })
         .click();

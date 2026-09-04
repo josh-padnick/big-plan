@@ -757,7 +757,9 @@ export const DiffTourProvider = ({
                             isShowingActiveChanges ? EYE_OFF_ICON : EYE_ICON
                           }
                         />
-                        {isShowingActiveChanges ? "Hide changes" : "View changes"}
+                        {isShowingActiveChanges
+                          ? "Hide changes"
+                          : "View changes"}
                       </Button>
                       {/* One control takes back whichever verdict the change
                           holds, and says the same word either way: the change
