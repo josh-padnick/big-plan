@@ -99,6 +99,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          # Match the verify job: the contract/probe tests in `bun run test`
+          # walk git history (git show <old rev>, merge-base to main), so a
+          # shallow clone fails them. Fetch the full history like verify does.
+          fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
