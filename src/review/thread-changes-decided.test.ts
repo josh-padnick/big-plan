@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
-import { changedPlaceIds } from "./change-restore.js";
+import { changedPlaceIds, changedPlaces } from "./change-restore.js";
 import { recordCommittedRevision } from "./change-set-commit.js";
 import { threadChangesAllDecided } from "./thread-changes-decided.js";
 import type { ChangeVerdictState } from "./shared/change-verdict.js";
@@ -38,10 +38,12 @@ Rollback is automatic too.
 
 const decided = (
   entries: ReadonlyArray<{
+    readonly changeSetId: string;
     readonly from: string;
     readonly to: string;
     readonly placeId: string;
     readonly verdict: "accepted" | "rejected";
+    readonly contentDigest?: string;
   }>,
 ): ChangeVerdictState => ({
   revision: entries.length,
@@ -58,11 +60,14 @@ describe("threadChangesAllDecided", () => {
   const from = deriveSnapshotDigest(BASELINE);
   const to = deriveSnapshotDigest(PROPOSED);
 
+  const SESSION = "dddddddddddddddd";
+  const PLAN = "eeeeeeeeeeeeeeee";
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "big-plan-thread-decided-"));
     planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PROPOSED);
-    store = reviewStoreFor({ planPath, planId: "eeeeeeeeeeeeeeee" });
+    store = reviewStoreFor({ planPath, planId: PLAN });
     await prepareStore(store);
     await writeSnapshot({ store, snapshot: from, source: BASELINE });
     await writeSnapshot({ store, snapshot: to, source: PROPOSED });
@@ -98,10 +103,18 @@ describe("threadChangesAllDecided", () => {
     await expect(
       threadChangesAllDecided({
         store,
+        sessionId: SESSION,
+        planId: PLAN,
         planPath,
         changeSetId: THREAD,
         verdicts: decided([
-          { from, to, placeId: first ?? "", verdict: "accepted" },
+          {
+            changeSetId: THREAD,
+            from,
+            to,
+            placeId: first ?? "",
+            verdict: "accepted",
+          },
         ]),
       }),
     ).resolves.toBe(false);
@@ -113,10 +126,13 @@ describe("threadChangesAllDecided", () => {
     await expect(
       threadChangesAllDecided({
         store,
+        sessionId: SESSION,
+        planId: PLAN,
         planPath,
         changeSetId: THREAD,
         verdicts: decided(
           all.map((placeId, index) => ({
+            changeSetId: THREAD,
             from,
             to,
             placeId,
@@ -132,6 +148,8 @@ describe("threadChangesAllDecided", () => {
     await expect(
       threadChangesAllDecided({
         store,
+        sessionId: SESSION,
+        planId: PLAN,
         planPath,
         changeSetId: "9999999999999999",
         verdicts: decided([]),
@@ -144,6 +162,8 @@ describe("threadChangesAllDecided", () => {
     await expect(
       threadChangesAllDecided({
         store,
+        sessionId: SESSION,
+        planId: PLAN,
         planPath,
         changeSetId: THREAD,
         verdicts: decided(
@@ -152,6 +172,35 @@ describe("threadChangesAllDecided", () => {
             to,
             placeId,
             verdict: "accepted" as const,
+          })),
+        ),
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("stays shut when every carried verdict changed again", async () => {
+    const currentPlaces = changedPlaces({
+      baselineSource: BASELINE,
+      proposedSource: PROPOSED,
+      from,
+      to,
+      fallbackTitle: "plan",
+    });
+    await expect(
+      threadChangesAllDecided({
+        store,
+        sessionId: SESSION,
+        planId: PLAN,
+        planPath,
+        changeSetId: THREAD,
+        verdicts: decided(
+          currentPlaces.map((place) => ({
+            changeSetId: THREAD,
+            from,
+            to,
+            placeId: place.placeId,
+            verdict: "accepted" as const,
+            contentDigest: "0".repeat(16),
           })),
         ),
       }),

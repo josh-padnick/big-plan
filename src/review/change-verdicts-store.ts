@@ -12,6 +12,8 @@
 
 import { join } from "node:path";
 import {
+  CHANGE_SET_ID,
+  CONTENT_DIGEST,
   DECIDED_CHANGE_LIMIT,
   VERDICT_BATCH_LIMIT,
   PLACE_ID_LIMIT,
@@ -19,6 +21,7 @@ import {
   changeVerdictKey,
   type ChangeVerdict,
   type ChangeVerdictActor,
+  type ChangeVerdictPlace,
   type ChangeVerdictOutcome,
   type ChangeVerdictState,
 } from "./shared/change-verdict.js";
@@ -47,14 +50,22 @@ export type StoredChangeVerdicts = ChangeVerdictState & {
  */
 export type ChangeVerdictMutation = {
   readonly op: "accept" | "reject" | "undo";
+  /** The change set whose decision this is, so no other set inherits it. */
+  readonly changeSetId: string;
   readonly from: string;
   readonly to: string;
-  readonly placeIds: ReadonlyArray<string>;
+  /**
+   * The places this decides, each with the content it is being decided over.
+   * The digest comes from the diff the reviewer is looking at, for the same
+   * reason the place id does: the record's job is to hold what was decided,
+   * not to re-derive the change in order to name it.
+   */
+  readonly places: ReadonlyArray<ChangeVerdictPlace>;
   /** The server's own clock, so a browser cannot backdate a verdict. */
   readonly decidedAt: string;
   /** The trusted boundary that created this mutation, never browser input. */
   readonly actor: ChangeVerdictActor;
-  /** Bulk acceptance may decide only places that are still undecided. */
+  /** A bulk verdict may decide only places that are still undecided. */
   readonly onlyUndecided?: boolean;
 };
 
@@ -86,6 +97,19 @@ const record = ({
   return value as Readonly<Record<string, unknown>>;
 };
 
+// A change-set id addresses the owner of a decision, so it is checked to the
+// same shape the committed revision log mints one in. An id no change set
+// holds addresses no decision and is inert rather than dangerous, but a
+// free-form one would let a browser widen a verdict past any owner at all.
+const changeSetId = (value: unknown): string => {
+  if (typeof value !== "string" || !CHANGE_SET_ID.test(value)) {
+    throw new ChangeVerdictsRejected(
+      '"changeSetId" must be a hexadecimal change-set id',
+    );
+  }
+  return value;
+};
+
 const digest = ({
   value,
   field,
@@ -115,6 +139,20 @@ const placeId = (value: unknown): string => {
   if (value.length > PLACE_ID_LIMIT) {
     throw new ChangeVerdictsRejected(
       `"placeId" is longer than ${PLACE_ID_LIMIT} characters`,
+    );
+  }
+  return value;
+};
+
+// A content digest says what the reviewer decided over. It is optional at the
+// boundary because a surface that cannot say is honest to leave it out; what
+// it may not be is malformed, since a digest nothing minted would report a
+// live verdict as stale forever.
+const contentDigest = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !CONTENT_DIGEST.test(value)) {
+    throw new ChangeVerdictsRejected(
+      '"contentDigest" must be a hexadecimal digest',
     );
   }
   return value;
@@ -171,7 +209,9 @@ const outcome = (value: unknown): ChangeVerdictOutcome => {
 const verdict = (value: unknown): ChangeVerdict => {
   const candidate = record({ value, field: "verdict" });
   const decidedBy = actor(candidate.actor);
+  const decidedOver = contentDigest(candidate.contentDigest);
   return {
+    changeSetId: changeSetId(candidate.changeSetId),
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
     placeId: placeId(candidate.placeId),
@@ -181,6 +221,7 @@ const verdict = (value: unknown): ChangeVerdict => {
       field: "decidedAt",
     }),
     ...(decidedBy === undefined ? {} : { actor: decidedBy }),
+    ...(decidedOver === undefined ? {} : { contentDigest: decidedOver }),
   };
 };
 
@@ -237,31 +278,39 @@ export const validateChangeVerdictMutation = ({
       '"op" must be "accept", "reject" or "undo"',
     );
   }
-  if (!Array.isArray(candidate.placeIds) || candidate.placeIds.length === 0) {
-    throw new ChangeVerdictsRejected('"placeIds" must name a change');
+  if (!Array.isArray(candidate.places) || candidate.places.length === 0) {
+    throw new ChangeVerdictsRejected('"places" must name a change');
   }
-  if (candidate.placeIds.length > VERDICT_BATCH_LIMIT) {
+  if (candidate.places.length > VERDICT_BATCH_LIMIT) {
     throw new ChangeVerdictsRejected(
-      `"placeIds" names more than ${VERDICT_BATCH_LIMIT} changes`,
+      `"places" names more than ${VERDICT_BATCH_LIMIT} changes`,
     );
   }
-  const placeIds = candidate.placeIds.map(placeId);
-  if (new Set(placeIds).size !== placeIds.length) {
-    throw new ChangeVerdictsRejected('"placeIds" repeats a change');
+  const places = candidate.places.map((value): ChangeVerdictPlace => {
+    const entry = record({ value, field: "place" });
+    const decidedOver = contentDigest(entry.contentDigest);
+    return {
+      placeId: placeId(entry.placeId),
+      ...(decidedOver === undefined ? {} : { contentDigest: decidedOver }),
+    };
+  });
+  if (new Set(places.map((place) => place.placeId)).size !== places.length) {
+    throw new ChangeVerdictsRejected('"places" repeats a change');
   }
   if (
     candidate.onlyUndecided !== undefined &&
-    (candidate.op !== "accept" || candidate.onlyUndecided !== true)
+    (candidate.op === "undo" || candidate.onlyUndecided !== true)
   ) {
     throw new ChangeVerdictsRejected(
-      '"onlyUndecided" may only be true for an "accept" mutation',
+      '"onlyUndecided" may only be true for an "accept" or "reject" mutation',
     );
   }
   return {
     op: candidate.op,
+    changeSetId: changeSetId(candidate.changeSetId),
     from: digest({ value: candidate.from, field: "from" }),
     to: digest({ value: candidate.to, field: "to" }),
-    placeIds,
+    places,
     decidedAt: now,
     actor: "reviewer",
     ...(candidate.onlyUndecided === undefined
@@ -285,22 +334,29 @@ export const applyChangeVerdictMutation = ({
 }): StoredChangeVerdicts => {
   const revision = verdicts.revision + 1;
   const touched = new Set(
-    mutation.placeIds
-      .filter(
-        (placeId) =>
-          !mutation.onlyUndecided ||
-          !verdicts.decided.some(
-            (entry) =>
-              entry.from === mutation.from &&
-              entry.to === mutation.to &&
-              entry.placeId === placeId,
-          ),
-      )
-      .map((placeId) =>
+    mutation.places
+      .filter((place) => {
+        if (!mutation.onlyUndecided) return true;
+        const existing = verdicts.decided.find(
+          (entry) =>
+            entry.changeSetId === mutation.changeSetId &&
+            entry.from === mutation.from &&
+            entry.to === mutation.to &&
+            entry.placeId === place.placeId,
+        );
+        if (existing === undefined) return true;
+        return (
+          place.contentDigest !== undefined &&
+          existing.contentDigest !== undefined &&
+          place.contentDigest !== existing.contentDigest
+        );
+      })
+      .map((place) =>
         changeVerdictKey({
+          changeSetId: mutation.changeSetId,
           from: mutation.from,
           to: mutation.to,
-          placeId,
+          placeId: place.placeId,
         }),
       ),
   );
@@ -317,19 +373,28 @@ export const applyChangeVerdictMutation = ({
   }
   const decided = [
     ...kept,
-    ...mutation.placeIds
-      .filter((placeId) =>
+    ...mutation.places
+      .filter((place) =>
         touched.has(
-          changeVerdictKey({ from: mutation.from, to: mutation.to, placeId }),
+          changeVerdictKey({
+            changeSetId: mutation.changeSetId,
+            from: mutation.from,
+            to: mutation.to,
+            placeId: place.placeId,
+          }),
         ),
       )
-      .map((placeId) => ({
+      .map((place) => ({
+        changeSetId: mutation.changeSetId,
         from: mutation.from,
         to: mutation.to,
-        placeId,
+        placeId: place.placeId,
         verdict: recorded,
         decidedAt: mutation.decidedAt,
         actor: mutation.actor,
+        ...(place.contentDigest === undefined
+          ? {}
+          : { contentDigest: place.contentDigest }),
       })),
   ];
   if (decided.length > DECIDED_CHANGE_LIMIT) {
@@ -346,6 +411,11 @@ export const applyChangeVerdictMutation = ({
  * A rejected place is the one verdict that also owns bytes, so the set of them
  * is what the plan source has to agree with. Deriving it here keeps that
  * question answerable from the record alone.
+ *
+ * It reads across owners deliberately, where the address a verdict is stored
+ * under does not. A verdict is one change set's decision, but the plan source
+ * is shared, so the bytes have to follow every rejection recorded against the
+ * revision rather than whichever set the reviewer happened to be reading.
  */
 export const rejectedPlaceIdsFor = ({
   verdicts,

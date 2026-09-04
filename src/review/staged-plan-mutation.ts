@@ -49,6 +49,7 @@ import type { ReviewStore } from "./store.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import { autoAcceptChangeSets } from "./change-set-closure.js";
+import { carryForwardChangeVerdicts } from "./change-carry-forward.js";
 import { readActiveArmedReviewMode } from "./review-mode-store.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
@@ -451,8 +452,18 @@ const autoAcceptPushIfArmed = async ({
   if (armed?.sessionId !== response.sessionId) return;
   await autoAcceptChangeSets({
     store,
+    sessionId: response.sessionId,
+    planId: response.planId,
     planPath,
-    transactions: [{ from: baseSnapshot, to: resultSnapshot }],
+    // A push is an immutable transaction keyed by the request that opened it,
+    // so the set this closes is that request and nothing else.
+    transactions: [
+      {
+        changeSetId: response.requestId,
+        from: baseSnapshot,
+        to: resultSnapshot,
+      },
+    ],
     decidedAt,
   });
 };
@@ -621,6 +632,12 @@ export const recoverStagedPlanMutations = async ({
                 claimGeneration: journal.generation,
               },
               now: journal.answeredAt,
+            });
+            await carryForwardChangeVerdicts({
+              store: lockedStore,
+              sessionId: journal.response.sessionId,
+              planId: journal.response.planId,
+              planPath,
             });
             await finalizeCommittedMutation({
               store: lockedStore,
@@ -889,6 +906,11 @@ export const commitStagedPlanMutation = async ({
         response: committedResponse,
       };
       let settledSource = resultSource;
+      // Every round a thread commits renames every place in its change set, so
+      // the reviewer's verdicts are carried onto the new span the moment the
+      // revision is recorded rather than left at an address the next read will
+      // report as nothing decided. It costs nothing when no set moved past a
+      // recorded verdict, which is every commit into a review that has none.
       const answered = await commitRequestTerminal({
         store: lockedStore,
         response: committedResponse,
@@ -957,6 +979,12 @@ export const commitStagedPlanMutation = async ({
             decidedAt: now,
           });
         },
+      });
+      await carryForwardChangeVerdicts({
+        store: lockedStore,
+        sessionId: committedResponse.sessionId,
+        planId: committedResponse.planId,
+        planPath,
       });
       await finalizeCommittedMutation({
         store: lockedStore,

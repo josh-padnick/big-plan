@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  blockEvidence,
   buildSnapshotDiff,
   diffRunSimilarity,
   diffSnapshots,
@@ -805,5 +806,34 @@ describe("picture changes", () => {
         alt: "Inserted",
       },
     });
+  });
+});
+
+// Compiler source positions travel inside a component's model and move whenever
+// anything above it is edited. The content digest is built from this evidence,
+// so hashing them would report an untouched component as changed and re-open a
+// verdict the reviewer gave over content that never moved.
+describe("blockEvidence", () => {
+  const callout = (position: unknown) => ({
+    id: "section/one/callout-1",
+    kind: "callout",
+    label: "Watch out",
+    section: "One",
+    text: "Watch out",
+    isComponentRoot: true,
+    model: { tone: "warning", body: { kind: "text", position } },
+  });
+
+  it("ignores compiler source positions inside a component model", () => {
+    expect(blockEvidence(callout({ start: { line: 4 } }))).toBe(
+      blockEvidence(callout({ start: { line: 91 } })),
+    );
+  });
+
+  it("still answers differently when the model itself changes", () => {
+    const moved = callout({ start: { line: 4 } });
+    expect(blockEvidence(moved)).not.toBe(
+      blockEvidence({ ...moved, model: { ...moved.model, tone: "danger" } }),
+    );
   });
 });

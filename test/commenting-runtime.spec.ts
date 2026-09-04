@@ -4826,12 +4826,19 @@ test("should restore and submit staged comments through the local review runtime
   });
   const changedBlocks = new Set(
     locations.flatMap((location) =>
-      location.newBlockId === undefined ? [] : [location.newBlockId],
+      [location.oldBlockId, location.newBlockId].filter(
+        (blockId): blockId is string => blockId !== undefined,
+      ),
     ),
   );
-  const changeTarget = [...changedBlocks].at(-1);
-  if (changeTarget === undefined) {
-    throw new Error("The simulated rewrite produced no changed target");
+  const removedTarget = locations.find((location) =>
+    location.oldText.includes("Keep every reviewer note safe"),
+  )?.oldBlockId;
+  const deliveryTarget = locations.find((location) =>
+    location.newText.includes("Sending atomically writes"),
+  )?.newBlockId;
+  if (removedTarget === undefined || deliveryTarget === undefined) {
+    throw new Error("The simulated rewrite did not produce both changes");
   }
   const resultSnapshot = deriveSnapshotDigest(afterSource);
   await writeSnapshot({
@@ -4853,12 +4860,29 @@ test("should restore and submit staged comments through the local review runtime
     response: validateAgentResponseDraft({
       value: {
         requestId: request.requestId,
-        outcomes: request.comments.map((comment) => ({
-          commentId: comment.id,
-          state: "changed",
-          message: "Removed the ambiguous promise and tightened delivery.",
-          changeTargets: [changeTarget],
-        })),
+        outcomes: request.comments.map((comment) =>
+          comment.body === "Clarify the failure boundary."
+            ? {
+                commentId: comment.id,
+                state: "changed",
+                message:
+                  "Removed the ambiguous promise and tightened delivery.",
+                changeTargets: [deliveryTarget],
+              }
+            : comment.body === "Name the operator recovery path."
+              ? {
+                  commentId: comment.id,
+                  state: "changed",
+                  message:
+                    "Removed the ambiguous promise and tightened delivery.",
+                  changeTargets: [removedTarget],
+                }
+              : {
+                  commentId: comment.id,
+                  state: "answered",
+                  message: "Reviewed the attached context.",
+                },
+        ),
       },
       request: claimed,
       commentsById: commentsFromExchange(exchange),

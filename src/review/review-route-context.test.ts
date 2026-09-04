@@ -350,6 +350,7 @@ describe("createSnapshotDiffs", () => {
       decided: [
         ...current.decided,
         {
+          changeSetId: "cafe",
           from: FROM_SNAPSHOT,
           to: TO_SNAPSHOT,
           placeId: "accepted-place",

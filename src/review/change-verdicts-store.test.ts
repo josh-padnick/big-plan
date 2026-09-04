@@ -20,6 +20,8 @@ import {
 const FROM = "aaaaaaaaaaaaaaaa";
 const TO = "bbbbbbbbbbbbbbbb";
 const LATER = "cccccccccccccccc";
+const SET = "cafe";
+const OTHER_SET = "beef";
 const NOW = "2026-08-18T00:00:00.000Z";
 
 const empty: StoredChangeVerdicts = {
@@ -29,38 +31,51 @@ const empty: StoredChangeVerdicts = {
 };
 
 const row = ({
+  changeSetId = SET,
   from = FROM,
   to = TO,
   placeId,
   verdict = "accepted" as const,
   actor,
+  contentDigest,
 }: {
+  readonly changeSetId?: string;
   readonly from?: string;
   readonly to?: string;
   readonly placeId: string;
   readonly verdict?: "accepted" | "rejected";
   readonly actor?: string;
+  readonly contentDigest?: string;
 }) => ({
+  changeSetId,
   from,
   to,
   placeId,
   verdict,
   decidedAt: NOW,
   ...(actor === undefined ? {} : { actor }),
+  ...(contentDigest === undefined ? {} : { contentDigest }),
 });
 
 const mutate = (
   op: "accept" | "reject" | "undo",
   placeIds: ReadonlyArray<string>,
   to = TO,
+  changeSetId = SET,
 ) =>
   validateChangeVerdictMutation({
-    value: { op, from: FROM, to, placeIds },
+    value: {
+      op,
+      changeSetId,
+      from: FROM,
+      to,
+      places: placeIds.map((placeId) => ({ placeId })),
+    },
     now: NOW,
   });
 
-const accept = (placeIds: ReadonlyArray<string>, to = TO) =>
-  mutate("accept", placeIds, to);
+const accept = (placeIds: ReadonlyArray<string>, to = TO, changeSetId = SET) =>
+  mutate("accept", placeIds, to, changeSetId);
 
 describe("validateChangeVerdicts", () => {
   it("reads an absent record as an empty one at revision zero", () => {
@@ -151,9 +166,10 @@ describe("validateChangeVerdictMutation", () => {
     const mutation = validateChangeVerdictMutation({
       value: {
         op: "accept",
+        changeSetId: SET,
         from: FROM,
         to: TO,
-        placeIds: ["p1"],
+        places: [{ placeId: "p1" }],
         decidedAt: "1999-01-01T00:00:00.000Z",
         actor: "auto-accept",
       },
@@ -172,7 +188,13 @@ describe("validateChangeVerdictMutation", () => {
   it("refuses an unknown operation", () => {
     expect(() =>
       validateChangeVerdictMutation({
-        value: { op: "withdraw", from: FROM, to: TO, placeIds: ["p1"] },
+        value: {
+          op: "withdraw",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [{ placeId: "p1" }],
+        },
         now: NOW,
       }),
     ).toThrow(/"accept", "reject" or "undo"/u);
@@ -183,25 +205,64 @@ describe("validateChangeVerdictMutation", () => {
   it("keeps a place id exactly as the caller wrote it", () => {
     expect(
       validateChangeVerdictMutation({
-        value: { op: "accept", from: FROM, to: TO, placeIds: [" p1 "] },
+        value: {
+          op: "accept",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [{ placeId: " p1 " }],
+        },
         now: NOW,
-      }).placeIds,
-    ).toEqual([" p1 "]);
+      }).places,
+    ).toEqual([{ placeId: " p1 " }]);
   });
 
   it("refuses a place id that is only whitespace", () => {
     expect(() =>
       validateChangeVerdictMutation({
-        value: { op: "accept", from: FROM, to: TO, placeIds: ["   "] },
+        value: {
+          op: "accept",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [{ placeId: "   " }],
+        },
         now: NOW,
       }),
     ).toThrow(/non-empty text/u);
   });
 
+  // A mutation with no owner names no change set, and a record that accepted
+  // one would hold a decision every set at those bounds could answer to. That
+  // is exactly the leak the owner in the address exists to close, so it is
+  // refused at the boundary rather than stored and disambiguated later.
+  it("refuses a mutation that names no change set", () => {
+    for (const changeSetId of [undefined, "", "not hex", "z".repeat(4)]) {
+      expect(() =>
+        validateChangeVerdictMutation({
+          value: {
+            op: "accept",
+            ...(changeSetId === undefined ? {} : { changeSetId }),
+            from: FROM,
+            to: TO,
+            places: [{ placeId: "p1" }],
+          },
+          now: NOW,
+        }),
+      ).toThrow(/hexadecimal change-set id/u);
+    }
+  });
+
   it("refuses a mutation that names no change", () => {
     expect(() =>
       validateChangeVerdictMutation({
-        value: { op: "accept", from: FROM, to: TO, placeIds: [] },
+        value: {
+          op: "accept",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [],
+        },
         now: NOW,
       }),
     ).toThrow(/must name a change/u);
@@ -212,11 +273,12 @@ describe("validateChangeVerdictMutation", () => {
       validateChangeVerdictMutation({
         value: {
           op: "accept",
+          changeSetId: SET,
           from: FROM,
           to: TO,
-          placeIds: Array.from(
+          places: Array.from(
             { length: VERDICT_BATCH_LIMIT + 1 },
-            (_, index) => `p${index}`,
+            (_, index) => ({ placeId: `p${index}` }),
           ),
         },
         now: NOW,
@@ -227,7 +289,13 @@ describe("validateChangeVerdictMutation", () => {
   it("refuses a batch that repeats one change", () => {
     expect(() =>
       validateChangeVerdictMutation({
-        value: { op: "accept", from: FROM, to: TO, placeIds: ["p1", "p1"] },
+        value: {
+          op: "accept",
+          changeSetId: SET,
+          from: FROM,
+          to: TO,
+          places: [{ placeId: "p1" }, { placeId: "p1" }],
+        },
         now: NOW,
       }),
     ).toThrow(/repeats a change/u);
@@ -235,17 +303,23 @@ describe("validateChangeVerdictMutation", () => {
 
   it.each([
     { op: "accept", onlyUndecided: false },
-    { op: "reject", onlyUndecided: true },
     { op: "undo", onlyUndecided: true },
   ])(
     "refuses onlyUndecided=$onlyUndecided for a $op mutation",
     ({ op, onlyUndecided }) => {
       expect(() =>
         validateChangeVerdictMutation({
-          value: { op, from: FROM, to: TO, placeIds: ["p1"], onlyUndecided },
+          value: {
+            op,
+            changeSetId: SET,
+            from: FROM,
+            to: TO,
+            places: [{ placeId: "p1" }],
+            onlyUndecided,
+          },
           now: NOW,
         }),
-      ).toThrow(/may only be true for an "accept" mutation/u);
+      ).toThrow(/may only be true for an "accept" or "reject" mutation/u);
     },
   );
 });
@@ -281,6 +355,46 @@ describe("applyChangeVerdictMutation", () => {
     ]);
   });
 
+  it("rejects only still-undecided places when a bulk decision races an acceptance", () => {
+    const accepted = applyChangeVerdictMutation({
+      verdicts: empty,
+      mutation: accept(["p1"]),
+    });
+    const next = applyChangeVerdictMutation({
+      verdicts: accepted,
+      mutation: {
+        ...mutate("reject", ["p1", "p2"]),
+        onlyUndecided: true,
+      },
+    });
+    expect(next.decided).toEqual([
+      row({ placeId: "p1", actor: "reviewer" }),
+      row({ placeId: "p2", verdict: "rejected", actor: "reviewer" }),
+    ]);
+  });
+
+  it("accepts a stale place during a guarded bulk decision", () => {
+    const oldDigest = "1".repeat(16);
+    const newDigest = "2".repeat(16);
+    const stale: StoredChangeVerdicts = {
+      version: 1,
+      revision: 1,
+      decided: [row({ placeId: "p1", contentDigest: oldDigest })],
+    };
+    const next = applyChangeVerdictMutation({
+      verdicts: stale,
+      mutation: {
+        ...accept(["p1"]),
+        places: [{ placeId: "p1", contentDigest: newDigest }],
+        onlyUndecided: true,
+      },
+    });
+
+    expect(next.decided).toEqual([
+      row({ placeId: "p1", actor: "reviewer", contentDigest: newDigest }),
+    ]);
+  });
+
   it("records a rejection under the same address an acceptance uses", () => {
     const next = applyChangeVerdictMutation({
       verdicts: empty,
@@ -290,6 +404,37 @@ describe("applyChangeVerdictMutation", () => {
     expect(next.decided).toEqual([
       row({ placeId: "p1", verdict: "rejected", actor: "reviewer" }),
     ]);
+  });
+
+  // Two change sets can attribute one place inside a revision they both span,
+  // and their reviewers decide it separately. The record therefore holds one
+  // row per owner, and a decision by one leaves the other's place undecided -
+  // which is the whole reason the owner is part of the address.
+  it("holds one row per change set for a place two of them share", () => {
+    const acceptedByOne = applyChangeVerdictMutation({
+      verdicts: empty,
+      mutation: accept(["p1"]),
+    });
+    const rejectedByTheOther = applyChangeVerdictMutation({
+      verdicts: acceptedByOne,
+      mutation: mutate("reject", ["p1"], TO, OTHER_SET),
+    });
+    expect(rejectedByTheOther.decided).toEqual([
+      row({ placeId: "p1", verdict: "accepted", actor: "reviewer" }),
+      row({
+        changeSetId: OTHER_SET,
+        placeId: "p1",
+        verdict: "rejected",
+        actor: "reviewer",
+      }),
+    ]);
+    // Undoing one owner's verdict leaves the other's exactly where it was.
+    expect(
+      applyChangeVerdictMutation({
+        verdicts: rejectedByTheOther,
+        mutation: mutate("undo", ["p1"], TO, OTHER_SET),
+      }).decided,
+    ).toEqual([row({ placeId: "p1", verdict: "accepted", actor: "reviewer" })]);
   });
 
   // Undo returns a change to undecided whichever way it had been decided, and

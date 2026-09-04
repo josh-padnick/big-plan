@@ -3,6 +3,8 @@
 
 import { isStoredCommentTarget, type ReviewComment } from "./comment.js";
 import {
+  CHANGE_SET_ID,
+  CONTENT_DIGEST,
   PLACE_ID_LIMIT,
   SNAPSHOT_DIGEST,
   type ChangeVerdict,
@@ -223,6 +225,8 @@ export type DiffLocation = {
   readonly section: string;
   readonly oldText: string;
   readonly newText: string;
+  readonly oldEvidence?: string;
+  readonly newEvidence?: string;
   readonly oldPresentation?: BlockPresentation;
   readonly newPresentation?: BlockPresentation;
   readonly oldTableHeaders?: ReadonlyArray<string>;
@@ -242,11 +246,25 @@ export type DiffLocation = {
 
 export type DiffPlace = {
   readonly placeId: string;
+  /**
+   * What this place shows, independent of the revision it was minted under. A
+   * verdict carried onto a later round compares this with what it was decided
+   * over, which is how a change that moved again reads as re-opened rather
+   * than as one nobody has seen.
+   */
+  readonly contentDigest: string;
   readonly status: "changed" | "added" | "removed";
   readonly label: string;
   readonly section: string;
   readonly note: "reworded" | "rewritten" | "replaced" | "added" | "removed";
   readonly locationIndexes: ReadonlyArray<number>;
+  /**
+   * The change sets that declared the blocks in this place, where the runtime
+   * could name them. It is what lets a thread say whose work the rest of the
+   * changes in view belong to instead of counting them anonymously; a place
+   * whose blocks nobody declared carries none.
+   */
+  readonly ownerChangeSetIds?: ReadonlyArray<string>;
 };
 
 export type SnapshotDiff = {
@@ -469,6 +487,8 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
     revision: storedRevision(value.revision),
     decided: value.decided.flatMap((entry): ReadonlyArray<ChangeVerdict> =>
       isReviewWireRecord(entry) &&
+      typeof entry.changeSetId === "string" &&
+      CHANGE_SET_ID.test(entry.changeSetId) &&
       typeof entry.from === "string" &&
       SNAPSHOT_DIGEST.test(entry.from) &&
       typeof entry.to === "string" &&
@@ -480,15 +500,22 @@ export const decodeChangeVerdicts = (value: unknown): ChangeVerdictState => {
       typeof entry.decidedAt === "string" &&
       (entry.actor === undefined ||
         entry.actor === "reviewer" ||
-        entry.actor === "auto-accept")
+        entry.actor === "auto-accept") &&
+      (entry.contentDigest === undefined ||
+        (typeof entry.contentDigest === "string" &&
+          CONTENT_DIGEST.test(entry.contentDigest)))
         ? [
             {
+              changeSetId: entry.changeSetId,
               from: entry.from,
               to: entry.to,
               placeId: entry.placeId,
               verdict: entry.verdict,
               decidedAt: entry.decidedAt,
               ...(entry.actor === undefined ? {} : { actor: entry.actor }),
+              ...(typeof entry.contentDigest === "string"
+                ? { contentDigest: entry.contentDigest }
+                : {}),
             },
           ]
         : [],
@@ -519,8 +546,10 @@ export type CommittedChangeSetState = {
 
 // A change set is keyed by an ordinary comment thread's short id or by an
 // immutable transaction's request id, so the wire accepts both widths.
-const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/;
 
+// Neither of the reviewer's own writes ever reaches a browser as a change set,
+// because neither proposes anything, which is why the four agent kinds are the
+// whole of what a change set may arrive as.
 const CHANGE_SET_PROVENANCE: ReadonlySet<string> = new Set<ChangeSetProvenance>(
   ["feedback", "reply", "chat", "push"],
 );
@@ -1286,6 +1315,12 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
           section: location.section,
           oldText: location.oldText,
           newText: location.newText,
+          ...(typeof location.oldEvidence === "string"
+            ? { oldEvidence: location.oldEvidence }
+            : {}),
+          ...(typeof location.newEvidence === "string"
+            ? { newEvidence: location.newEvidence }
+            : {}),
           ...(oldPresentation === undefined ? {} : { oldPresentation }),
           ...(newPresentation === undefined ? {} : { newPresentation }),
           ...(Array.isArray(location.oldTableHeaders) &&
@@ -1326,6 +1361,8 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
     if (
       !isReviewWireRecord(place) ||
       typeof place.placeId !== "string" ||
+      typeof place.contentDigest !== "string" ||
+      !CONTENT_DIGEST.test(place.contentDigest) ||
       (place.status !== "changed" &&
         place.status !== "added" &&
         place.status !== "removed") ||
@@ -1348,14 +1385,22 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
         index < locations.length,
     );
     if (locationIndexes.length !== place.locationIndexes.length) return [];
+    const ownerChangeSetIds = Array.isArray(place.ownerChangeSetIds)
+      ? place.ownerChangeSetIds.filter(
+          (id): id is string =>
+            typeof id === "string" && CHANGE_SET_ID.test(id),
+        )
+      : [];
     return [
       {
         placeId: place.placeId,
+        contentDigest: place.contentDigest,
         status: place.status,
         label: place.label,
         section: place.section,
         note: place.note,
         locationIndexes,
+        ...(ownerChangeSetIds.length === 0 ? {} : { ownerChangeSetIds }),
       },
     ];
   });

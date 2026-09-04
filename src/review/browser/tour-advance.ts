@@ -36,27 +36,27 @@ export const changeSetTourId = ({
 }): string => `${threadId}:${kind}`;
 
 /**
- * Whether the open tour is behind the change set given here.
+ * Whether the open tour is behind the comparison given here.
  *
  * A thread owns one change set whose result advances as replies commit, so the
- * bounds the stepper holds go stale the moment the next reply publishes. The
- * set is matched by the thread that owns it rather than by its bounds alone:
- * two threads opened against the same plan state share a baseline, so bounds
- * alone would move the reviewer onto another thread's change.
+ * bounds the bar holds go stale the moment the next reply publishes. The
+ * comparison is matched by the tour it belongs to rather than by its bounds
+ * alone: two threads opened against the same plan state share a baseline, so
+ * bounds alone would move the reviewer onto another thread's change.
  */
 export const tourIsBehind = ({
-  activeChangeSetId,
+  activeTourId,
   activeDiff,
-  changeSetId,
+  tourId,
   diff,
 }: {
-  readonly activeChangeSetId: string | null;
+  readonly activeTourId: string | null;
   readonly activeDiff: { readonly from: string; readonly to: string } | null;
-  readonly changeSetId: string | undefined;
+  readonly tourId: string | undefined;
   readonly diff: { readonly from: string; readonly to: string } | null;
 }): boolean =>
-  changeSetId !== undefined &&
-  activeChangeSetId === changeSetId &&
+  tourId !== undefined &&
+  activeTourId === tourId &&
   activeDiff !== null &&
   diff !== null &&
   (activeDiff.from !== diff.from || activeDiff.to !== diff.to);

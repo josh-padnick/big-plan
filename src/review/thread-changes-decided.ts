@@ -15,11 +15,14 @@
 // an unprovable claim is not a proof.
 
 import { basename, extname } from "node:path";
-import { changedPlaceIds } from "./change-restore.js";
+import { changedSnapshotDiff } from "./change-restore.js";
 import { readCommittedChangeSets } from "./change-set-commit.js";
+import { readChangeOwnership } from "./change-ownership.js";
+import { attributeOwnedDiffPlaces } from "./shared/change-attribution.js";
 import {
   changeDispositionOf,
   acceptedChangeKeys,
+  decidedContentDigests,
   rejectedChangeKeys,
   type ChangeVerdictState,
 } from "./shared/change-verdict.js";
@@ -34,11 +37,15 @@ import type { ReviewStore } from "./store.js";
  */
 export const threadChangesAllDecided = async ({
   store,
+  sessionId,
+  planId,
   planPath,
   changeSetId,
   verdicts,
 }: {
   readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
   readonly planPath: string;
   readonly changeSetId: string;
   readonly verdicts: ChangeVerdictState;
@@ -60,22 +67,39 @@ export const threadChangesAllDecided = async ({
     // and an unanswerable question is not a yes.
     return false;
   }
-  const places = changedPlaceIds({
+  // The reader's own addresses, which means the reader's own grouping: a place
+  // minted without the ownership partition is one no recorded verdict names.
+  const ownership = await readChangeOwnership({
+    store,
+    sessionId,
+    planId,
+    from,
+    to,
+  });
+  const diff = changedSnapshotDiff({
     baselineSource,
     proposedSource,
     from,
     to,
     fallbackTitle: basename(planPath, extname(planPath)),
+    ...(ownership === undefined ? {} : { ownership }),
   });
+  const attributed = new Set(
+    attributeOwnedDiffPlaces({ diff, changeSetId }).placeIds,
+  );
+  const places = diff.places.filter((place) => attributed.has(place.placeId));
   if (places.length === 0) return false;
   const accepted = acceptedChangeKeys(verdicts);
   const rejected = rejectedChangeKeys(verdicts);
-  return places.every(
-    (placeId) =>
-      changeDispositionOf({
-        address: { from, to, placeId },
-        accepted,
-        rejected,
-      }) !== "undecided",
-  );
+  const decidedDigests = decidedContentDigests(verdicts);
+  return places.every((place) => {
+    const disposition = changeDispositionOf({
+      address: { changeSetId, from, to, placeId: place.placeId },
+      accepted,
+      rejected,
+      decidedDigests,
+      contentDigest: place.contentDigest,
+    });
+    return disposition !== "undecided" && disposition !== "stale";
+  });
 };

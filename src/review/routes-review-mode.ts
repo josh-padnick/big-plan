@@ -56,16 +56,17 @@ const transactionsForThread = async ({
         }),
       ),
   );
+  // A verdict is addressed to the change set that owns it, so a revision is
+  // closed once per set it advanced rather than once per revision.
   return revisions.flatMap((revision) =>
     revision === undefined ||
     (revision.provenance !== "push" && revision.provenance !== "reply")
       ? []
-      : [
-          {
-            from: revision.baseSnapshot,
-            to: revision.resultSnapshot,
-          },
-        ],
+      : revision.changeSetIds.map((changeSetId) => ({
+          changeSetId,
+          from: revision.baseSnapshot,
+          to: revision.resultSnapshot,
+        })),
   );
 };
 
@@ -115,6 +116,8 @@ export const updateReviewMode = async (
       const armedAtMs = Date.now();
       await autoAcceptChangeSets({
         store,
+        sessionId: context.sessionId,
+        planId: context.planId,
         planPath: context.resolvedPlanPath,
         transactions,
         decidedAt: new Date(armedAtMs).toISOString(),

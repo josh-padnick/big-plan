@@ -48,6 +48,7 @@ const diff: SnapshotDiff = {
       section: "Two",
       note: "added",
       locationIndexes: [1],
+      ownerChangeSetIds: ["beef"],
     },
   ],
 };
@@ -58,7 +59,56 @@ describe("change attribution", () => {
       attributeDiffPlaces({
         diff,
         changeTargets: ["section/one/paragraph-1"],
+        changeSetId: "cafe",
       }),
-    ).toEqual({ placeIds: ["1".repeat(16)], spilloverCount: 1 });
+    ).toEqual({
+      placeIds: ["1".repeat(16)],
+      spilloverCount: 1,
+      foreign: [{ changeSetId: "beef", placeCount: 1 }],
+    });
+  });
+
+  it("should never report the attributed set as foreign to itself", () => {
+    const owned: SnapshotDiff = {
+      ...diff,
+      places: diff.places.map((place) => ({
+        ...place,
+        ownerChangeSetIds: ["cafe"],
+      })),
+    };
+    expect(
+      attributeDiffPlaces({
+        diff: owned,
+        changeTargets: ["section/one/paragraph-1"],
+        changeSetId: "cafe",
+      }),
+    ).toEqual({
+      placeIds: ["1".repeat(16)],
+      spilloverCount: 1,
+      foreign: [],
+    });
+  });
+
+  it("should exclude a targeted place when another change set owns it", () => {
+    const foreignTarget: SnapshotDiff = {
+      ...diff,
+      places: [
+        {
+          ...diff.places[0],
+          ownerChangeSetIds: ["beef"],
+        },
+      ],
+    };
+    expect(
+      attributeDiffPlaces({
+        diff: foreignTarget,
+        changeTargets: ["section/one/paragraph-1"],
+        changeSetId: "cafe",
+      }),
+    ).toEqual({
+      placeIds: [],
+      spilloverCount: 1,
+      foreign: [{ changeSetId: "beef", placeCount: 1 }],
+    });
   });
 });

@@ -94,6 +94,8 @@ export const closuresForResolvedThreads = async ({
     if (span === undefined) continue;
     const diff = await transactionSnapshotDiff({
       store,
+      sessionId,
+      planId,
       planPath,
       from: span.from,
       to: span.to,
@@ -103,12 +105,31 @@ export const closuresForResolvedThreads = async ({
       responses: exchange.responses,
       commentId,
     });
-    const placeIds =
+    const owned =
       changeTargets === undefined
-        ? diff.places.map((place) => place.placeId)
-        : attributeDiffPlaces({ diff, changeTargets }).placeIds;
-    if (placeIds.length === 0) continue;
-    closures.push({ from: span.from, to: span.to, placeIds });
+        ? new Set(diff.places.map((place) => place.placeId))
+        : new Set(
+            attributeDiffPlaces({
+              diff,
+              changeTargets,
+              changeSetId: commentId,
+            }).placeIds,
+          );
+    // The content each place holds travels with it, so a resolve that closed a
+    // change can still say what it closed when a later round rewrites it.
+    const places = diff.places.filter((place) => owned.has(place.placeId));
+    if (places.length === 0) continue;
+    // A thread's change set is keyed by the comment it grew from, so that is
+    // the owner every verdict this resolve records is addressed to.
+    closures.push({
+      changeSetId: commentId,
+      from: span.from,
+      to: span.to,
+      places: places.map((place) => ({
+        placeId: place.placeId,
+        contentDigest: place.contentDigest,
+      })),
+    });
   }
   return closures;
 };

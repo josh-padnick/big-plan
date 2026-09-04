@@ -13,22 +13,55 @@
 // reject - so nothing about how the first decision went can survive to
 // constrain the second.
 //
-// A verdict is addressed by the revision it belongs to - the diff's two
-// snapshot digests - plus the place inside it. That address is content-pinned
-// by construction: a later plan revision produces a different result digest, so
-// a verdict can never migrate onto different content. Nothing here needs a
-// currency predicate for the same reason.
+// A verdict is addressed by the change set that proposed it, the revision it
+// belongs to - the diff's two snapshot digests - and the place inside it. That
+// address is content-pinned by construction: a later plan revision produces a
+// different result digest, so a verdict can never migrate onto different
+// content. Nothing here needs a currency predicate for the same reason.
+//
+// The change set is part of the address because a revision line is shared and
+// a reviewer's decision is not. Two threads answered by one revision routinely
+// attribute the same place - their edits land side by side and the diff groups
+// them - and without an owner in the key those two threads hold one acceptance
+// fact between them, so closing one silently closes the other. The owner makes
+// the address say whose decision it is, which is the difference between a
+// record that can be read back per thread and one that cannot.
 //
 // The counting lives here rather than at each surface because a change set's
 // progress is shown in more than one place at once - the digest attached to an
 // agent message, the stepper reviewing that same set - and two surfaces that
 // each derive it are two surfaces that can disagree about whether the change
 // set still has open work.
+//
+// A change set's span advances as its thread commits more rounds, which renames
+// every place in it, so a verdict is carried onto the new address by the block
+// it is about rather than left at an address nothing asks about any more. What
+// a carried verdict cannot promise is that it still applies: the round that
+// advanced the set may have rewritten the very change it was given for. So a
+// row also carries a digest of the content it was decided over, and a row whose
+// digest no longer matches the place in front of the reviewer reads as `stale` -
+// "you decided this, and it changed again" - rather than as either a live
+// verdict or a change nobody has seen. That is the same shape, and the same
+// word, the decision-answers record already uses for an answer the plan moved
+// out from under; and it is self-healing in the same way, because restoring the
+// content restores the digest and with it the verdict.
 
-/** The revision-scoped address of one change place. */
-export type ChangeVerdictAddress = {
+/**
+ * The scope one surface records verdicts under: the change set that owns the
+ * decision, and the revision its diff spans.
+ *
+ * It is named separately from the address because every surface that decides
+ * changes holds it once and names many places inside it, and because a scope
+ * with no place in it is still the thing a standing is counted over.
+ */
+export type ChangeVerdictScope = {
+  readonly changeSetId: string;
   readonly from: string;
   readonly to: string;
+};
+
+/** The owner- and revision-scoped address of one change place. */
+export type ChangeVerdictAddress = ChangeVerdictScope & {
   readonly placeId: string;
 };
 
@@ -47,9 +80,11 @@ export type ChangeVerdictOutcome = "accepted" | "rejected";
  * one selector rather than a second question beside it - which is what keeps
  * the stored record a single shape instead of a fork. `undecided` is the
  * answer for every address the record holds no row for, which is why nothing
- * ever stores it.
+ * ever stores it, and `stale` is the answer for a row whose content moved,
+ * which is why nothing stores that either: both are read off the record rather
+ * than written into it.
  */
-export type ChangeDisposition = ChangeVerdictOutcome | "undecided";
+export type ChangeDisposition = ChangeVerdictOutcome | "undecided" | "stale";
 
 /** One recorded verdict: the address, the answer, and when it was given. */
 export type ChangeVerdict = ChangeVerdictAddress & {
@@ -57,6 +92,24 @@ export type ChangeVerdict = ChangeVerdictAddress & {
   readonly decidedAt: string;
   /** Absent means reviewer. */
   readonly actor?: ChangeVerdictActor;
+  /**
+   * A digest of the change's content at the moment it was decided. Absent on a
+   * row written before the reviewer's surface could supply one, and absence is
+   * read as "cannot tell", which keeps the verdict live rather than inventing
+   * staleness the record has no evidence for.
+   */
+  readonly contentDigest?: string;
+};
+
+/**
+ * One place a verdict operation names, with the content the reviewer decided
+ * over. The digest travels with the place rather than beside it because the
+ * two are one fact: a verdict given for content nobody recorded cannot later
+ * say whether that content moved.
+ */
+export type ChangeVerdictPlace = {
+  readonly placeId: string;
+  readonly contentDigest?: string;
 };
 
 /**
@@ -72,8 +125,18 @@ export type ChangeVerdictState = {
 /** A snapshot digest, as every review endpoint spells one. */
 export const SNAPSHOT_DIGEST = /^[a-f0-9]{16,64}$/u;
 
+/**
+ * A change-set id, as both the committed revision log and the verdict record
+ * spell one. It names either an ordinary comment thread or an immutable
+ * request-keyed transaction, so it accepts short comment ids and request ids.
+ */
+export const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/u;
+
 /** A place id is the diff's own, so it is bounded like any other stored id. */
 export const PLACE_ID_LIMIT = 256;
+
+/** A content digest, as the diff mints one for the place it describes. */
+export const CONTENT_DIGEST = /^[a-f0-9]{16,64}$/u;
 
 /**
  * How many decided changes one review may hold. Reached only by a review with
@@ -92,22 +155,23 @@ export const VERDICT_BATCH_LIMIT = 500;
  * deciding all of them is one operation either way, so the split belongs beside
  * the bound that forces it rather than at the surface that trips over it.
  */
-export const changeVerdictBatches = (
-  placeIds: ReadonlyArray<string>,
-): ReadonlyArray<ReadonlyArray<string>> => {
-  const batches: Array<ReadonlyArray<string>> = [];
-  for (let start = 0; start < placeIds.length; start += VERDICT_BATCH_LIMIT) {
-    batches.push(placeIds.slice(start, start + VERDICT_BATCH_LIMIT));
+export const changeVerdictBatches = <T>(
+  places: ReadonlyArray<T>,
+): ReadonlyArray<ReadonlyArray<T>> => {
+  const batches: Array<ReadonlyArray<T>> = [];
+  for (let start = 0; start < places.length; start += VERDICT_BATCH_LIMIT) {
+    batches.push(places.slice(start, start + VERDICT_BATCH_LIMIT));
   }
   return batches;
 };
 
 /** The key one verdict is stored and looked up under. */
 export const changeVerdictKey = ({
+  changeSetId,
   from,
   to,
   placeId,
-}: ChangeVerdictAddress): string => `${from}:${to}:${placeId}`;
+}: ChangeVerdictAddress): string => `${changeSetId}:${from}:${to}:${placeId}`;
 
 const keysWithVerdict = ({
   state,
@@ -133,22 +197,60 @@ export const rejectedChangeKeys = (
 ): ReadonlySet<string> => keysWithVerdict({ state, verdict: "rejected" });
 
 /**
+ * The content each decided address was decided over, for the surfaces that can
+ * compare it with what is now in front of the reviewer.
+ *
+ * A row with no digest is absent from this map rather than present with a
+ * placeholder: the two mean different things, and a placeholder would report a
+ * verdict as stale on the strength of a fact nobody recorded.
+ */
+export const decidedContentDigests = (
+  state: ChangeVerdictState,
+): ReadonlyMap<string, string> =>
+  new Map(
+    state.decided.flatMap((entry) =>
+      entry.contentDigest === undefined
+        ? []
+        : [[changeVerdictKey(entry), entry.contentDigest] as const],
+    ),
+  );
+
+/**
  * What the record says about one address. Every caller that needs the whole
  * answer rather than one side of it reads this, so nothing has to spell out
  * that a change in neither set is undecided.
+ *
+ * A decided address whose content has moved since answers `stale`. Both halves
+ * of that comparison have to be present for it to fire: a caller that cannot
+ * say what the place holds now, and a row that never said what it was decided
+ * over, both leave the verdict live rather than reporting a staleness neither
+ * of them has evidence for.
  */
 export const changeDispositionOf = ({
   address,
   accepted,
   rejected,
+  decidedDigests,
+  contentDigest,
 }: {
   readonly address: ChangeVerdictAddress;
   readonly accepted: ReadonlySet<string>;
   readonly rejected: ReadonlySet<string>;
+  /** What each decided address was decided over, where the record says. */
+  readonly decidedDigests?: ReadonlyMap<string, string>;
+  /** What this place holds now, where the caller can say. */
+  readonly contentDigest?: string;
 }): ChangeDisposition => {
   const key = changeVerdictKey(address);
-  if (accepted.has(key)) return "accepted";
-  return rejected.has(key) ? "rejected" : "undecided";
+  const decided = accepted.has(key)
+    ? "accepted"
+    : rejected.has(key)
+      ? "rejected"
+      : "undecided";
+  if (decided === "undecided") return decided;
+  const decidedOver = decidedDigests?.get(key);
+  if (decidedOver === undefined || contentDigest === undefined) return decided;
+  return decidedOver === contentDigest ? decided : "stale";
 };
 
 /** How much of one change set is decided, how it was decided, and what is left. */
@@ -157,6 +259,14 @@ export type ChangeSetStanding = {
   readonly accepted: number;
   readonly rejected: number;
   readonly open: number;
+  /**
+   * How many of the open places the reviewer had already decided before the
+   * content moved. It is a subset of `open` rather than a fourth column beside
+   * it, exactly as the decision contract counts a stale answer: the work is
+   * owed again either way, and the count exists so the reviewer can be told
+   * which of it they have seen before.
+   */
+  readonly stale: number;
   readonly isAccepted: boolean;
   /** Every place has a verdict, whichever way each one went. */
   readonly isSettled: boolean;
@@ -168,43 +278,49 @@ export type ChangeSetStanding = {
  * not been closed by a verdict, and calling it settled would report work that
  * never happened.
  *
- * `open` counts only the places nobody has decided, so a rejected change stops
- * asking the reviewer for an answer exactly as an accepted one does. The two
- * stay separate above that because they leave the plan in opposite states.
+ * `open` counts every place without a verdict that still applies, so a rejected
+ * change stops asking the reviewer for an answer exactly as an accepted one
+ * does, while a decision the content moved out from under starts asking again.
+ * The three stay separate above that because they leave the reviewer owing
+ * different things.
  */
 export const changeSetStanding = ({
+  changeSetId,
   from,
   to,
-  placeIds,
+  places,
   accepted,
   rejected,
-}: {
-  readonly from: string;
-  readonly to: string;
-  readonly placeIds: ReadonlyArray<string>;
+  decidedDigests,
+}: ChangeVerdictScope & {
+  readonly places: ReadonlyArray<ChangeVerdictPlace>;
   readonly accepted: ReadonlySet<string>;
   readonly rejected: ReadonlySet<string>;
+  readonly decidedDigests?: ReadonlyMap<string, string>;
 }): ChangeSetStanding => {
-  const total = placeIds.length;
-  const dispositions = placeIds.map((placeId) =>
+  const total = places.length;
+  const dispositions = places.map((place) =>
     changeDispositionOf({
-      address: { from, to, placeId },
+      address: { changeSetId, from, to, placeId: place.placeId },
       accepted,
       rejected,
+      ...(decidedDigests === undefined ? {} : { decidedDigests }),
+      ...(place.contentDigest === undefined
+        ? {}
+        : { contentDigest: place.contentDigest }),
     }),
   );
-  const acceptedCount = dispositions.filter(
-    (disposition) => disposition === "accepted",
-  ).length;
-  const rejectedCount = dispositions.filter(
-    (disposition) => disposition === "rejected",
-  ).length;
+  const countOf = (answer: ChangeDisposition): number =>
+    dispositions.filter((disposition) => disposition === answer).length;
+  const acceptedCount = countOf("accepted");
+  const rejectedCount = countOf("rejected");
   const decided = acceptedCount + rejectedCount;
   return {
     total,
     accepted: acceptedCount,
     rejected: rejectedCount,
     open: total - decided,
+    stale: countOf("stale"),
     isAccepted: total > 0 && acceptedCount === total,
     isSettled: total > 0 && decided === total,
   };

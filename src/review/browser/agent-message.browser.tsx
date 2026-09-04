@@ -15,17 +15,22 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
+import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
 import type { AgentModelIdentity } from "../shared/agent-model.js";
 import { parseMessageMarkdown } from "../shared/message-markdown.js";
-import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
+import {
+  parseReviewerMarkdown,
+  reviewerMessageLabel,
+} from "../shared/reviewer-markdown.js";
 import { messageTimeLabel } from "../shared/time-label.js";
 import { ACKNOWLEDGED_STATUS_LABEL } from "../shared/agent-status.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
+import type { ForeignChangeSet } from "../shared/change-attribution.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
   AgentIdentityChip,
@@ -38,7 +43,7 @@ import {
 } from "./message-markdown-view.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
 import { advancedTourPlaceId, tourIsBehind } from "./tour-advance.js";
-import { Badge, Tooltip, WorkingMark } from "./ui.browser.js";
+import { Badge, Button, Tooltip, WorkingMark } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
@@ -500,13 +505,49 @@ export const PlanMovedSinceNote = ({ detail }: { readonly detail: string }) => (
   </p>
 );
 
+/**
+ * What "Changed again" means, in the reviewer's terms rather than the record's.
+ *
+ * The badge is short because it sits in the reading column; the sentence it
+ * stands for is the part that actually answers "why am I being asked this
+ * twice", so it hangs off an info icon rather than being spelled out on every
+ * change.
+ */
+export const CHANGED_AGAIN_HELP =
+  "You decided this change, and a later round changed it again. It is waiting for a decision one more time.";
+
+/** The badge and its explanation, as every surface showing a stale change uses it. */
+export const ChangedAgainBadge = () => (
+  <span className="inline-flex min-w-0 items-center gap-1">
+    <Badge size="status" tone="statusNeutral" data-review-place-verdict="stale">
+      Changed again
+    </Badge>
+    {/* Above, not below: the badge's other home is the review bar, which sits
+        at the foot of the window, where a tooltip opening downwards would be
+        off-screen. */}
+    <Tooltip label={CHANGED_AGAIN_HELP} placement="above" asChild>
+      <span
+        className="inline-flex shrink-0 items-center text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3.5"
+        tabIndex={0}
+        role="img"
+        aria-label={CHANGED_AGAIN_HELP}
+      >
+        <Icon icon={INFO_ICON} />
+      </span>
+    </Tooltip>
+  </span>
+);
+
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
   diff,
   changeSetId,
+  tourId: tourIdInput,
   agentIdentity,
   placeIds,
   spilloverCount,
+  foreignChangeSets,
+  changeSetLink,
   isSuperseded,
   isPremiseView,
   planMovedDetail,
@@ -519,11 +560,28 @@ export const AgentChangeDigest = ({
   chatThreadId,
 }: {
   readonly diff: SnapshotDiff | null;
-  /** The thread that owns this change set, where the set has one. */
-  readonly changeSetId?: string;
+  /** The change set this digest belongs to, and whose verdicts it records. */
+  readonly changeSetId: string;
+  /**
+   * Which of the thread's comparisons this card is, so the bar follows the
+   * right one. Defaults to the change set, for a card that has only one.
+   */
+  readonly tourId?: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly placeIds?: ReadonlyArray<string>;
   readonly spilloverCount?: number;
+  /**
+   * The other change sets whose work sits inside this span. Naming them is the
+   * disclosure that makes an overlap visible: this thread's diff spans the
+   * shared revision line, so another thread's revision routinely appears in it,
+   * and a reviewer who cannot see whose it is has no way to know their own
+   * decision is not the only one this view is about.
+   */
+  readonly foreignChangeSets?: ReadonlyArray<ForeignChangeSet>;
+  /** Resolves a foreign set's own thread, when the page can reach one. */
+  readonly changeSetLink?: (
+    changeSetId: string,
+  ) => { readonly label: string; readonly onOpen: () => void } | undefined;
   readonly isSuperseded?: boolean;
   /** True when this digest compares the reviewer's premise with the plan now. */
   readonly isPremiseView?: boolean;
@@ -551,15 +609,17 @@ export const AgentChangeDigest = ({
 }) => {
   const {
     activeDiff,
-    activeChangeSetId,
+    activeTourId,
     activeIsSuperseded,
     activePlaceId,
+    isRecordingVerdict,
     isPlaceAccepted,
     dispositionOf,
     standingOf,
     closeTour,
     openTour,
   } = useDiffTour();
+  const tourId = tourIdInput ?? changeSetId;
   const available =
     diff === null
       ? []
@@ -570,13 +630,12 @@ export const AgentChangeDigest = ({
   const isExpanded = expandedChoice ?? available.length <= 3;
   const placeIdsInTour = available.map((place) => place.placeId);
   const isBehind = tourIsBehind({
-    activeChangeSetId,
+    activeTourId,
     activeDiff,
-    changeSetId,
+    tourId,
     diff,
   });
-  const ownsOpenTour =
-    changeSetId !== undefined && activeChangeSetId === changeSetId;
+  const ownsOpenTour = activeTourId === tourId;
   useEffect(() => {
     // The plan can advance while the reviewer is still reading a change, and
     // when it does the comparison on screen is about a revision the plan has
@@ -588,6 +647,7 @@ export const AgentChangeDigest = ({
     if ((activeIsSuperseded ?? false) === (isSuperseded ?? false)) return;
     openTour({
       diff,
+      tourId,
       changeSetId,
       ...(activePlaceId === null ? {} : { startPlaceId: activePlaceId }),
       placeIds: placeIdsInTour,
@@ -619,7 +679,13 @@ export const AgentChangeDigest = ({
     // stands rather than the round it opened on. It stays on the change the
     // reviewer was reading: the round renamed every place, so the change is
     // found again by the block it is about rather than by its id.
-    if (!isBehind || diff === null) return;
+    //
+    // Not while their hand is still on it, though. A verdict on its way to the
+    // record was given for the round in view, and swapping the set underneath
+    // it would move the reviewer off the change they were answering and leave
+    // the answer addressed to a span nothing shows. The effect re-runs when
+    // the write lands, so the set is handed over on the next idle instead.
+    if (!isBehind || isRecordingVerdict || diff === null) return;
     const startPlaceId = advancedTourPlaceId({
       activeDiff,
       activePlaceId,
@@ -628,7 +694,8 @@ export const AgentChangeDigest = ({
     });
     openTour({
       diff,
-      ...(changeSetId === undefined ? {} : { changeSetId }),
+      tourId,
+      changeSetId,
       ...(startPlaceId === undefined ? {} : { startPlaceId }),
       placeIds: placeIdsInTour,
       isSuperseded,
@@ -644,6 +711,7 @@ export const AgentChangeDigest = ({
     changeSetId,
     diff,
     isBehind,
+    isRecordingVerdict,
     isSuperseded,
     isPremiseView,
     chatThreadId,
@@ -669,12 +737,27 @@ export const AgentChangeDigest = ({
     );
   }
   if (available.length === 0) return null;
+  // Everything this digest asks or records is addressed to its own change set
+  // over the revision in view, so a neighbouring thread reading the same
+  // revision can never inherit the answer.
+  const scope = { changeSetId, from: diff.from, to: diff.to };
+  // A named foreign set is a thread the reviewer can open. An unnamed one is
+  // still worth saying - the comparison holds work this thread did not propose
+  // - but there is nothing to link to, so it is said without a link rather
+  // than with a count standing in for the name.
+  const named = (foreignChangeSets ?? []).map((foreign) => ({
+    changeSetId: foreign.changeSetId,
+    link: changeSetLink?.(foreign.changeSetId),
+  }));
+  const foreignDisclosure =
+    named.some((foreign) => foreign.link !== undefined) || named.length > 0
+      ? named
+      : (spilloverCount ?? 0) > 0
+        ? [{ changeSetId: "unnamed", link: undefined }]
+        : null;
   // The digest and the stepper reviewing this same set both ask the selector,
   // so the two can never disagree about how much is still open.
-  const standing = standingOf(
-    diff,
-    available.map((place) => place.placeId),
-  );
+  const standing = standingOf(scope, available);
   const allAccepted = standing.isAccepted;
   // A rejected change is decided, so it counts towards the set being finished
   // while staying separate from what was kept: reporting a set with rejections
@@ -769,7 +852,8 @@ export const AgentChangeDigest = ({
                   onClick={() =>
                     openTour({
                       diff,
-                      ...(changeSetId === undefined ? {} : { changeSetId }),
+                      tourId,
+                      changeSetId,
                       placeIds: placeIdsInTour,
                       startPlaceId: entry.placeId,
                       isSuperseded,
@@ -781,10 +865,15 @@ export const AgentChangeDigest = ({
                     })
                   }
                 >
+                  {dispositionOf(scope, entry) === "stale" ? (
+                    <span className="col-span-2 mb-0.5">
+                      <ChangedAgainBadge />
+                    </span>
+                  ) : null}
                   <span className="min-w-0 [overflow-wrap:anywhere]">
                     {entry.label}
                   </span>
-                  {isPlaceAccepted(diff, entry.placeId) ? (
+                  {isPlaceAccepted(scope, entry) ? (
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-accent [&>svg]:size-3.5"
                       aria-label="Accepted"
@@ -792,7 +881,7 @@ export const AgentChangeDigest = ({
                     >
                       <Icon icon={CHECK_ICON} />
                     </span>
-                  ) : dispositionOf(diff, entry.placeId) === "rejected" ? (
+                  ) : dispositionOf(scope, entry) === "rejected" ? (
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-danger [&>svg]:size-3.5"
                       aria-label="Rejected"
@@ -810,10 +899,36 @@ export const AgentChangeDigest = ({
           ))}
         </div>
       ) : null}
-      {spilloverCount === undefined || spilloverCount === 0 ? null : (
-        <p className="m-0 text-2xs text-muted">
-          {spilloverCount} other change{spilloverCount === 1 ? "" : "s"}{" "}
-          elsewhere in this snapshot
+      {/* The reviewer's question about the rest of this comparison is one
+          question: is a change in it also being reviewed somewhere else? So
+          this says that once, and answers it with the way into that thread -
+          the same link the stepper offers - rather than with counts they then
+          have to reconcile against each other. */}
+      {foreignDisclosure === null ? null : (
+        <p
+          className="m-0 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-2xs text-muted"
+          data-review-foreign-change-sets=""
+        >
+          Also changed in
+          {foreignDisclosure.map((foreign) =>
+            foreign.link === undefined ? (
+              <span key={foreign.changeSetId}>another comment thread</span>
+            ) : (
+              <Button
+                key={foreign.changeSetId}
+                variant="ghost"
+                size="micro"
+                className="min-w-0 max-w-64 justify-start [&>svg]:size-3.5 [&>svg]:shrink-0"
+                aria-label={`Open comment thread: ${reviewerMessageLabel(foreign.link.label)}`}
+                onClick={foreign.link.onOpen}
+              >
+                <Icon icon={MESSAGE_SQUARE_ICON} />
+                <span className="min-w-0 truncate">
+                  {reviewerMessageLabel(foreign.link.label)}
+                </span>
+              </Button>
+            ),
+          )}
         </p>
       )}
       {allAccepted ? (
@@ -843,7 +958,8 @@ export const AgentChangeDigest = ({
             }
             openTour({
               diff,
-              ...(changeSetId === undefined ? {} : { changeSetId }),
+              tourId,
+              changeSetId,
               placeIds: placeIdsInTour,
               isSuperseded,
               isPremiseView,

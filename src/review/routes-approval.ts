@@ -67,13 +67,16 @@ import { requestIsTerminal } from "./shared/agent-request-state.js";
 import { encodeApprovalSummary } from "./shared/review-wire.js";
 import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
+import { readChangeOwnership } from "./change-ownership.js";
+import { attributeDiffPlaces } from "./shared/change-attribution.js";
 import {
   applyChangeVerdictMutation,
   type StoredChangeVerdicts,
 } from "./change-verdicts-store.js";
 import {
   acceptedChangeKeys,
-  changeVerdictKey,
+  changeDispositionOf,
+  decidedContentDigests,
   rejectedChangeKeys,
   changeVerdictBatches,
 } from "./shared/change-verdict.js";
@@ -208,10 +211,14 @@ const changeSetsAtApproval = async (
   const folded = changeSetsFromCommitted({
     committed,
     requests: exchange.requests,
-    placeIdsByRevision: new Map(),
+    placesByRevision: new Map(),
   });
-  const placeIdsByRevision = new Map<string, ReadonlyArray<string>>();
+  const diffsByRevision = new Map<
+    string,
+    ReturnType<typeof buildSnapshotDiff>
+  >();
   for (const { from, to } of folded) {
+    if (diffsByRevision.has(`${from}:${to}`)) continue;
     const [beforeSource, afterSource] = await Promise.all([
       readSnapshot({ store: context.store, snapshot: from }),
       readSnapshot({ store: context.store, snapshot: to }),
@@ -226,21 +233,54 @@ const changeSetsAtApproval = async (
       fallbackTitle,
       identity: {},
     });
+    // Approval closes the sets at the addresses the reviewer was shown, so it
+    // groups the revision exactly as the reader's diff grouped it.
+    const ownership = await readChangeOwnership({
+      store: context.store,
+      sessionId: context.sessionId,
+      planId: context.planId,
+      from,
+      to,
+    });
     const diff = buildSnapshotDiff({
       from,
       to,
       before: before.blocks,
       after: after.blocks,
+      ...(ownership === undefined ? {} : { ownership }),
     });
-    placeIdsByRevision.set(
-      `${from}:${to}`,
-      diff.places.map((place) => place.placeId),
-    );
+    diffsByRevision.set(`${from}:${to}`, diff);
   }
-  return folded.map((changeSet) => ({
-    ...changeSet,
-    placeIds: placeIdsByRevision.get(`${changeSet.from}:${changeSet.to}`) ?? [],
-  }));
+  return folded.map((changeSet) => {
+    const diff = diffsByRevision.get(`${changeSet.from}:${changeSet.to}`);
+    if (diff === undefined) return { ...changeSet, places: [] };
+    const changeTargets = exchange.responses.flatMap((response) =>
+      "outcomes" in response
+        ? response.outcomes.flatMap((outcome) =>
+            response.requestId === changeSet.id ||
+            outcome.commentId === changeSet.id
+              ? (outcome.changeTargets ?? [])
+              : [],
+          )
+        : [],
+    );
+    const placeIds =
+      changeTargets.length === 0
+        ? new Set(diff.places.map((place) => place.placeId))
+        : new Set(
+            attributeDiffPlaces({
+              diff,
+              changeTargets,
+              changeSetId: changeSet.id,
+            }).placeIds,
+          );
+    return {
+      ...changeSet,
+      places: diff.places
+        .filter((place) => placeIds.has(place.placeId))
+        .map(({ placeId, contentDigest }) => ({ placeId, contentDigest })),
+    };
+  });
 };
 
 /**
@@ -275,6 +315,7 @@ const acceptChangeSets = async ({
       changeSets,
       accepted: acceptedChangeKeys(state),
       rejected: rejectedChangeKeys(state),
+      decidedDigests: decidedContentDigests(state),
       inputs,
       requests: requestIds.map((requestId) => ({
         requestId,
@@ -283,7 +324,7 @@ const acceptChangeSets = async ({
     });
   const decidedAt = new Date().toISOString();
   for (const changeSet of standingOf(verdicts).changeSets.open) {
-    if (changeSet.placeIds.length === 0) {
+    if (changeSet.places.length === 0) {
       throw new ApprovalRecordRejected(
         `Change set ${changeSet.id} could not be resolved for approval`,
       );
@@ -294,22 +335,33 @@ const acceptChangeSets = async ({
     // answered. Re-accepting a rejected place would overwrite the one verdict
     // that owns bytes, and the plan would then hold restored content under a
     // row that says the reviewer accepted the change it took out.
-    const undecided = changeSet.placeIds.filter((placeId) => {
-      const key = changeVerdictKey({
-        from: changeSet.from,
-        to: changeSet.to,
-        placeId,
+    const decidedDigests = decidedContentDigests(verdicts);
+    const undecided = changeSet.places.filter((place) => {
+      const disposition = changeDispositionOf({
+        address: {
+          changeSetId: changeSet.id,
+          from: changeSet.from,
+          to: changeSet.to,
+          placeId: place.placeId,
+        },
+        accepted,
+        rejected,
+        decidedDigests,
+        ...(place.contentDigest === undefined
+          ? {}
+          : { contentDigest: place.contentDigest }),
       });
-      return !accepted.has(key) && !rejected.has(key);
+      return disposition === "undecided" || disposition === "stale";
     });
-    for (const placeIds of changeVerdictBatches(undecided)) {
+    for (const places of changeVerdictBatches(undecided)) {
       verdicts = applyChangeVerdictMutation({
         verdicts,
         mutation: {
           op: "accept",
+          changeSetId: changeSet.id,
           from: changeSet.from,
           to: changeSet.to,
-          placeIds,
+          places,
           decidedAt,
           actor: "reviewer",
         },

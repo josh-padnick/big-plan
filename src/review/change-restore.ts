@@ -22,7 +22,13 @@ import { renderDocument } from "../render/render-document.js";
 import type { BlockDescriptor } from "../render/render-document.js";
 import { planSourceSegments } from "../render/plan-source-segments.js";
 import type { PlanSourceSegment } from "../render/plan-source-segments.js";
-import { buildSnapshotDiff } from "./snapshot-diff.js";
+import {
+  blockEvidence,
+  buildSnapshotDiff,
+  type ChangeOwnership,
+  type DiffPlace,
+  type SnapshotDiff,
+} from "./snapshot-diff.js";
 
 /**
  * How many authored edits one change set may hold before restoring a single
@@ -43,25 +49,40 @@ export class ChangeRestoreRejected extends Error {
   }
 }
 
-export const changedPlaceIds = ({
+export const changedSnapshotDiff = ({
   baselineSource,
   proposedSource,
   from,
   to,
   fallbackTitle,
+  ownership,
 }: {
   readonly baselineSource: string;
   readonly proposedSource: string;
   readonly from: string;
   readonly to: string;
   readonly fallbackTitle: string;
-}): ReadonlyArray<string> => {
+  /** The reader's ownership partition, so these are the reader's addresses. */
+  readonly ownership?: ChangeOwnership;
+}): SnapshotDiff => {
   const before = blocksOf({ markdown: baselineSource, fallbackTitle });
   const after = blocksOf({ markdown: proposedSource, fallbackTitle });
-  return buildSnapshotDiff({ from, to, before, after }).places.map(
-    (place) => place.placeId,
-  );
+  return buildSnapshotDiff({
+    from,
+    to,
+    before,
+    after,
+    ...(ownership === undefined ? {} : { ownership }),
+  });
 };
+
+export const changedPlaces = (
+  input: Parameters<typeof changedSnapshotDiff>[0],
+): ReadonlyArray<DiffPlace> => changedSnapshotDiff(input).places;
+
+export const changedPlaceIds = (
+  input: Parameters<typeof changedPlaces>[0],
+): ReadonlyArray<string> => changedPlaces(input).map((place) => place.placeId);
 
 /** One splice: proposed bytes to remove, baseline bytes to put in their place. */
 type SourceEdit = {
@@ -454,18 +475,6 @@ const applyEdits = ({
 // reads identically - so the model is part of the identity too. Without it a
 // restore that put such a change back would look like a change that had not
 // moved, and the proof below would refuse a restore that had in fact worked.
-const blockSignature = (block: BlockDescriptor | undefined): string =>
-  block === undefined
-    ? ""
-    : JSON.stringify({
-        kind: block.kind,
-        text: block.text,
-        model: block.model ?? null,
-        presentation: block.presentation ?? null,
-        tableHeaders: block.tableHeaders ?? null,
-        isTableHeader: block.isTableHeader ?? false,
-      });
-
 const changeSignatures = ({
   before,
   after,
@@ -480,12 +489,12 @@ const changeSignatures = ({
       [
         location.status,
         location.kind,
-        blockSignature(
+        blockEvidence(
           location.oldBlockId === undefined
             ? undefined
             : beforeById.get(location.oldBlockId),
         ),
-        blockSignature(
+        blockEvidence(
           location.newBlockId === undefined
             ? undefined
             : afterById.get(location.newBlockId),
@@ -537,6 +546,7 @@ export const restoreRejectedPlaces = ({
   to,
   placeIds,
   fallbackTitle,
+  ownership,
 }: {
   readonly baselineSource: string;
   readonly proposedSource: string;
@@ -544,6 +554,12 @@ export const restoreRejectedPlaces = ({
   readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
   readonly fallbackTitle: string;
+  /**
+   * The reader's ownership partition. A rejected place is named by the address
+   * the reviewer saw, so the revision has to be grouped the way they saw it or
+   * the place they rejected is not in this proposal at all.
+   */
+  readonly ownership?: ChangeOwnership;
 }): string => {
   if (placeIds.length === 0) return proposedSource;
   const baselineBlocks = blocksOf({
@@ -556,6 +572,7 @@ export const restoreRejectedPlaces = ({
     to,
     before: baselineBlocks,
     after: proposedBlocks,
+    ...(ownership === undefined ? {} : { ownership }),
   });
   const rejected = new Set(placeIds);
   const known = new Set(proposed.places.map((place) => place.placeId));

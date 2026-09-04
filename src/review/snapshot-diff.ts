@@ -32,6 +32,31 @@ export type SnapshotDiffLocation = DiffLocation & {
 // vocabulary shared with browser delivery.
 export type SnapshotDiffPlace = DiffPlace;
 
+// Compiler source positions are stripped here for the same reason
+// `sameComponentModel` strips them: they are diagnostic provenance rather than
+// plan meaning. A revision anywhere above a component moves every HAST position
+// inside its model, and hashing those would report an untouched component as
+// changed - which, since the content digest is built from this, would re-open a
+// verdict the reviewer gave over content that never moved.
+export const blockEvidence = (block: SnapshotBlock | undefined): string =>
+  block === undefined
+    ? ""
+    : createHash("sha256")
+        .update(
+          JSON.stringify(
+            {
+              kind: block.kind,
+              text: block.text,
+              model: block.model ?? null,
+              presentation: block.presentation ?? null,
+              tableHeaders: block.tableHeaders ?? null,
+              isTableHeader: block.isTableHeader ?? false,
+            },
+            (key, value: unknown) => (key === "position" ? undefined : value),
+          ),
+        )
+        .digest("hex");
+
 type BuiltSnapshotDiff = Omit<SnapshotDiff, "locations"> & {
   readonly locations: ReadonlyArray<SnapshotDiffLocation>;
 };
@@ -406,6 +431,8 @@ export const diffSnapshots = ({
       section: newBlock.section,
       oldText: oldBlock.text,
       newText: newBlock.text,
+      oldEvidence: blockEvidence(oldBlock),
+      newEvidence: blockEvidence(newBlock),
       ...(oldBlock.presentation === undefined
         ? {}
         : { oldPresentation: oldBlock.presentation }),
@@ -458,6 +485,7 @@ export const diffSnapshots = ({
       section: oldBlock.section,
       oldText: oldBlock.text,
       newText: "",
+      oldEvidence: blockEvidence(oldBlock),
       ...(oldBlock.presentation === undefined
         ? {}
         : { oldPresentation: oldBlock.presentation }),
@@ -485,6 +513,7 @@ export const diffSnapshots = ({
       section: newBlock.section,
       oldText: "",
       newText: newBlock.text,
+      newEvidence: blockEvidence(newBlock),
       ...(newBlock.presentation === undefined
         ? {}
         : { newPresentation: newBlock.presentation }),
@@ -569,6 +598,36 @@ const placeLabel = (locations: ReadonlyArray<SnapshotDiffLocation>): string => {
   return truncatedLabel(locations[0]?.label ?? "Change");
 };
 
+/**
+ * A digest of what one place actually shows, independent of the bounds it was
+ * minted under.
+ *
+ * A place id is deliberately bound to its revision, so it renames whenever the
+ * change set's span advances; that is what makes it a safe address and what
+ * makes it useless for asking "is this still the same change". This answers
+ * that question instead. It reads the words on both sides rather than the
+ * block ids, because a round that leaves a change alone leaves both sides of
+ * it identical while renaming everything around it.
+ */
+const contentDigest = (
+  locations: ReadonlyArray<SnapshotDiffLocation>,
+): string =>
+  createHash("sha256")
+    .update(
+      locations
+        .flatMap((location) => [
+          location.status,
+          location.kind,
+          location.oldText,
+          location.newText,
+          location.oldEvidence ?? "",
+          location.newEvidence ?? "",
+        ])
+        .join("\u0000"),
+    )
+    .digest("hex")
+    .slice(0, 16);
+
 const placeId = ({
   from,
   to,
@@ -640,17 +699,60 @@ const componentKeyFor = ({
   return owner?.isComponentRoot === true ? owner.id : undefined;
 };
 
-/** Groups adjacent changed blocks within a section into calm review stops. */
+/**
+ * Which change set declared each changed block, as the party that knows the
+ * committed revisions hands it in.
+ *
+ * It is data passed in rather than something this module derives, because the
+ * revision log and the agent exchange are review-runtime facts and grouping is
+ * a pure rule over blocks. The map is deliberately partial: a block no change
+ * set declared has no owner here, and grouping treats that as unknown rather
+ * than as an owner of its own.
+ */
+export type ChangeOwnership = ReadonlyMap<string, string>;
+
+// The change set a location belongs to, when the partition names one. Both
+// sides are asked because a declared target names the block as the revision
+// that changed it left it, while a deleted block only exists on the old side.
+const ownerChangeSetFor = ({
+  location,
+  ownership,
+}: {
+  readonly location: SnapshotDiffLocation;
+  readonly ownership: ChangeOwnership | undefined;
+}): string | undefined => {
+  if (ownership === undefined) return undefined;
+  const newOwner =
+    location.newBlockId === undefined
+      ? undefined
+      : ownership.get(location.newBlockId);
+  if (newOwner !== undefined) return newOwner;
+  return location.oldBlockId === undefined
+    ? undefined
+    : ownership.get(location.oldBlockId);
+};
+
+/**
+ * Groups adjacent changed blocks within a section into calm review stops.
+ *
+ * Adjacency is geometric, and ownership is not, so grouping asks both. Two
+ * changed blocks that sit side by side but belong to different change sets are
+ * two review stops rather than one: merging them mints a single place id that
+ * both threads then attribute, and a place both threads attribute is a place
+ * either one's acceptance silently closes for the other.
+ */
 export const buildSnapshotDiff = ({
   from,
   to,
   before,
   after,
+  ownership,
 }: {
   readonly from: string;
   readonly to: string;
   readonly before: ReadonlyArray<SnapshotBlock>;
   readonly after: ReadonlyArray<SnapshotBlock>;
+  readonly ownership?: ChangeOwnership;
 }): BuiltSnapshotDiff => {
   const locations = diffSnapshots({ before, after });
   const groups: Array<Array<number>> = [];
@@ -676,6 +778,22 @@ export const buildSnapshotDiff = ({
       previous === undefined
         ? undefined
         : componentKeyFor({ location: previous, before, after });
+    const currentChangeSet = ownerChangeSetFor({ location, ownership });
+    const groupChangeSets = new Set(
+      (group ?? []).flatMap((locationIndex) => {
+        const groupedLocation = locations.at(locationIndex);
+        if (groupedLocation === undefined) return [];
+        const owner = ownerChangeSetFor({
+          location: groupedLocation,
+          ownership,
+        });
+        return owner === undefined ? [] : [owner];
+      }),
+    );
+    const sameChangeSet =
+      currentChangeSet === undefined ||
+      groupChangeSets.size === 0 ||
+      groupChangeSets.has(currentChangeSet);
     const renderedEvidence =
       location.isComponentRoot || RENDERED_SNAPSHOT_KINDS.has(location.kind);
     const previousRenderedEvidence =
@@ -687,6 +805,7 @@ export const buildSnapshotDiff = ({
       group !== undefined &&
       previous !== undefined &&
       previous.section === location.section &&
+      sameChangeSet &&
       (currentComponentKey === undefined ||
         previousComponentKey === undefined ||
         currentComponentKey === previousComponentKey) &&
@@ -714,13 +833,23 @@ export const buildSnapshotDiff = ({
       const statuses = new Set(
         groupedLocations.map((location) => location.status),
       );
+      const ownerChangeSetIds = [
+        ...new Set(
+          groupedLocations.flatMap((location) => {
+            const owner = ownerChangeSetFor({ location, ownership });
+            return owner === undefined ? [] : [owner];
+          }),
+        ),
+      ];
       return {
         placeId: placeId({ from, to, locations: groupedLocations }),
+        contentDigest: contentDigest(groupedLocations),
         status: statuses.size === 1 ? first.status : "changed",
         label: placeLabel(groupedLocations),
         section: first.section,
         note: placeNote(groupedLocations),
         locationIndexes,
+        ...(ownerChangeSetIds.length === 0 ? {} : { ownerChangeSetIds }),
       };
     }),
   };

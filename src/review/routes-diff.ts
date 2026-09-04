@@ -15,7 +15,8 @@ import type {
   ReviewRouteRequest,
   ReviewRouteResponse,
 } from "./review-route-context.js";
-import { buildSnapshotDiff } from "./snapshot-diff.js";
+import { buildSnapshotDiff, type ChangeOwnership } from "./snapshot-diff.js";
+import { readChangeOwnership } from "./change-ownership.js";
 import { readSnapshot } from "./store.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import { encodeSnapshotDiff, type SnapshotDiff } from "./shared/review-wire.js";
@@ -28,6 +29,7 @@ export const compileSnapshotDiffPayload = ({
   to,
   beforeSource,
   afterSource,
+  ownership,
   compileDocument,
   onCompiled,
 }: {
@@ -35,6 +37,7 @@ export const compileSnapshotDiffPayload = ({
   readonly to: string;
   readonly beforeSource: string;
   readonly afterSource: string;
+  readonly ownership?: ChangeOwnership;
   readonly compileDocument?: DiffDocumentCompiler;
   readonly onCompiled?: (documents: {
     readonly baseline: ReturnType<typeof compileDiffDocuments>["baseline"];
@@ -56,6 +59,7 @@ export const compileSnapshotDiffPayload = ({
     to,
     before: compiled.baseline.blocks,
     after: compiled.proposed.blocks,
+    ...(ownership === undefined ? {} : { ownership }),
   });
   return encodeSnapshotDiff({
     ...snapshotDiff,
@@ -130,11 +134,19 @@ export const readSnapshotDiff = async (
         } catch {
           throw new SnapshotDiffSourceUnavailable();
         }
+        const ownership = await readChangeOwnership({
+          store,
+          sessionId: context.sessionId,
+          planId: context.planId,
+          from,
+          to,
+        });
         return compileSnapshotDiffPayload({
           from,
           to,
           beforeSource,
           afterSource,
+          ...(ownership === undefined ? {} : { ownership }),
           onCompiled: ({ baseline, proposed }) =>
             snapshotDiffs.retainPairBlocks({
               from,

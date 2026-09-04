@@ -232,9 +232,10 @@ describe("review mode protocol", () => {
         method: "POST",
         body: {
           op: "accept",
+          changeSetId: BETA_THREAD,
           from: beta.from,
           to: beta.to,
-          placeIds: [betaPlaces[0]],
+          places: [{ placeId: betaPlaces[0] }],
           actor: "auto-accept",
         },
       });
@@ -259,18 +260,20 @@ describe("review mode protocol", () => {
       const accepted = acceptedChangeKeys(verdicts);
       expect(
         changeSetStanding({
+          changeSetId: ALPHA_THREAD,
           from: alpha.from,
           to: alpha.to,
-          placeIds: alphaPlaces,
+          places: alphaPlaces.map((placeId) => ({ placeId })),
           accepted,
           rejected: new Set(),
         }),
       ).toMatchObject({ open: 0, isAccepted: true });
       expect(
         changeSetStanding({
+          changeSetId: BETA_THREAD,
           from: beta.from,
           to: beta.to,
-          placeIds: betaPlaces,
+          places: betaPlaces.map((placeId) => ({ placeId })),
           accepted,
           rejected: new Set(),
         }),
@@ -311,9 +314,10 @@ describe("review mode protocol", () => {
       });
       expect(
         changeSetStanding({
+          changeSetId: ARMED_PUSH,
           from: arriving.from,
           to: arriving.to,
-          placeIds: arrivingPlaces,
+          places: arrivingPlaces.map((placeId) => ({ placeId })),
           accepted: acceptedChangeKeys(verdicts),
         }),
       ).toMatchObject({ open: 0, isAccepted: true });
@@ -373,9 +377,10 @@ describe("review mode protocol", () => {
       });
       expect(
         changeSetStanding({
+          changeSetId: RESTARTED_PUSH,
           from: restarted.from,
           to: restarted.to,
-          placeIds: restartedPlaces,
+          places: restartedPlaces.map((placeId) => ({ placeId })),
           accepted: acceptedChangeKeys(verdicts),
           rejected: new Set(),
         }),
@@ -484,9 +489,10 @@ describe("review mode protocol", () => {
       });
       expect(
         changeSetStanding({
+          changeSetId: RECOVERY_PUSH,
           from: minted.stage.baseSnapshot,
           to: resultSnapshot,
-          placeIds: places,
+          places: places.map((placeId) => ({ placeId })),
           accepted: acceptedChangeKeys(verdicts),
           rejected: new Set(),
         }),

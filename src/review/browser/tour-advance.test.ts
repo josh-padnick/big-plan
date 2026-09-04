@@ -68,9 +68,9 @@ describe("tourIsBehind", () => {
   it("is behind once its own thread committed a later round", () => {
     expect(
       tourIsBehind({
-        activeChangeSetId: "c0de",
+        activeTourId: "c0de",
         activeDiff: { from: S1, to: S2 },
-        changeSetId: "c0de",
+        tourId: "c0de",
         diff: { from: S1, to: S3 },
       }),
     ).toBe(true);
@@ -79,9 +79,9 @@ describe("tourIsBehind", () => {
   it("is current while the thread's bounds still match", () => {
     expect(
       tourIsBehind({
-        activeChangeSetId: "c0de",
+        activeTourId: "c0de",
         activeDiff: { from: S1, to: S3 },
-        changeSetId: "c0de",
+        tourId: "c0de",
         diff: { from: S1, to: S3 },
       }),
     ).toBe(false);
@@ -90,9 +90,9 @@ describe("tourIsBehind", () => {
   it("leaves another thread's tour alone, baseline shared or not", () => {
     expect(
       tourIsBehind({
-        activeChangeSetId: "d1ce",
+        activeTourId: "d1ce",
         activeDiff: { from: S1, to: S2 },
-        changeSetId: "c0de",
+        tourId: "c0de",
         diff: { from: S1, to: S3 },
       }),
     ).toBe(false);
@@ -101,17 +101,17 @@ describe("tourIsBehind", () => {
   it("stays out of a tour no thread owns", () => {
     expect(
       tourIsBehind({
-        activeChangeSetId: null,
+        activeTourId: null,
         activeDiff: { from: S1, to: S2 },
-        changeSetId: "c0de",
+        tourId: "c0de",
         diff: { from: S1, to: S3 },
       }),
     ).toBe(false);
     expect(
       tourIsBehind({
-        activeChangeSetId: "c0de",
+        activeTourId: "c0de",
         activeDiff: { from: S1, to: S2 },
-        changeSetId: undefined,
+        tourId: undefined,
         diff: { from: S1, to: S3 },
       }),
     ).toBe(false);
@@ -120,17 +120,17 @@ describe("tourIsBehind", () => {
   it("waits for a diff at both ends before moving anyone", () => {
     expect(
       tourIsBehind({
-        activeChangeSetId: "c0de",
+        activeTourId: "c0de",
         activeDiff: null,
-        changeSetId: "c0de",
+        tourId: "c0de",
         diff: { from: S1, to: S3 },
       }),
     ).toBe(false);
     expect(
       tourIsBehind({
-        activeChangeSetId: "c0de",
+        activeTourId: "c0de",
         activeDiff: { from: S1, to: S2 },
-        changeSetId: "c0de",
+        tourId: "c0de",
         diff: null,
       }),
     ).toBe(false);
@@ -238,32 +238,32 @@ describe("changeSetTourId", () => {
     expect(changes).not.toBe(premise);
     expect(
       tourIsBehind({
-        activeChangeSetId: premise,
+        activeTourId: premise,
         activeDiff: { from: "premise", to: "current" },
-        changeSetId: changes,
+        tourId: changes,
         diff: { from: "baseline", to: "result" },
       }),
     ).toBe(false);
     expect(
       tourIsBehind({
-        activeChangeSetId: changes,
+        activeTourId: changes,
         activeDiff: { from: "baseline", to: "result" },
-        changeSetId: premise,
+        tourId: premise,
         diff: { from: "premise", to: "current" },
       }),
     ).toBe(false);
   });
 
   it("should still report its own comparison advancing", () => {
-    const changeSetId = changeSetTourId({
+    const tourId = changeSetTourId({
       threadId: "comment-1",
       kind: "changes",
     });
     expect(
       tourIsBehind({
-        activeChangeSetId: changeSetId,
+        activeTourId: tourId,
         activeDiff: { from: "baseline", to: "result" },
-        changeSetId,
+        tourId,
         diff: { from: "baseline", to: "result-2" },
       }),
     ).toBe(true);

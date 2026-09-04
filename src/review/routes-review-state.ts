@@ -52,6 +52,7 @@ import {
   type AcceptedOpenPlaces,
 } from "./change-set-closure.js";
 import { closuresForResolvedThreads } from "./resolved-thread-acceptance.js";
+import { changeSetIdsFor, recordRejectRevision } from "./change-set-commit.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import { threadChangesAllDecided } from "./thread-changes-decided.js";
 import {
@@ -692,6 +693,22 @@ export const revertAgentChanges = async (
   } catch (error: unknown) {
     return settlementRefusal(error);
   }
+  // The log is told the plan moved back, and which change set's work went with
+  // it. Without that record, approval later reads the reverted response's span
+  // as a change set still awaiting a verdict and auto-accepts work the plan no
+  // longer holds - reporting the reviewer as having accepted the very revision
+  // they took out.
+  await recordRejectRevision({
+    store,
+    changeSetIds: changeSetIdsFor({
+      response: agentResponse,
+      isPushedThread: false,
+    }),
+    baseSnapshot: agentResponse.resultSnapshot,
+    resultSnapshot: request.baselineSnapshot,
+    committedAt: new Date().toISOString(),
+    provenance: "revert",
+  });
   readerProgress.accept(request.baselineSnapshot);
   return jsonResponse({
     status: 200,
@@ -791,6 +808,8 @@ export const deleteSentComment = async (
       ? false
       : await threadChangesAllDecided({
           store,
+          sessionId,
+          planId,
           planPath: resolvedPlanPath,
           changeSetId: commentId,
           verdicts: await context.changeVerdicts.read(),

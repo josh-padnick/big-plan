@@ -39,7 +39,14 @@ import {
   ChangeRestoreRejected,
   restoreRejectedPlaces,
 } from "./change-restore.js";
-import { readCommittedChangeSets } from "./change-set-commit.js";
+import {
+  readCommittedChangeSets,
+  recordRejectRevision,
+} from "./change-set-commit.js";
+import { readChangeOwnership } from "./change-ownership.js";
+import { buildSnapshotDiff } from "./snapshot-diff.js";
+import { renderDocument } from "../render/render-document.js";
+import { carryForwardChangeVerdicts } from "./change-carry-forward.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
 import { revertPlanSource } from "./staged-plan-mutation.js";
@@ -73,12 +80,15 @@ const verdictState = (verdicts: StoredChangeVerdicts): ReviewRouteResponse =>
  */
 const reconcilePlanSource = async ({
   context,
+  changeSetId,
   from,
   to,
   before,
   after,
 }: {
   readonly context: ReviewRouteContext;
+  /** The set whose proposed content this write takes back out, or puts back. */
+  readonly changeSetId?: string;
   readonly from: string;
   readonly to: string;
   readonly before: ReadonlyArray<string>;
@@ -86,9 +96,16 @@ const reconcilePlanSource = async ({
 }): Promise<void> => {
   const { store, resolvedPlanPath, readerProgress } = context;
   const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
-  const [baselineSource, proposedSource] = await Promise.all([
+  const [baselineSource, proposedSource, ownership] = await Promise.all([
     readSnapshot({ store, snapshot: from }),
     readSnapshot({ store, snapshot: to }),
+    readChangeOwnership({
+      store,
+      sessionId: context.sessionId,
+      planId: context.planId,
+      from,
+      to,
+    }),
   ]);
   const restored = (placeIds: ReadonlyArray<string>): string =>
     restoreRejectedPlaces({
@@ -98,6 +115,7 @@ const reconcilePlanSource = async ({
       to,
       placeIds,
       fallbackTitle,
+      ...(ownership === undefined ? {} : { ownership }),
     });
   const expectedSource = restored(before);
   const nextSource = restored(after);
@@ -120,6 +138,19 @@ const reconcilePlanSource = async ({
     expectedSnapshot,
     source: nextSource,
   });
+  // The write landed, so the log is told how the plan got from the digest it
+  // held to the one it holds now. An unrecorded move leaves the chain broken
+  // at exactly the point a reviewer acted, and everything derived by walking
+  // that chain goes with it.
+  if (changeSetId !== undefined) {
+    await recordRejectRevision({
+      store,
+      changeSetIds: [changeSetId],
+      baseSnapshot: expectedSnapshot,
+      resultSnapshot: nextSnapshot,
+      committedAt: new Date().toISOString(),
+    });
+  }
   readerProgress.accept(nextSnapshot);
 };
 
@@ -131,6 +162,12 @@ const reconcileRecordedRejections = async ({
   readonly context: ReviewRouteContext;
   readonly verdicts: StoredChangeVerdicts;
 }): Promise<void> => {
+  // One span, not one span per owner: the bytes a repair writes are derived
+  // from every rejection recorded against the revision, whoever made it. The
+  // owners are read back from those rejections below rather than carried here,
+  // because a map keyed by the span alone can only remember the last one seen -
+  // and recording the repair under an owner that never rejected that place is
+  // exactly the cross-owner attribution this feature exists to prevent.
   const revisions = new Map<string, { from: string; to: string }>();
   for (const changeSet of await readCommittedChangeSets({
     store: context.store,
@@ -148,12 +185,25 @@ const reconcileRecordedRejections = async ({
   }
   const { store, resolvedPlanPath, readerProgress } = context;
   const currentSource = await readFile(resolvedPlanPath, "utf8");
-  const matches: Array<string> = [];
+  const matches: Array<{
+    readonly source: string;
+    readonly changeSetIds: ReadonlyArray<string>;
+  }> = [];
   for (const { from, to } of revisions.values()) {
+    // A revision from a digest to itself describes no change, so there is
+    // nothing for a rejection to have been interrupted in the middle of.
+    if (from === to) continue;
     const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
-    const [baselineSource, proposedSource] = await Promise.all([
+    const [baselineSource, proposedSource, ownership] = await Promise.all([
       readSnapshot({ store, snapshot: from }),
       readSnapshot({ store, snapshot: to }),
+      readChangeOwnership({
+        store,
+        sessionId: context.sessionId,
+        planId: context.planId,
+        from,
+        to,
+      }),
     ]);
     const rejected = rejectedPlaceIdsFor({ verdicts, from, to });
     const restored = (placeIds: ReadonlyArray<string>): string =>
@@ -164,6 +214,7 @@ const reconcileRecordedRejections = async ({
         to,
         placeIds,
         fallbackTitle,
+        ...(ownership === undefined ? {} : { ownership }),
       });
     const intendedSource = restored(rejected);
     if (currentSource === intendedSource) return;
@@ -174,6 +225,7 @@ const reconcileRecordedRejections = async ({
       from,
       to,
       fallbackTitle,
+      ...(ownership === undefined ? {} : { ownership }),
     });
     let matchingNeighbors = 0;
     for (const placeId of places) {
@@ -188,11 +240,30 @@ const reconcileRecordedRejections = async ({
         if (!(error instanceof ChangeRestoreRejected)) throw error;
       }
     }
-    if (matchingNeighbors === 1) matches.push(intendedSource);
+    if (matchingNeighbors === 1) {
+      // The revision names every set whose proposed content this repair takes
+      // back out, read from the rejections that produced these bytes.
+      matches.push({
+        source: intendedSource,
+        changeSetIds: [
+          ...new Set(
+            verdicts.decided
+              .filter(
+                (entry) =>
+                  entry.verdict === "rejected" &&
+                  entry.from === from &&
+                  entry.to === to,
+              )
+              .map((entry) => entry.changeSetId),
+          ),
+        ],
+      });
+    }
   }
   if (matches.length !== 1) return;
-  const intendedSource = matches[0];
-  if (intendedSource === undefined) return;
+  const match = matches[0];
+  if (match === undefined) return;
+  const intendedSource = match.source;
   const expectedSnapshot = deriveSnapshotDigest(currentSource);
   const nextSnapshot = deriveSnapshotDigest(intendedSource);
   await writeSnapshot({
@@ -206,13 +277,41 @@ const reconcileRecordedRejections = async ({
     expectedSnapshot,
     source: intendedSource,
   });
+  // The repair completes a write the reviewer's decision started, so the log
+  // records it for the same reason the decision itself does.
+  if (match.changeSetIds.length > 0) {
+    await recordRejectRevision({
+      store,
+      changeSetIds: match.changeSetIds,
+      baseSnapshot: expectedSnapshot,
+      resultSnapshot: nextSnapshot,
+      committedAt: new Date().toISOString(),
+    });
+  }
   readerProgress.accept(nextSnapshot);
 };
 
-/** Reads the recorded verdicts and repairs an interrupted rejection publish. */
+/**
+ * Reads the recorded verdicts, carries any that a committed round left behind
+ * onto the span their change set now spans, and repairs an interrupted
+ * rejection publish.
+ *
+ * Carrying here as well as at the commit itself is what closes the race the
+ * commit alone cannot: a reviewer deciding a change while the next round is
+ * landing writes at the span that was current when they started, and only a
+ * later pass can see both that write and the round that superseded it. It
+ * answers from the record alone when nothing is behind, so the ordinary read
+ * costs no reading of plan sources at all.
+ */
 export const readChangeVerdictState = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
+  await carryForwardChangeVerdicts({
+    store: context.store,
+    sessionId: context.sessionId,
+    planId: context.planId,
+    planPath: context.resolvedPlanPath,
+  });
   const verdicts = await context.changeVerdicts.read();
   await reconcileRecordedRejections({ context, verdicts });
   return verdictState(verdicts);
@@ -229,25 +328,31 @@ const restorePreviousVerdicts = ({
   readonly result: StoredChangeVerdicts;
   readonly mutation: ChangeVerdictMutation;
 }): StoredChangeVerdicts => {
+  // Every lookup is scoped to the mutation's own change set as well as its
+  // bounds. Two sets can attribute one place inside a shared revision, and
+  // taking a failed write back by bounds alone would revoke the other set's
+  // verdict on a gesture its reviewer never made.
+  const ownedByMutation = (entry: {
+    readonly changeSetId: string;
+    readonly from: string;
+    readonly to: string;
+  }): boolean =>
+    entry.changeSetId === mutation.changeSetId &&
+    entry.from === mutation.from &&
+    entry.to === mutation.to;
   const previousByPlace = new Map(
     previous.decided
-      .filter(
-        (entry) => entry.from === mutation.from && entry.to === mutation.to,
-      )
+      .filter(ownedByMutation)
       .map((entry) => [entry.placeId, entry]),
   );
   const resultByPlace = new Map(
     result.decided
-      .filter(
-        (entry) => entry.from === mutation.from && entry.to === mutation.to,
-      )
+      .filter(ownedByMutation)
       .map((entry) => [entry.placeId, entry]),
   );
   const currentByPlace = new Map(
     current.decided
-      .filter(
-        (entry) => entry.from === mutation.from && entry.to === mutation.to,
-      )
+      .filter(ownedByMutation)
       .map((entry) => [entry.placeId, entry]),
   );
   const same = (
@@ -258,18 +363,15 @@ const restorePreviousVerdicts = ({
     left?.decidedAt === right?.decidedAt &&
     left?.actor === right?.actor;
   const eligible = new Set<string>();
-  for (const placeId of mutation.placeIds) {
+  for (const { placeId } of mutation.places) {
     const expected = resultByPlace.get(placeId);
     if (same(currentByPlace.get(placeId), expected)) eligible.add(placeId);
   }
   if (eligible.size === 0) return current;
   const restored = current.decided.filter(
-    (entry) =>
-      entry.from !== mutation.from ||
-      entry.to !== mutation.to ||
-      !eligible.has(entry.placeId),
+    (entry) => !ownedByMutation(entry) || !eligible.has(entry.placeId),
   );
-  for (const placeId of mutation.placeIds) {
+  for (const { placeId } of mutation.places) {
     if (!eligible.has(placeId)) continue;
     const prior = previousByPlace.get(placeId);
     if (prior !== undefined) restored.push(prior);
@@ -278,6 +380,86 @@ const restorePreviousVerdicts = ({
     restored.some((entry, index) => entry !== current.decided[index])
     ? { ...current, revision: current.revision + 1, decided: restored }
     : current;
+};
+
+/**
+ * Refuses a verdict whose places belong to a different change set.
+ *
+ * The address a verdict is stored under is a claim about ownership, and until
+ * this existed nothing proved it: the boundary checked that the change-set id
+ * was well formed and that each place id was bounded text, so a caller could
+ * record a decision for one thread's change under another thread's set. That
+ * is the very leak ownership-scoped acceptance exists to close, and a boundary
+ * that only checks shapes closes it for honest callers alone.
+ *
+ * A place nobody declared has no owner to contradict, so it passes: the
+ * partition is deliberately partial, and refusing on an absent fact would
+ * block ordinary work to punish a claim nothing disputes. The cost is one diff
+ * of the span, which is why it runs only where the span has an ownership
+ * partition at all.
+ */
+const refuseForeignPlaces = async ({
+  context,
+  mutation,
+}: {
+  readonly context: ReviewRouteContext;
+  readonly mutation: ChangeVerdictMutation;
+}): Promise<void> => {
+  const { store, resolvedPlanPath } = context;
+  const exactTransaction = (await readCommittedChangeSets({ store })).find(
+    (changeSet) =>
+      changeSet.changeSetId === mutation.changeSetId &&
+      changeSet.baseSnapshot === mutation.from &&
+      changeSet.resultSnapshot === mutation.to &&
+      (changeSet.provenance === "chat" || changeSet.provenance === "push"),
+  );
+  // A chat or push is an immutable request-keyed transaction, so its exact
+  // committed span proves ownership of the revision directly. This also
+  // handles a digest reached more than once: the span-only ownership fold can
+  // select an earlier path to identical bytes, but that does not erase the
+  // later transaction recorded in the immutable log.
+  if (exactTransaction !== undefined) return;
+  const ownership = await readChangeOwnership({
+    store,
+    sessionId: context.sessionId,
+    planId: context.planId,
+    from: mutation.from,
+    to: mutation.to,
+  });
+  if (ownership === undefined) return;
+  let before: string;
+  let after: string;
+  try {
+    [before, after] = await Promise.all([
+      readSnapshot({ store, snapshot: mutation.from }),
+      readSnapshot({ store, snapshot: mutation.to }),
+    ]);
+  } catch {
+    throw new ChangeVerdictsRejected(
+      "This change's revision could not be read, so its ownership could not be verified and the decision was not recorded",
+    );
+  }
+  const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
+  const blocksOf = (markdown: string) =>
+    renderDocument({ markdown, fallbackTitle, identity: {} }).blocks;
+  const diff = buildSnapshotDiff({
+    from: mutation.from,
+    to: mutation.to,
+    before: blocksOf(before),
+    after: blocksOf(after),
+    ownership,
+  });
+  const placesById = new Map(
+    diff.places.map((place) => [place.placeId, place]),
+  );
+  for (const { placeId } of mutation.places) {
+    const owners = placesById.get(placeId)?.ownerChangeSetIds ?? [];
+    if (owners.length > 0 && !owners.includes(mutation.changeSetId)) {
+      throw new ChangeVerdictsRejected(
+        "This change belongs to another change set, so it cannot be decided here",
+      );
+    }
+  }
 };
 
 /**
@@ -310,6 +492,10 @@ export const recordChangeVerdicts = async (
       value: payloadOf(request.body),
       now: new Date().toISOString(),
     });
+    // Ownership is proved before the record moves, because a row written under
+    // the wrong set is a false statement about who decided what, and taking it
+    // back afterwards cannot unsay it to whoever read the record meanwhile.
+    await refuseForeignPlaces({ context, mutation });
     verdicts = await changeVerdicts.update((current) => {
       const result = applyChangeVerdictMutation({
         verdicts: current,
@@ -353,6 +539,7 @@ export const recordChangeVerdicts = async (
   try {
     await reconcilePlanSource({
       context,
+      changeSetId: mutation.changeSetId,
       from: mutation.from,
       to: mutation.to,
       before,
