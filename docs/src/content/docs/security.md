@@ -117,10 +117,11 @@ while the recorded lock holder, the claim generation, and the source's base dige
 hold, and only through a single atomic rename — with a journal written beforehand so an
 interrupted publish settles to exactly one answer after a crash rather than to a guess.
 
-Your own writes cross the same boundary. A revert re-proves the digest it was computed against,
-which is why a revision the agent published while you were deciding **refuses** the revert rather
-than silently disappearing under it. Approval stamps your answers into the source inside the
-approval commit's own hold of that lock, so it cannot go stale against its own write.
+Your own writes cross the same boundary. Rejecting a change or reverting a response re-proves the
+digest the restoration was computed against, which is why a revision the agent published while you
+were deciding **refuses** the write rather than silently disappearing under it. Approval stamps your
+answers into the source inside the approval commit's own hold of that lock, so it cannot go stale
+against its own write.
 
 ### 6. The install path
 
