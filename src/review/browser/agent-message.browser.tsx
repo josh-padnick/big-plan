@@ -480,7 +480,7 @@ export const AgentChangeIdentity = ({
  */
 export const PLAN_MOVED_SINCE_LABEL = "Plan updated since this thread began.";
 
-/** Names who produced a change set, and flags a plan that moved under it. */
+/** Flags a plan that moved beyond the thread's committed change set. */
 export const PlanMovedSinceNote = ({ detail }: { readonly detail: string }) => (
   <p
     className="m-0 flex items-center gap-1 text-2xs text-muted"

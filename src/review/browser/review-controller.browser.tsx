@@ -3630,12 +3630,12 @@ const StagedCard = ({
 };
 
 /**
- * One change set, rendered where it was authored.
+ * One change set, rendered at its thread's foot.
  *
  * The bounds are given rather than derived from the response that happens to
- * be beside it: a comment thread's change set spans every reply it has
- * committed, so the diff shown in the thread is the thread's baseline against
- * the plan now, not the last reply's own before-and-after.
+ * precede it: a comment thread's change set spans every reply it has committed,
+ * so the diff shown in the thread is the thread's baseline against its own
+ * committed result, not the last reply's before-and-after or the current plan.
  */
 const ChangeAttachment = ({
   identity,
