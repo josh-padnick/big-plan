@@ -32,14 +32,9 @@ const PLAN_IDENTITY_SELECTOR = {
     "Resolve plan identity through live-target.browser.ts (liveBlock, liveBaselineBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, the visible-copy preference, and the drift check.",
 };
 
-// The island may not put plan content anywhere but in the plan. A
-// "Historical changes" section appended after the last slide was the designed
-// answer for a change whose block had drifted, and it was the reported defect
-// four rounds running: a card at the foot of the document is nowhere near the
-// place it describes, and every new way to lose an anchor fell into it. It is
-// gone, and the three shapes that built it are fenced so no lane rebuilds it
-// by reaching for the same tools - there is no ignore list, because there is
-// no longer any caller entitled to append to the article.
+// Plan content belongs only at its live plan location. These selectors fence
+// the former foot-of-page fallback shapes so an unanchored change stays absent;
+// structural supersession belongs to diff-anchor.ts instead.
 const FOOT_OF_PAGE_SELECTOR = {
   selector:
     'TemplateElement[value.raw=/data-review-historical/], Literal[value=/data-review-historical/], MemberExpression[property.name="reviewHistoricalChanges"], MemberExpression[property.name="reviewHistoricalDiff"], CallExpression[callee.property.name="after"][callee.object.name=/[Ss]lide/]',

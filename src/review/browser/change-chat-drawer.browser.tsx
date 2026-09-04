@@ -191,7 +191,7 @@ export const ChangeChatDrawer = ({
             >
               <span
                 data-review-change-chat-bubble=""
-                className={`grid min-w-0 max-w-[85%] grid-cols-[minmax(0,1fr)] gap-0.5 rounded-xl px-2.5 py-1.5 ${
+                className={`grid min-w-0 max-w-[85%] grid-cols-[minmax(0,1fr)] gap-0.5 rounded-xl px-3 py-1.5 ${
                   message.author === "reviewer"
                     ? "rounded-br-sm bg-accent-soft text-ink"
                     : "rounded-bl-sm border border-edge bg-paper text-ink"
