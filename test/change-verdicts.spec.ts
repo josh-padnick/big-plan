@@ -1114,13 +1114,15 @@ test("should lay out the review bar differently before and after a change is dec
       // BIG-153 "Changed again" badge that will sit there is out of scope here.
       // What this locks is the three buttons and their order: the conversation,
       // then the two verdicts, then the set-wide overflow at the end.
-      expect(await barControls()).toEqual([
-        "Exit review",
-        "Chat about this change",
-        "Reject this change",
-        "Accept this change",
-        "More change set actions",
-      ]);
+      await expect
+        .poll(barControls)
+        .toEqual([
+          "Exit review",
+          "Chat about this change",
+          "Reject this change",
+          "Accept this change",
+          "More change set actions",
+        ]);
     });
 
     await test.step("decided by rejecting: evidence, Undo, badge, then overflow", async () => {
@@ -1138,13 +1140,15 @@ test("should lay out the review bar differently before and after a change is dec
           name: "Undo rejection for this change",
         }),
       ).toBeVisible();
-      expect(await barControls()).toEqual([
-        "Exit review",
-        "View changes",
-        "Undo rejection for this change",
-        "badge:Rejected",
-        "More change set actions",
-      ]);
+      await expect
+        .poll(barControls)
+        .toEqual([
+          "Exit review",
+          "View changes",
+          "Undo rejection for this change",
+          "badge:Rejected",
+          "More change set actions",
+        ]);
       await expect(page.locator("article")).toContainText(
         "The worker retries a failed job once before it gives up.",
       );
@@ -1187,13 +1191,15 @@ test("should lay out the review bar differently before and after a change is dec
       // An accepted change keeps its evidence one control away, so the row is
       // View changes, Undo, the Accepted badge, and the set-wide overflow at
       // the far right - and Chat is nowhere in it.
-      expect(await barControls()).toEqual([
-        "Exit review",
-        "View changes",
-        "Undo acceptance for this change",
-        "badge:Accepted",
-        "More change set actions",
-      ]);
+      await expect
+        .poll(barControls)
+        .toEqual([
+          "Exit review",
+          "View changes",
+          "Undo acceptance for this change",
+          "badge:Accepted",
+          "More change set actions",
+        ]);
     });
 
     await page.goto("about:blank");

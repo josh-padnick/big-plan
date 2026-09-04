@@ -211,7 +211,7 @@ export const DiffTourProvider = ({
   const tourRef = useRef<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [showCompletionSummary, setShowCompletionSummary] = useState(false);
-  // Which accepted place the reviewer has asked to see the evidence for. It is
+  // Which decided place the reviewer has asked to see the evidence for. It is
   // one place rather than a flag because the ask is about the change in front
   // of them: carrying it to the next place would put the proposal treatment
   // back on a change they never asked to reopen.
