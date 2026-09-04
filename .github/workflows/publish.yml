@@ -1,22 +1,35 @@
 # Publishes an immutable npm release from a version tag on main, proves the
 # package came from this workflow, and exercises the canary before promotion.
+# Pull requests that touch this workflow run the fresh-runner verify dry-run
+# only, so a change to the release verification proves its browser-dependent
+# tests pass on a clean GitHub-hosted runner before it can turn a release red.
 name: Publish npm canary
 
 on:
   push:
     tags:
       - "v*.*.*"
+  pull_request:
+    paths:
+      - .github/workflows/publish.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: npm-release
+  # Every real release (a tag push) shares one fixed lane, because they all
+  # publish the shared `next` dist-tag and must never run at once. Pull-request
+  # dry-runs get their own per-ref lane so one never queues behind a release or
+  # another PR.
+  group: npm-release-${{ github.event_name == 'push' && 'publish-next' || github.ref }}
   cancel-in-progress: false
 
 jobs:
   verify:
     name: Verify release tag
+    # Only a tag push verifies-and-releases; pull requests run the dry-run job
+    # below, never this publish chain.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -44,6 +57,14 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      # The merge-guard contract tests in `bun run test` build commits with
+      # `git commit-tree`, which aborts with "empty ident name" on a runner with
+      # no git identity. The self-hosted CI runner has an ambient global
+      # identity; this clean GitHub-hosted runner has none, so set one.
+      - name: Configure a git identity for tests that build commits
+        run: |
+          git config --global user.email "ci@big-plan.invalid"
+          git config --global user.name "Big Plan CI"
       - run: bun run lint
       - run: bun run build
       - name: Generated files must not drift from their sources
@@ -54,9 +75,67 @@ jobs:
             echo "::error::Generated files drifted from their sources. Run 'bun run gen' and commit the result."
             exit 1
           fi
+      # `bun run test` runs the Mermaid compile-time renderer tests, which fail
+      # with "Mermaid compile-time rendering needs Chromium (Playwright 1.61.1)"
+      # on a runner with no browser. This job runs on a clean GitHub-hosted
+      # runner, so install the pinned Chromium BEFORE the tests, not after. (CI
+      # on the self-hosted runner survives the old order only because its browser
+      # cache persists across runs; this job has no such cache.) Cache the
+      # browser keyed on the pinned Playwright version so a hit skips the
+      # download while a version bump forces a fresh install.
+      - name: Cache the pinned Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install the pinned Playwright Chromium for compile-time Mermaid
+        run: bunx playwright install chromium
       - run: bun run test
-      - run: bunx playwright install chromium
       - run: bun run test:e2e
+
+  # Proves the install-then-test sequence above works on a clean GitHub-hosted
+  # runner, in this PR's own checks, before a release ever relies on it. The
+  # push-tags trigger cannot run on a PR, and the self-hosted CI lane keeps a
+  # persistent Playwright cache that hides the missing-browser failure, so this
+  # is the only place a PR can prove the order is correct on a fresh runner. It
+  # runs the exact release-critical order: install the pinned Chromium, then
+  # `bun run test` (which includes the Mermaid compile-time renderer tests).
+  verify-dry-run:
+    name: Verify dry-run (fresh runner)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Match the verify job: the contract/probe tests in `bun run test`
+          # walk git history (git show <old rev>, merge-base to main), so a
+          # shallow clone fails them. Fetch the full history like verify does.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      # Mirror the verify job: the merge-guard contract tests build commits with
+      # `git commit-tree`, which needs a git identity this clean runner lacks.
+      - name: Configure a git identity for tests that build commits
+        run: |
+          git config --global user.email "ci@big-plan.invalid"
+          git config --global user.name "Big Plan CI"
+      # Mirror the verify job's order faithfully: `bun run test` shells out to
+      # the built CLI (`dist/cli/main.js`) for the agent-loop tests, so the
+      # package must be built first, and the Mermaid renderer tests need the
+      # pinned Chromium installed before the tests run.
+      - run: bun run build
+      - name: Cache the pinned Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install the pinned Playwright Chromium for compile-time Mermaid
+        run: bunx playwright install chromium
+      - run: bun run test
 
   publish-next:
     name: Publish to next
