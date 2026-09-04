@@ -32,6 +32,18 @@ export type SnapshotDiffLocation = DiffLocation & {
 // vocabulary shared with browser delivery.
 export type SnapshotDiffPlace = DiffPlace;
 
+export const blockEvidence = (block: SnapshotBlock | undefined): string =>
+  block === undefined
+    ? ""
+    : JSON.stringify({
+        kind: block.kind,
+        text: block.text,
+        model: block.model ?? null,
+        presentation: block.presentation ?? null,
+        tableHeaders: block.tableHeaders ?? null,
+        isTableHeader: block.isTableHeader ?? false,
+      });
+
 type BuiltSnapshotDiff = Omit<SnapshotDiff, "locations"> & {
   readonly locations: ReadonlyArray<SnapshotDiffLocation>;
 };
@@ -406,6 +418,8 @@ export const diffSnapshots = ({
       section: newBlock.section,
       oldText: oldBlock.text,
       newText: newBlock.text,
+      oldEvidence: blockEvidence(oldBlock),
+      newEvidence: blockEvidence(newBlock),
       ...(oldBlock.presentation === undefined
         ? {}
         : { oldPresentation: oldBlock.presentation }),
@@ -458,6 +472,7 @@ export const diffSnapshots = ({
       section: oldBlock.section,
       oldText: oldBlock.text,
       newText: "",
+      oldEvidence: blockEvidence(oldBlock),
       ...(oldBlock.presentation === undefined
         ? {}
         : { oldPresentation: oldBlock.presentation }),
@@ -485,6 +500,7 @@ export const diffSnapshots = ({
       section: newBlock.section,
       oldText: "",
       newText: newBlock.text,
+      newEvidence: blockEvidence(newBlock),
       ...(newBlock.presentation === undefined
         ? {}
         : { newPresentation: newBlock.presentation }),
@@ -591,6 +607,8 @@ const contentDigest = (
           location.kind,
           location.oldText,
           location.newText,
+          location.oldEvidence ?? "",
+          location.newEvidence ?? "",
         ])
         .join("\u0000"),
     )

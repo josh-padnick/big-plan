@@ -23,6 +23,7 @@ import type { BlockDescriptor } from "../render/render-document.js";
 import { planSourceSegments } from "../render/plan-source-segments.js";
 import type { PlanSourceSegment } from "../render/plan-source-segments.js";
 import {
+  blockEvidence,
   buildSnapshotDiff,
   type ChangeOwnership,
   type DiffPlace,
@@ -474,18 +475,6 @@ const applyEdits = ({
 // reads identically - so the model is part of the identity too. Without it a
 // restore that put such a change back would look like a change that had not
 // moved, and the proof below would refuse a restore that had in fact worked.
-const blockSignature = (block: BlockDescriptor | undefined): string =>
-  block === undefined
-    ? ""
-    : JSON.stringify({
-        kind: block.kind,
-        text: block.text,
-        model: block.model ?? null,
-        presentation: block.presentation ?? null,
-        tableHeaders: block.tableHeaders ?? null,
-        isTableHeader: block.isTableHeader ?? false,
-      });
-
 const changeSignatures = ({
   before,
   after,
@@ -500,12 +489,12 @@ const changeSignatures = ({
       [
         location.status,
         location.kind,
-        blockSignature(
+        blockEvidence(
           location.oldBlockId === undefined
             ? undefined
             : beforeById.get(location.oldBlockId),
         ),
-        blockSignature(
+        blockEvidence(
           location.newBlockId === undefined
             ? undefined
             : afterById.get(location.newBlockId),

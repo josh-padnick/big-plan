@@ -113,7 +113,9 @@ const hasSameBlockEvidence = ({
         candidate.status === location.status &&
         candidate.kind === location.kind &&
         candidate.oldText === location.oldText &&
-        candidate.newText === location.newText,
+        candidate.newText === location.newText &&
+        candidate.oldEvidence === location.oldEvidence &&
+        candidate.newEvidence === location.newEvidence,
     );
   });
 };

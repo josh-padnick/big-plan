@@ -68,6 +68,7 @@ import { encodeApprovalSummary } from "./shared/review-wire.js";
 import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import { readChangeOwnership } from "./change-ownership.js";
+import { attributeDiffPlaces } from "./shared/change-attribution.js";
 import {
   applyChangeVerdictMutation,
   type StoredChangeVerdicts,
@@ -212,12 +213,12 @@ const changeSetsAtApproval = async (
     requests: exchange.requests,
     placesByRevision: new Map(),
   });
-  const placesByRevision = new Map<
+  const diffsByRevision = new Map<
     string,
-    ReadonlyArray<{ readonly placeId: string; readonly contentDigest?: string }>
+    ReturnType<typeof buildSnapshotDiff>
   >();
   for (const { from, to } of folded) {
-    if (placesByRevision.has(`${from}:${to}`)) continue;
+    if (diffsByRevision.has(`${from}:${to}`)) continue;
     const [beforeSource, afterSource] = await Promise.all([
       readSnapshot({ store: context.store, snapshot: from }),
       readSnapshot({ store: context.store, snapshot: to }),
@@ -248,18 +249,40 @@ const changeSetsAtApproval = async (
       after: after.blocks,
       ...(ownership === undefined ? {} : { ownership }),
     });
-    placesByRevision.set(
-      `${from}:${to}`,
-      diff.places.map(({ placeId, contentDigest }) => ({
-        placeId,
-        contentDigest,
-      })),
-    );
+    diffsByRevision.set(`${from}:${to}`, diff);
   }
-  return folded.map((changeSet) => ({
-    ...changeSet,
-    places: placesByRevision.get(`${changeSet.from}:${changeSet.to}`) ?? [],
-  }));
+  return folded.map((changeSet) => {
+    const diff = diffsByRevision.get(
+      `${changeSet.from}:${changeSet.to}`,
+    );
+    if (diff === undefined) return { ...changeSet, places: [] };
+    const changeTargets = exchange.responses.flatMap((response) =>
+      "outcomes" in response
+        ? response.outcomes.flatMap((outcome) =>
+            response.requestId === changeSet.id ||
+            outcome.commentId === changeSet.id
+              ? (outcome.changeTargets ?? [])
+              : [],
+          )
+        : [],
+    );
+    const placeIds =
+      changeTargets.length === 0
+        ? new Set(diff.places.map((place) => place.placeId))
+        : new Set(
+            attributeDiffPlaces({
+              diff,
+              changeTargets,
+              changeSetId: changeSet.id,
+            }).placeIds,
+          );
+    return {
+      ...changeSet,
+      places: diff.places
+        .filter((place) => placeIds.has(place.placeId))
+        .map(({ placeId, contentDigest }) => ({ placeId, contentDigest })),
+    };
+  });
 };
 
 /**

@@ -225,6 +225,8 @@ export type DiffLocation = {
   readonly section: string;
   readonly oldText: string;
   readonly newText: string;
+  readonly oldEvidence?: string;
+  readonly newEvidence?: string;
   readonly oldPresentation?: BlockPresentation;
   readonly newPresentation?: BlockPresentation;
   readonly oldTableHeaders?: ReadonlyArray<string>;
@@ -1313,6 +1315,12 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
           section: location.section,
           oldText: location.oldText,
           newText: location.newText,
+          ...(typeof location.oldEvidence === "string"
+            ? { oldEvidence: location.oldEvidence }
+            : {}),
+          ...(typeof location.newEvidence === "string"
+            ? { newEvidence: location.newEvidence }
+            : {}),
           ...(oldPresentation === undefined ? {} : { oldPresentation }),
           ...(newPresentation === undefined ? {} : { newPresentation }),
           ...(Array.isArray(location.oldTableHeaders) &&

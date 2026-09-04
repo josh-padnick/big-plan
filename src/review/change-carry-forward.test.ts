@@ -8,6 +8,7 @@
 // again.
 
 import { describe, expect, it } from "vitest";
+import { renderDocument } from "../render/render-document.js";
 import { carriedVerdicts, spansBehind } from "./change-carry-forward.js";
 import type { CommittedPlanRevision } from "./change-set-commit.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
@@ -330,6 +331,58 @@ describe("carrying verdicts onto an advanced change set", () => {
         decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
       }),
     ).toMatchObject({ accepted: 1, stale: 0, open: 0 });
+  });
+
+  it("marks a model-only component change stale", () => {
+    const source = (type: string) => `# Plan
+
+## Risk
+
+<Callout type="${type}">
+
+The rollout needs attention.
+
+</Callout>
+`;
+    const blocks = (markdown: string) =>
+      renderDocument({ markdown, fallbackTitle: "Plan", identity: {} }).blocks;
+    const baseline = blocks(source("note"));
+    const previousCallout = buildSnapshotDiff({
+      from: S0,
+      to: S1,
+      before: baseline,
+      after: blocks(source("warning")),
+    });
+    const nextCallout = buildSnapshotDiff({
+      from: S0,
+      to: S2,
+      before: baseline,
+      after: blocks(source("danger")),
+    });
+    const place = previousCallout.places[0];
+    if (place === undefined) throw new Error("Expected a Callout change");
+    const carried = carriedVerdicts({
+      previous: previousCallout,
+      next: nextCallout,
+      decided: [
+        verdict({
+          placeId: place.placeId,
+          contentDigest: place.contentDigest,
+        }),
+      ],
+    });
+
+    expect(
+      changeSetStanding({
+        changeSetId: SET,
+        from: S0,
+        to: S2,
+        places: nextCallout.places,
+        accepted: new Set(carried.map(changeVerdictKey)),
+        rejected: new Set(),
+        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+      }),
+    ).toMatchObject({ accepted: 0, stale: 1, open: 1 });
   });
 
   it("keeps the untouched change accepted and re-opens only what moved", () => {
