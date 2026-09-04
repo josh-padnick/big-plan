@@ -563,16 +563,18 @@ export const DiffTourProvider = ({
     setRevealCount((count) => count + 1);
   }, [isChatOpen]);
 
-  /** The places in this set nobody has decided, in document order. */
+  /** The places in this set that are owed a decision, in document order. */
   // The places, not just their ids: a verdict is recorded over the content it
   // was given for, so what is decided has to carry that content with it.
-  const undecidedPlaces = (): ReadonlyArray<DiffPlace> =>
+  const openPlaces = (): ReadonlyArray<DiffPlace> =>
     tour === null
       ? []
       : places.filter(
           (place) =>
             tourScope !== null &&
-            dispositionOf(tourScope, place) === "undecided",
+            ["undecided", "stale"].includes(
+              dispositionOf(tourScope, place),
+            ),
         );
 
   /** Takes back whatever verdict the current change holds. */
@@ -615,10 +617,10 @@ export const DiffTourProvider = ({
   /** Records one verdict over everything in the set nobody has decided yet. */
   const decideEveryOpenPlace = (verdict: "accepted" | "rejected"): void => {
     if (tourScope === null) return;
-    const undecided = undecidedPlaces();
-    if (undecided.length === 0) return;
+    const open = openPlaces();
+    if (open.length === 0) return;
     setShownChangesPlaceId(null);
-    void setPlacesDecided(tourScope, undecided, verdict, {
+    void setPlacesDecided(tourScope, open, verdict, {
       onlyUndecided: true,
     });
   };

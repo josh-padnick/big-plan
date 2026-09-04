@@ -213,9 +213,23 @@ describe("carrying verdicts onto an advanced change set", () => {
       contentDigest: first.contentDigest,
     });
 
+    const carried = carriedVerdicts({
+      previous: onePlace,
+      next: split,
+      decided: [entry],
+    });
+    expect(carried).toHaveLength(2);
     expect(
-      carriedVerdicts({ previous: onePlace, next: split, decided: [entry] }),
-    ).toHaveLength(2);
+      changeSetStanding({
+        changeSetId: SET,
+        from: S0,
+        to: S2,
+        places: split.places,
+        accepted: new Set(carried.map(changeVerdictKey)),
+        rejected: new Set(),
+        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+      }),
+    ).toMatchObject({ accepted: 2, stale: 0, open: 0 });
   });
 
   it("keeps the untouched change accepted and re-opens only what moved", () => {

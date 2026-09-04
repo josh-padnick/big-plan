@@ -74,6 +74,35 @@ const placeBlockIds = ({
     }),
   );
 
+const hasSameBlockEvidence = ({
+  previous,
+  next,
+  place,
+}: {
+  readonly previous: SnapshotDiff;
+  readonly next: SnapshotDiff;
+  readonly place: DiffPlace;
+}): boolean =>
+  place.locationIndexes.every((index) => {
+    const location = next.locations.at(index);
+    if (location === undefined) return false;
+    const blockIds = new Set(
+      [location.newBlockId, location.oldBlockId].filter(
+        (blockId): blockId is string => blockId !== undefined,
+      ),
+    );
+    return previous.locations.some(
+      (candidate) =>
+        [candidate.newBlockId, candidate.oldBlockId].some(
+          (blockId) => blockId !== undefined && blockIds.has(blockId),
+        ) &&
+        candidate.status === location.status &&
+        candidate.kind === location.kind &&
+        candidate.oldText === location.oldText &&
+        candidate.newText === location.newText,
+    );
+  });
+
 /**
  * The verdicts of one advanced change set, re-addressed to its new span.
  *
@@ -116,9 +145,9 @@ export const carriedVerdicts = ({
         ...entry,
         to: next.to,
         placeId: match.placeId,
-        // The digest stays the one the reviewer decided over. Replacing it with
-        // the new place's would assert that they had seen this round's wording,
-        // which is exactly the claim carrying a verdict forward must not make.
+        ...(hasSameBlockEvidence({ previous, next, place: match })
+          ? { contentDigest: match.contentDigest }
+          : {}),
       });
     }
   }
@@ -308,22 +337,18 @@ export const carryForwardChangeVerdicts = async ({
           ...diffs,
           decided: decided.filter(superseded),
         });
-        const carriedPlaceIds = new Set(carried.map((entry) => entry.placeId));
-        decided = [
-          ...decided.filter(
-            (entry) =>
-              !superseded(entry) &&
-              // A place already decided at the current span keeps that answer:
-              // the reviewer decided it after the round landed, so it is newer
-              // than anything being carried onto it.
-              !(
-                entry.changeSetId === span.changeSetId &&
-                entry.from === span.from &&
-                entry.to === span.currentTo &&
-                carriedPlaceIds.has(entry.placeId)
-              ),
+        const currentPlaceIds = new Set(
+          decided.flatMap((entry) =>
+            entry.changeSetId === span.changeSetId &&
+            entry.from === span.from &&
+            entry.to === span.currentTo
+              ? [entry.placeId]
+              : [],
           ),
-          ...carried,
+        );
+        decided = [
+          ...decided.filter((entry) => !superseded(entry)),
+          ...carried.filter((entry) => !currentPlaceIds.has(entry.placeId)),
         ];
       }
       return decided === stored.decided

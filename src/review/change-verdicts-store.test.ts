@@ -37,6 +37,7 @@ const row = ({
   placeId,
   verdict = "accepted" as const,
   actor,
+  contentDigest,
 }: {
   readonly changeSetId?: string;
   readonly from?: string;
@@ -44,6 +45,7 @@ const row = ({
   readonly placeId: string;
   readonly verdict?: "accepted" | "rejected";
   readonly actor?: string;
+  readonly contentDigest?: string;
 }) => ({
   changeSetId,
   from,
@@ -52,6 +54,7 @@ const row = ({
   verdict,
   decidedAt: NOW,
   ...(actor === undefined ? {} : { actor }),
+  ...(contentDigest === undefined ? {} : { contentDigest }),
 });
 
 const mutate = (
@@ -350,6 +353,28 @@ describe("applyChangeVerdictMutation", () => {
     expect(next.decided).toEqual([
       row({ placeId: "p1", verdict: "rejected", actor: "reviewer" }),
       row({ placeId: "p2", actor: "reviewer" }),
+    ]);
+  });
+
+  it("accepts a stale place during a guarded bulk decision", () => {
+    const oldDigest = "1".repeat(16);
+    const newDigest = "2".repeat(16);
+    const stale: StoredChangeVerdicts = {
+      version: 1,
+      revision: 1,
+      decided: [row({ placeId: "p1", contentDigest: oldDigest })],
+    };
+    const next = applyChangeVerdictMutation({
+      verdicts: stale,
+      mutation: {
+        ...accept(["p1"]),
+        places: [{ placeId: "p1", contentDigest: newDigest }],
+        onlyUndecided: true,
+      },
+    });
+
+    expect(next.decided).toEqual([
+      row({ placeId: "p1", actor: "reviewer", contentDigest: newDigest }),
     ]);
   });
 
