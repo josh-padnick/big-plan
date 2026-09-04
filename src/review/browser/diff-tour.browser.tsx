@@ -324,7 +324,7 @@ export const DiffTourProvider = ({
         placeIds: ReadonlyArray<string>,
         verdict: "accepted" | "rejected" | undefined,
         options?: { readonly onlyUndecided: boolean },
-      ): Promise<void> => {
+      ): Promise<VerdictWriteResult> => {
         // A gesture that would record what the store already holds is not a
         // write; sending one would advance the revision for nothing.
         const changing = placeIds.filter(
