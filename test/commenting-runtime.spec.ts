@@ -5613,11 +5613,14 @@ test("should preview stale, historical, and multi-place causal diffs through the
     // the comparison an in-context place to stand. The reviewer sees the
     // change there instead of meeting a card marooned below the whole plan.
     await expect(rail).toContainText("Retired experiment");
-    const retiredChangeLens = page.locator(
-      "[data-slide] [data-review-diff-lens]",
-    );
+    const retiredChangeLens = page.locator("[data-review-diff-lens]");
     await expect(retiredChangeLens).toHaveCount(1);
     await expect(retiredChangeLens).toContainText("Retired experiment");
+    expect(
+      await retiredChangeLens.evaluate(
+        (lens) => lens.closest("[data-slide]") !== null,
+      ),
+    ).toBe(true);
     await page.screenshot({
       path: testInfo.outputPath("retired-change.png"),
     });
