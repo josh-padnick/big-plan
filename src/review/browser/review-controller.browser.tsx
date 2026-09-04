@@ -1120,13 +1120,17 @@ const useThreadDeleteLoss = ({
   readonly active: boolean;
 }): {
   readonly diff: SnapshotDiff | null;
+  readonly loadError: boolean;
   readonly undecidedPlaceIds: ReadonlyArray<string>;
   readonly slides: ReadonlyArray<PlanSlideLoss> | undefined;
 } => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
+  const [loadError, setLoadError] = useState(false);
   useEffect(() => {
     if (!active || identity === null || from === undefined || to === undefined)
       return;
+    setDiff(null);
+    setLoadError(false);
     const ready = readySnapshotDiff(identity, from, to);
     if (ready !== null) {
       setDiff(ready);
@@ -1138,14 +1142,17 @@ const useThreadDeleteLoss = ({
         if (current) setDiff(value);
       })
       .catch(() => {
-        if (current) setDiff(null);
+        if (current) setLoadError(true);
       });
     return () => {
       current = false;
     };
   }, [active, from, identity, to]);
   useEffect(() => {
-    if (!active) setDiff(null);
+    if (!active) {
+      setDiff(null);
+      setLoadError(false);
+    }
   }, [active]);
   const undecidedPlaceIds = useMemo(
     () =>
@@ -1160,6 +1167,7 @@ const useThreadDeleteLoss = ({
   );
   return {
     diff,
+    loadError,
     undecidedPlaceIds,
     slides: useMemo(
       () =>
@@ -1318,8 +1326,10 @@ const PlanLossSlideRow = ({ slide }: { readonly slide: PlanSlideLoss }) => {
 
 const PlanLossEvidence = ({
   slides,
+  loadError,
 }: {
   readonly slides: ReadonlyArray<PlanSlideLoss> | undefined;
+  readonly loadError: boolean;
 }) => {
   const total = slides === undefined ? 0 : planLossChangeCount(slides);
   return (
@@ -1332,7 +1342,11 @@ const PlanLossEvidence = ({
           ? "What you will lose"
           : `What you will lose · ${total} ${total === 1 ? "change" : "changes"} on ${slides.length === 1 ? "one slide" : `${slides.length} slides`}`}
       </p>
-      {slides === undefined ? (
+      {loadError ? (
+        <p className="m-0 text-sm text-ink">
+          Could not read what this thread wrote. Cancel and try again.
+        </p>
+      ) : slides === undefined ? (
         <p className="m-0 text-sm text-ink">Reading what this thread wrote…</p>
       ) : slides.length === 0 ? (
         <p className="m-0 text-sm text-ink">
@@ -7392,10 +7406,11 @@ export const ReviewController = () => {
    */
   const deleteThread = async (commentId: string) => {
     const { diff, undecidedPlaceIds } = threadDelete;
+    if (diff === null) return;
     // The confirmation is answered, so it comes down before the two writes it
     // authorized rather than sitting there looking like a dead button.
     setPendingDelete(null);
-    if (diff !== null && undecidedPlaceIds.length > 0) {
+    if (undecidedPlaceIds.length > 0) {
       setStatus("Rejecting the changes this thread left undecided…");
       // The stepper is narrating this change set, and both its content and its
       // thread are about to go.
@@ -9687,6 +9702,9 @@ export const ReviewController = () => {
               : "Delete"
         }
         onCancel={() => setPendingDelete(null)}
+        actionDisabled={
+          pendingDelete?.kind === "thread" && threadDelete.diff === null
+        }
         onAction={() => {
           if (pendingDelete?.kind === "comment") {
             deleteDraft(pendingDelete.comment.id);
@@ -9707,7 +9725,10 @@ export const ReviewController = () => {
         }}
       >
         {pendingDelete?.kind === "thread" ? (
-          <PlanLossEvidence slides={threadDelete.slides} />
+          <PlanLossEvidence
+            slides={threadDelete.slides}
+            loadError={threadDelete.loadError}
+          />
         ) : null}
       </AlertDialog>
     </>

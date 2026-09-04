@@ -247,9 +247,10 @@ export const DiffTourProvider = ({
       ? undefined
       : active.locationIndexes
           .map((locationIndex) => tour.diff.locations.at(locationIndex))
-          .flatMap((location) =>
-            location?.newBlockId === undefined ? [] : [location.newBlockId],
-          )
+          .flatMap((location) => {
+            const blockId = location?.newBlockId ?? location?.oldBlockId;
+            return blockId === undefined ? [] : [blockId];
+          })
           .at(0);
   const closeTour = () => {
     setShownChangesPlaceId(null);
