@@ -48,6 +48,7 @@ import {
   type ChangeChatValue,
 } from "./change-chat-drawer.browser.js";
 import { changeChatMessage } from "../shared/change-chat.js";
+import { ChangedAgainBadge } from "./agent-message.browser.js";
 
 type OpenTour = {
   readonly diff: SnapshotDiff;
@@ -837,15 +838,11 @@ export const DiffTourProvider = ({
                     </>
                   ) : (
                     <>
-                      {isActiveStale ? (
-                        <Badge
-                          tone="statusNeutral"
-                          size="status"
-                          data-review-place-verdict="stale"
-                        >
-                          Changed again since you decided it
-                        </Badge>
-                      ) : null}
+                      {/* One vocabulary for a re-changed place: the same badge
+                          the change digest shows, carrying the same
+                          explanation, so the stepper is not a second wording
+                          of the same fact. */}
+                      {isActiveStale ? <ChangedAgainBadge /> : null}
                       <Button
                         variant="outline"
                         size="micro"

@@ -15,12 +15,16 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
+import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { agentModelDisplayName } from "../shared/agent-identity-catalog.js";
 import type { AgentModelIdentity } from "../shared/agent-model.js";
 import { parseMessageMarkdown } from "../shared/message-markdown.js";
-import { parseReviewerMarkdown } from "../shared/reviewer-markdown.js";
+import {
+  parseReviewerMarkdown,
+  reviewerMessageLabel,
+} from "../shared/reviewer-markdown.js";
 import { messageTimeLabel } from "../shared/time-label.js";
 import { ACKNOWLEDGED_STATUS_LABEL } from "../shared/agent-status.js";
 import type { AgentStatus } from "../shared/agent-status.js";
@@ -39,7 +43,7 @@ import {
 } from "./message-markdown-view.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
 import { advancedTourPlaceId, tourIsBehind } from "./tour-advance.js";
-import { Badge, Tooltip, WorkingMark } from "./ui.browser.js";
+import { Badge, Button, Tooltip, WorkingMark } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
@@ -501,27 +505,35 @@ export const PlanMovedSinceNote = ({ detail }: { readonly detail: string }) => (
   </p>
 );
 
-const FOREIGN_LABEL_LIMIT = 60;
-
 /**
- * What a foreign change set is called in the disclosure. A set the page can
- * name is named; one it cannot is still declared to be somebody else's work,
- * because "another thread" is the fact the reviewer needs and an id is not.
+ * What "Changed again" means, in the reviewer's terms rather than the record's.
+ *
+ * The badge is short because it sits in the reading column; the sentence it
+ * stands for is the part that actually answers "why am I being asked this
+ * twice", so it hangs off an info icon rather than being spelled out on every
+ * change.
  */
-const foreignName = ({
-  foreign,
-  changeSetLabel,
-}: {
-  readonly foreign: ForeignChangeSet;
-  readonly changeSetLabel?: (changeSetId: string) => string | undefined;
-}): string => {
-  const label = changeSetLabel?.(foreign.changeSetId)?.trim() ?? "";
-  if (label === "") return "another thread";
-  const firstLine = label.split("\n", 1)[0] ?? label;
-  return firstLine.length > FOREIGN_LABEL_LIMIT
-    ? `${firstLine.slice(0, FOREIGN_LABEL_LIMIT - 1).trimEnd()}…`
-    : firstLine;
-};
+export const CHANGED_AGAIN_HELP =
+  "You decided this change, and a later round changed it again. It is waiting for a decision one more time.";
+
+/** The badge and its explanation, as every surface showing a stale change uses it. */
+export const ChangedAgainBadge = () => (
+  <span className="inline-flex min-w-0 items-center gap-1">
+    <Badge size="status" tone="statusNeutral" data-review-place-verdict="stale">
+      Changed again
+    </Badge>
+    <Tooltip label={CHANGED_AGAIN_HELP} placement="below" asChild>
+      <span
+        className="inline-flex shrink-0 items-center text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3.5"
+        tabIndex={0}
+        role="img"
+        aria-label={CHANGED_AGAIN_HELP}
+      >
+        <Icon icon={INFO_ICON} />
+      </span>
+    </Tooltip>
+  </span>
+);
 
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
@@ -531,7 +543,7 @@ export const AgentChangeDigest = ({
   placeIds,
   spilloverCount,
   foreignChangeSets,
-  changeSetLabel,
+  changeSetLink,
   isSuperseded,
   isPremiseView,
   planMovedDetail,
@@ -557,8 +569,10 @@ export const AgentChangeDigest = ({
    * decision is not the only one this view is about.
    */
   readonly foreignChangeSets?: ReadonlyArray<ForeignChangeSet>;
-  /** Resolves a foreign set's own name, when the page knows one. */
-  readonly changeSetLabel?: (changeSetId: string) => string | undefined;
+  /** Resolves a foreign set's own thread, when the page can reach one. */
+  readonly changeSetLink?: (
+    changeSetId: string,
+  ) => { readonly label: string; readonly onOpen: () => void } | undefined;
   readonly isSuperseded?: boolean;
   /** True when this digest compares the reviewer's premise with the plan now. */
   readonly isPremiseView?: boolean;
@@ -716,6 +730,20 @@ export const AgentChangeDigest = ({
   // over the revision in view, so a neighbouring thread reading the same
   // revision can never inherit the answer.
   const scope = { changeSetId, from: diff.from, to: diff.to };
+  // A named foreign set is a thread the reviewer can open. An unnamed one is
+  // still worth saying - the comparison holds work this thread did not propose
+  // - but there is nothing to link to, so it is said without a link rather
+  // than with a count standing in for the name.
+  const named = (foreignChangeSets ?? []).map((foreign) => ({
+    changeSetId: foreign.changeSetId,
+    link: changeSetLink?.(foreign.changeSetId),
+  }));
+  const foreignDisclosure =
+    named.some((foreign) => foreign.link !== undefined) || named.length > 0
+      ? named
+      : (spilloverCount ?? 0) > 0
+        ? [{ changeSetId: "unnamed", link: undefined }]
+        : null;
   // The digest and the stepper reviewing this same set both ask the selector,
   // so the two can never disagree about how much is still open.
   const standing = standingOf(scope, available);
@@ -825,6 +853,11 @@ export const AgentChangeDigest = ({
                     })
                   }
                 >
+                  {dispositionOf(scope, entry) === "stale" ? (
+                    <span className="col-span-2 mb-0.5">
+                      <ChangedAgainBadge />
+                    </span>
+                  ) : null}
                   <span className="min-w-0 [overflow-wrap:anywhere]">
                     {entry.label}
                   </span>
@@ -844,19 +877,6 @@ export const AgentChangeDigest = ({
                     >
                       <Icon icon={X_ICON} />
                     </span>
-                  ) : dispositionOf(scope, entry) === "stale" ? (
-                    // A change the reviewer already decided, which the agent
-                    // then changed again. It is owed an answer like any open
-                    // change; what the badge adds is that they have seen it
-                    // before, so they are not asked to treat it as new work.
-                    <Badge
-                      className="row-span-2 self-center"
-                      size="status"
-                      tone="statusNeutral"
-                      data-review-place-verdict="stale"
-                    >
-                      Changed again
-                    </Badge>
                   ) : null}
                   <em className="col-start-1 text-2xs font-normal text-muted capitalize">
                     {entry.note}
@@ -867,34 +887,36 @@ export const AgentChangeDigest = ({
           ))}
         </div>
       ) : null}
-      {spilloverCount === undefined || spilloverCount === 0 ? null : (
-        <div className="m-0 grid grid-cols-[minmax(0,1fr)] gap-0.5 text-2xs text-muted">
-          <p className="m-0">
-            {spilloverCount} other change{spilloverCount === 1 ? "" : "s"}{" "}
-            elsewhere in this snapshot
-          </p>
-          {(foreignChangeSets ?? []).length === 0 ? null : (
-            <ul
-              className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-0.5 p-0"
-              data-review-foreign-change-sets=""
-            >
-              {(foreignChangeSets ?? []).map((foreign) => (
-                <li key={foreign.changeSetId} className="min-w-0 truncate">
-                  {foreign.placeCount}{" "}
-                  {foreign.placeCount === 1 ? "belongs" : "belong"} to{" "}
-                  <span className="font-semibold">
-                    {foreignName({ foreign, changeSetLabel })}
-                  </span>
-                </li>
-              ))}
-            </ul>
+      {/* The reviewer's question about the rest of this comparison is one
+          question: is a change in it also being reviewed somewhere else? So
+          this says that once, and answers it with the way into that thread -
+          the same link the stepper offers - rather than with counts they then
+          have to reconcile against each other. */}
+      {foreignDisclosure === null ? null : (
+        <p
+          className="m-0 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-2xs text-muted"
+          data-review-foreign-change-sets=""
+        >
+          Also changed in
+          {foreignDisclosure.map((foreign) =>
+            foreign.link === undefined ? (
+              <span key={foreign.changeSetId}>another comment thread</span>
+            ) : (
+              <Button
+                key={foreign.changeSetId}
+                variant="ghost"
+                size="micro"
+                className="min-w-0 max-w-64 justify-start [&>svg]:size-3.5 [&>svg]:shrink-0"
+                aria-label={`Open comment thread: ${reviewerMessageLabel(foreign.link.label)}`}
+                onClick={foreign.link.onOpen}
+              >
+                <Icon icon={MESSAGE_SQUARE_ICON} />
+                <span className="min-w-0 truncate">
+                  {reviewerMessageLabel(foreign.link.label)}
+                </span>
+              </Button>
+            ),
           )}
-        </div>
-      )}
-      {standing.stale === 0 ? null : (
-        <p className="m-0 text-2xs text-muted" data-review-changes-stale="">
-          {standing.stale} change{standing.stale === 1 ? "" : "s"} you decided
-          changed again in a later round
         </p>
       )}
       {allAccepted ? (

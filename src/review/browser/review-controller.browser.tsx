@@ -3666,7 +3666,7 @@ const ChangeAttachment = ({
   onDeleteThread,
   thread,
   chatThreadId,
-  changeSetLabel,
+  changeSetLink,
 }: {
   readonly identity: RuntimeIdentity;
   readonly from: string;
@@ -3690,8 +3690,10 @@ const ChangeAttachment = ({
     readonly onOpen: () => void;
   };
   readonly chatThreadId?: string;
-  /** Names the other change sets whose work this span carries. */
-  readonly changeSetLabel?: (changeSetId: string) => string | undefined;
+  /** Opens the other change sets' threads, where this span carries their work. */
+  readonly changeSetLink?: (
+    changeSetId: string,
+  ) => { readonly label: string; readonly onOpen: () => void } | undefined;
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(() =>
     readySnapshotDiff(identity, from, to),
@@ -3723,7 +3725,7 @@ const ChangeAttachment = ({
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
       foreignChangeSets={attributed?.foreign}
-      {...(changeSetLabel === undefined ? {} : { changeSetLabel })}
+      {...(changeSetLink === undefined ? {} : { changeSetLink })}
       isSuperseded={currentSnapshot !== "" && currentSnapshot !== to}
       {...(planMovedSince
         ? {
@@ -3936,7 +3938,7 @@ const SentThread = ({
   pushedOrigin,
   onArmAutoAccept,
   appliedSummaries = [],
-  changeSetLabel,
+  changeSetLink,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -3972,8 +3974,10 @@ const SentThread = ({
   readonly pushedOrigin?: "prompt" | "about";
   /** Offered only by pushed threads while this session is in review mode. */
   readonly onArmAutoAccept?: () => void;
-  /** Names another change set whose work sits inside this thread's span. */
-  readonly changeSetLabel?: (changeSetId: string) => string | undefined;
+  /** Opens another change set's own thread, where its work sits in this span. */
+  readonly changeSetLink?: (
+    changeSetId: string,
+  ) => { readonly label: string; readonly onOpen: () => void } | undefined;
   readonly appliedSummaries?: ReadonlyArray<{
     readonly changeSetId: string;
     readonly text: string;
@@ -4634,7 +4638,7 @@ const SentThread = ({
                 onDeleteThread={canDeleteComment ? onDelete : undefined}
                 thread={{ label: comment.body, onOpen: onJump }}
                 chatThreadId={comment.id}
-                {...(changeSetLabel === undefined ? {} : { changeSetLabel })}
+                {...(changeSetLink === undefined ? {} : { changeSetLink })}
               />
             </ProposedChangesTurn>
           ) : identity !== null && latestExchange?.response === undefined ? (
@@ -7731,23 +7735,29 @@ export const ReviewController = () => {
   const pushedThreadOriginById = new Map(
     pushedThreadOpeners.map((opener) => [opener.comment.id, opener.origin]),
   );
-  // What each change set is called, so a thread whose span contains another
-  // thread's revision can say whose work that is instead of counting it. A
-  // comment-keyed set is named by the comment it grew from; a request-keyed
-  // transaction by what its request targeted.
-  const changeSetNames = new Map<string, string>();
-  for (const comment of [...sent, ...pushedThreadComments]) {
-    const body = comment.body.trim();
-    if (body !== "") changeSetNames.set(comment.id, body);
-  }
-  for (const request of agent.requests) {
-    const label = request.targetLabel?.trim() ?? "";
-    if (label !== "" && !changeSetNames.has(request.requestId)) {
-      changeSetNames.set(request.requestId, label);
-    }
-  }
-  const changeSetLabel = (changeSetId: string): string | undefined =>
-    changeSetNames.get(changeSetId);
+  // The way into another thread's own review of a change, for a thread whose
+  // comparison carries it. It is a link rather than a name because the answer
+  // the reviewer wants is "go read it there", and the thread card below already
+  // spells that gesture; this reuses it rather than inventing a second one.
+  const changeSetComments = new Map(
+    [...sent, ...pushedThreadComments].map((comment) => [comment.id, comment]),
+  );
+  const changeSetLink = (
+    changeSetId: string,
+  ): { readonly label: string; readonly onOpen: () => void } | undefined => {
+    const comment = changeSetComments.get(changeSetId);
+    if (comment === undefined || comment.body.trim() === "") return undefined;
+    return {
+      label: comment.body,
+      // The same gesture the thread link lower on the card performs, because
+      // it is the same link: it puts the reader at the change that thread is
+      // about, with that thread's own card beside it.
+      onOpen: () => {
+        openFeedbackSidebar("comments");
+        jumpTo(comment);
+      },
+    };
+  };
   const sentIds = new Set(sent.map((comment) => comment.id));
   const threadProjections = projectCommentThreads({
     comments: [
@@ -8333,7 +8343,7 @@ export const ReviewController = () => {
     return (
       <li key={comment.id} className="min-w-0">
         <SentThread
-          changeSetLabel={changeSetLabel}
+          changeSetLink={changeSetLink}
           comment={comment}
           surface="rail"
           associated={false}
@@ -9192,7 +9202,7 @@ export const ReviewController = () => {
                   if (thread === undefined) return null;
                   return (
                     <SentThread
-                      changeSetLabel={changeSetLabel}
+                      changeSetLink={changeSetLink}
                       key={comment.id}
                       comment={comment}
                       surface="rail"
@@ -9609,7 +9619,7 @@ export const ReviewController = () => {
             if (thread === undefined) return null;
             return (
               <SentThread
-                changeSetLabel={changeSetLabel}
+                changeSetLink={changeSetLink}
                 comment={comment}
                 surface="thread"
                 associated={
