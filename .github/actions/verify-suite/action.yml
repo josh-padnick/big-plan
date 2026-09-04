@@ -19,6 +19,27 @@ description: >-
 runs:
   using: composite
   steps:
+    # Isolate this job's machine-level Big Plan state and temp files from any
+    # other job sharing the runner host. Two self-hosted runners live on one
+    # Mac Mini under the same account, so a naked `bun run test:e2e` would let
+    # two suites reach the same `~/.big-plan` service registry and the same
+    # /tmp. `BIG_PLAN_STATE_DIR` fully overrides the only HOME-derived Big Plan
+    # state (src/review/state-directory.ts returns exactly this when set), and
+    # pinning TMPDIR sends every mkdtemp the suite makes into a per-job tree.
+    # RUNNER_TEMP already differs per runner instance; the run id/attempt makes
+    # it unique even if the pool is ever reconfigured. The concurrency group on
+    # the calling jobs is the belt to this suspenders - it keeps two suites off
+    # the Mini at once so the shared CPU cannot starve a review server into the
+    # 500s and 409s that state isolation alone would not prevent.
+    - name: Isolate this job's Big Plan and temp state
+      shell: bash
+      run: |
+        job_root="$RUNNER_TEMP/bigplan-verify-suite/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        mkdir -p "$job_root/state" "$job_root/tmp"
+        {
+          echo "BIG_PLAN_STATE_DIR=$job_root/state"
+          echo "TMPDIR=$job_root/tmp"
+        } >> "$GITHUB_ENV"
     - uses: oven-sh/setup-bun@v2
       with:
         # Reads the packageManager field so CI and local bun stay in lockstep.

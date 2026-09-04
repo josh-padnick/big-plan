@@ -39,6 +39,12 @@ jobs:
     # fails tests that lint passed on the identical commit. That drift is what
     # this job used to reintroduce by hand-copying lint's steps onto ubuntu.
     runs-on: self-hosted
+    # Share the machine-wide verify-suite lane with ci.yml's lint job and the
+    # dry-run below, so no two full e2e suites run on the single Mac Mini at
+    # once. Keep this group string identical across all three jobs.
+    concurrency:
+      group: bigplan-verify-suite-self-hosted
+      cancel-in-progress: false
     timeout-minutes: 30
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -89,6 +95,11 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
+    # Same machine-wide verify-suite lane as ci.yml's lint job and the Verify
+    # job above; keep this group string identical across all three.
+    concurrency:
+      group: bigplan-verify-suite-self-hosted
+      cancel-in-progress: false
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6

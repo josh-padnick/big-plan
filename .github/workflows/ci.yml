@@ -25,6 +25,17 @@ jobs:
   lint:
     # Runs on the local self-hosted runner.
     runs-on: self-hosted
+    # Serialize every self-hosted job that runs the verify suite - this lint
+    # job, the release Verify job, and its dry-run - into one machine-wide lane.
+    # The two runner instances live on a single Mac Mini, so two full e2e suites
+    # at once oversubscribe its CPU and starve the local review server into 500s
+    # and draft 409s. One shared group with cancel-in-progress false makes them
+    # queue instead of collide; the group is deliberately not ref-scoped because
+    # the contention is per-machine, not per-branch. Keep this group string in
+    # exact sync with the Verify and dry-run jobs in publish.yml.
+    concurrency:
+      group: bigplan-verify-suite-self-hosted
+      cancel-in-progress: false
     permissions:
       contents: read
     steps:
