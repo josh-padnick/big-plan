@@ -30,7 +30,10 @@ import {
   type ChangeDisposition,
   type ChangeSetStanding,
 } from "../shared/change-verdict.js";
-import { useChangeVerdicts } from "./use-change-verdicts.browser.js";
+import {
+  useChangeVerdicts,
+  type VerdictWriteResult,
+} from "./use-change-verdicts.browser.js";
 import { reviewerMessageLabel } from "../shared/reviewer-markdown.js";
 import { DiffLensPortal } from "./diff-lens.browser.js";
 import { tourStartIndex } from "./diff-anchor.js";
@@ -130,7 +133,7 @@ type DiffTourValue = {
     placeIds: ReadonlyArray<string>,
     verdict: "accepted" | "rejected" | undefined,
     options?: { readonly onlyUndecided: boolean },
-  ) => Promise<void>;
+  ) => Promise<VerdictWriteResult>;
   /** False while this page may not record anything, so no control offers to. */
   readonly canRecordAcceptance: boolean;
   /** Keys closed specifically by the session's auto-accept mode. */

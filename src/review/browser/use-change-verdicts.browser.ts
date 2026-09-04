@@ -90,6 +90,8 @@ export type PendingVerdict = {
   readonly movesPlanSource?: boolean;
 };
 
+export type VerdictWriteResult = "recorded" | "refused";
+
 /** What every surface that shows a change set's standing reads. */
 export type ChangeVerdictsValue = {
   /** The accepted change keys, including gestures still being written. */
@@ -107,7 +109,9 @@ export type ChangeVerdictsValue = {
    * open changes are rejected, needs that answer; every other caller ignores
    * it exactly as before.
    */
-  readonly recordChangeVerdicts: (input: PendingVerdict) => Promise<void>;
+  readonly recordChangeVerdicts: (
+    input: PendingVerdict,
+  ) => Promise<VerdictWriteResult>;
   /** Re-read after a server-side operation records verdicts outside this hook. */
   readonly refresh: () => void;
 };
@@ -142,7 +146,9 @@ const overlay = ({
 };
 
 /** One queued gesture, with the answer its caller is waiting on. */
-type QueuedVerdict = PendingVerdict & { readonly settle: () => void };
+type QueuedVerdict = PendingVerdict & {
+  readonly settle: (result: VerdictWriteResult) => void;
+};
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -226,7 +232,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           );
           queue.current = queue.current.filter((entry) => entry !== head);
           setPending([...queue.current]);
-          head.settle();
+          head.settle("recorded");
           if (head.movesPlanSource === true) {
             document.dispatchEvent(new CustomEvent(PLAN_SOURCE_MOVED_EVENT));
           }
@@ -239,7 +245,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           if (isTerminalReviewRuntimeRefusal(error)) {
             queue.current = queue.current.filter((entry) => entry !== head);
             setPending([...queue.current]);
-            head.settle();
+            head.settle("refused");
             failures = 0;
             toast.dismiss(VERDICT_RETRY_TOAST_ID);
             // A write does earn a notice even when the session lapsed, because
@@ -275,8 +281,8 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
   }, [applyResponse, identity]);
 
   const recordChangeVerdicts = useCallback(
-    (input: PendingVerdict): Promise<void> => {
-      if (input.placeIds.length === 0) return Promise.resolve();
+    (input: PendingVerdict): Promise<VerdictWriteResult> => {
+      if (input.placeIds.length === 0) return Promise.resolve("recorded");
       // One gesture can name more places than a single mutation may carry, so
       // it is queued as successive batches. The overlay reads the whole queue,
       // so every place stays shown while its own batch is still in flight, and
@@ -285,13 +291,15 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
       // The gesture is one answer to its caller even though it is several
       // writes, so it settles when the last of its batches has left the queue.
       let outstanding = batches.length;
-      let resolve: () => void = () => undefined;
-      const settled = new Promise<void>((done) => {
+      let result: VerdictWriteResult = "recorded";
+      let resolve: (value: VerdictWriteResult) => void = () => undefined;
+      const settled = new Promise<VerdictWriteResult>((done) => {
         resolve = done;
       });
-      const settle = (): void => {
+      const settle = (batchResult: VerdictWriteResult): void => {
+        if (batchResult === "refused") result = "refused";
         outstanding -= 1;
-        if (outstanding === 0) resolve();
+        if (outstanding === 0) resolve(result);
       };
       queue.current = [
         ...queue.current,

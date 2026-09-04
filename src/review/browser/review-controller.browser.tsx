@@ -7415,9 +7415,15 @@ export const ReviewController = () => {
       // The stepper is narrating this change set, and both its content and its
       // thread are about to go.
       closeTour();
-      await setPlacesDecided(diff, undecidedPlaceIds, "rejected", {
-        onlyUndecided: true,
-      });
+      const result = await setPlacesDecided(
+        diff,
+        undecidedPlaceIds,
+        "rejected",
+        {
+          onlyUndecided: true,
+        },
+      );
+      if (result === "refused") return;
     }
     await deleteSentComment(commentId, "thread");
   };
