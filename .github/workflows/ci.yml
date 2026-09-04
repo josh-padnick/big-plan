@@ -52,7 +52,20 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - name: Runtime dependencies must have no high or critical vulnerabilities
-        run: npm audit --no-package-lock --omit=dev --audit-level=high
+        # npm's audit endpoint occasionally returns a transient 5xx response.
+        # Retry a bounded number of times; a real advisory or persistent outage
+        # still fails the job on the final attempt.
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --no-package-lock --omit=dev --audit-level=high; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "npm audit failed on attempt $attempt; retrying in 5 seconds"
+              sleep 5
+            fi
+          done
+          exit 1
       - run: bun run lint
       - run: bun run build
       # Generated modules are committed; build just regenerated them, so any

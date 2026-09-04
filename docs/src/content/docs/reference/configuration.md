@@ -18,7 +18,7 @@ process start, or a directory Big Plan chooses on its own.
 
 ### Declared by a connecting coding agent
 
-Export these before running `agent next`, `agent push`, or `agent note` to say who is
+Export these before running `agent connect`, `agent next`, `agent push`, or `agent note` to say who is
 connected. All are optional and independent: declare only the ones you can answer, and the
 reviewer is shown exactly those.
 

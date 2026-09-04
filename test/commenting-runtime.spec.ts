@@ -1932,16 +1932,19 @@ test.describe("a drafts write prepared against content the store moved past", ()
       const expand = rail.getByRole("button", {
         name: `Expand staged comment: ${body}`,
       });
-      if (await expand.isVisible()) await expand.click();
       const card = rail
         .locator(".review-staged-card")
         .filter({ hasText: body });
+      const send = card.getByRole("button", { name: "Send this" });
+      await expect(expand.or(send)).toBeVisible();
+      if (await expand.isVisible()) await expand.click();
+      await expect(send).toBeVisible();
       const submitted = targetPage.waitForResponse(
         (response) =>
           response.url().endsWith("/api/feedback") &&
           response.request().method() === "POST",
       );
-      await card.getByRole("button", { name: "Send this" }).click();
+      await send.click();
       return (await submitted).status();
     };
 

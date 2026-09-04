@@ -2877,7 +2877,9 @@ describe("review runtime feedback", () => {
       ]),
       responses: [],
       plan: runtime.planPath,
-      agentCommand: expect.stringContaining(`agent '${runtime.planPath}'`),
+      agentCommand: expect.stringContaining(
+        `agent connect '${runtime.planPath}'`,
+      ),
       recoveryPrompt: expect.stringContaining(
         "Reconnect to my existing Big Plan review",
       ),

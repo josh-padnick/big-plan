@@ -154,6 +154,7 @@ describe("reviewCommand", () => {
       expect(help).toEqual(
         expect.arrayContaining([
           expect.stringContaining(`already serves this plan at ${live.url}`),
+          expect.stringContaining(`agent connect '${live.planPath}'`),
           expect.stringContaining("--takeover"),
         ]),
       );

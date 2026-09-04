@@ -39,6 +39,7 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { basename, extname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   renderDocument,
   MarkdownDiagnosticsError,
@@ -744,17 +745,22 @@ export const startReviewRuntime = async ({
     ? Math.max(0, Math.min(AGENT_CLAIM_LEASE_MS, queuedWorkIdleTimeoutMs))
     : AGENT_CLAIM_LEASE_MS;
   const resolvedPlanPath = resolve(planPath);
-  const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
+  const servingExecutablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
+  // The process serving a review may be a development wrapper. Agent commands
+  // always cross the installed product CLI, whose command grammar is stable.
+  const agentExecutablePath = fileURLToPath(
+    new URL("../../bin/big-plan.mjs", import.meta.url),
+  );
   const agentCommand = agentConnectCommand({
-    executablePath,
+    executablePath: agentExecutablePath,
     planPath: resolvedPlanPath,
   });
   const restartCommand = reviewRestartCommand({
-    executablePath,
+    executablePath: servingExecutablePath,
     planPath: resolvedPlanPath,
   });
   const recoveryPrompt = agentRecoveryPrompt({
-    executablePath,
+    executablePath: agentExecutablePath,
     planPath: resolvedPlanPath,
   });
   const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });

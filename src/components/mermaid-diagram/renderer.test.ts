@@ -30,7 +30,7 @@ const success = (result: MermaidRenderResult | undefined): MermaidRawRender => {
 // the whole suite takes the headroom a browser render needs. The default
 // per-test timeout is tuned for pure logic and expires on a loaded machine
 // while the render is still honest work.
-const BROWSER_RENDER_TIMEOUT_MS = 20_000;
+const BROWSER_RENDER_TIMEOUT_MS = 60_000;
 
 describe(
   "compile-time Mermaid renderer",

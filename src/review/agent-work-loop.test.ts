@@ -494,6 +494,67 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it.each([
+    { label: "malformed JSON", response: "{" },
+    { label: "a missing request id", response: JSON.stringify({}) },
+    {
+      label: "an unknown request id",
+      response: JSON.stringify({ requestId: "eeeeeeeeeeeeeeee" }),
+    },
+  ])(
+    "should give an actionable retry when response_file contains $label",
+    async ({ response }) => {
+      const directory = await mkdtemp(
+        join(tmpdir(), "big-plan-agent-response-"),
+      );
+      const planPath = join(directory, "plan.mdx");
+      const source = "# Plan\n\nOne question waits.\n";
+      await writeFile(planPath, source);
+      const responseRuntime = await startReviewRuntime({ planPath });
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "dddddddddddddddd",
+        sessionId: responseRuntime.sessionId,
+        planId: responseRuntime.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Is the plan ready?",
+      });
+      await writeAgentRequest({ store: responseRuntime.store, request });
+
+      try {
+        const pickup = await runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        });
+        if (
+          typeof pickup.response_file !== "string" ||
+          typeof pickup.agent_token !== "string"
+        ) {
+          throw new Error("Pickup did not return its response contract");
+        }
+        await writeFile(pickup.response_file, response);
+
+        await expect(
+          runAgentWorkLoopAction({
+            kind: "respond",
+            planPath,
+            responsePath: pickup.response_file,
+            executablePath,
+            agentToken: pickup.agent_token,
+          }),
+        ).rejects.toThrow(
+          /^change response_file and run the same respond_command again: /u,
+        );
+      } finally {
+        await responseRuntime.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("should discard an inherited draft when a later handoff leaves it behind", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-draft-"));
     const planPath = join(directory, "plan.mdx");

@@ -18,6 +18,7 @@
     "CHANGELOG.md",
     "bin",
     "dist",
+    "docs/src/content/docs/for-agents/review-protocol.md",
     "examples/diff-gallery-before.mdx"
   ],
   "engines": {

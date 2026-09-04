@@ -12,7 +12,7 @@ export const agentConnectCommand = ({
   readonly executablePath: string;
   readonly planPath: string;
 }): string =>
-  `node ${quoteShellArgument(executablePath)} agent ${quoteShellArgument(planPath)}`;
+  `node ${quoteShellArgument(executablePath)} agent connect ${quoteShellArgument(planPath)}`;
 
 export const reviewRestartCommand = ({
   executablePath,
@@ -116,8 +116,7 @@ export const agentRecoveryPrompt = ({
     // honest source is asked directly - in the prompt the reviewer is already
     // handing over. The model is asked for as an id rather than a name because
     // an id is the form an agent can state without composing it.
-    "First export what you know about yourself in that shell, skipping any you cannot answer: BIG_PLAN_AGENT_MODEL as the exact model id your API uses, for example grok-4.6; BIG_PLAN_AGENT_EFFORT as your reasoning effort; BIG_PLAN_AGENT_CLIENT as your tool and version, for example grok-cli 0.2.99; and BIG_PLAN_AGENT_SESSION_URL as a link to this conversation, or BIG_PLAN_AGENT_SESSION as its id if it has no link.",
+    "Identity is OPTIONAL; skip every field you do not know. BIG_PLAN_AGENT_MODEL (the exact API model id) matters most. You may also export BIG_PLAN_AGENT_EFFORT, BIG_PLAN_AGENT_CLIENT, and BIG_PLAN_AGENT_SESSION_URL, or BIG_PLAN_AGENT_SESSION when the conversation has an id but no link.",
     `Then run ${agentConnectCommand({ executablePath, planPath })}.`,
-    "Read the prompt_file path it prints and follow that prompt in this agent session.",
-    "Keep the connection loop running so the review remains live.",
+    "Keep this one command in the foreground. It waits for a reviewer request and returns the request, exact response template, validation rules, and submit command together.",
   ].join(" ");
