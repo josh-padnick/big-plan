@@ -169,8 +169,23 @@ test("should disconnect a working agent and free the review for the next one", a
       path: testInfo.outputPath("disconnect-connection-log.png"),
     });
 
-    // The review is free, and the question the first agent was holding is back
-    // in the queue for whoever attaches next.
+    // A healthy-page disconnect frees the seat without making the review
+    // unusable: the card names the departure, connection guidance remains,
+    // and the ordinary review controls stay live for the next agent.
+    await expect(activity).toHaveAttribute(
+      "data-review-current-activity",
+      "disconnected",
+    );
+    await expect(activity).toContainText("Agent disconnected");
+    await expect(
+      sidebar.getByText("Reconnect your agent", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }),
+    ).toBeEnabled();
+
+    // The question the first agent was holding is back in the queue for
+    // whoever attaches next.
     const second = await runAgentCli(["next", planPath, "--wait"]);
     expect(agentIdOf(second.stdout, "connection_token")).not.toBe(
       connectionToken,
