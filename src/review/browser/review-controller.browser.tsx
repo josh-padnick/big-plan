@@ -264,7 +264,10 @@ import { useArticleVersion } from "./use-article-version.browser.js";
 import { useChangeSets } from "./use-change-sets.browser.js";
 import { flashThread, useFlashedThread } from "./thread-flash.browser.js";
 import { PLAN_SOURCE_MOVED_EVENT } from "./use-change-verdicts.browser.js";
-import { threadChangeFor } from "../shared/thread-change-set.js";
+import {
+  threadChangeFor,
+  threadChangeSpanFor,
+} from "../shared/thread-change-set.js";
 import { changeSetTourId, type ChangeSetTourKind } from "./tour-advance.js";
 import {
   requestJson,
@@ -4976,16 +4979,22 @@ export const ReviewController = () => {
   // is resolved here: the fold carries where the thread started and where its
   // latest reply left the plan, which is exactly the revision the reviewer's
   // undecided changes live in.
-  const threadDeleteChangeSet =
+  const threadDeleteChange =
     pendingDelete?.kind === "thread"
-      ? committedChangeSets.find(
-          (changeSet) => changeSet.changeSetId === pendingDelete.comment.id,
-        )
+      ? threadChangeSpanFor({
+          changeSets: committedChangeSets,
+          commentId: pendingDelete.comment.id,
+          requestIds: agent.requests
+            .filter((request) =>
+              requestCommentIds(request).includes(pendingDelete.comment.id),
+            )
+            .map((request) => request.requestId),
+        })
       : undefined;
   const threadDelete = useThreadDeleteLoss({
     identity,
-    from: threadDeleteChangeSet?.baseSnapshot,
-    to: threadDeleteChangeSet?.resultSnapshot,
+    from: threadDeleteChange?.from,
+    to: threadDeleteChange?.to,
     dispositionOf,
     active: pendingDelete?.kind === "thread",
   });
@@ -7849,6 +7858,7 @@ export const ReviewController = () => {
     [
       commentSubmitAvailability,
       drafts,
+      isOpen,
       isSending,
       replyPendingCommentIds,
       resolvedCommentIds,
@@ -7872,6 +7882,7 @@ export const ReviewController = () => {
       ? ""
       : [
           String(openChat.isSending),
+          String(isOpen),
           openChat.unavailable ?? "",
           String(openChat.elsewhereCount),
           ...openChat.messages.map(
