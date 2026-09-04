@@ -179,6 +179,45 @@ describe("carrying verdicts onto an advanced change set", () => {
     expect(carried.every((entry) => entry.actor === "reviewer")).toBe(true);
   });
 
+  it("carries one decided place onto every place it splits into", () => {
+    const split = buildSnapshotDiff({
+      from: S0,
+      to: S2,
+      before: baseline,
+      after: roundOne,
+      ownership: new Map([
+        [ALPHA_BEFORE.id, SET],
+        [BRAVO_BEFORE.id, OTHER],
+      ]),
+    });
+    const combined = buildSnapshotDiff({
+      from: S0,
+      to: S1,
+      before: baseline,
+      after: roundOne,
+    });
+    expect(combined.places).toHaveLength(2);
+    const first = combined.places[0];
+    if (first === undefined) throw new Error("Expected a changed place");
+    const onePlace = {
+      ...combined,
+      places: [
+        {
+          ...first,
+          locationIndexes: [0, 1],
+        },
+      ],
+    };
+    const entry = verdict({
+      placeId: first.placeId,
+      contentDigest: first.contentDigest,
+    });
+
+    expect(
+      carriedVerdicts({ previous: onePlace, next: split, decided: [entry] }),
+    ).toHaveLength(2);
+  });
+
   it("keeps the untouched change accepted and re-opens only what moved", () => {
     const carried = carriedVerdicts({ previous, next, decided });
     const accepted = new Set(carried.map((entry) => changeVerdictKey(entry)));

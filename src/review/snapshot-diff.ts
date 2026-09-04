@@ -748,14 +748,21 @@ export const buildSnapshotDiff = ({
         ? undefined
         : componentKeyFor({ location: previous, before, after });
     const currentChangeSet = ownerChangeSetFor({ location, ownership });
-    const previousChangeSet =
-      previous === undefined
-        ? undefined
-        : ownerChangeSetFor({ location: previous, ownership });
+    const groupChangeSets = new Set(
+      (group ?? []).flatMap((locationIndex) => {
+        const groupedLocation = locations.at(locationIndex);
+        if (groupedLocation === undefined) return [];
+        const owner = ownerChangeSetFor({
+          location: groupedLocation,
+          ownership,
+        });
+        return owner === undefined ? [] : [owner];
+      }),
+    );
     const sameChangeSet =
       currentChangeSet === undefined ||
-      previousChangeSet === undefined ||
-      currentChangeSet === previousChangeSet;
+      groupChangeSets.size === 0 ||
+      groupChangeSets.has(currentChangeSet);
     const renderedEvidence =
       location.isComponentRoot || RENDERED_SNAPSHOT_KINDS.has(location.kind);
     const previousRenderedEvidence =

@@ -38,6 +38,7 @@ const THREAD_B = "bbbb";
 
 const ALPHA = "section/section-one/paragraph-1";
 const BRAVO = "section/section-one/paragraph-2";
+const CHARLIE = "section/section-one/paragraph-3";
 
 const block = ({
   id,
@@ -133,6 +134,35 @@ describe("overlapping change sets", () => {
       after,
       ownership,
     });
+    expect(separated.places).toHaveLength(2);
+    expect(separated.places.map((place) => place.ownerChangeSetIds)).toEqual([
+      [THREAD_A],
+      [THREAD_B],
+    ]);
+  });
+
+  it("does not let an unowned change bridge two owners", () => {
+    const bridgedBefore = [
+      block({ id: ALPHA, text: "Alpha before." }),
+      block({ id: BRAVO, text: "Bravo before." }),
+      block({ id: CHARLIE, text: "Charlie before." }),
+    ];
+    const bridgedAfter = [
+      block({ id: ALPHA, text: "Alpha changed by A." }),
+      block({ id: BRAVO, text: "Bravo changed without an owner." }),
+      block({ id: CHARLIE, text: "Charlie changed by B." }),
+    ];
+    const separated = buildSnapshotDiff({
+      from: S0,
+      to: S1,
+      before: bridgedBefore,
+      after: bridgedAfter,
+      ownership: new Map([
+        [ALPHA, THREAD_A],
+        [CHARLIE, THREAD_B],
+      ]),
+    });
+
     expect(separated.places).toHaveLength(2);
     expect(separated.places.map((place) => place.ownerChangeSetIds)).toEqual([
       [THREAD_A],

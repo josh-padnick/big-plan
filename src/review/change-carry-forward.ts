@@ -77,14 +77,13 @@ const placeBlockIds = ({
 /**
  * The verdicts of one advanced change set, re-addressed to its new span.
  *
- * Each decided place is matched to the place in the new diff that speaks for
+ * Each decided place is matched to every place in the new diff that speaks for
  * one of its blocks. A place with no match decided a change the round removed,
  * so its verdict is dropped: there is nothing left for it to be about, and
  * keeping it would leave the set reporting progress against work that is gone.
  *
- * A new place that two old places both point at takes the first match in the
- * new diff's own order, so the result is the same however the record happens
- * to be ordered.
+ * A new place that two old places both point at takes the first old place in
+ * the previous diff's order, so record ordering cannot change the result.
  */
 export const carriedVerdicts = ({
   previous,
@@ -95,32 +94,33 @@ export const carriedVerdicts = ({
   readonly next: SnapshotDiff;
   readonly decided: ReadonlyArray<ChangeVerdict>;
 }): ReadonlyArray<ChangeVerdict> => {
-  const previousById = new Map(
-    previous.places.map((place) => [place.placeId, place]),
-  );
   const carried: Array<ChangeVerdict> = [];
   const claimed = new Set<string>();
-  for (const entry of decided) {
-    const before = previousById.get(entry.placeId);
-    if (before === undefined) continue;
+  const decidedByPlaceId = new Map(
+    decided.map((entry) => [entry.placeId, entry]),
+  );
+  for (const before of previous.places) {
+    const entry = decidedByPlaceId.get(before.placeId);
+    if (entry === undefined) continue;
     const blockIds = placeBlockIds({ diff: previous, place: before });
-    const match = next.places.find(
+    const matches = next.places.filter(
       (place) =>
         !claimed.has(place.placeId) &&
         [...placeBlockIds({ diff: next, place })].some((blockId) =>
           blockIds.has(blockId),
         ),
     );
-    if (match === undefined) continue;
-    claimed.add(match.placeId);
-    carried.push({
-      ...entry,
-      to: next.to,
-      placeId: match.placeId,
-      // The digest stays the one the reviewer decided over. Replacing it with
-      // the new place's would assert that they had seen this round's wording,
-      // which is exactly the claim carrying a verdict forward must not make.
-    });
+    for (const match of matches) {
+      claimed.add(match.placeId);
+      carried.push({
+        ...entry,
+        to: next.to,
+        placeId: match.placeId,
+        // The digest stays the one the reviewer decided over. Replacing it with
+        // the new place's would assert that they had seen this round's wording,
+        // which is exactly the claim carrying a verdict forward must not make.
+      });
+    }
   }
   return carried;
 };
@@ -237,14 +237,11 @@ export const carryForwardChangeVerdicts = async ({
     return;
   }
   if (spansBehind({ revisions, verdicts: current }).length === 0) return;
-  const carriedBySpan = new Map<string, ReadonlyArray<ChangeVerdict>>();
+  const diffsBySpan = new Map<
+    string,
+    { readonly previous: SnapshotDiff; readonly next: SnapshotDiff }
+  >();
   for (const span of spansBehind({ revisions, verdicts: current })) {
-    const decided = current.decided.filter(
-      (entry) =>
-        entry.changeSetId === span.changeSetId &&
-        entry.from === span.from &&
-        entry.to === span.staleTo,
-    );
     try {
       const [previousOwnership, nextOwnership] = await Promise.all([
         readChangeOwnership({
@@ -278,15 +275,15 @@ export const carryForwardChangeVerdicts = async ({
           ownership: nextOwnership,
         }),
       ]);
-      carriedBySpan.set(
-        `${span.changeSetId}:${span.staleTo}`,
-        carriedVerdicts({ previous, next, decided }),
-      );
+      diffsBySpan.set(`${span.changeSetId}:${span.staleTo}`, {
+        previous,
+        next,
+      });
     } catch {
       continue;
     }
   }
-  if (carriedBySpan.size === 0) return;
+  if (diffsBySpan.size === 0) return;
   await updateStoredChangeVerdicts({
     store,
     change: (stored) => {
@@ -294,7 +291,7 @@ export const carryForwardChangeVerdicts = async ({
       // scan and the write is carried too when it sits at the same superseded
       // span, and left alone when it does not.
       const spans = spansBehind({ revisions, verdicts: stored }).filter(
-        (span) => carriedBySpan.has(`${span.changeSetId}:${span.staleTo}`),
+        (span) => diffsBySpan.has(`${span.changeSetId}:${span.staleTo}`),
       );
       if (spans.length === 0) return stored;
       let decided = stored.decided;
@@ -303,8 +300,14 @@ export const carryForwardChangeVerdicts = async ({
           entry.changeSetId === span.changeSetId &&
           entry.from === span.from &&
           entry.to === span.staleTo;
-        const carried =
-          carriedBySpan.get(`${span.changeSetId}:${span.staleTo}`) ?? [];
+        const diffs = diffsBySpan.get(
+          `${span.changeSetId}:${span.staleTo}`,
+        );
+        if (diffs === undefined) continue;
+        const carried = carriedVerdicts({
+          ...diffs,
+          decided: decided.filter(superseded),
+        });
         const carriedPlaceIds = new Set(carried.map((entry) => entry.placeId));
         decided = [
           ...decided.filter(
