@@ -3822,7 +3822,9 @@ const StalePremiseNotice = ({
       : attributeDiffPlaces({
           diff,
           changeTargets: blockIds,
-          changeSetId: comment.id,
+          // A premise comparison is evidence, not this set's proposed work.
+          // Its target narrows what the reader sees without asserting verdict
+          // ownership over another set's later changes.
         });
   const changedOutsideTarget =
     blockIds.length > 0 && attributed.placeIds.length === 0;

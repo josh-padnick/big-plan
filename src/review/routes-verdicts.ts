@@ -406,6 +406,19 @@ const refuseForeignPlaces = async ({
   readonly mutation: ChangeVerdictMutation;
 }): Promise<void> => {
   const { store, resolvedPlanPath } = context;
+  const exactTransaction = (await readCommittedChangeSets({ store })).find(
+    (changeSet) =>
+      changeSet.changeSetId === mutation.changeSetId &&
+      changeSet.baseSnapshot === mutation.from &&
+      changeSet.resultSnapshot === mutation.to &&
+      (changeSet.provenance === "chat" || changeSet.provenance === "push"),
+  );
+  // A chat or push is an immutable request-keyed transaction, so its exact
+  // committed span proves ownership of the revision directly. This also
+  // handles a digest reached more than once: the span-only ownership fold can
+  // select an earlier path to identical bytes, but that does not erase the
+  // later transaction recorded in the immutable log.
+  if (exactTransaction !== undefined) return;
   const ownership = await readChangeOwnership({
     store,
     sessionId: context.sessionId,

@@ -24,7 +24,7 @@ export type AttributedPlaces = {
   readonly foreign: ReadonlyArray<ForeignChangeSet>;
 };
 
-/** Selects every place touching an outcome's server-validated block targets. */
+/** Selects places touching an outcome's targets without crossing known ownership. */
 export const attributeDiffPlaces = ({
   diff,
   changeTargets,
@@ -37,7 +37,7 @@ export const attributeDiffPlaces = ({
 }): AttributedPlaces => {
   const targets = new Set(changeTargets);
   const placeIds = diff.places.flatMap((place) => {
-    const isOwned = place.locationIndexes.some((index) => {
+    const touchesTarget = place.locationIndexes.some((index) => {
       const location = diff.locations.at(index);
       return (
         location !== undefined &&
@@ -46,7 +46,11 @@ export const attributeDiffPlaces = ({
         )
       );
     });
-    return isOwned ? [place.placeId] : [];
+    const hasForeignOwner =
+      changeSetId !== undefined &&
+      (place.ownerChangeSetIds?.length ?? 0) > 0 &&
+      place.ownerChangeSetIds?.includes(changeSetId) !== true;
+    return touchesTarget && !hasForeignOwner ? [place.placeId] : [];
   });
   const attributed = new Set(placeIds);
   const counts = new Map<string, number>();

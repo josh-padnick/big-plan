@@ -88,4 +88,27 @@ describe("change attribution", () => {
       foreign: [],
     });
   });
+
+  it("should exclude a targeted place when another change set owns it", () => {
+    const foreignTarget: SnapshotDiff = {
+      ...diff,
+      places: [
+        {
+          ...diff.places[0],
+          ownerChangeSetIds: ["beef"],
+        },
+      ],
+    };
+    expect(
+      attributeDiffPlaces({
+        diff: foreignTarget,
+        changeTargets: ["section/one/paragraph-1"],
+        changeSetId: "cafe",
+      }),
+    ).toEqual({
+      placeIds: [],
+      spilloverCount: 1,
+      foreign: [{ changeSetId: "beef", placeCount: 1 }],
+    });
+  });
 });
