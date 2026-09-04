@@ -35,14 +35,18 @@ export type SnapshotDiffPlace = DiffPlace;
 export const blockEvidence = (block: SnapshotBlock | undefined): string =>
   block === undefined
     ? ""
-    : JSON.stringify({
-        kind: block.kind,
-        text: block.text,
-        model: block.model ?? null,
-        presentation: block.presentation ?? null,
-        tableHeaders: block.tableHeaders ?? null,
-        isTableHeader: block.isTableHeader ?? false,
-      });
+    : createHash("sha256")
+        .update(
+          JSON.stringify({
+            kind: block.kind,
+            text: block.text,
+            model: block.model ?? null,
+            presentation: block.presentation ?? null,
+            tableHeaders: block.tableHeaders ?? null,
+            isTableHeader: block.isTableHeader ?? false,
+          }),
+        )
+        .digest("hex");
 
 type BuiltSnapshotDiff = Omit<SnapshotDiff, "locations"> & {
   readonly locations: ReadonlyArray<SnapshotDiffLocation>;
