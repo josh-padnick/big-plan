@@ -1,7 +1,13 @@
-// Presents one reviewer-uploaded picture: a thumbnail that opens an
+// Presents one picture in the review island: a thumbnail that opens an
 // accessible, focus-restoring lightbox, and an honest placeholder when the
-// picture cannot be loaded. The source path names only the content digest, so
-// the picture survives every later review session of the same plan.
+// picture cannot be loaded.
+//
+// The caller resolves the source, because the pictures worth zooming come from
+// two places. A reviewer's own attachment is addressed by content digest, so
+// it survives every later review session of the same plan; a picture the plan
+// itself holds is already loaded in the article, and its resolved source is
+// what the browser worked out. Owning one lightbox rather than two is what
+// keeps a zoom control reading the same wherever a reader meets a picture.
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -10,7 +16,6 @@ import { MINUS_ICON } from "../../icons/lucide/minus.js";
 import { PLUS_ICON } from "../../icons/lucide/plus.js";
 import { SCAN_ICON } from "../../icons/lucide/scan.js";
 import { X_ICON } from "../../icons/lucide/x.js";
-import { reviewImageSource } from "../shared/review-image.js";
 import { Icon } from "./icon.browser.js";
 import { Button } from "./ui.browser.js";
 
@@ -58,11 +63,15 @@ const UnavailableImage = ({ alt }: { readonly alt: string }) => (
 );
 
 export const ReviewImage = ({
-  id,
+  source,
   alt,
+  className,
 }: {
-  readonly id: string;
+  /** The already-resolved picture address. */
+  readonly source: string;
   readonly alt: string;
+  /** Spacing the surrounding flow owns; the thumbnail carries none itself. */
+  readonly className?: string;
 }) => {
   const [isBroken, setIsBroken] = useState(false);
   const [isLightboxBroken, setIsLightboxBroken] = useState(false);
@@ -71,7 +80,6 @@ export const ReviewImage = ({
   const trigger = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const source = reviewImageSource(id);
   const close = () => {
     setOpen(false);
     setIsLightboxBroken(false);
@@ -217,7 +225,7 @@ export const ReviewImage = ({
       <button
         ref={trigger}
         type="button"
-        className="mt-2 block cursor-zoom-in rounded border border-edge p-0.5 transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-accent"
+        className={`block cursor-zoom-in rounded border border-edge p-0.5 transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-accent${className === undefined ? "" : ` ${className}`}`}
         aria-label={`Open ${alt}`}
         onClick={() => {
           setIsLightboxBroken(false);

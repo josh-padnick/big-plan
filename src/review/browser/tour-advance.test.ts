@@ -8,7 +8,11 @@ import type {
   DiffPlace,
   SnapshotDiff,
 } from "../shared/review-wire.js";
-import { advancedTourPlaceId, tourIsBehind } from "./tour-advance.js";
+import {
+  advancedTourPlaceId,
+  changeSetTourId,
+  tourIsBehind,
+} from "./tour-advance.js";
 
 const S1 = "1".repeat(16);
 const S2 = "2".repeat(16);
@@ -219,5 +223,49 @@ describe("advancedTourPlaceId", () => {
         placeIds: ["a-2"],
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("changeSetTourId", () => {
+  it("should separate the two comparisons one thread can hold", () => {
+    // The defect this prevents: both were addressed by the thread alone, so
+    // each read the other's open tour as its own set gone stale and re-opened
+    // over it. The reviewer, touching nothing, watched the bar flip between
+    // "Reviewing change set" and "Since your comment" several times a second.
+    const threadId = "comment-1";
+    const changes = changeSetTourId({ threadId, kind: "changes" });
+    const premise = changeSetTourId({ threadId, kind: "premise" });
+    expect(changes).not.toBe(premise);
+    expect(
+      tourIsBehind({
+        activeChangeSetId: premise,
+        activeDiff: { from: "premise", to: "current" },
+        changeSetId: changes,
+        diff: { from: "baseline", to: "result" },
+      }),
+    ).toBe(false);
+    expect(
+      tourIsBehind({
+        activeChangeSetId: changes,
+        activeDiff: { from: "baseline", to: "result" },
+        changeSetId: premise,
+        diff: { from: "premise", to: "current" },
+      }),
+    ).toBe(false);
+  });
+
+  it("should still report its own comparison advancing", () => {
+    const changeSetId = changeSetTourId({
+      threadId: "comment-1",
+      kind: "changes",
+    });
+    expect(
+      tourIsBehind({
+        activeChangeSetId: changeSetId,
+        activeDiff: { from: "baseline", to: "result" },
+        changeSetId,
+        diff: { from: "baseline", to: "result-2" },
+      }),
+    ).toBe(true);
   });
 });

@@ -15,6 +15,7 @@ import {
   extractReviewImageReferences,
   MAX_IMAGE_BYTES,
   MAX_IMAGES_PER_MESSAGE,
+  reviewImageSource,
   type ReviewImageDescriptor,
 } from "../shared/review-image.js";
 import { ReviewImage } from "./review-image.browser.js";
@@ -222,8 +223,9 @@ export const ComposeImages = ({
           {references.map((reference, index) => (
             <ReviewImage
               key={`${reference.id}-${index}`}
-              id={reference.id}
+              source={reviewImageSource(reference.id)}
               alt={reference.alt}
+              className="mt-2"
             />
           ))}
         </div>

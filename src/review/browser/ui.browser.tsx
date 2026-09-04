@@ -571,7 +571,15 @@ export const Tooltip = ({
           </span>,
           document.body,
         );
-  if (asChild) {
+  // A disabled control dispatches no pointer events, so a tooltip cloned onto
+  // one never opens - and a disabled control is exactly when the reader most
+  // needs to be told what it does and why they cannot press it. The wrapper
+  // form receives those events instead, so an unpressable child is given one
+  // whether the caller asked for asChild or not.
+  const isChildDisabled =
+    asChild &&
+    (children.props as { readonly disabled?: boolean }).disabled === true;
+  if (asChild && !isChildDisabled) {
     return (
       <>
         {cloneElement(children, {
@@ -623,6 +631,7 @@ type AlertDialogProps = {
   readonly footerAlign?: "end" | "split";
   /** Disables both choices while the dialog's action is in flight. */
   readonly pending?: boolean;
+  readonly actionDisabled?: boolean;
   /** When set, the panel hangs below this control instead of the viewport center. */
   readonly anchorRef?: RefObject<HTMLElement | null>;
 };
@@ -776,6 +785,7 @@ export const AlertDialog = ({
   width = "default",
   footerAlign = "end",
   pending = false,
+  actionDisabled = false,
   anchorRef,
 }: AlertDialogProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -963,7 +973,7 @@ export const AlertDialog = ({
             variant={resolvedActionVariant}
             size="md"
             onClick={onAction}
-            disabled={pending}
+            disabled={pending || actionDisabled}
             aria-describedby={footnote === undefined ? undefined : footnoteId}
             className={
               width === "wide" && footerAlign === "split"

@@ -78,7 +78,11 @@ your feedback, revises **its own copy** of the plan, checks the new version, and
 answer per comment.
 
 Big Plan then shows you **what changed** — a walk through each changed place, side by side with
-what was there before. You accept the ones you are happy with, and revert the ones you are not.
+what was there before, each one shown where it happened. A bar at the foot of the page tours the
+set: accept the changes you are happy with, reject the ones you are not, and undo either verdict.
+When a change is not what you wanted, **Chat** opens a conversation about that one change without
+taking it off your screen, and the agent's answer arrives there. The bar's menu also lets you
+accept or reject every change in the set, or delete the thread that proposed it.
 
 Your plan file is never edited by the agent directly. Big Plan swaps its copy in only when a
 valid answer publishes, so an agent that stalls or dies mid-edit leaves your plan exactly as it

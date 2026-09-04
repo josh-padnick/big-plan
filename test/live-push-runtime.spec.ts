@@ -463,20 +463,21 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
     await stepper.getByRole("button", { name: "Accept this change" }).click();
     await expect(stepper).toContainText("2 of 2");
     await stepper.getByRole("button", { name: "Accept this change" }).click();
-    await expect(stepper).toContainText("All changes accepted (2 of 2)");
-    await stepper.getByRole("button", { name: "Keep chatting" }).click();
-    await expect(stepper).toBeHidden();
+    await expect(stepper).toContainText("All changes decided");
+    // Chatting keeps the review open, so the change stays in view while the
+    // reviewer says what they want instead.
+    await stepper.getByRole("button", { name: "Chat", exact: true }).click();
+    await expect(stepper.locator("[data-review-change-chat]")).toBeVisible();
+    await stepper.getByRole("button", { name: "Close chat" }).click();
 
     // The stepper reviews the thread's change set, not the round it was opened
     // on, so it is left open across the next push below.
-    await thread
-      .getByRole("button", { name: /Continue review|Review changes \(2\)/u })
-      .click();
-    await expect(stepper).toContainText("All changes accepted (2 of 2)");
+    await expect(stepper).toContainText("All changes decided");
     // Standing on the set's second change, so the push below can prove where
     // the reviewer lands rather than only that the bounds moved.
     await stepper.getByRole("button", { name: "Back to review" }).click();
-    await stepper.getByRole("button", { name: "Next change" }).click();
+    // Accepting walked the set to its end, and chatting no longer closes the
+    // review, so the reviewer is already standing on the second change.
     await expect(stepper).toContainText("2 of 2");
 
     const continuedPush = await runAgentCli([
@@ -551,7 +552,7 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       stepper.getByRole("button", { name: "Accept this change" }),
     ).toBeVisible({ timeout: 15_000 });
     await expect(stepper).toContainText("2 of 2");
-    await expect(stepper).not.toContainText("All changes accepted");
+    await expect(stepper).not.toContainText("All changes decided");
     await page.keyboard.press("Escape");
 
     // The thread's change set has a bubble of its own, so its controls are
@@ -562,18 +563,21 @@ test("should review, reply to, and resolve a pushed thread in chat", async ({
       .click();
     await expect(stepper).toContainText("1 of 2");
     await stepper.getByRole("button", { name: "Accept this change" }).click();
-    await stepper.getByRole("button", { name: "Accept this change" }).click();
-    await expect(stepper).toContainText("All changes accepted (2 of 2)");
-    await page.keyboard.press("Escape");
+    await expect(stepper).toContainText("2 of 2");
 
-    await thread
-      .getByRole("button", { name: "Revert response" })
-      .first()
+    // Undo returns an accepted change to undecided, where it is re-decidable
+    // either way - so both changes can then be rejected in one gesture from
+    // the overflow, which puts the plan back on the thread's baseline.
+    await stepper.getByRole("button", { name: "Previous change" }).click();
+    await stepper
+      .getByRole("button", { name: "Undo acceptance for this change" })
       .click();
-    await page
-      .getByRole("alertdialog", { name: "Revert response?" })
-      .getByRole("button", { name: "Revert response" })
+    await stepper
+      .getByRole("button", { name: "More change set actions" })
       .click();
+    await page.getByRole("menuitem", { name: "Reject all changes" }).click();
+    await expect(stepper).toContainText("All changes decided");
+    await page.keyboard.press("Escape");
     await expect(page.locator("article")).toContainText(
       "The terminal response publishes the reviewed candidate atomically.",
       { timeout: 15_000 },

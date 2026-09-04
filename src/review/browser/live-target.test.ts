@@ -4,6 +4,8 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  isPlanDomBehind,
+  publishPlanSnapshots,
   baselineMissReason,
   candidateMatchesLivePicture,
   liveBaselineBlock,
@@ -289,5 +291,41 @@ describe("liveBaselineBlock", () => {
     expect(liveBaselineBlock("missing-id", "abcdef012345")).toEqual({
       missing: "unknown-id",
     });
+  });
+});
+
+describe("misses under a plan-DOM lag", () => {
+  afterEach(() =>
+    publishPlanSnapshots({ displayedSnapshot: "", currentSnapshot: "" }),
+  );
+
+  it("reports absence as absence while the article is current", () => {
+    expect(isPlanDomBehind()).toBe(false);
+    expect(pickLiveCandidate([])).toEqual({ missing: "unknown-id" });
+  });
+
+  it("says the article is behind rather than that the name is unknown", () => {
+    publishPlanSnapshots({
+      displayedSnapshot: "aaa",
+      currentSnapshot: "bbb",
+    });
+    expect(isPlanDomBehind()).toBe(true);
+    // The name is not absent from the plan; it is absent from an article that
+    // a landed write has already made stale. A caller that renders absence
+    // must wait, and this is the only thing that tells it to.
+    expect(pickLiveCandidate([])).toEqual({ missing: "plan-dom-behind" });
+  });
+
+  it("goes back to plain absence once the article has caught up", () => {
+    publishPlanSnapshots({
+      displayedSnapshot: "aaa",
+      currentSnapshot: "bbb",
+    });
+    publishPlanSnapshots({
+      displayedSnapshot: "bbb",
+      currentSnapshot: "bbb",
+    });
+    expect(isPlanDomBehind()).toBe(false);
+    expect(pickLiveCandidate([])).toEqual({ missing: "unknown-id" });
   });
 });

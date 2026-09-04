@@ -27,12 +27,13 @@ import type {
   SnapshotDiff,
 } from "../shared/review-wire.js";
 import type { LensPlacement } from "./diff-anchor.js";
+import { NO_REVEAL_HONOURED, shouldHonourReveal } from "./lens-reveal.js";
 import {
   foundElement,
-  liveArticle,
   liveBlock,
   liveComponentDiff,
   liveLensAnchor,
+  type LiveTargetMissReason,
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import { announcePlanDom, replacePlanDom } from "./plan-dom.browser.js";
@@ -609,13 +610,11 @@ const ReplayedComponentDiff = ({ view }: { readonly view: string }) => {
 export const DiffLensContent = ({
   diff,
   place,
-  isHistorical,
   isSuperseded,
   presentation,
 }: {
   readonly diff: SnapshotDiff;
   readonly place: DiffPlace;
-  readonly isHistorical: boolean;
   readonly isSuperseded: boolean;
   readonly presentation?: ProsePresentation;
 }) => {
@@ -653,11 +652,13 @@ export const DiffLensContent = ({
   const componentLocation = visibleLocations.find(
     (location) => location.view !== undefined,
   );
-  const title = isHistorical
-    ? "Updated"
-    : isSuperseded
-      ? "What changed - plan revised again"
-      : "What changed";
+  // Two states, not three. A change the plan has no place for renders nothing
+  // at all now, so there is no third "Updated" card standing apart from the
+  // document; what a superseded change gets is the same lens with a title that
+  // says the recorded words are history.
+  const title = isSuperseded
+    ? "What changed - plan revised again"
+    : "What changed";
   return (
     <section
       className="grid w-full min-w-0 max-w-[var(--measure)] grid-cols-[minmax(0,1fr)] gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
@@ -668,7 +669,7 @@ export const DiffLensContent = ({
       <div className="flex min-w-0 items-baseline gap-2">
         <strong
           className={`rounded-full px-2 py-0.5 text-2xs font-bold uppercase tracking-caps ${
-            isHistorical
+            isSuperseded
               ? "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
               : "bg-accent-soft text-accent"
           }`}
@@ -721,6 +722,11 @@ type LensAnchor = {
 };
 
 /** Uses instant scrolling when the reader asks the viewer to reduce motion. */
+// The reveal the reader has already been taken to. Module state because only
+// one tour lens is on screen at a time and the ask has to survive the lens
+// being unmounted and mounted again by the very gesture that made it.
+let honouredReveal = NO_REVEAL_HONOURED;
+
 const lensScrollBehavior = (): ScrollBehavior =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ? "auto"
@@ -832,17 +838,36 @@ const SETTLE_PASS_LIMIT = 12;
  * place can describe several locations, and one unresolvable location does not
  * make the place historical while another can still show the change in place.
  */
+/**
+ * Where this change's lens belongs, or why nowhere.
+ *
+ * The reason is carried out rather than collapsed into null because the two
+ * ways a lens can find nothing lead to opposite renderings. A change the plan
+ * genuinely no longer holds belongs in the historical archive; a change whose
+ * article has not caught up with the reviewer's own gesture belongs exactly
+ * where it always did, and drawing the archive for it puts the diff at the
+ * foot of the page - the defect this distinction exists to end.
+ */
 const firstLiveAnchor = (
   locations: ReadonlyArray<DiffLocation>,
   isSuperseded: boolean,
-): LensAnchor | null => {
+): LensAnchor | { readonly missing: LiveTargetMissReason } => {
+  const misses: Array<LiveTargetMissReason> = [];
   for (const location of locations) {
     const anchor = liveLensAnchor(location, { isSuperseded });
     if ("found" in anchor) {
       return { element: anchor.found, placement: anchor.placement };
     }
+    misses.push(anchor.missing);
   }
-  return null;
+  // One location still waiting on the swap is enough to make the whole place
+  // premature: the archive would be drawn from an article that is about to
+  // change under it.
+  return {
+    missing: misses.includes("plan-dom-behind")
+      ? "plan-dom-behind"
+      : (misses.at(0) ?? "unknown-id"),
+  };
 };
 
 const LegacyDiffLensPortal = ({
@@ -850,18 +875,45 @@ const LegacyDiffLensPortal = ({
   place,
   isVisible,
   isSuperseded,
+  revealKey = 0,
 }: {
   readonly diff: SnapshotDiff;
   readonly place: DiffPlace;
   readonly isVisible: boolean;
   readonly isSuperseded: boolean;
+  /**
+   * Bumped when the reviewer asked for this change again rather than merely
+   * changed something about it. Undo is the case: the change is back and the
+   * reader has to be taken to it, wherever they had scrolled to.
+   */
+  readonly revealKey?: number;
 }) => {
   const locations = useMemo(
     () => placeLocations({ diff, place }),
     [diff, place],
   );
   const [host, setHost] = useState<HTMLElement | null>(null);
-  const [isHistorical, setIsHistorical] = useState(false);
+  // A reveal outlives the component that was asked for it. Undoing a rejection
+  // is the case that forces this: while the change is rejected the tour renders
+  // no lens at all, so the ask arrives at nothing, and the lens that will
+  // honour it does not exist until the article has caught up - by which point
+  // the swap has already restored the reader's old scroll position over the top
+  // of it. Remembering which reveal has been honoured, rather than which one
+  // this mount has seen, is what carries the ask across that gap.
+  useEffect(() => {
+    if (
+      !shouldHonourReveal({
+        revealKey,
+        honoured: honouredReveal,
+        hasHost: host !== null,
+      }) ||
+      host === null
+    ) {
+      return;
+    }
+    honouredReveal = revealKey;
+    return openChangeAtReadingPosition(host);
+  }, [host, revealKey]);
   const [presentation, setPresentation] = useState<ProsePresentation>();
   // The host, the anchor it sits beside, and the blocks it hides all belong to
   // the article that was displayed when the lens opened. A refresh replaces
@@ -876,43 +928,22 @@ const LegacyDiffLensPortal = ({
       return;
     }
     const anchor = firstLiveAnchor(locations, isSuperseded);
-    if (anchor === null) {
-      setIsHistorical(true);
+    if ("missing" in anchor) {
+      // A change with nowhere in the plan to stand shows nothing at all.
+      //
+      // There used to be somewhere: a "Historical changes" section appended
+      // after the last slide, which every way of losing an anchor fell into.
+      // It was the designed answer to "the block drifted", and it was the
+      // reported defect four rounds running, because a card at the foot of the
+      // document is nowhere near the place it describes and the reader has no
+      // way to tell a change that moved from a change that was never there.
+      // Superseded locations now anchor by structural address, so a revised
+      // block still has a place; what reaches here is a change the plan really
+      // has no place for, and the digest and the bar are its record.
+      setHost(null);
       setPresentation(undefined);
-      const article = liveArticle();
-      if (article === null) {
-        setHost(null);
-        return;
-      }
-      const container = document.createElement("div");
-      container.dataset.reviewDiffLensHost = "";
-      container.dataset.reviewHistoricalDiff = "";
-      container.className =
-        "mx-auto my-4 min-w-0 w-full max-w-[var(--measure)] px-4";
-      let archive = article.querySelector<HTMLElement>(
-        "[data-review-historical-changes]",
-      );
-      const ownsArchive = archive === null;
-      if (archive === null) {
-        archive = document.createElement("section");
-        archive.dataset.reviewHistoricalChanges = "";
-        archive.className = "mx-auto my-8 w-full max-w-[var(--measure)]";
-        archive.setAttribute("aria-label", "Historical changes");
-        const slides = article.querySelectorAll<HTMLElement>("[data-slide]");
-        const lastSlide = slides.item(slides.length - 1);
-        if (lastSlide === null) article.append(archive);
-        else lastSlide.after(archive);
-      }
-      archive.append(container);
-      setHost(container);
-      const stopPositioning = openChangeAtReadingPosition(container);
-      return () => {
-        stopPositioning();
-        container.remove();
-        if (ownsArchive && archive?.childElementCount === 0) archive.remove();
-      };
+      return;
     }
-    setIsHistorical(false);
     setPresentation(prosePresentationFor(anchor.element));
     const direct = locations
       .map((location) => location.newBlockId)
@@ -981,7 +1012,6 @@ const LegacyDiffLensPortal = ({
         <DiffLensContent
           diff={diff}
           place={place}
-          isHistorical={isHistorical}
           isSuperseded={isSuperseded}
           presentation={presentation}
         />,
@@ -1143,22 +1173,34 @@ const ACCEPTED_PLACE_ATTRIBUTE = "data-review-accepted-place";
  * and answering with nothing at all would lose the record of what was accepted
  * exactly where it is the only surviving evidence. Nothing renders until the
  * anchor has been resolved, so the reader never sees the proposal flash back.
+ *
+ * A superseded place is resolved the way a superseded lens resolves one, which
+ * is what lets an acceptance survive the plan moving on. What changed is which
+ * revision the block now holds, not whether the reviewer answered it.
  */
 const AcceptedPlanPlace = ({
   diff,
   place,
   locations,
+  isSuperseded,
 }: {
   readonly diff: SnapshotDiff;
   readonly place: DiffPlace;
   readonly locations: ReadonlyArray<DiffLocation>;
+  readonly isSuperseded: boolean;
 }) => {
   const articleVersion = useArticleVersion();
   const [hasPlanPlace, setHasPlanPlace] = useState<boolean>();
   useEffect(() => {
-    const anchor = firstLiveAnchor(locations, false);
-    setHasPlanPlace(anchor !== null);
-    if (anchor === null) return;
+    const anchor = firstLiveAnchor(locations, isSuperseded);
+    if ("missing" in anchor) {
+      // Behind the plan source is not the same as gone from it, and only the
+      // second one earns the archived copy. Leaving the answer unknown keeps
+      // this rendering nothing until the swap says which it was.
+      setHasPlanPlace(anchor.missing === "plan-dom-behind" ? undefined : false);
+      return;
+    }
+    setHasPlanPlace(true);
     const { element, placement } = anchor;
     requestAnimationFrame(() =>
       element.scrollIntoView({
@@ -1167,16 +1209,32 @@ const AcceptedPlanPlace = ({
       }),
     );
     if (placement !== "replace") return;
-    element.setAttribute(ACCEPTED_PLACE_ATTRIBUTE, "");
-    return () => element.removeAttribute(ACCEPTED_PLACE_ATTRIBUTE);
-  }, [articleVersion, locations]);
+    // Every block the change put in the plan, not just the one the lens
+    // anchored on. A change can add paragraphs beside the one it reworded -
+    // an agent asked to say the same thing twice does exactly that - and a
+    // ring around only the first tells the reviewer they accepted less than
+    // they did.
+    const marked = new Set<HTMLElement>([element]);
+    for (const location of locations) {
+      const blockId = location.newBlockId;
+      if (blockId === undefined) continue;
+      const found = foundElement(liveBlock(blockId));
+      if (found !== null) marked.add(found);
+    }
+    for (const node of marked) node.setAttribute(ACCEPTED_PLACE_ATTRIBUTE, "");
+    return () => {
+      for (const node of marked) {
+        node.removeAttribute(ACCEPTED_PLACE_ATTRIBUTE);
+      }
+    };
+  }, [articleVersion, isSuperseded, locations]);
   if (hasPlanPlace !== false) return null;
   return (
     <LegacyDiffLensPortal
       diff={diff}
       place={place}
       isVisible
-      isSuperseded={false}
+      isSuperseded={isSuperseded}
     />
   );
 };
@@ -1189,6 +1247,7 @@ export const DiffLensPortal = ({
   isSuperseded,
   isAccepted,
   isShowingChanges,
+  revealKey,
 }: {
   readonly diff: SnapshotDiff;
   readonly place: DiffPlace;
@@ -1197,6 +1256,8 @@ export const DiffLensPortal = ({
   readonly isAccepted: boolean;
   /** True while the reviewer has asked to see an accepted change's evidence. */
   readonly isShowingChanges: boolean;
+  /** Bumped when the reviewer asked to be taken back to this change. */
+  readonly revealKey?: number;
 }) => {
   const locations = useMemo(
     () => placeLocations({ diff, place }),
@@ -1222,13 +1283,21 @@ export const DiffLensPortal = ({
   // one control away rather than gone: asking for it puts the reviewer back on
   // the same lens an open place gets, which is what makes undoing the
   // acceptance a decision made against the same view that produced it.
-  if (isVisible && isAccepted && !isShowingChanges && !isSuperseded) {
+  //
+  // This is asked before anything else about the place, and of every place,
+  // because it is the reviewer's answer rather than a rendering preference.
+  // The plan having moved on since is a fact about which revision the block
+  // now holds; it does not reopen a question that was already answered, and a
+  // path that reached the diff around this gate would put a proposal back in
+  // front of a reader whose own bar says Accepted.
+  if (isVisible && isAccepted && !isShowingChanges) {
     return (
       <AcceptedPlanPlace
         key={`${place.placeId}:${articleVersion}`}
         diff={diff}
         place={place}
         locations={locations}
+        isSuperseded={isSuperseded}
       />
     );
   }
@@ -1257,6 +1326,7 @@ export const DiffLensPortal = ({
         place={place}
         isVisible={isVisible}
         isSuperseded={isSuperseded}
+        revealKey={revealKey}
       />
     );
   }
@@ -1267,6 +1337,7 @@ export const DiffLensPortal = ({
       place={place}
       isVisible={isVisible}
       isSuperseded={isSuperseded}
+      revealKey={revealKey}
     />
   ) : (
     <ComponentDiffReplacement

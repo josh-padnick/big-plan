@@ -99,7 +99,7 @@ It may install a server-rendered article revision or component diff root, but ev
 The plan remains fully readable when scripts are disabled, and Big Plan ships no separate script-free HTML variant.
 Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
-Three runtime contracts hold that browser layer together, and each exists
+Four runtime contracts hold that browser layer together, and each exists
 because breaking it fails silently rather than loudly.
 The review island may replace plan DOM only through `src/review/browser/plan-dom.browser.ts`, which announces the swap as `bigplan:article-replaced`.
 Every shell script and every island effect that holds a node re-resolves on that event, because a replaced article or component root detaches everything wired beneath it and a dead handler throws nothing.
@@ -118,12 +118,16 @@ Measuring anywhere else fails silently in the same shape, because an unlaid-out
 element still answers `getBoundingClientRect()` with an all-zero rect that is
 indistinguishable from a real measurement at the document origin and parks the
 thread in the left margin, the far side of the screen from its content.
+Absence is not one fact either, and that is the fourth contract.
+A name missing from the article can mean the plan no longer holds it, or it can mean a write has already moved the plan source and the swap has not arrived, and the two want different renderings: the first renders no fallback because the change set and review bar remain its record, while the second waits for the article to catch up.
+The same resolver owns that distinction and reports `plan-dom-behind` for every miss while the article is known to be stale, which `src/review/browser/plan-dom-lag.ts` decides and a plan-moving verdict write announces.
+Anything that renders absence switches on the reason rather than on a boolean, so a caller that has not considered "not yet" fails to compile instead of drawing a change below the whole plan.
 
 One server-side invariant is worth the same treatment, for the same reason.
 The authoritative plan source has exactly one writer, `src/review/staged-plan-mutation.ts`.
 Agent edits go into a claim-scoped stage, and a stage publishes only under the plan-mutation lock, only when the recorded holder, the claim generation, and the source's base digest all still hold, and only through one atomic rename that a journal written beforehand can settle after a crash.
-The reviewer's three writes cross the same boundary. A revert takes that lock and re-proves the digest it was computed against before renaming, so a revision an agent published in the meantime refuses the revert instead of disappearing under it.
-Rejecting a change takes the same lock through the same revert, because its bytes are derived rather than edited: the plan is always the agent's proposed revision with the whole rejected set of that revision restored to the thread's baseline, so an undo re-derives the plan the rejection never touched instead of inverting an earlier write.
+The reviewer's two writes cross the same boundary, through one restore primitive that takes that lock and re-proves the digest it was computed against before renaming, so a revision an agent published in the meantime refuses the write instead of disappearing under it.
+Rejecting a change is that primitive's only reviewer-facing form, because its bytes are derived rather than edited: the plan is always the agent's proposed revision with the whole rejected set of that revision restored to the thread's baseline, so an undo re-derives the plan the rejection never touched instead of inverting an earlier write.
 Approval stamps the reviewer's answers into the source as decided decisions, and it does so inside the approval commit's own hold of that lock, because an approval that pinned the pre-stamp revision would go stale against its own write.
 Anything that writes the plan outside that boundary reintroduces the failure the boundary exists to remove, and it does so silently: the bytes land, and nothing refuses them until a reviewer notices work they never approved.
 Its record for the Change Engine goes through `src/review/change-set-commit.ts` and nowhere else, which is what keeps a change set describing published revisions only.

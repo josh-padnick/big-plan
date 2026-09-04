@@ -41,52 +41,53 @@ export type LensAnchorCandidate = {
 };
 
 /**
- * Orders the block ids a location can anchor to, best first. A superseded diff
- * only ever anchors to its own new block: its neighbours describe a plan
- * revision the reader has already moved past, so following them would show the
- * change against unrelated content. That one candidate also carries the
- * result snapshot's content facts for the block, because the displayed
- * document was rendered from a later snapshot and the id alone cannot prove
- * the block still holds the content the diff is about.
+ * Orders the block ids a location can anchor to, best first.
  *
- * A location that brought its own complete rendering asks a different question
- * of the same id, and gets a different expectation. A lens built from recorded
- * text is only honest beside a block that still holds that text; a component
- * that carries `view` shows both of its own sides and reads the live block for
- * nothing, so the id is asking where to stand rather than what to say. Holding
- * such a location to the old text sends a change the plan still has a place for
- * into the historical archive at the foot of the document - a stop the stepper
- * still counts, with nothing to see where the reader is looking.
+ * A superseded location anchors by structural address rather than by the words
+ * it recorded. The address is what the reader's question is actually about -
+ * where in the plan did this happen - and it survives the agent revising the
+ * block again, which the recorded text does not. Holding prose to that text
+ * meant every later revision under an open lens turned the change into a
+ * drifted block with no anchor. A structurally valid location keeps that
+ * superseded change beside the place it describes.
  *
  * It is still held to something, because a structural path is not an identity:
- * the same address can come to name an entirely different component, and
- * standing a historical card over one of those hides a live component behind a
- * record of something else. The kind is what the two questions have in common -
- * a component revised again is still the component the change was about, and a
- * component replaced by another is not - so that is what the id must still
- * name.
+ * the same address can come to name entirely different content, and standing a
+ * change lens over that hides live content behind a record of something else.
+ * The kind is what survives a rewording - a paragraph revised again is
+ * still the paragraph the change was about, and a paragraph replaced by a
+ * table is not - so that is what the id must still name, for prose exactly as
+ * for a component.
+ *
+ * Its neighbours follow, then nothing. A superseded neighbour describes a
+ * revision the reader has moved past, so it is a worse answer than the block
+ * itself. If none resolves, the change stays absent rather than moving away
+ * from where it happened.
  */
 export const lensAnchorCandidates = (
   location: DiffLocation,
   { isSuperseded }: { readonly isSuperseded: boolean },
 ): ReadonlyArray<LensAnchorCandidate> => {
   if (isSuperseded) {
-    const carriesOwnRendering = location.view !== undefined;
-    return location.newBlockId === undefined
-      ? []
-      : [
-          {
-            blockId: location.newBlockId,
-            placement: "replace",
-            ...(carriesOwnRendering
-              ? { expectedKind: location.kind }
-              : { expectedText: location.newText }),
-            ...(!carriesOwnRendering &&
-            location.newPresentation?.aspect === "image"
-              ? { expectedPicture: location.newPresentation }
-              : {}),
-          },
-        ];
+    const ordered: ReadonlyArray<readonly [string | undefined, LensPlacement]> =
+      [
+        [location.newBlockId, "replace"],
+        [location.beforeBlockId, "before"],
+        [location.afterBlockId, "after"],
+      ];
+    return ordered.flatMap(([blockId, placement]) =>
+      blockId === undefined
+        ? []
+        : [
+            {
+              blockId,
+              placement,
+              ...(placement === "replace"
+                ? { expectedKind: location.kind }
+                : {}),
+            },
+          ],
+    );
   }
   const ordered: ReadonlyArray<readonly [string | undefined, LensPlacement]> = [
     [location.newBlockId, "replace"],
@@ -135,8 +136,8 @@ export const candidateMatchesLiveText = ({
  * tell one table from another table at the same address, and it is not trying
  * to: it separates "the component this change was about, revised again" from
  * "some other component that inherited this structural path", which is the
- * distinction that decides whether a historical card may stand over a live
- * block at all.
+ * distinction that decides whether a change lens may stand over a live block
+ * at all.
  */
 export const candidateMatchesLiveKind = ({
   candidate,

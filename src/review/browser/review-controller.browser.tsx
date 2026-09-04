@@ -17,6 +17,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -40,11 +41,17 @@ import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
-import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import { changeVerdictKey } from "../shared/change-verdict.js";
+import {
+  planLossChangeCount,
+  projectPlanLoss,
+  THREAD_DELETE_ACCEPTED_NOTE,
+  THREAD_DELETE_LEAD_LINE,
+  type PlanSlideLoss,
+} from "../shared/plan-loss.js";
 import {
   AGENT_STALL_MS,
   agentDisconnectDropsWork,
@@ -177,9 +184,18 @@ import {
   type ReviewCommentSubmitAvailability,
 } from "./review-comment-submit.js";
 import { useDiffTour } from "./diff-tour.browser.js";
+import { ReviewImage } from "./review-image.browser.js";
+import type { ChangeChatValue } from "./change-chat-drawer.browser.js";
+import {
+  changeChatTurns,
+  firstOtherChangeChatTurn,
+  otherChangeChatTurns,
+} from "../shared/change-chat.js";
 import {
   foundElement,
+  liveArticle,
   liveBlock,
+  publishPlanSnapshots,
   liveBaselineBlock,
   liveDecisionFigure,
   liveFlowAnchor,
@@ -246,7 +262,13 @@ import {
 } from "./review-recovery-storage.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import { useChangeSets } from "./use-change-sets.browser.js";
-import { threadChangeFor } from "../shared/thread-change-set.js";
+import { flashThread, useFlashedThread } from "./thread-flash.browser.js";
+import { PLAN_SOURCE_MOVED_EVENT } from "./use-change-verdicts.browser.js";
+import {
+  threadChangeFor,
+  threadChangeSpanFor,
+} from "../shared/thread-change-set.js";
+import { changeSetTourId, type ChangeSetTourKind } from "./tour-advance.js";
 import {
   requestJson,
   runtimeIdentity,
@@ -267,6 +289,12 @@ import {
   WorkingMark,
 } from "./ui.browser.js";
 import { replacePlanDom } from "./plan-dom.browser.js";
+// The composer's chord is named once, so no surface can tell the reader to
+// press a key that does nothing there.
+import {
+  MODIFIER_SHORTCUT,
+  MODIFIER_SHORTCUT_KEYS,
+} from "./keyboard-shortcut.browser.js";
 
 const BODY_LIMIT = 4000;
 const LONG_COMMENT = 180;
@@ -281,7 +309,7 @@ const TABLE_PRECISION_KINDS = new Set([
 // it could never be acted on; feedback belongs on the section it points to.
 const DERIVED_KINDS = new Set(["table-of-contents"]);
 
-type SentDeleteKind = "reverted" | "canceled" | "abandoned" | "queued";
+type SentDeleteKind = "thread" | "canceled" | "abandoned" | "queued";
 
 /**
  * One sent thread's pending delete. `abandonedClaim` rides along because the
@@ -325,26 +353,24 @@ const withAbandonedClaimNote = ({
  * Which confirmation one sent thread's delete earns. A comment released by an
  * abandoned claim gets its own, because the queued wording promises the agent
  * never picked it up and here it did (BIG-120).
+ *
+ * A thread that has already changed the plan gets its own too, and gets it
+ * first: deleting it is a verdict on those changes rather than the removal of
+ * a note nobody acted on, so its confirmation has to name the content it is
+ * about to take out of the plan.
  */
 const sentDeleteKind = ({
   thread,
-  currentSnapshot,
 }: {
   readonly thread: CommentThreadProjection<AgentRequest, AgentResponse>;
-  readonly currentSnapshot: string;
 }): SentDeleteKind =>
-  thread.latestChanged?.baselineSnapshot === currentSnapshot
-    ? "reverted"
+  thread.latestChanged !== undefined
+    ? "thread"
     : thread.latestCanceled
       ? "canceled"
       : thread.deleteUnlockedByAbandonedClaim
         ? "abandoned"
         : "queued";
-
-type PendingRevert = {
-  readonly requestId: string;
-  readonly commentId: string;
-};
 
 // The server owns the answer time and the digest of the decision that was
 // answered, so a mutation carries neither.
@@ -483,15 +509,6 @@ const FEEDBACK_TAB_CLASS =
   "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>[data-review-tab-count]]:min-w-5 [&>[data-review-tab-count]]:justify-center [&>[data-review-tab-count]]:bg-[var(--annotation-bg)] [&>[data-review-tab-count]]:text-2xs [&>[data-review-tab-count]]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
 const APPLE_PLATFORM = /Mac|iPhone|iPad/u.test(navigator.platform);
-const MODIFIER_SHORTCUT = APPLE_PLATFORM ? "⌘+Enter" : "Ctrl+Enter";
-// The composer's whole keyboard vocabulary, told at the controls it drives
-// rather than in a standing line of helper text. Each chord travels as its
-// keystrokes rather than as one joined string, because the composer's tooltips
-// draw a keystroke as a key the reader presses rather than as prose. Every
-// other surface still reads the joined form; chipping those is BIG-203.
-const MODIFIER_SHORTCUT_KEYS = APPLE_PLATFORM
-  ? (["⌘", "Enter"] as const)
-  : (["Ctrl", "Enter"] as const);
 const ESCAPE_SHORTCUT_KEYS = ["Esc"] as const;
 const NEW_COMMENT_SHORTCUT = APPLE_PLATFORM ? "⌃+⌘+C" : "Ctrl+Alt+C";
 const isNewCommentShortcut = (event: globalThis.KeyboardEvent): boolean =>
@@ -1078,6 +1095,279 @@ const readySnapshotDiff = (
 ): SnapshotDiff | null => {
   const cached = snapshotDiffCache.get(snapshotDiffKey(identity, from, to));
   return cached?.state === "ready" ? cached.value : null;
+};
+
+/** How many slides the dialog draws before it counts the rest. */
+const PLAN_LOSS_SLIDE_LIMIT = 6;
+
+/**
+ * What deleting one thread takes out of the plan, resolved for the dialog that
+ * confirms it.
+ *
+ * The thread's whole change set is the diff from where the thread started to
+ * where its latest reply left the plan, and the places going are the ones
+ * nobody has decided: an accepted change stays, so naming it here would
+ * promise a loss that will not happen.
+ */
+const useThreadDeleteLoss = ({
+  identity,
+  from,
+  to,
+  dispositionOf,
+  active,
+}: {
+  readonly identity: RuntimeIdentity | null;
+  readonly from: string | undefined;
+  readonly to: string | undefined;
+  readonly dispositionOf: (diff: SnapshotDiff, placeId: string) => string;
+  readonly active: boolean;
+}): {
+  readonly diff: SnapshotDiff | null;
+  readonly loadError: boolean;
+  readonly undecidedPlaceIds: ReadonlyArray<string>;
+  readonly slides: ReadonlyArray<PlanSlideLoss> | undefined;
+} => {
+  const [diff, setDiff] = useState<SnapshotDiff | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  useEffect(() => {
+    if (!active || identity === null || from === undefined || to === undefined)
+      return;
+    setDiff(null);
+    setLoadError(false);
+    const ready = readySnapshotDiff(identity, from, to);
+    if (ready !== null) {
+      setDiff(ready);
+      return;
+    }
+    let current = true;
+    cachedSnapshotDiff(identity, from, to)
+      .then((value) => {
+        if (current) setDiff(value);
+      })
+      .catch(() => {
+        if (current) setLoadError(true);
+      });
+    return () => {
+      current = false;
+    };
+  }, [active, from, identity, to]);
+  useEffect(() => {
+    if (!active) {
+      setDiff(null);
+      setLoadError(false);
+    }
+  }, [active]);
+  const undecidedPlaceIds = useMemo(
+    () =>
+      diff === null
+        ? []
+        : diff.places
+            .filter(
+              (place) => dispositionOf(diff, place.placeId) === "undecided",
+            )
+            .map((place) => place.placeId),
+    [diff, dispositionOf],
+  );
+  return {
+    diff,
+    loadError,
+    undecidedPlaceIds,
+    slides: useMemo(
+      () =>
+        diff === null
+          ? undefined
+          : projectPlanLoss({ diff, placeIds: undecidedPlaceIds }),
+      [diff, undecidedPlaceIds],
+    ),
+  };
+};
+
+/** The live slide a scope names, preferring the block the diff pointed at. */
+const liveSlideOf = ({
+  scope,
+  anchorBlockId,
+}: {
+  readonly scope: string;
+  readonly anchorBlockId: string | undefined;
+}): HTMLElement | null => {
+  const fromBlock =
+    anchorBlockId === undefined
+      ? null
+      : foundElement(liveBlock(anchorBlockId))?.closest<HTMLElement>(
+          "[data-slide]",
+        );
+  if (fromBlock != null) return fromBlock;
+  // A scope is the slide heading's own anchor id under a "section/" prefix,
+  // so a slide whose blocks all left the plan is still reachable by name.
+  const heading = liveArticle()?.querySelector<HTMLElement>(
+    `#${CSS.escape(scope.replace(/^section\//u, ""))}`,
+  );
+  return heading?.closest<HTMLElement>("[data-slide]") ?? null;
+};
+
+/**
+ * The kicker a slide shows, read from the slide the reader is looking at
+ * rather than from the diff.
+ *
+ * The ordinal in "2 / Goals and non-goals" exists only in the rendered kicker;
+ * nothing on the wire carries it. Reading the live slide is therefore not a
+ * shortcut but the only way to name the slide the way the document does, and
+ * it is the same walk every other surface that names a slide already makes.
+ */
+const readSlideKicker = (slide: PlanSlideLoss): string | undefined => {
+  const kicker = liveSlideOf(slide)
+    ?.querySelector<HTMLElement>("[data-slide-kicker]")
+    ?.textContent?.trim();
+  return kicker === "" ? undefined : kicker;
+};
+
+/** The address the browser resolved for a picture the plan is showing. */
+const liveImageSource = ({
+  slide,
+  source,
+}: {
+  readonly slide: PlanSlideLoss;
+  readonly source: string;
+}): string => {
+  const element = liveSlideOf(slide);
+  const match = [
+    ...(element?.querySelectorAll<HTMLImageElement>("img") ?? []),
+  ].find(
+    (image) =>
+      image.getAttribute("src") === source || image.currentSrc.endsWith(source),
+  );
+  return match?.currentSrc ?? match?.src ?? source;
+};
+
+/**
+ * One affected slide, drawn and behaving the way the plan draws a slide.
+ *
+ * A reviewer already knows this card: it is the slide, collapsed, with its own
+ * kicker over its own title, and it opens the way that slide opens. What it
+ * opens onto is the difference that matters here - not the slide's contents,
+ * but the passages and pictures this deletion takes off it. Keeping them
+ * behind the disclosure is what lets the box answer "which slides?" at a
+ * glance and "what exactly?" on demand, instead of answering both at once and
+ * reading as the plan reprinted inside a dialog.
+ */
+const PlanLossSlideRow = ({ slide }: { readonly slide: PlanSlideLoss }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const kicker = readSlideKicker(slide) ?? slide.title;
+  const changes = `${slide.changeCount} ${slide.changeCount === 1 ? "change" : "changes"}`;
+  const panelId = useId();
+  return (
+    <li
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border border-edge bg-raised shadow-raised"
+      data-review-loss-slide={slide.scope}
+      {...(isOpen ? { "data-review-loss-slide-open": "" } : {})}
+    >
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-controls={panelId}
+        className="grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-0 bg-transparent px-3 py-2 text-left hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        {/* The chevron the plan's own slide shows, turning the way that one
+            turns: right when closed, down when open. */}
+        <span
+          className={`text-subtle opacity-40 transition-transform [&_svg]:size-4 ${isOpen ? "rotate-90" : ""}`}
+        >
+          <Icon icon={CHEVRON_RIGHT_ICON} />
+        </span>
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
+          <span className="truncate text-2xs font-semibold uppercase tracking-caps text-subtle">
+            {kicker}
+          </span>
+          <span className="truncate text-sm font-semibold text-ink">
+            {slide.title}
+          </span>
+        </span>
+        <span className="shrink-0 text-2xs tabular-nums text-muted">
+          {changes}
+        </span>
+      </button>
+      <div id={panelId} hidden={!isOpen}>
+        {slide.previews.length === 0 ? (
+          <p className="m-0 border-t border-edge px-3 py-2 text-xs text-muted">
+            This change leaves no text or picture behind on this slide.
+          </p>
+        ) : (
+          <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge p-3">
+            {slide.previews.map((preview, index) =>
+              preview.shape === "image" ? (
+                <li
+                  key={`image-${index}`}
+                  className="flex min-w-0 items-center gap-2"
+                >
+                  <ReviewImage
+                    source={liveImageSource({
+                      slide,
+                      source: preview.image.source,
+                    })}
+                    alt={preview.image.alt}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted">
+                    {preview.image.alt === "" ? "Picture" : preview.image.alt}
+                  </span>
+                </li>
+              ) : (
+                <li
+                  key={`text-${index}`}
+                  className="min-w-0 border-l-2 border-edge pl-2 text-xs text-muted [overflow-wrap:anywhere]"
+                >
+                  {preview.excerpt.text}
+                </li>
+              ),
+            )}
+          </ul>
+        )}
+      </div>
+    </li>
+  );
+};
+
+const PlanLossEvidence = ({
+  slides,
+  loadError,
+}: {
+  readonly slides: ReadonlyArray<PlanSlideLoss> | undefined;
+  readonly loadError: boolean;
+}) => {
+  const total = slides === undefined ? 0 : planLossChangeCount(slides);
+  return (
+    <div
+      className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border border-edge bg-surface p-3"
+      data-review-plan-loss=""
+    >
+      <p className="m-0 text-2xs font-semibold uppercase tracking-caps text-subtle">
+        {slides === undefined || slides.length === 0
+          ? "What you will lose"
+          : `What you will lose · ${total} ${total === 1 ? "change" : "changes"} on ${slides.length === 1 ? "one slide" : `${slides.length} slides`}`}
+      </p>
+      {loadError ? (
+        <p className="m-0 text-sm text-ink">
+          Could not read what this thread wrote. Cancel and try again.
+        </p>
+      ) : slides === undefined ? (
+        <p className="m-0 text-sm text-ink">Reading what this thread wrote…</p>
+      ) : slides.length === 0 ? (
+        <p className="m-0 text-sm text-ink">
+          Nothing this thread proposed is still waiting on you, so the plan
+          keeps exactly what it holds now.
+        </p>
+      ) : (
+        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-2 p-0">
+          {slides.slice(0, PLAN_LOSS_SLIDE_LIMIT).map((slide) => (
+            <PlanLossSlideRow key={slide.scope} slide={slide} />
+          ))}
+          {slides.length > PLAN_LOSS_SLIDE_LIMIT ? (
+            <li className="text-xs text-muted">{`and ${slides.length - PLAN_LOSS_SLIDE_LIMIT} more slides`}</li>
+          ) : null}
+        </ul>
+      )}
+    </div>
+  );
 };
 
 const randomId = (): string => {
@@ -3357,10 +3647,9 @@ const ChangeAttachment = ({
   currentSnapshot,
   onStatus,
   onResolve,
-  onRevert,
-  canRevert,
+  onDeleteThread,
   thread,
-  onKeepChatting,
+  chatThreadId,
 }: {
   readonly identity: RuntimeIdentity;
   readonly from: string;
@@ -3372,13 +3661,12 @@ const ChangeAttachment = ({
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
   readonly onResolve?: () => void;
-  readonly onRevert?: () => void;
-  readonly canRevert?: boolean;
+  readonly onDeleteThread?: () => void;
   readonly thread?: {
     readonly label: string;
     readonly onOpen: () => void;
   };
-  readonly onKeepChatting?: () => void;
+  readonly chatThreadId?: string;
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(() =>
     readySnapshotDiff(identity, from, to),
@@ -3413,13 +3701,30 @@ const ChangeAttachment = ({
       isLoading={isLoading}
       onLoad={() => void load()}
       onResolve={onResolve}
-      onRevert={onRevert}
-      canRevert={canRevert}
+      onDeleteThread={onDeleteThread}
       thread={thread}
-      onKeepChatting={onKeepChatting}
+      chatThreadId={chatThreadId}
     />
   );
 };
+
+/**
+ * The blocks one comment is about, which is what its change set may be
+ * attributed to. A document-wide comment names none, and answers with an empty
+ * list rather than a guess.
+ */
+const commentTargetBlockIds = (
+  comment: ReviewComment,
+): ReadonlyArray<string> =>
+  comment.target.type === "document"
+    ? []
+    : [
+        comment.target.blockId,
+        ...(comment.target.type === "selection" &&
+        comment.target.endBlockId !== undefined
+          ? [comment.target.endBlockId]
+          : []),
+      ];
 
 const StalePremiseNotice = ({
   comment,
@@ -3434,25 +3739,14 @@ const StalePremiseNotice = ({
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
   readonly onResolve?: () => void;
+
   readonly thread?: {
     readonly label: string;
     readonly onOpen: () => void;
   };
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
-  const blockIds = useMemo(
-    () =>
-      comment.target.type === "document"
-        ? []
-        : [
-            comment.target.blockId,
-            ...(comment.target.type === "selection" &&
-            comment.target.endBlockId !== undefined
-              ? [comment.target.endBlockId]
-              : []),
-          ],
-    [comment.target],
-  );
+  const blockIds = useMemo(() => commentTargetBlockIds(comment), [comment]);
   useEffect(() => {
     if (identity === null || comment.premiseSnapshot === currentSnapshot) {
       setDiff(null);
@@ -3495,10 +3789,14 @@ const StalePremiseNotice = ({
       >
         Plan changed since this comment
       </Badge>
+      {/* Two facts, in the reader's own terms: this comment was written
+          against an older plan, and what follows compares that plan with the
+          one on screen now. Which snapshots those are, and whether the change
+          landed inside or outside the comment's target, are machinery the
+          digest below already shows the consequences of. */}
       <p className="mt-1 mb-0 text-2xs">
-        {changedOutsideTarget
-          ? "The plan changed outside this comment's target. Review the premise-to-current changes before sending it."
-          : "This compares the plan when you commented with the current plan."}
+        The plan has changed since you first requested a change. What follows is
+        the difference against the plan as it reads now.
       </p>
       {placeIds.length > 0 ? (
         <AgentChangeDigest
@@ -3507,12 +3805,26 @@ const StalePremiseNotice = ({
           spilloverCount={
             changedOutsideTarget ? undefined : attributed.spilloverCount
           }
+          // Addressed by the thread it belongs to *and* by which of the
+          // thread's two comparisons this is, so when this one advances the
+          // tour re-opens on the recomputed diff, and the thread's proposed
+          // revision - a different set that happens to share the thread - is
+          // never mistaken for it.
+          changeSetId={changeSetTourId({
+            threadId: comment.id,
+            kind: "premise",
+          })}
           isSuperseded
+          isPremiseView
           isLoading={false}
           onLoad={() => undefined}
-          actionLabel="Review premise → current"
+          // The reader is looking at their own comment's thread; naming the two
+          // snapshots being compared is machinery they did not ask about, and
+          // the sentence above the control already says which two.
+          actionLabel="Review changes"
           thread={thread}
           onResolve={onResolve}
+          chatThreadId={comment.id}
         />
       ) : null}
       {onResolve === undefined ? null : (
@@ -3571,7 +3883,6 @@ const SentThread = ({
   onShowAgent,
   onCancelRequest,
   onDelete,
-  onRevert,
   currentSnapshot,
   reply,
   onReplyChange,
@@ -3601,7 +3912,6 @@ const SentThread = ({
   readonly onShowAgent: () => void;
   readonly onCancelRequest: (requestId: string) => void;
   readonly onDelete: () => void;
-  readonly onRevert: (requestId: string, commentId: string) => void;
   readonly currentSnapshot: string;
   /**
    * Reply text is owned above this card, because one thread can be on screen
@@ -3656,7 +3966,26 @@ const SentThread = ({
   }, [identity, threadChange]);
   const outcome = latestExchange?.outcome;
   const targetPresent = targetElement(comment.target) !== null;
-  const cardClass = `mt-2 min-w-0 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
+  // Marked when the reviewer has just been sent here, and marked whole: they
+  // asked where the rest of this conversation is, and the answer is the
+  // conversation. A mark on one message inside it would pick out something
+  // they never asked about.
+  // This card calls the inline surface "thread"; the disclosure rules and the
+  // flash both call it "inline". One name crosses the boundary.
+  const flashSurface: ThreadSurface = surface === "rail" ? "rail" : "inline";
+  const isFlashed = useFlashedThread({
+    commentId: comment.id,
+    surface: flashSurface,
+  });
+  const flashedCard = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isFlashed) return;
+    flashedCard.current?.scrollIntoView({ block: "center" });
+  }, [isFlashed]);
+  const flashClass = isFlashed
+    ? " outline-3 outline-offset-2 outline-accent bg-accent-wash!"
+    : "";
+  const cardClass = `mt-2 min-w-0 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}${flashClass}`;
   const associate = () => onAssociate(comment.target);
   const railFreshness = threadTime(
     latestExchange?.response?.createdAt ??
@@ -3681,29 +4010,20 @@ const SentThread = ({
             ? "Working"
             : "Queued";
   const railTime = railFreshness === "Just now" ? "just now" : railFreshness;
-  const latestChangeWasReverted =
-    latestChanged !== undefined &&
-    latestChanged.baselineSnapshot === currentSnapshot;
-  const canRevertLatestChange =
-    latestChanged?.response?.resultSnapshot === currentSnapshot;
-  // One label for every revert control in this thread. After a successful
-  // revert the control stays visible in the still-open thread, so it must
-  // say the revert happened rather than blame a newer plan change.
-  const revertActionLabel = canRevertLatestChange
-    ? "Revert response"
-    : latestChangeWasReverted
-      ? "Response reverted"
-      : "Revert unavailable - the plan changed again";
+  // A thread that proposed changes is deletable whatever the reviewer has
+  // decided about them, because deleting it is itself a verdict: everything
+  // still undecided is rejected, and everything accepted stays in the plan.
+  // Nothing about where the plan currently sits gates that.
   const canDeleteComment =
     pushedOrigin === undefined &&
-    (canDeleteQueued || canDeleteCanceled || latestChangeWasReverted);
+    (canDeleteQueued || canDeleteCanceled || latestChanged !== undefined);
   // An affordance a pickup had taken away says why it is back, wherever it
   // appears. The rail and the summary card have room for the label alone, so
   // the label carries the reason and the expanded card explains it in full.
-  const deleteKind = sentDeleteKind({ thread, currentSnapshot });
+  const deleteKind = sentDeleteKind({ thread });
   const deleteCommentLabel =
-    deleteKind === "reverted"
-      ? "Delete comment"
+    deleteKind === "thread"
+      ? "Delete thread"
       : deleteKind === "canceled"
         ? "Delete canceled comment"
         : deleteKind === "abandoned"
@@ -3733,7 +4053,6 @@ const SentThread = ({
     setResolvedWorkError(null);
     onReply(body);
   };
-
   if (!expanded) {
     if (surface === "thread") {
       return (
@@ -3810,18 +4129,6 @@ const SentThread = ({
               onClick={onResolve}
             />
           ) : null}
-          {latestChanged === undefined ? null : (
-            <ThreadIconButton
-              label={revertActionLabel}
-              icon={ROTATE_CCW_ICON}
-              disabled={!canRevertLatestChange}
-              onClick={() =>
-                latestChanged === undefined
-                  ? undefined
-                  : onRevert(latestChanged.request.requestId, comment.id)
-              }
-            />
-          )}
         </ContextualCommentSummary>
       );
     }
@@ -3851,9 +4158,11 @@ const SentThread = ({
     }
     return (
       <Card
+        ref={flashedCard}
         className={cardClass}
         density="dense"
         elevation="none"
+        {...(isFlashed ? { "data-review-thread-flash": flashSurface } : {})}
         onPointerEnter={associate}
         onPointerLeave={(event) => {
           if (!event.currentTarget.contains(document.activeElement))
@@ -3905,19 +4214,6 @@ const SentThread = ({
               tone="danger"
             />
           ) : null}
-          {latestChanged === undefined ? null : (
-            <ThreadIconButton
-              label={revertActionLabel}
-              icon={ROTATE_CCW_ICON}
-              disabled={!canRevertLatestChange}
-              onClick={() =>
-                latestChanged === undefined
-                  ? undefined
-                  : onRevert(latestChanged.request.requestId, comment.id)
-              }
-              tone="danger"
-            />
-          )}
           <ThreadIconButton
             label={resolved ? "Unresolve thread" : "Resolve thread"}
             icon={CHECK_ICON}
@@ -3996,9 +4292,11 @@ const SentThread = ({
 
   return (
     <Card
+      ref={flashedCard}
       className={cardClass}
       density={surface === "rail" ? "dense" : "compact"}
       elevation={surface === "rail" ? "none" : "floating"}
+      {...(isFlashed ? { "data-review-thread-flash": flashSurface } : {})}
       onPointerEnter={associate}
       onPointerLeave={(event) => {
         if (!event.currentTarget.contains(document.activeElement))
@@ -4056,19 +4354,6 @@ const SentThread = ({
             tone="danger"
           />
         ) : null}
-        {latestChanged === undefined ? null : (
-          <ThreadIconButton
-            label={revertActionLabel}
-            icon={ROTATE_CCW_ICON}
-            disabled={!canRevertLatestChange}
-            onClick={() =>
-              latestChanged === undefined
-                ? undefined
-                : onRevert(latestChanged.request.requestId, comment.id)
-            }
-            tone="danger"
-          />
-        )}
         <ThreadIconButton
           label={resolved ? "Unresolve thread" : "Resolve thread"}
           icon={CHECK_ICON}
@@ -4167,6 +4452,10 @@ const SentThread = ({
                           identity={identity}
                           currentSnapshot={currentSnapshot}
                           onStatus={onReplySent}
+                          // A tour with no thread label is the worst state for
+                          // a reviewer already asking which thread they are
+                          // in, and this notice is reached from inside one.
+                          thread={{ label: comment.body, onOpen: onJump }}
                         />
                       ) : null}
                     </MessageTurn>
@@ -4290,7 +4579,10 @@ const SentThread = ({
                           identity={identity}
                           from={threadChange.from}
                           to={threadChange.to}
-                          changeSetId={comment.id}
+                          changeSetId={changeSetTourId({
+                            threadId: comment.id,
+                            kind: "changes",
+                          })}
                           {...(threadChange.agentIdentity === undefined
                             ? {}
                             : { agentIdentity: threadChange.agentIdentity })}
@@ -4300,21 +4592,11 @@ const SentThread = ({
                           currentSnapshot={currentSnapshot}
                           onStatus={onReplySent}
                           onResolve={onResolve}
-                          onRevert={() =>
-                            onRevert(request.requestId, comment.id)
+                          onDeleteThread={
+                            canDeleteComment ? onDelete : undefined
                           }
-                          canRevert={canRevertLatestChange}
                           thread={{ label: comment.body, onOpen: onJump }}
-                          onKeepChatting={() => {
-                            onJump();
-                            window.setTimeout(
-                              () =>
-                                document
-                                  .getElementById(`reply-${comment.id}`)
-                                  ?.focus(),
-                              0,
-                            );
-                          }}
+                          chatThreadId={comment.id}
                         />
                       </ProposedChangesTurn>
                     ) : null}
@@ -4348,22 +4630,6 @@ const SentThread = ({
                       tone="danger"
                     />
                   ) : null}
-                  {latestChanged === undefined ? null : (
-                    <ThreadIconButton
-                      label={revertActionLabel}
-                      icon={ROTATE_CCW_ICON}
-                      disabled={!canRevertLatestChange}
-                      onClick={() =>
-                        latestChanged === undefined
-                          ? undefined
-                          : onRevert(
-                              latestChanged.request.requestId,
-                              comment.id,
-                            )
-                      }
-                      tone="danger"
-                    />
-                  )}
                   <Button
                     variant="accentOutline"
                     size="micro"
@@ -4506,12 +4772,28 @@ const ChatExchange = ({
 };
 
 export const ReviewController = () => {
-  const { autoAccepted, closeTour, refreshVerdicts, standingOf } =
-    useDiffTour();
+  const {
+    activeChangeBlockId,
+    activeChatThreadId,
+    autoAccepted,
+    closeTour,
+    dispositionOf,
+    refreshVerdicts,
+    setPlacesDecided,
+    standingOf,
+    syncTourChat,
+    activeChangeSetId,
+    activeDiff,
+    activeIsSuperseded,
+    syncTourDiff,
+  } = useDiffTour();
   const identity = useMemo(runtimeIdentity, []);
   const initialSnapshot = useMemo(bootstrapSnapshot, []);
   const planId =
     identity?.planId ?? rootElement.getAttribute("data-plan-id") ?? "";
+  // Read here, not only in the thread card, because the open tour is refreshed
+  // from this component whether or not that card is mounted.
+  const { changeSets } = useChangeSets();
   const blockHosts = useBlockHosts();
   const imageHosts = useImageHosts();
   const reviewContainerHosts = useReviewContainerHosts();
@@ -4662,9 +4944,6 @@ export const ReviewController = () => {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
-  const [pendingRevert, setPendingRevert] = useState<PendingRevert | null>(
-    null,
-  );
   const [associatedTarget, setAssociatedTarget] =
     useState<CommentTarget | null>(null);
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(
@@ -4688,6 +4967,37 @@ export const ReviewController = () => {
     }
   }, [archivedChatRequestIds, planId]);
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
+  // The one fact that separates "this change left the plan" from "the article
+  // has not caught up", published wherever plan identity is resolved. It is
+  // the two snapshot ids rather than a signal from whichever writer moved the
+  // bytes, so an agent's publish counts exactly as a reviewer's verdict does.
+  publishPlanSnapshots({
+    displayedSnapshot,
+    currentSnapshot: agent.currentSnapshot,
+  });
+  // Deleting a thread names what it deletes, so the thread's whole change set
+  // is resolved here: the fold carries where the thread started and where its
+  // latest reply left the plan, which is exactly the revision the reviewer's
+  // undecided changes live in.
+  const threadDeleteChange =
+    pendingDelete?.kind === "thread"
+      ? threadChangeSpanFor({
+          changeSets: committedChangeSets,
+          commentId: pendingDelete.comment.id,
+          requestIds: agent.requests
+            .filter((request) =>
+              requestCommentIds(request).includes(pendingDelete.comment.id),
+            )
+            .map((request) => request.requestId),
+        })
+      : undefined;
+  const threadDelete = useThreadDeleteLoss({
+    identity,
+    from: threadDeleteChange?.from,
+    to: threadDeleteChange?.to,
+    dispositionOf,
+    active: pendingDelete?.kind === "thread",
+  });
   useEffect(() => {
     setApproval(runtimeSession?.approval);
   }, [runtimeSession?.approval]);
@@ -5145,7 +5455,11 @@ export const ReviewController = () => {
     setReplyDrafts(next);
   }, []);
   const sendThreadReply = useCallback(
-    async (commentId: string, body: string): Promise<void> => {
+    async (
+      commentId: string,
+      body: string,
+      aboutBlockId?: string,
+    ): Promise<void> => {
       if (body === "" || replyPendingCommentIdsRef.current.has(commentId)) {
         return;
       }
@@ -5178,7 +5492,14 @@ export const ReviewController = () => {
           path: "/api/agent-requests",
           identity,
           method: "POST",
-          body: { kind: "reply", commentId, body },
+          body: {
+            kind: "reply",
+            commentId,
+            body,
+            // Written by the drawer: the reviewer typed this while reviewing
+            // one change, and the thread holds several.
+            ...(aboutBlockId === undefined ? {} : { aboutBlockId }),
+          },
         });
         if ((replyDraftsRef.current.get(commentId) ?? "").trim() === body) {
           changeReplyDraft(commentId, "");
@@ -6337,6 +6658,11 @@ export const ReviewController = () => {
     };
     void refresh();
     document.addEventListener("bigplan:approval-changed", refresh);
+    // A rejection has already moved the plan source by the time its response
+    // lands, so the reader's page goes and looks at once. Waiting for the tick
+    // is what made rejecting feel slow next to accepting, which moves no bytes
+    // and therefore had nothing to wait for.
+    document.addEventListener(PLAN_SOURCE_MOVED_EVENT, refresh);
     const timer = window.setInterval(
       () => void refresh(),
       REVIEW_POLL_INTERVAL_MS,
@@ -6344,6 +6670,7 @@ export const ReviewController = () => {
     return () => {
       current = false;
       document.removeEventListener("bigplan:approval-changed", refresh);
+      document.removeEventListener(PLAN_SOURCE_MOVED_EVENT, refresh);
       window.clearInterval(timer);
     };
   }, [
@@ -6889,6 +7216,26 @@ export const ReviewController = () => {
     stageReviewComment,
   ]);
 
+  /**
+   * Sends one staged comment as it currently stands.
+   *
+   * By id rather than by value, because the two can differ: a control that
+   * captured the comment in its own render sends the body from that render,
+   * and the runtime - which compares what it is handed against what it holds -
+   * refuses the mismatch as a review that changed underneath. Reading the
+   * draft at the moment of sending is what lets one gesture edit and send,
+   * which is what the change drawer does for a comment nobody has sent yet.
+   */
+  const submitStagedComment = useCallback(
+    (commentId: string): void => {
+      const latest = latestReviewStateRef.current.state.drafts.find(
+        (draft) => draft.id === commentId,
+      );
+      if (latest === undefined) return;
+      void sendComments([latest]);
+    },
+    [sendComments],
+  );
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;
     const comment: ReviewComment = {
@@ -6959,7 +7306,7 @@ export const ReviewController = () => {
     setPendingDelete(null);
     setStatus("All staged comments deleted.");
   };
-  const deleteSentComment = async (commentId: string) => {
+  const deleteSentComment = async (commentId: string, kind: SentDeleteKind) => {
     const refusal = reviewWriteRefusal({
       path: "delete-comment",
       availability: writeAvailability,
@@ -6972,9 +7319,9 @@ export const ReviewController = () => {
       return;
     }
     if (identity === null) return;
-    // Close the confirmation before the round-trip. Leaving the dialog up
-    // until the runtime answers reads as a dead button, and a reviewer who
-    // clicks again deletes twice.
+    // Close the confirmation and say what is happening before the round-trip.
+    // Leaving the dialog up until the runtime answers reads as a dead button,
+    // and a reviewer who clicks again deletes twice.
     setPendingDelete(null);
     let deleted: "deleted" | "stale";
     try {
@@ -7043,45 +7390,54 @@ export const ReviewController = () => {
       }),
     );
     if (selectedCommentId === commentId) setSelectedCommentId(null);
+    // Naming what went is the whole confirmation a reviewer gets that the
+    // thing they meant to delete is the thing that was deleted - a thread and
+    // the one comment in it are the same card until it is gone.
+    setStatus(
+      kind === "canceled"
+        ? "Canceled comment deleted."
+        : kind === "thread"
+          ? "Thread deleted."
+          : kind === "abandoned"
+            ? "Comment deleted."
+            : "Queued comment deleted.",
+    );
   };
-  const revertAgentChanges = async () => {
-    if (pendingRevert === null) return;
-    const refusal = reviewWriteRefusal({
-      path: "revert-changes",
-      availability: writeAvailability,
-    });
-    if (refusal !== undefined) {
-      setPendingRevert(null);
-      reportRefusedWrite({ path: "revert-changes", refusal });
-      return;
-    }
-    if (identity === null) return;
-    const revert = pendingRevert;
-    // Same reason as deletion: close the confirmation immediately, then let
-    // the refreshed plan or the failure notice report how it went.
-    setPendingRevert(null);
-    try {
-      await serializeRuntimeWrite(() =>
-        requestJson({
-          path: "/api/revert-agent-changes",
-          identity,
-          method: "POST",
-          body: revert,
-        }),
+  /**
+   * Deletes one thread and settles the changes it proposed in the one order
+   * that keeps the two honest: everything still undecided is rejected first,
+   * and the thread goes only once those rejections are recorded.
+   *
+   * The order is not a preference. A rejection is a write to the plan derived
+   * from the thread's own baseline, so deleting first would leave the plan
+   * holding content the reviewer just said they did not want, with the thread
+   * that explains it gone. Accepted changes are never named here, which is
+   * exactly why they stay.
+   */
+  const deleteThread = async (commentId: string) => {
+    const { diff, undecidedPlaceIds } = threadDelete;
+    if (diff === null) return;
+    // The confirmation is answered, so it comes down before the two writes it
+    // authorized rather than sitting there looking like a dead button.
+    setPendingDelete(null);
+    if (undecidedPlaceIds.length > 0) {
+      setStatus("Rejecting the changes this thread left undecided…");
+      // The stepper is narrating this change set, and both its content and its
+      // thread are about to go.
+      closeTour();
+      const result = await setPlacesDecided(
+        diff,
+        undecidedPlaceIds,
+        "rejected",
+        {
+          onlyUndecided: true,
+        },
       );
-    } catch (error) {
-      reportFailedWrite({ path: "revert-changes", error });
-      return;
+      if (result === "refused") return;
     }
-    // The reverted change set no longer exists, so a tour narrating it
-    // would walk stale content.
-    closeTour();
-    // No full reload: pulling the fresh agent snapshot lets the in-place
-    // plan refresh swap the article while React state survives, so the
-    // thread the reviewer confirmed this from stays open and can drive
-    // the next revert.
-    await refreshAgentSnapshot();
+    await deleteSentComment(commentId, "thread");
   };
+
   const jumpTo = (comment: ReviewComment) => {
     setAssociatedTarget(comment.target);
     const element = targetElement(comment.target);
@@ -7094,11 +7450,24 @@ export const ReviewController = () => {
     }
     scrollToLiveElement(element, "center");
   };
-  const updateDraft = (id: string, body: string) => {
+  const updateDraft = (
+    id: string,
+    body: string,
+    // Set when the drawer wrote this: the comment is the first message of a
+    // conversation about one change, and the drawer that shows that
+    // conversation has to be able to recognise it later.
+    aboutBlockId?: string,
+  ) => {
     const current = latestReviewStateRef.current.state;
     applyLocalReviewState({
       drafts: current.drafts.map((comment) =>
-        comment.id === id ? { ...comment, body } : comment,
+        comment.id === id
+          ? {
+              ...comment,
+              body,
+              ...(aboutBlockId === undefined ? {} : { aboutBlockId }),
+            }
+          : comment,
       ),
       resolvedCommentIds: current.resolvedCommentIds,
     });
@@ -7330,6 +7699,315 @@ export const ReviewController = () => {
     nowMs: agentProjectionNowMs,
     cancelPendingRequestIds,
   });
+  // The one owner of the change drawer's conversation.
+  //
+  // It lives here rather than on the card that opened the drawer because the
+  // exchange outlives every such card. A staged comment becomes a sent thread
+  // the moment the reviewer sends from the drawer, and the staged card - which
+  // was supplying the messages - unmounts while the agent is still answering,
+  // leaving the drawer waiting on a turn nobody was left to deliver. The
+  // controller always holds the exchange, so it always has the next turn.
+  const threadChat = useCallback(
+    (commentId: string, about: string | undefined): ChangeChatValue => {
+      const projection = threadProjections.get(commentId);
+      const sentComment = sent.find(
+        (candidate: ReviewComment) => candidate.id === commentId,
+      );
+      const draft = drafts.find(
+        (candidate: ReviewComment) => candidate.id === commentId,
+      );
+      const comment = sentComment ?? draft;
+      const isResolved = resolvedCommentIds.has(commentId);
+      const block = reviewWriteBlock(writeAvailability);
+      // A comment nobody has sent has said nothing yet, so its drawer opens
+      // empty and what the reviewer types becomes the comment and sends it.
+      if (sentComment === undefined) {
+        return {
+          ...(draft?.body === undefined ? {} : { threadLabel: draft.body }),
+          messages: [],
+          isSending,
+          ...(block === undefined
+            ? commentSubmitAvailability.state === "available"
+              ? {}
+              : { unavailable: commentSubmitAvailability.label }
+            : { unavailable: block.label }),
+          onSend: (message) => {
+            if (draft === undefined) return;
+            // The comment is this conversation's first message, so it carries
+            // the change the drawer is about - the association every later
+            // reply carries, and the one the drawer filters on.
+            updateDraft(draft.id, message, about);
+            submitStagedComment(draft.id);
+          },
+          onOpenThread: () => {
+            if (draft !== undefined) jumpTo(draft);
+          },
+        };
+      }
+      const conversation = {
+        comment: {
+          body: comment?.body ?? "",
+          ...(comment?.aboutBlockId === undefined
+            ? {}
+            : { aboutBlockId: comment.aboutBlockId }),
+        },
+        rounds: (projection?.exchanges ?? []).map((exchange) => ({
+          requestId: exchange.request.requestId,
+          ...(exchange.request.kind === "reply" &&
+          typeof exchange.request.body === "string"
+            ? { said: exchange.request.body }
+            : {}),
+          ...(exchange.outcome === undefined
+            ? {}
+            : {
+                answered: exchange.outcome.message,
+                ...(exchange.outcome.state === "warning" &&
+                exchange.outcome.summary !== undefined
+                  ? { warning: exchange.outcome.summary }
+                  : {}),
+              }),
+          // The association follows the question: an answer is about
+          // whatever was asked, and the runtime stamped it there. A feedback
+          // round asks with the comment, so it inherits the comment's.
+          ...((exchange.request.aboutBlockId ?? comment?.aboutBlockId) ===
+          undefined
+            ? {}
+            : {
+                aboutBlockId: (exchange.request.aboutBlockId ??
+                  comment?.aboutBlockId) as string,
+              }),
+          // Queued until the agent actually starts: the projection's own
+          // per-round status is what says which, and it is the same fact the
+          // thread card groups by.
+          ...(exchange.response === undefined && !exchange.canceled
+            ? {
+                awaiting:
+                  exchange.status.stage === "working" ||
+                  exchange.status.stage === "stalled"
+                    ? ("working" as const)
+                    : ("queued" as const),
+              }
+            : {}),
+        })),
+      };
+      const elsewhereTurn = firstOtherChangeChatTurn({
+        ...conversation,
+        ...(about === undefined ? {} : { about }),
+      });
+      return {
+        ...(comment?.body === undefined ? {} : { threadLabel: comment.body }),
+        messages: changeChatTurns({
+          ...conversation,
+          ...(about === undefined ? {} : { about }),
+        }),
+        elsewhereCount: otherChangeChatTurns({
+          ...conversation,
+          ...(about === undefined ? {} : { about }),
+        }),
+        isSending: replyPendingCommentIds.has(commentId),
+        ...(block === undefined
+          ? isResolved
+            ? { unavailable: RESOLVED_THREAD_NEW_WORK_ERROR }
+            : {}
+          : { unavailable: block.label }),
+        onSend: (message) => void sendThreadReply(commentId, message, about),
+        // The same words the thread card sends, so a warning answered from
+        // either place reads the same in the agent's history.
+        onProceed: () =>
+          void sendThreadReply(commentId, "Do it anyway.", about),
+        onOpenThread: () => jumpTo(sentComment),
+        // Where the rest of the conversation is, rather than where this
+        // change is. The reviewer has just been told that messages exist which
+        // this drawer is not showing, so the answer owed is those messages -
+        // and where they can be read depends on which panels are open, so the
+        // rule is stated once here rather than left to whichever surface
+        // happens to be mounted:
+        //
+        //   feedback rail open  -> take them to the thread in the rail
+        //   feedback rail shut  -> open the thread beside the plan instead
+        //
+        // Either way the whole thread window is marked, because a mark on one
+        // message inside it answers a question they did not ask.
+        ...(elsewhereTurn === undefined
+          ? {}
+          : {
+              onOpenElsewhere: () => {
+                const surface: ThreadSurface = isOpen ? "rail" : "inline";
+                // The inline thread is drawn beside the block it is about, so
+                // bringing that block into view is what puts the thread on
+                // screen at all.
+                if (surface === "inline") jumpTo(sentComment);
+                setThreadOpenState((state) =>
+                  setThreadOpen({
+                    state,
+                    commentId,
+                    kind: "sent",
+                    surface,
+                    isRailOpen: isOpen,
+                    open: true,
+                  }),
+                );
+                if (resolvedCommentIds.has(commentId)) {
+                  setRevealResolvedThreads(true);
+                }
+                flashThread({ commentId, surface });
+              },
+            }),
+      };
+    },
+    [
+      commentSubmitAvailability,
+      drafts,
+      isOpen,
+      isSending,
+      replyPendingCommentIds,
+      resolvedCommentIds,
+      sent,
+      sendThreadReply,
+      submitStagedComment,
+      threadProjections,
+      updateDraft,
+      writeAvailability,
+    ],
+  );
+  const openChat =
+    activeChatThreadId === null
+      ? undefined
+      : threadChat(activeChatThreadId, activeChangeBlockId ?? undefined);
+  // Keyed on the turns rather than on the object holding them: the value is
+  // rebuilt every render, and pushing every render would re-render the bar
+  // every render.
+  const openChatKey =
+    openChat === undefined
+      ? ""
+      : [
+          String(openChat.isSending),
+          String(isOpen),
+          openChat.unavailable ?? "",
+          String(openChat.elsewhereCount),
+          ...openChat.messages.map(
+            (message) => `${message.id}:${message.awaiting ?? ""}`,
+          ),
+        ].join("|");
+  useEffect(() => {
+    if (activeChatThreadId === null || openChat === undefined) return;
+    syncTourChat({ threadId: activeChatThreadId, chat: openChat });
+  }, [activeChangeBlockId, activeChatThreadId, openChatKey, syncTourChat]);
+
+  // The open tour always shows the latest comparison of what it is standing
+  // on.
+  //
+  // A change set advances whenever a reply commits or an agent publishes, and
+  // the reviewer standing on it is owed the plan as it now reads rather than
+  // the round they happened to open. This lives here, in the one component
+  // that is always mounted, because the card that opened the tour is unmounted
+  // the moment the feedback rail is closed - and the reviewer's right to see
+  // the truth cannot depend on which panels they left open. A tour standing
+  // elsewhere is not touched: it gets the latest set when it arrives there,
+  // because arriving is itself an open.
+  const openTourSet = useMemo(() => {
+    if (activeChangeSetId === null) return undefined;
+    const separator = activeChangeSetId.lastIndexOf(":");
+    if (separator === -1) return undefined;
+    const threadId = activeChangeSetId.slice(0, separator);
+    const kind = activeChangeSetId.slice(separator + 1) as ChangeSetTourKind;
+    if (kind !== "changes" && kind !== "premise") return undefined;
+    return { changeSetId: activeChangeSetId, threadId, kind };
+  }, [activeChangeSetId]);
+  const openTourComment = useMemo(
+    () =>
+      openTourSet === undefined
+        ? undefined
+        : [...sent, ...drafts].find(
+            (comment) => comment.id === openTourSet.threadId,
+          ),
+    [drafts, openTourSet, sent],
+  );
+  const openTourBounds = useMemo(() => {
+    if (openTourSet === undefined || openTourComment === undefined) {
+      return undefined;
+    }
+    if (openTourSet.kind === "premise") {
+      if (
+        openTourComment.premiseSnapshot === undefined ||
+        currentSnapshot === "" ||
+        openTourComment.premiseSnapshot === currentSnapshot
+      ) {
+        return undefined;
+      }
+      return {
+        from: openTourComment.premiseSnapshot,
+        to: currentSnapshot,
+        // The premise comparison is against the plan as it now reads, so it is
+        // never behind itself.
+        isSuperseded: true,
+        changeTargets: commentTargetBlockIds(openTourComment),
+      };
+    }
+    const projection = threadProjections.get(openTourSet.threadId);
+    if (projection === undefined) return undefined;
+    const change = threadChangeFor({
+      changeSets,
+      commentId: openTourSet.threadId,
+      exchanges: projection.exchanges,
+      currentSnapshot,
+    });
+    if (change === undefined) return undefined;
+    return {
+      from: change.from,
+      to: change.to,
+      isSuperseded: currentSnapshot !== "" && currentSnapshot !== change.to,
+      changeTargets: change.changeTargets,
+    };
+  }, [
+    changeSets,
+    currentSnapshot,
+    openTourComment,
+    openTourSet,
+    threadProjections,
+  ]);
+  useEffect(() => {
+    if (identity === null || openTourSet === undefined) return;
+    if (openTourBounds === undefined) return;
+    const { from, to, isSuperseded, changeTargets } = openTourBounds;
+    if (
+      activeDiff?.from === from &&
+      activeDiff.to === to &&
+      activeIsSuperseded === isSuperseded
+    )
+      return;
+    let current = true;
+    void cachedSnapshotDiff(identity, from, to)
+      .then((diff) => {
+        if (!current) return;
+        const attributed =
+          changeTargets === undefined || changeTargets.length === 0
+            ? undefined
+            : attributeDiffPlaces({ diff, changeTargets });
+        const placeIds =
+          attributed === undefined || attributed.placeIds.length === 0
+            ? diff.places.map((place) => place.placeId)
+            : attributed.placeIds;
+        syncTourDiff({
+          changeSetId: openTourSet.changeSetId,
+          diff,
+          placeIds,
+          isSuperseded,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [
+    activeDiff,
+    activeIsSuperseded,
+    identity,
+    openTourBounds,
+    openTourSet,
+    syncTourDiff,
+  ]);
+
   const agentStatus: AgentStatus = projectLatestAgentStatus({
     requests: agent.requests,
     responses: agent.responses,
@@ -7610,9 +8288,6 @@ export const ReviewController = () => {
           onShowAgent={openAgentSidebar}
           onCancelRequest={(requestId) => void cancelRequest(requestId)}
           onDelete={() => undefined}
-          onRevert={(requestId, commentId) =>
-            setPendingRevert({ requestId, commentId })
-          }
           currentSnapshot={currentSnapshot}
           reply={replyDrafts.get(comment.id) ?? ""}
           onReplyChange={(body) => changeReplyDraft(comment.id, body)}
@@ -8389,7 +9064,7 @@ export const ReviewController = () => {
                       setPendingDelete({ kind: "comment", comment })
                     }
                     onJump={() => jumpTo(comment)}
-                    onSubmit={() => void sendComments([comment])}
+                    onSubmit={() => submitStagedComment(comment.id)}
                     submitAvailability={commentSubmitAvailability}
                     onShowAgent={openAgentSidebar}
                     onAssociate={setAssociatedTarget}
@@ -8427,7 +9102,7 @@ export const ReviewController = () => {
                       setPendingDelete({ kind: "comment", comment })
                     }
                     onJump={() => jumpTo(comment)}
-                    onSubmit={() => void sendComments([comment])}
+                    onSubmit={() => submitStagedComment(comment.id)}
                     submitAvailability={commentSubmitAvailability}
                     onShowAgent={openAgentSidebar}
                     onAssociate={setAssociatedTarget}
@@ -8479,13 +9154,10 @@ export const ReviewController = () => {
                       }
                       onDelete={() =>
                         setPendingDelete({
-                          kind: sentDeleteKind({ thread, currentSnapshot }),
+                          kind: sentDeleteKind({ thread }),
                           comment,
                           abandonedClaim: thread.deleteUnlockedByAbandonedClaim,
                         })
-                      }
-                      onRevert={(requestId, commentId) =>
-                        setPendingRevert({ requestId, commentId })
                       }
                       currentSnapshot={currentSnapshot}
                       reply={replyDrafts.get(comment.id) ?? ""}
@@ -8847,7 +9519,7 @@ export const ReviewController = () => {
               onUpdate={(body) => updateDraft(comment.id, body)}
               onDelete={() => setPendingDelete({ kind: "comment", comment })}
               onJump={() => jumpTo(comment)}
-              onSubmit={() => void sendComments([comment])}
+              onSubmit={() => submitStagedComment(comment.id)}
               submitAvailability={commentSubmitAvailability}
               onShowAgent={openAgentSidebar}
               onAssociate={setAssociatedTarget}
@@ -8895,13 +9567,10 @@ export const ReviewController = () => {
                 onCancelRequest={(requestId) => void cancelRequest(requestId)}
                 onDelete={() =>
                   setPendingDelete({
-                    kind: sentDeleteKind({ thread, currentSnapshot }),
+                    kind: sentDeleteKind({ thread }),
                     comment,
                     abandonedClaim: thread.deleteUnlockedByAbandonedClaim,
                   })
-                }
-                onRevert={(requestId, commentId) =>
-                  setPendingRevert({ requestId, commentId })
                 }
                 currentSnapshot={currentSnapshot}
                 reply={replyDrafts.get(comment.id) ?? ""}
@@ -9018,14 +9687,6 @@ export const ReviewController = () => {
         onDismiss={() => setIsRecoveryConflictOpen(false)}
       />
       <AlertDialog
-        open={pendingRevert !== null}
-        title="Revert response?"
-        description="This restores the plan to its state just before this response. Earlier changes stay in place - this is not a reset to the original plan. The comment and thread will remain until you delete them."
-        actionLabel="Revert response"
-        onCancel={() => setPendingRevert(null)}
-        onAction={() => void revertAgentChanges()}
-      />
-      <AlertDialog
         open={pendingDelete !== null}
         title={
           pendingDelete?.kind === "all"
@@ -9036,7 +9697,9 @@ export const ReviewController = () => {
                 ? "Delete queued comment?"
                 : pendingDelete?.kind === "abandoned"
                   ? "Delete comment the agent left?"
-                  : "Delete comment?"
+                  : pendingDelete?.kind === "thread"
+                    ? "Delete this thread?"
+                    : "Delete comment?"
         }
         description={
           pendingDelete?.kind === "all"
@@ -9051,16 +9714,28 @@ export const ReviewController = () => {
                 ? "This removes the comment before the agent picks it up. This action cannot be undone."
                 : pendingDelete?.kind === "abandoned"
                   ? `${ABANDONED_CLAIM_REASON} This permanently removes the comment and its thread. ${ABANDONED_CLAIM_CONSEQUENCE}`
-                  : pendingDelete?.kind === "reverted"
+                  : pendingDelete?.kind === "thread"
                     ? withAbandonedClaimNote({
-                        description:
-                          "This permanently removes the comment and its thread. The reverted plan changes stay reverted.",
+                        description: THREAD_DELETE_LEAD_LINE,
                         abandonedClaim: pendingDelete.abandonedClaim,
                       })
                     : "This permanently removes your staged comment. This action cannot be undone."
         }
-        actionLabel={pendingDelete?.kind === "all" ? "Delete all" : "Delete"}
+        width={pendingDelete?.kind === "thread" ? "wide" : "default"}
+        {...(pendingDelete?.kind === "thread"
+          ? { footnote: THREAD_DELETE_ACCEPTED_NOTE }
+          : {})}
+        actionLabel={
+          pendingDelete?.kind === "all"
+            ? "Delete all"
+            : pendingDelete?.kind === "thread"
+              ? "Delete thread"
+              : "Delete"
+        }
         onCancel={() => setPendingDelete(null)}
+        actionDisabled={
+          pendingDelete?.kind === "thread" && threadDelete.diff === null
+        }
         onAction={() => {
           if (pendingDelete?.kind === "comment") {
             deleteDraft(pendingDelete.comment.id);
@@ -9069,13 +9744,24 @@ export const ReviewController = () => {
           } else if (
             pendingDelete?.kind === "queued" ||
             pendingDelete?.kind === "canceled" ||
-            pendingDelete?.kind === "abandoned" ||
-            pendingDelete?.kind === "reverted"
+            pendingDelete?.kind === "abandoned"
           ) {
-            void deleteSentComment(pendingDelete.comment.id);
+            void deleteSentComment(
+              pendingDelete.comment.id,
+              pendingDelete.kind,
+            );
+          } else if (pendingDelete?.kind === "thread") {
+            void deleteThread(pendingDelete.comment.id);
           }
         }}
-      />
+      >
+        {pendingDelete?.kind === "thread" ? (
+          <PlanLossEvidence
+            slides={threadDelete.slides}
+            loadError={threadDelete.loadError}
+          />
+        ) : null}
+      </AlertDialog>
     </>
   );
 };
