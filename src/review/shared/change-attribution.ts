@@ -67,3 +67,27 @@ export const attributeDiffPlaces = ({
       .sort((left, right) => right.placeCount - left.placeCount),
   };
 };
+
+export const attributeOwnedDiffPlaces = ({
+  diff,
+  changeSetId,
+}: {
+  readonly diff: SnapshotDiff;
+  readonly changeSetId: string;
+}): AttributedPlaces => {
+  const hasOwnership = diff.places.some(
+    (place) => (place.ownerChangeSetIds?.length ?? 0) > 0,
+  );
+  const changeTargets = diff.places.flatMap((place) =>
+    !hasOwnership || place.ownerChangeSetIds?.includes(changeSetId) === true
+      ? place.locationIndexes.flatMap((index) => {
+          const location = diff.locations.at(index);
+          if (location === undefined) return [];
+          return [location.oldBlockId, location.newBlockId].filter(
+            (blockId): blockId is string => blockId !== undefined,
+          );
+        })
+      : [],
+  );
+  return attributeDiffPlaces({ diff, changeTargets, changeSetId });
+};

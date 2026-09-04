@@ -26,6 +26,7 @@ import {
   buildSnapshotDiff,
   type ChangeOwnership,
   type DiffPlace,
+  type SnapshotDiff,
 } from "./snapshot-diff.js";
 
 /**
@@ -47,7 +48,7 @@ export class ChangeRestoreRejected extends Error {
   }
 }
 
-export const changedPlaces = ({
+export const changedSnapshotDiff = ({
   baselineSource,
   proposedSource,
   from,
@@ -62,7 +63,7 @@ export const changedPlaces = ({
   readonly fallbackTitle: string;
   /** The reader's ownership partition, so these are the reader's addresses. */
   readonly ownership?: ChangeOwnership;
-}): ReadonlyArray<DiffPlace> => {
+}): SnapshotDiff => {
   const before = blocksOf({ markdown: baselineSource, fallbackTitle });
   const after = blocksOf({ markdown: proposedSource, fallbackTitle });
   return buildSnapshotDiff({
@@ -71,8 +72,12 @@ export const changedPlaces = ({
     before,
     after,
     ...(ownership === undefined ? {} : { ownership }),
-  }).places;
+  });
 };
+
+export const changedPlaces = (
+  input: Parameters<typeof changedSnapshotDiff>[0],
+): ReadonlyArray<DiffPlace> => changedSnapshotDiff(input).places;
 
 export const changedPlaceIds = (
   input: Parameters<typeof changedPlaces>[0],

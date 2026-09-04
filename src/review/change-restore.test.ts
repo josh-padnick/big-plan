@@ -11,6 +11,7 @@ import {
   restoreRejectedPlaces,
 } from "./change-restore.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
+import { attributeOwnedDiffPlaces } from "./shared/change-attribution.js";
 
 const FROM = "a".repeat(16);
 const TO = "b".repeat(16);
@@ -142,6 +143,52 @@ describe("restoreRejectedPlaces", () => {
         placeIds: places.map((place) => place.placeId),
       }),
     ).toBe(BASELINE);
+  });
+
+  it("restores only the deleting thread's owned bytes", () => {
+    const before = renderDocument({
+      markdown: BASELINE,
+      fallbackTitle: TITLE,
+      identity: {},
+    }).blocks;
+    const after = renderDocument({
+      markdown: PROPOSED,
+      fallbackTitle: TITLE,
+      identity: {},
+    }).blocks;
+    const queue = after.find((entry) => entry.text.includes("Postgres"));
+    const worker = after.find((entry) => entry.text.includes("two seconds"));
+    if (queue === undefined || worker === undefined) {
+      throw new Error("Expected both changed blocks");
+    }
+    const ownership = new Map([
+      [queue.id, "aaaa"],
+      [worker.id, "bbbb"],
+    ]);
+    const diff = buildSnapshotDiff({
+      from: FROM,
+      to: TO,
+      before,
+      after,
+      ownership,
+    });
+    const threadA = attributeOwnedDiffPlaces({
+      diff,
+      changeSetId: "aaaa",
+    });
+    const restored = restoreRejectedPlaces({
+      baselineSource: BASELINE,
+      proposedSource: PROPOSED,
+      from: FROM,
+      to: TO,
+      placeIds: threadA.placeIds,
+      fallbackTitle: TITLE,
+      ownership,
+    });
+
+    expect(restored).toContain("Failed checkouts wait in a durable queue.");
+    expect(restored).toContain("Two workers drain the queue every two seconds.");
+    expect(threadA.placeIds).toHaveLength(1);
   });
 
   it("re-derives the same bytes whichever order the rejections arrived in", () => {

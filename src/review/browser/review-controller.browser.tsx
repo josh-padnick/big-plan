@@ -43,7 +43,10 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
-import { attributeDiffPlaces } from "../shared/change-attribution.js";
+import {
+  attributeDiffPlaces,
+  attributeOwnedDiffPlaces,
+} from "../shared/change-attribution.js";
 import {
   changeVerdictKey,
   type ChangeVerdictPlace,
@@ -1134,7 +1137,7 @@ const useThreadDeleteLoss = ({
 }): {
   readonly diff: SnapshotDiff | null;
   readonly loadError: boolean;
-  readonly undecidedPlaces: ReadonlyArray<ChangeVerdictPlace>;
+  readonly openPlaces: ReadonlyArray<ChangeVerdictPlace>;
   readonly slides: ReadonlyArray<PlanSlideLoss> | undefined;
 } => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
@@ -1167,32 +1170,33 @@ const useThreadDeleteLoss = ({
       setLoadError(false);
     }
   }, [active]);
-  const undecidedPlaces = useMemo(
-    () =>
-      diff === null || changeSetId === undefined
-        ? []
-        : diff.places.filter(
-            (place) =>
-              dispositionOf(
-                { changeSetId, from: diff.from, to: diff.to },
-                place,
-              ) === "undecided",
-          ),
-    [changeSetId, diff, dispositionOf],
-  );
+  const openPlaces = useMemo(() => {
+    if (diff === null || changeSetId === undefined) return [];
+    const attributed = new Set(
+      attributeOwnedDiffPlaces({ diff, changeSetId }).placeIds,
+    );
+    return diff.places.filter((place) => {
+      if (!attributed.has(place.placeId)) return false;
+      const disposition = dispositionOf(
+        { changeSetId, from: diff.from, to: diff.to },
+        place,
+      );
+      return disposition === "undecided" || disposition === "stale";
+    });
+  }, [changeSetId, diff, dispositionOf]);
   return {
     diff,
     loadError,
-    undecidedPlaces,
+    openPlaces,
     slides: useMemo(
       () =>
         diff === null
           ? undefined
           : projectPlanLoss({
               diff,
-              placeIds: undecidedPlaces.map((place) => place.placeId),
+              placeIds: openPlaces.map((place) => place.placeId),
             }),
-      [diff, undecidedPlaces],
+      [diff, openPlaces],
     ),
   };
 };
@@ -7470,12 +7474,12 @@ export const ReviewController = () => {
    * exactly why they stay.
    */
   const deleteThread = async (commentId: string) => {
-    const { diff, undecidedPlaces } = threadDelete;
+    const { diff, openPlaces } = threadDelete;
     if (diff === null) return;
     // The confirmation is answered, so it comes down before the two writes it
     // authorized rather than sitting there looking like a dead button.
     setPendingDelete(null);
-    if (undecidedPlaces.length > 0) {
+    if (openPlaces.length > 0) {
       setStatus("Rejecting the changes this thread left undecided…");
       // The stepper is narrating this change set, and both its content and its
       // thread are about to go.
@@ -7484,7 +7488,7 @@ export const ReviewController = () => {
         // The rejections are this thread's own, so they are recorded against
         // its change set rather than against whatever else shares the bounds.
         { changeSetId: commentId, from: diff.from, to: diff.to },
-        undecidedPlaces,
+        openPlaces,
         "rejected",
         {
           onlyUndecided: true,

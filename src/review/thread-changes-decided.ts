@@ -15,9 +15,10 @@
 // an unprovable claim is not a proof.
 
 import { basename, extname } from "node:path";
-import { changedPlaces } from "./change-restore.js";
+import { changedSnapshotDiff } from "./change-restore.js";
 import { readCommittedChangeSets } from "./change-set-commit.js";
 import { readChangeOwnership } from "./change-ownership.js";
+import { attributeOwnedDiffPlaces } from "./shared/change-attribution.js";
 import {
   changeDispositionOf,
   acceptedChangeKeys,
@@ -75,7 +76,7 @@ export const threadChangesAllDecided = async ({
     from,
     to,
   });
-  const places = changedPlaces({
+  const diff = changedSnapshotDiff({
     baselineSource,
     proposedSource,
     from,
@@ -83,18 +84,22 @@ export const threadChangesAllDecided = async ({
     fallbackTitle: basename(planPath, extname(planPath)),
     ...(ownership === undefined ? {} : { ownership }),
   });
+  const attributed = new Set(
+    attributeOwnedDiffPlaces({ diff, changeSetId }).placeIds,
+  );
+  const places = diff.places.filter((place) => attributed.has(place.placeId));
   if (places.length === 0) return false;
   const accepted = acceptedChangeKeys(verdicts);
   const rejected = rejectedChangeKeys(verdicts);
   const decidedDigests = decidedContentDigests(verdicts);
   return places.every((place) => {
     const disposition = changeDispositionOf({
-        address: { changeSetId, from, to, placeId: place.placeId },
-        accepted,
-        rejected,
-        decidedDigests,
-        contentDigest: place.contentDigest,
-      });
+      address: { changeSetId, from, to, placeId: place.placeId },
+      accepted,
+      rejected,
+      decidedDigests,
+      contentDigest: place.contentDigest,
+    });
     return disposition !== "undecided" && disposition !== "stale";
   });
 };
