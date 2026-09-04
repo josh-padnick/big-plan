@@ -1109,7 +1109,7 @@ export const ApproveControl = ({
       changeSetsFromCommitted({
         committed,
         requests: agent.requests,
-        placeIdsByRevision: new Map(),
+        placesByRevision: new Map(),
       }),
     [agent.requests, committed],
   );
@@ -1119,10 +1119,13 @@ export const ApproveControl = ({
       changeSetsFromCommitted({
         committed,
         requests: agent.requests,
-        placeIdsByRevision: new Map(
+        placesByRevision: new Map(
           [...diffs.entries()].map(([key, diff]) => [
             key,
-            diff.places.map((place) => place.placeId),
+            diff.places.map(({ placeId, contentDigest }) => ({
+              placeId,
+              contentDigest,
+            })),
           ]),
         ),
       }),
@@ -1134,6 +1137,7 @@ export const ApproveControl = ({
         changeSets,
         accepted: verdicts.accepted,
         rejected: verdicts.rejected,
+        decidedDigests: verdicts.decidedDigests,
         inputs: contract.inputs,
         requests: openRequestsFromExchange(agent.requests),
       }),
@@ -1143,6 +1147,7 @@ export const ApproveControl = ({
       contract.inputs,
       verdicts.accepted,
       verdicts.rejected,
+      verdicts.decidedDigests,
     ],
   );
   const status = approval?.status;
@@ -1193,7 +1198,7 @@ export const ApproveControl = ({
         // two comparisons, so the set is both what it shows and what it owns.
         tourId: changeSet.id,
         changeSetId: changeSet.id,
-        placeIds: changeSet.placeIds,
+        placeIds: changeSet.places.map((place) => place.placeId),
       });
     }
     closeDialog();

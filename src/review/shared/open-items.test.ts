@@ -25,7 +25,7 @@ const changeSet = (overrides: Partial<OpenChangeSet> = {}): OpenChangeSet => ({
   label: "Retry backoff",
   from: FROM,
   to: TO,
-  placeIds: ["p1", "p2"],
+  places: [{ placeId: "p1" }, { placeId: "p2" }],
   ...overrides,
 });
 
@@ -47,6 +47,7 @@ describe("deriveOpenItems", () => {
         `${SET_ID}:${FROM}:${TO}:p2`,
       ]),
       rejected: new Set(),
+      decidedDigests: new Map(),
       inputs: [input({ state: "answered", detail: "Answered: Gradual" })],
       requests: [],
     });
@@ -64,6 +65,7 @@ describe("deriveOpenItems", () => {
       changeSets: [changeSet()],
       accepted: new Set([`${SET_ID}:${FROM}:${TO}:p1`]),
       rejected: new Set([`${SET_ID}:${FROM}:${TO}:p2`]),
+      decidedDigests: new Map(),
       inputs: [input({ state: "answered", detail: "Answered: Gradual" })],
       requests: [],
     });
@@ -78,6 +80,7 @@ describe("deriveOpenItems", () => {
       changeSets: [changeSet()],
       accepted: new Set(),
       rejected: new Set(),
+      decidedDigests: new Map(),
       inputs: [input()],
       requests: [],
     });
@@ -92,9 +95,10 @@ describe("deriveOpenItems", () => {
 
   it("treats a change set with no loaded places as still open", () => {
     const items = deriveOpenItems({
-      changeSets: [changeSet({ placeIds: [] })],
+      changeSets: [changeSet({ places: [] })],
       accepted: new Set(),
       rejected: new Set(),
+      decidedDigests: new Map(),
       inputs: [],
       requests: [],
     });
@@ -107,6 +111,7 @@ describe("deriveOpenItems", () => {
       changeSets: [],
       accepted: new Set(),
       rejected: new Set(),
+      decidedDigests: new Map(),
       inputs: [
         input({ inputId: "critical", isCritical: true }),
         input({ inputId: "advisory" }),
@@ -138,6 +143,7 @@ describe("deriveOpenItems", () => {
       changeSets: [],
       accepted: new Set(),
       rejected: new Set(),
+      decidedDigests: new Map(),
       inputs: [input()],
       requests: [],
     });
@@ -149,10 +155,30 @@ describe("deriveOpenItems", () => {
       changeSets: [],
       accepted: new Set(),
       rejected: new Set(),
+      decidedDigests: new Map(),
       inputs: [],
       requests: [],
     });
     expect(approveIsPrimary(items)).toBe(true);
+  });
+
+  it("keeps a changed-again place open for approval", () => {
+    const key = `${SET_ID}:${FROM}:${TO}:p1`;
+    const items = deriveOpenItems({
+      changeSets: [
+        changeSet({
+          places: [{ placeId: "p1", contentDigest: "2".repeat(16) }],
+        }),
+      ],
+      accepted: new Set([key]),
+      rejected: new Set(),
+      decidedDigests: new Map([[key, "1".repeat(16)]]),
+      inputs: [],
+      requests: [],
+    });
+
+    expect(items.changeSets.open).toHaveLength(1);
+    expect(items.changeSets.standing[0]).toMatchObject({ open: 1, stale: 1 });
   });
 });
 
@@ -232,7 +258,7 @@ describe("changeSetsFromCommitted", () => {
             targetLabel: "Retry backoff",
           },
         ],
-        placeIdsByRevision: new Map([[`${S1}:${S3}`, ["p1"]]]),
+        placesByRevision: new Map([[`${S1}:${S3}`, [{ placeId: "p1" }]]]),
       }),
     ).toEqual([
       {
@@ -240,7 +266,7 @@ describe("changeSetsFromCommitted", () => {
         label: "Retry backoff",
         from: S1,
         to: S3,
-        placeIds: ["p1"],
+        places: [{ placeId: "p1" }],
       },
     ]);
   });
@@ -252,7 +278,7 @@ describe("changeSetsFromCommitted", () => {
           { changeSetId: "c0de", baseSnapshot: S1, resultSnapshot: S2 },
         ],
         requests: [],
-        placeIdsByRevision: new Map([[`${S1}:${S2}`, ["p1"]]]),
+        placesByRevision: new Map([[`${S1}:${S2}`, [{ placeId: "p1" }]]]),
       }),
     ).toEqual([
       {
@@ -260,7 +286,7 @@ describe("changeSetsFromCommitted", () => {
         label: `Version ${S2.slice(0, 7)}`,
         from: S1,
         to: S2,
-        placeIds: ["p1"],
+        places: [{ placeId: "p1" }],
       },
     ]);
   });
@@ -278,7 +304,7 @@ describe("changeSetsFromCommitted", () => {
             targetLabel: "2 · Rollout",
           },
         ],
-        placeIdsByRevision: new Map(),
+        placesByRevision: new Map(),
       }),
     ).toEqual([
       {
@@ -286,7 +312,7 @@ describe("changeSetsFromCommitted", () => {
         label: "2 · Rollout",
         from: S1,
         to: S2,
-        placeIds: [],
+        places: [],
         sectionId: "2",
       },
     ]);
@@ -300,7 +326,7 @@ describe("changeSetsFromCommitted", () => {
           { changeSetId: "d1ce", baseSnapshot: S2, resultSnapshot: S3 },
         ],
         requests: [],
-        placeIdsByRevision: new Map(),
+        placesByRevision: new Map(),
       }).map((changeSet) => changeSet.id),
     ).toEqual(["c0de", "d1ce"]);
   });
@@ -312,7 +338,7 @@ describe("changeSetsFromCommitted", () => {
           { changeSetId: "c0de", baseSnapshot: S1, resultSnapshot: S1 },
         ],
         requests: [],
-        placeIdsByRevision: new Map(),
+        placesByRevision: new Map(),
       }),
     ).toEqual([]);
   });

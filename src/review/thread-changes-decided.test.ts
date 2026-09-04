@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
-import { changedPlaceIds } from "./change-restore.js";
+import { changedPlaceIds, changedPlaces } from "./change-restore.js";
 import { recordCommittedRevision } from "./change-set-commit.js";
 import { threadChangesAllDecided } from "./thread-changes-decided.js";
 import type { ChangeVerdictState } from "./shared/change-verdict.js";
@@ -42,6 +42,7 @@ const decided = (
     readonly to: string;
     readonly placeId: string;
     readonly verdict: "accepted" | "rejected";
+    readonly contentDigest?: string;
   }>,
 ): ChangeVerdictState => ({
   revision: entries.length,
@@ -170,6 +171,35 @@ describe("threadChangesAllDecided", () => {
             to,
             placeId,
             verdict: "accepted" as const,
+          })),
+        ),
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("stays shut when every carried verdict changed again", async () => {
+    const currentPlaces = changedPlaces({
+      baselineSource: BASELINE,
+      proposedSource: PROPOSED,
+      from,
+      to,
+      fallbackTitle: "plan",
+    });
+    await expect(
+      threadChangesAllDecided({
+        store,
+        sessionId: SESSION,
+        planId: PLAN,
+        planPath,
+        changeSetId: THREAD,
+        verdicts: decided(
+          currentPlaces.map((place) => ({
+            changeSetId: THREAD,
+            from,
+            to,
+            placeId: place.placeId,
+            verdict: "accepted" as const,
+            contentDigest: "0".repeat(16),
           })),
         ),
       }),

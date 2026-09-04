@@ -22,7 +22,11 @@ import { renderDocument } from "../render/render-document.js";
 import type { BlockDescriptor } from "../render/render-document.js";
 import { planSourceSegments } from "../render/plan-source-segments.js";
 import type { PlanSourceSegment } from "../render/plan-source-segments.js";
-import { buildSnapshotDiff, type ChangeOwnership } from "./snapshot-diff.js";
+import {
+  buildSnapshotDiff,
+  type ChangeOwnership,
+  type DiffPlace,
+} from "./snapshot-diff.js";
 
 /**
  * How many authored edits one change set may hold before restoring a single
@@ -43,7 +47,7 @@ export class ChangeRestoreRejected extends Error {
   }
 }
 
-export const changedPlaceIds = ({
+export const changedPlaces = ({
   baselineSource,
   proposedSource,
   from,
@@ -58,7 +62,7 @@ export const changedPlaceIds = ({
   readonly fallbackTitle: string;
   /** The reader's ownership partition, so these are the reader's addresses. */
   readonly ownership?: ChangeOwnership;
-}): ReadonlyArray<string> => {
+}): ReadonlyArray<DiffPlace> => {
   const before = blocksOf({ markdown: baselineSource, fallbackTitle });
   const after = blocksOf({ markdown: proposedSource, fallbackTitle });
   return buildSnapshotDiff({
@@ -67,8 +71,12 @@ export const changedPlaceIds = ({
     before,
     after,
     ...(ownership === undefined ? {} : { ownership }),
-  }).places.map((place) => place.placeId);
+  }).places;
 };
+
+export const changedPlaceIds = (
+  input: Parameters<typeof changedPlaces>[0],
+): ReadonlyArray<string> => changedPlaces(input).map((place) => place.placeId);
 
 /** One splice: proposed bytes to remove, baseline bytes to put in their place. */
 type SourceEdit = {

@@ -427,7 +427,7 @@ describe("a rejection in the committed revision log", () => {
       changeSetsFromCommitted({
         committed: changeSetsFrom([proposal, reverted]),
         requests: [],
-        placeIdsByRevision: new Map(),
+        placesByRevision: new Map(),
       }),
     ).toEqual([]);
   });

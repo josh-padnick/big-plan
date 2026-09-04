@@ -5,7 +5,11 @@
 // already have owners; this module only joins them into the shape the dialog
 // and the toolbar both read, so those two surfaces cannot disagree.
 
-import { changeSetStanding, type ChangeSetStanding } from "./change-verdict.js";
+import {
+  changeSetStanding,
+  type ChangeSetStanding,
+  type ChangeVerdictPlace,
+} from "./change-verdict.js";
 import {
   reviewInputStanding,
   type ReviewInput,
@@ -19,7 +23,7 @@ export type OpenChangeSet = {
   readonly label: string;
   readonly from: string;
   readonly to: string;
-  readonly placeIds: ReadonlyArray<string>;
+  readonly places: ReadonlyArray<ChangeVerdictPlace>;
   readonly sectionId?: string;
 };
 
@@ -141,11 +145,14 @@ const changeSetLabels = (
 export const changeSetsFromCommitted = ({
   committed,
   requests,
-  placeIdsByRevision,
+  placesByRevision,
 }: {
   readonly committed: ReadonlyArray<CommittedChangeSetFold>;
   readonly requests: ReadonlyArray<ChangeSetLabelSource>;
-  readonly placeIdsByRevision: ReadonlyMap<string, ReadonlyArray<string>>;
+  readonly placesByRevision: ReadonlyMap<
+    string,
+    ReadonlyArray<ChangeVerdictPlace>
+  >;
 }): ReadonlyArray<OpenChangeSet> => {
   const labels = changeSetLabels(requests);
   return committed.flatMap((changeSet): ReadonlyArray<OpenChangeSet> => {
@@ -163,7 +170,7 @@ export const changeSetsFromCommitted = ({
         label,
         from,
         to,
-        placeIds: placeIdsByRevision.get(`${from}:${to}`) ?? [],
+        places: placesByRevision.get(`${from}:${to}`) ?? [],
         ...(sectionId === undefined ? {} : { sectionId }),
       },
     ];
@@ -220,12 +227,14 @@ export const deriveOpenItems = ({
   changeSets,
   accepted,
   rejected,
+  decidedDigests,
   inputs,
   requests,
 }: {
   readonly changeSets: ReadonlyArray<OpenChangeSet>;
   readonly accepted: ReadonlySet<string>;
   readonly rejected: ReadonlySet<string>;
+  readonly decidedDigests: ReadonlyMap<string, string>;
   readonly inputs: ReadonlyArray<ReviewInput>;
   readonly requests: ReadonlyArray<OpenRequest>;
 }): DerivedOpenItems => {
@@ -234,14 +243,10 @@ export const deriveOpenItems = ({
       changeSetId: changeSet.id,
       from: changeSet.from,
       to: changeSet.to,
-      // The approve dialog counts what is owed, not what the reviewer is
-      // looking at, and a stale place is owed exactly as an undecided one is.
-      // It therefore counts places without the content digests that would tell
-      // the two apart, and leaves that distinction to the surfaces showing the
-      // change.
-      places: changeSet.placeIds.map((placeId) => ({ placeId })),
+      places: changeSet.places,
       accepted,
       rejected,
+      decidedDigests,
     }),
   );
   const openChangeSets = changeSets.filter((changeSet, index) => {
@@ -249,10 +254,11 @@ export const deriveOpenItems = ({
     if (setStanding === undefined) return true;
     // A set whose places have not loaded yet is still open: treating it as
     // closed would promote Approve before the reviewer has seen the work.
-    if (changeSet.placeIds.length === 0) return true;
+    if (changeSet.places.length === 0) return true;
     // A rejected change is decided, not outstanding: the reviewer answered it
     // and the plan already carries that answer, so a set holding one still
-    // closes. Only a place nobody has decided keeps a set open.
+    // closes. A place nobody has decided, or whose content changed after its
+    // decision, keeps a set open.
     return !setStanding.isSettled;
   });
   const inputStanding = reviewInputStanding(inputs);
