@@ -259,11 +259,15 @@ test("should keep an accepted change accepted across a reload and a restart", as
           await expect(
             page.getByRole("button", { name: /Using read-only session/u }),
           ).toBeVisible();
-          await expect(
-            rail(page).getByRole("button", {
-              name: "Accepting is unavailable because this page cannot record review state",
-            }),
-          ).toBeDisabled();
+          await rail(page)
+            .getByRole("button", { name: "Continue review" })
+            .click();
+          const unavailableVerdicts = stepper(page).getByRole("button", {
+            name: "Accepting is unavailable because this page cannot record review state",
+          });
+          await expect(unavailableVerdicts).toHaveCount(2);
+          await expect(unavailableVerdicts.first()).toBeDisabled();
+          await expect(unavailableVerdicts.last()).toBeDisabled();
           expect(await recordedChanges(verdictsPath)).toHaveLength(1);
           return;
         }
