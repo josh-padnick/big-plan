@@ -472,7 +472,7 @@ A `DataTable` configuration-only change keeps the full row evidence visible
 beside the changed table or column settings.
 The change navigator tours several places without losing reading context.
 
-Choose **Accept change** to mark the current place accepted and advance to the next undecided place, or **Accept all** to accept the remaining set.
+Choose **Accept change** to mark the current place accepted and advance to the next open place, or **Accept all** to accept the remaining set.
 Acceptance is a review checklist rather than an edit: it does not change the plan or resolve the comment thread.
 An accepted place leaves the **What changed** presentation and returns to the plan's ordinary content. Use **View changes** to bring its comparison back temporarily, **Hide changes** to return to the plan, or **Unaccept** to reopen the place in its pre-accept state.
 A rejected place instead restores that change to the thread's baseline bytes. The proposal and its diff disappear from that place, while the change digest marks it with a red X, and **Undo** returns it to undecided.
@@ -494,7 +494,7 @@ If Big Plan cannot reach the runtime while reading recorded verdicts, it warns t
 If recording a verdict fails, Big Plan says it is not saved yet and keeps retrying; keep the review open until the change set reports the decision.
 If the runtime refuses the verdict outright, the mark comes back off and the review says so, so the page never claims work that nothing recorded.
 Choose **Keep chatting** to continue the conversation; a comment thread also offers **Resolve thread**.
-Resolving accepts every change in that thread that is still undecided in one recorded verdict update. Changes you already accepted or rejected keep those decisions, and unresolving the thread does not undo any acceptance; use **Unaccept** or **Undo** when you want to take a verdict back.
+Resolving accepts every change in that thread that is still undecided or marked **Changed again** in one recorded verdict update. Changes you already accepted or rejected keep those decisions, and unresolving the thread does not undo any acceptance; use **Unaccept** or **Undo** when you want to take a verdict back.
 The thread and change-set counts update as soon as the resolve is recorded.
 Resolving never cancels a message the thread is still waiting on: while the agent owes that thread an answer, the review runtime refuses the resolve and says so, so cancel the waiting message or wait for its answer first.
 A resolved thread will not accept a reply or new feedback until you unresolve it: a reply you have already typed is kept, and unresolving the thread clears the message so you can send it.

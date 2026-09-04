@@ -162,8 +162,8 @@ export const carriedVerdicts = ({
     for (const match of matches) {
       const collisionCount = decidedPlaces.filter((place) => {
         const candidateBlockIds = placeBlockIds({ diff: previous, place });
-        return [...placeBlockIds({ diff: next, place: match })].some((blockId) =>
-          candidateBlockIds.has(blockId),
+        return [...placeBlockIds({ diff: next, place: match })].some(
+          (blockId) => candidateBlockIds.has(blockId),
         );
       }).length;
       claimed.add(match.placeId);
@@ -356,9 +356,7 @@ export const carryForwardChangeVerdicts = async ({
           entry.changeSetId === span.changeSetId &&
           entry.from === span.from &&
           entry.to === span.staleTo;
-        const diffs = diffsBySpan.get(
-          `${span.changeSetId}:${span.staleTo}`,
-        );
+        const diffs = diffsBySpan.get(`${span.changeSetId}:${span.staleTo}`);
         if (diffs === undefined) continue;
         const carried = carriedVerdicts({
           ...diffs,

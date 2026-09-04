@@ -185,8 +185,8 @@ describe("carrying verdicts onto an advanced change set", () => {
     const split = buildSnapshotDiff({
       from: S0,
       to: S2,
-      before: baseline,
-      after: roundOne,
+      before: baseline.map(block),
+      after: roundOne.map(block),
       ownership: new Map([
         [ALPHA_BEFORE.id, SET],
         [BRAVO_BEFORE.id, OTHER],
@@ -195,8 +195,8 @@ describe("carrying verdicts onto an advanced change set", () => {
     const combined = buildSnapshotDiff({
       from: S0,
       to: S1,
-      before: baseline,
-      after: roundOne,
+      before: baseline.map(block),
+      after: roundOne.map(block),
     });
     expect(combined.places).toHaveLength(2);
     const first = combined.places[0];
@@ -230,7 +230,10 @@ describe("carrying verdicts onto an advanced change set", () => {
         places: split.places,
         accepted: new Set(carried.map(changeVerdictKey)),
         rejected: new Set(),
-        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+        decidedDigests: decidedContentDigests({
+          revision: 1,
+          decided: carried,
+        }),
       }),
     ).toMatchObject({ accepted: 0, stale: 2, open: 2 });
   });
@@ -270,7 +273,10 @@ describe("carrying verdicts onto an advanced change set", () => {
         places: merged.places,
         accepted: new Set(carried.map(changeVerdictKey)),
         rejected: new Set(),
-        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+        decidedDigests: decidedContentDigests({
+          revision: 1,
+          decided: carried,
+        }),
       }),
     ).toMatchObject({ accepted: 0, stale: 1, open: 1 });
   });
@@ -310,7 +316,10 @@ describe("carrying verdicts onto an advanced change set", () => {
         places: next.places,
         accepted: new Set(carried.map(changeVerdictKey)),
         rejected: new Set(),
-        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+        decidedDigests: decidedContentDigests({
+          revision: 1,
+          decided: carried,
+        }),
       }),
     ).toMatchObject({ accepted: 0, stale: 2, open: 2 });
   });
@@ -328,7 +337,10 @@ describe("carrying verdicts onto an advanced change set", () => {
         places: nextAlpha === undefined ? [] : [nextAlpha],
         accepted: new Set(carried.map(changeVerdictKey)),
         rejected: new Set(),
-        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+        decidedDigests: decidedContentDigests({
+          revision: 1,
+          decided: carried,
+        }),
       }),
     ).toMatchObject({ accepted: 1, stale: 0, open: 0 });
   });
@@ -380,7 +392,10 @@ The rollout needs attention.
         places: nextCallout.places,
         accepted: new Set(carried.map(changeVerdictKey)),
         rejected: new Set(),
-        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+        decidedDigests: decidedContentDigests({
+          revision: 1,
+          decided: carried,
+        }),
       }),
     ).toMatchObject({ accepted: 0, stale: 1, open: 1 });
   });

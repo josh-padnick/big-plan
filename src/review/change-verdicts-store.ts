@@ -335,24 +335,22 @@ export const applyChangeVerdictMutation = ({
   const revision = verdicts.revision + 1;
   const touched = new Set(
     mutation.places
-      .filter(
-        (place) => {
-          if (!mutation.onlyUndecided) return true;
-          const existing = verdicts.decided.find(
-            (entry) =>
-              entry.changeSetId === mutation.changeSetId &&
-              entry.from === mutation.from &&
-              entry.to === mutation.to &&
-              entry.placeId === place.placeId,
-          );
-          if (existing === undefined) return true;
-          return (
-            place.contentDigest !== undefined &&
-            existing.contentDigest !== undefined &&
-            place.contentDigest !== existing.contentDigest
-          );
-        },
-      )
+      .filter((place) => {
+        if (!mutation.onlyUndecided) return true;
+        const existing = verdicts.decided.find(
+          (entry) =>
+            entry.changeSetId === mutation.changeSetId &&
+            entry.from === mutation.from &&
+            entry.to === mutation.to &&
+            entry.placeId === place.placeId,
+        );
+        if (existing === undefined) return true;
+        return (
+          place.contentDigest !== undefined &&
+          existing.contentDigest !== undefined &&
+          place.contentDigest !== existing.contentDigest
+        );
+      })
       .map((place) =>
         changeVerdictKey({
           changeSetId: mutation.changeSetId,

@@ -572,9 +572,7 @@ export const DiffTourProvider = ({
       : places.filter(
           (place) =>
             tourScope !== null &&
-            ["undecided", "stale"].includes(
-              dispositionOf(tourScope, place),
-            ),
+            ["undecided", "stale"].includes(dispositionOf(tourScope, place)),
         );
 
   /** Takes back whatever verdict the current change holds. */

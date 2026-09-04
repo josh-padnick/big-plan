@@ -187,7 +187,9 @@ describe("restoreRejectedPlaces", () => {
     });
 
     expect(restored).toContain("Failed checkouts wait in a durable queue.");
-    expect(restored).toContain("Two workers drain the queue every two seconds.");
+    expect(restored).toContain(
+      "Two workers drain the queue every two seconds.",
+    );
     expect(threadA.placeIds).toHaveLength(1);
   });
 

@@ -252,9 +252,7 @@ const changeSetsAtApproval = async (
     diffsByRevision.set(`${from}:${to}`, diff);
   }
   return folded.map((changeSet) => {
-    const diff = diffsByRevision.get(
-      `${changeSet.from}:${changeSet.to}`,
-    );
+    const diff = diffsByRevision.get(`${changeSet.from}:${changeSet.to}`);
     if (diff === undefined) return { ...changeSet, places: [] };
     const changeTargets = exchange.responses.flatMap((response) =>
       "outcomes" in response
