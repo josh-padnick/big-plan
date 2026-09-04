@@ -7,10 +7,12 @@ import {
   type ReviewPollHealth,
 } from "./review-poll-health.js";
 import {
+  reviewSessionReach,
   reviewWriteAvailability,
   reviewWriteBlock,
   reviewWriteBlockedStatus,
   reviewWritePathOutcome,
+  reviewWritePathTitle,
   reviewWriteRefusal,
   type ReviewWritePath,
 } from "./review-write-availability.js";
@@ -20,6 +22,12 @@ const RUNTIME_DOWN = {
   state: "runtime-unavailable",
   consecutiveFailures: 2,
   firstFailureAtMs: 0,
+} as const satisfies ReviewPollHealth;
+// A runtime that answers every poll and refuses each one: a 401 on a re-minted
+// token, or a session id the page was not served with (BIG-282).
+const RUNTIME_REFUSING = {
+  state: "poll-failed",
+  consecutiveFailures: 2,
 } as const satisfies ReviewPollHealth;
 
 const availability = (
@@ -67,6 +75,25 @@ describe("review write availability", () => {
     expect(availability({ health: RUNTIME_DOWN })).toMatchObject({
       block: "runtime-offline",
     });
+  });
+
+  it("should block a runtime that refuses this tab, with a reload as the way back", () => {
+    // Before this block the gate let the write through and the runtime refused
+    // it with a 401 nobody rendered; the captain's Disconnect click (BIG-282).
+    expect(availability({ health: RUNTIME_REFUSING })).toMatchObject({
+      block: "session-refused",
+      cause: "This tab's review session is out of date.",
+      remedy: "Reload this page to reconnect. All comments are safe.",
+      label: "Review session out of date",
+    });
+  });
+
+  it("should still allow writes while a single refused poll is outstanding", () => {
+    expect(
+      availability({
+        health: { state: "poll-failed", consecutiveFailures: 1 },
+      }),
+    ).toEqual({ state: "available" });
   });
 
   it("should block a reachable runtime that has stopped accepting changes", () => {
@@ -121,6 +148,7 @@ describe("review write availability", () => {
       { hasReviewSession: false },
       { authoritative: false },
       { health: RUNTIME_DOWN },
+      { health: RUNTIME_REFUSING },
       { writesStalledMs: 30_001 },
     ]) {
       const block = reviewWriteBlock(availability(input));
@@ -134,6 +162,38 @@ describe("review write availability", () => {
 
   it("should report no block while writes are available", () => {
     expect(reviewWriteBlock(availability())).toBeUndefined();
+  });
+
+  it("should read the session from the gate so no surface calls it reachable while writes are refused", () => {
+    // The card, the toolbar, the banner, and the thread strips all read this
+    // one answer; each reading poll health its own way is how the card said
+    // "Agent connected" under a lost-contact banner (BIG-264, BIG-282).
+    expect(reviewSessionReach(availability())).toBe("reachable");
+    expect(reviewSessionReach(availability({ health: RUNTIME_DOWN }))).toBe(
+      "offline",
+    );
+    expect(reviewSessionReach(availability({ health: RUNTIME_REFUSING }))).toBe(
+      "out-of-date",
+    );
+  });
+
+  it("should leave the session reachable for blocks that have a surface of their own", () => {
+    for (const input of [
+      { hasReviewSession: false },
+      { authoritative: false },
+      { writesStalledMs: 30_001 },
+    ]) {
+      expect(reviewSessionReach(availability(input))).toBe("reachable");
+    }
+  });
+
+  it("should title every path's notice with what did not happen", () => {
+    for (const path of PATHS) {
+      expect(reviewWritePathTitle(path)).toMatch(/not|unchanged/u);
+    }
+    expect(reviewWritePathTitle("disconnect-agent")).toBe(
+      "Agent not disconnected",
+    );
   });
 
   it("should keep the seam's paths and outcomes in step", () => {
