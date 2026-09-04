@@ -3927,6 +3927,7 @@ test("should restore and submit staged comments through the local review runtime
   page,
   reviewRuntimeUrl,
 }, testInfo) => {
+  test.setTimeout(60_000);
   await page.goto(reviewRuntimeUrl);
 
   const agentStatus = agentStatusTrigger(page);
@@ -5212,6 +5213,16 @@ test("should restore and submit staged comments through the local review runtime
     "Connected to the local review runtime.",
   );
   await page.unroute("**/api/agent");
+  await page.reload();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await expect(
+    rail.getByText("The agent is connected and waiting for feedback.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await continuedThread
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
   const revertResponse = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/revert-agent-changes") &&
