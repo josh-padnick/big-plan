@@ -104,6 +104,11 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      # Mirror the verify job's order faithfully: `bun run test` shells out to
+      # the built CLI (`dist/cli/main.js`) for the agent-loop tests, so the
+      # package must be built first, and the Mermaid renderer tests need the
+      # pinned Chromium installed before the tests run.
+      - run: bun run build
       - name: Cache the pinned Playwright browser
         uses: actions/cache@v4
         with:
