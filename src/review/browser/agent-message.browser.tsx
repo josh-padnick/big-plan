@@ -726,15 +726,9 @@ export const AgentChangeDigest = ({
         <Icon icon={CHEVRON_RIGHT_ICON} />
         {available.length} change{available.length === 1 ? "" : "s"} across{" "}
         {sections.size} slide{sections.size === 1 ? "" : "s"}
-        {decidedCount === 0 ? null : allDecided ? (
-          <Badge
-            className="ml-auto"
-            size="status"
-            tone={allAccepted ? "statusAccent" : "statusNeutral"}
-          >
-            {allAccepted ? "Accepted" : "Decided"}
-          </Badge>
-        ) : (
+        {/* The in-progress count stays with the toggle; the settled verdict
+            moves to a badge at the far bottom right of the card (BIG-289). */}
+        {decidedCount === 0 || allDecided ? null : (
           <span
             // A generic span cannot carry an accessible name, so a reader would
             // be told only "1/2". The image role is what lets the label stand
@@ -873,6 +867,18 @@ export const AgentChangeDigest = ({
                   ? "Review change"
                   : `Review changes (${available.length})`))}
         </button>
+        {/* The settled verdict sits at the far bottom right of the card, the
+            last thing the eye lands on once the reviewer is done (BIG-289). */}
+        {allDecided ? (
+          <Badge
+            className="ml-auto"
+            size="status"
+            tone={allAccepted ? "statusAccent" : "statusNeutral"}
+            data-review-change-set-verdict={allAccepted ? "accepted" : "decided"}
+          >
+            {allAccepted ? "Accepted" : "Decided"}
+          </Badge>
+        ) : null}
       </div>
     </div>
   );
