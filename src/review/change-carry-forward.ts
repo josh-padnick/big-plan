@@ -285,10 +285,15 @@ export const carryForwardChangeVerdicts = async ({
   let current: StoredChangeVerdicts;
   let revisions: ReadonlyArray<CommittedPlanRevision>;
   try {
-    [current, revisions] = await Promise.all([
-      readChangeVerdicts({ store, validate: validateChangeVerdicts }),
-      readCommittedRevisions({ store }),
-    ]);
+    current = await readChangeVerdicts({
+      store,
+      validate: validateChangeVerdicts,
+    });
+    // A review that has decided nothing has nothing to carry, and this runs on
+    // every read of the record, so the common case costs one read rather than
+    // a read of the whole revision log beside it.
+    if (current.decided.length === 0) return;
+    revisions = await readCommittedRevisions({ store });
   } catch {
     return;
   }

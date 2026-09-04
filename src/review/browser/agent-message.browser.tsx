@@ -522,7 +522,10 @@ export const ChangedAgainBadge = () => (
     <Badge size="status" tone="statusNeutral" data-review-place-verdict="stale">
       Changed again
     </Badge>
-    <Tooltip label={CHANGED_AGAIN_HELP} placement="below" asChild>
+    {/* Above, not below: the badge's other home is the review bar, which sits
+        at the foot of the window, where a tooltip opening downwards would be
+        off-screen. */}
+    <Tooltip label={CHANGED_AGAIN_HELP} placement="above" asChild>
       <span
         className="inline-flex shrink-0 items-center text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3.5"
         tabIndex={0}

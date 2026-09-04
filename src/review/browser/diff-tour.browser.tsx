@@ -779,6 +779,12 @@ export const DiffTourProvider = ({
                       the change is decided the conversation moves on: the
                       reviewer talks in the thread, which the top-row link
                       already reaches, so the decided row drops Chat. */}
+                  {/* One vocabulary for a re-changed place: the same badge the
+                      change digest shows, carrying the same explanation, so the
+                      bar is not a second wording of the same fact. It leads the
+                      row because it says what this change IS, and the controls
+                      after it are what the reviewer can do about it. */}
+                  {isActiveStale ? <ChangedAgainBadge /> : null}
                   {isActiveDecided || tour.chat === undefined ? null : (
                     <Button
                       variant="outline"
@@ -849,11 +855,6 @@ export const DiffTourProvider = ({
                     </>
                   ) : (
                     <>
-                      {/* One vocabulary for a re-changed place: the same badge
-                          the change digest shows, carrying the same
-                          explanation, so the stepper is not a second wording
-                          of the same fact. */}
-                      {isActiveStale ? <ChangedAgainBadge /> : null}
                       <Button
                         variant="outline"
                         size="micro"
