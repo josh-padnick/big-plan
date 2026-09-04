@@ -248,8 +248,13 @@ const BADGE_TONES = {
   // both a warning state and a warning-family label without the two competing.
   statusWarningOutline:
     "border border-[var(--callout-warning-c)] bg-transparent text-[var(--callout-warning-c)]",
+  // The danger reading of statusAccent: the same 14% family wash under the
+  // family ink, so a rejected state reads as a soft-red pill exactly the way an
+  // accepted one reads as soft green. The wash and the ink share one colour
+  // (`--callout-danger-c`, which `text-danger` also resolves to), mirroring
+  // statusAccent and statusWarning.
   statusDanger:
-    "bg-[color-mix(in_srgb,var(--danger-c)_14%,var(--bg))] text-danger",
+    "bg-[color-mix(in_srgb,var(--callout-danger-c)_14%,var(--bg))] text-danger",
 } as const;
 
 const BADGE_SHAPES = {

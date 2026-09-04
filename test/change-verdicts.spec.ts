@@ -885,10 +885,15 @@ test("should reveal an undone change, keep an accepted one as plan content, and 
       }),
     ).toBeVisible();
     await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
-    // And the reviewer can still reach the conversation from the row itself,
-    // without first abandoning the review.
+    // The decision is made, so the conversation moves to the thread: the
+    // decided row drops Chat (BIG-292 item 2), and the reviewer reaches the
+    // conversation through the top-row thread link instead, still without
+    // abandoning the review.
     await expect(
       stepper(page).getByRole("button", { name: "Chat about this change" }),
+    ).toHaveCount(0);
+    await expect(
+      stepper(page).getByRole("button", { name: /^Open comment thread:/u }),
     ).toBeVisible();
     await page.goto("about:blank");
   } finally {
@@ -1047,6 +1052,157 @@ test("should chat about a change without losing sight of it", async ({
     await page.goto("about:blank");
   } finally {
     await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// BIG-292. The bar is two different rows, and which controls sit in it - and in
+// what order - is the product decision under test here. Undecided, the row
+// offers the conversation and the two verdicts, then the set-wide overflow:
+// badge (none yet), Chat, Reject, Accept, overflow. Once a change is decided
+// the row changes shape - Chat is gone, because the decision is made and the
+// conversation belongs in the thread the top-row link reaches - and the
+// verdict badge sits after the actions with the set-wide overflow closing the
+// row at its far right.
+test("should lay out the review bar differently before and after a change is decided", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-bar-layout-"));
+  const planPath = join(directory, "plan.mdx");
+  // The reveal fixture attaches the conversation to the change set, so the
+  // undecided row actually offers Chat - which is the button the decided row
+  // has to be shown dropping.
+  await writeFile(planPath, REVEAL_AFTER);
+  const { startReviewRuntime: startCompiledRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startReviewRuntime(
+    { planPath, diffPreviewSource: REVEAL_BEFORE },
+    startCompiledRuntime,
+  );
+  try {
+    await openThread(page, runtime.url);
+    await rail(page)
+      .getByRole("button", { name: /Review changes \(2\)/u })
+      .click();
+    await expect(stepper(page)).toContainText("1 of 2");
+
+    // The ordered controls in the action row, left to right: a button reads as
+    // its accessible name, and the verdict badge reads as "badge:<verdict>", so
+    // its position in the row is as observable as any button's.
+    const barControls = (): Promise<ReadonlyArray<string>> =>
+      stepper(page)
+        .locator("[data-review-bar-actions]")
+        .evaluate((row) =>
+          Array.from(
+            row.querySelectorAll("button, [data-review-verdict-badge]"),
+          ).map((element) =>
+            element.matches("[data-review-verdict-badge]")
+              ? `badge:${(element.textContent ?? "").trim()}`
+              : (element.getAttribute("aria-label") ??
+                (element.textContent ?? "").trim()),
+          ),
+        );
+
+    await test.step("undecided: Chat, Reject, Accept, then the overflow", async () => {
+      // The conversation is pushed onto the open tour a moment after it opens,
+      // so wait for the row to hold Chat before reading its order - otherwise
+      // the read races the sync and sees the row without it.
+      await expect(
+        stepper(page).getByRole("button", { name: "Chat about this change" }),
+      ).toBeVisible();
+      // No verdict is recorded yet, so there is no badge to lead the row - the
+      // BIG-153 "Changed again" badge that will sit there is out of scope here.
+      // What this locks is the three buttons and their order: the conversation,
+      // then the two verdicts, then the set-wide overflow at the end.
+      await expect
+        .poll(barControls)
+        .toEqual([
+          "Exit review",
+          "Chat about this change",
+          "Reject this change",
+          "Accept this change",
+          "More change set actions",
+        ]);
+    });
+
+    await test.step("decided by rejecting: evidence, Undo, badge, then overflow", async () => {
+      await stepper(page)
+        .getByRole("button", { name: "Reject this change" })
+        .click();
+      // Rejecting the first change advances to the still-open second one, so the
+      // decided row is read by stepping back to the change that now holds a
+      // verdict rather than by reading the change the tour moved on to.
+      await stepper(page)
+        .getByRole("button", { name: "Previous change" })
+        .click();
+      await expect(
+        stepper(page).getByRole("button", {
+          name: "Undo rejection for this change",
+        }),
+      ).toBeVisible();
+      await expect
+        .poll(barControls)
+        .toEqual([
+          "Exit review",
+          "View changes",
+          "Undo rejection for this change",
+          "badge:Rejected",
+          "More change set actions",
+        ]);
+      await expect(page.locator("article")).toContainText(
+        "The worker retries a failed job once before it gives up.",
+      );
+      await expect(
+        page.locator("article").getByText("three times before it gives up"),
+      ).toHaveCount(0);
+
+      await stepper(page).getByRole("button", { name: "View changes" }).click();
+      const lens = page.locator("[data-review-diff-lens]");
+      await expect(lens).toContainText("What changed");
+      await expect(lens.locator("del")).toContainText("once");
+      await expect(lens.locator("ins").first()).toContainText("three");
+      await expect(stepper(page)).toContainText("Rejected");
+
+      await stepper(page).getByRole("button", { name: "Hide changes" }).click();
+      await expect(lens).toHaveCount(0);
+      await expect(page.locator("article")).toContainText(
+        "The worker retries a failed job once before it gives up.",
+      );
+      await expect(
+        page.locator("article").getByText("three times before it gives up"),
+      ).toHaveCount(0);
+    });
+
+    await test.step("decided by accepting: View changes, Undo, badge, then overflow", async () => {
+      await stepper(page)
+        .getByRole("button", { name: "Undo rejection for this change" })
+        .click();
+      await stepper(page)
+        .getByRole("button", { name: "Accept this change" })
+        .click();
+      await stepper(page)
+        .getByRole("button", { name: "Previous change" })
+        .click();
+      await expect(
+        stepper(page).getByRole("button", {
+          name: "Undo acceptance for this change",
+        }),
+      ).toBeVisible();
+      // An accepted change keeps its evidence one control away, so the row is
+      // View changes, Undo, the Accepted badge, and the set-wide overflow at
+      // the far right - and Chat is nowhere in it.
+      await expect
+        .poll(barControls)
+        .toEqual([
+          "Exit review",
+          "View changes",
+          "Undo acceptance for this change",
+          "badge:Accepted",
+          "More change set actions",
+        ]);
+    });
+  } finally {
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
