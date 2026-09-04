@@ -17,10 +17,11 @@ permissions:
   contents: read
 
 concurrency:
-  # Serialize releases under one lane per ref; a tag push is its own ref, so
-  # separate versions never clobber each other, and PR dry-runs get their own
-  # group instead of queueing behind a release.
-  group: npm-release-${{ github.ref }}
+  # Every real release (a tag push) shares one fixed lane, because they all
+  # publish the shared `next` dist-tag and must never run at once. Pull-request
+  # dry-runs get their own per-ref lane so one never queues behind a release or
+  # another PR.
+  group: npm-release-${{ github.event_name == 'push' && 'publish-next' || github.ref }}
   cancel-in-progress: false
 
 jobs:
