@@ -101,6 +101,20 @@ const CONGESTED_STATUSES = new Set([408, 429]);
  * runtime failing at a request it accepted, which is worth trying again, and
  * so is a 4xx that reports congestion rather than a verdict on the request.
  */
+/**
+ * True when the runtime refused because this page's session no longer exists -
+ * it was restarted, taken over, or otherwise replaced.
+ *
+ * It is worth telling apart from every other terminal refusal because it is
+ * not a verdict on the request at all, and because the page already has one
+ * place that owns this story: the session poll, which says the session is
+ * unreachable and how to get a live one back. A feature that notices the lapse
+ * first must not tell it a second time in its own vocabulary, because its
+ * words are about its own record - and the reader cannot act on those.
+ */
+export const isReviewSessionLapsed = (error: unknown): boolean =>
+  reviewRuntimeRefusalStatus(error) === 401;
+
 export const isTerminalReviewRuntimeRefusal = (error: unknown): boolean => {
   const status = reviewRuntimeRefusalStatus(error);
   return (

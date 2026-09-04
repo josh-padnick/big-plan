@@ -6,6 +6,36 @@
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
 
 /**
+ * Which comparison of a thread a tour is showing.
+ *
+ * A thread can hold two at once: the revision its agent proposed, and - once
+ * the plan moves past the comment - the difference between the plan the
+ * reviewer wrote against and the plan as it now reads. They answer different
+ * questions and advance on different clocks.
+ */
+export type ChangeSetTourKind = "changes" | "premise";
+
+/**
+ * The identity of one comparison, for the tour that shows it.
+ *
+ * Identifying a comparison by its thread alone is not enough, because a thread
+ * can hold both of them. Two cards passing the same id with different bounds
+ * each read the other's tour as their own set gone stale, so each re-opens the
+ * tour with its own diff and the two take the screen from each other on every
+ * poll - which is what the reviewer sees as the bar flickering between
+ * "Reviewing change set" and "Since your comment" while they touch nothing.
+ * Minting the id here, from both facts, is what makes that collision
+ * unrepresentable rather than merely unlikely.
+ */
+export const changeSetTourId = ({
+  threadId,
+  kind,
+}: {
+  readonly threadId: string;
+  readonly kind: ChangeSetTourKind;
+}): string => `${threadId}:${kind}`;
+
+/**
  * Whether the open tour is behind the change set given here.
  *
  * A thread owns one change set whose result advances as replies commit, so the

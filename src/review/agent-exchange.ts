@@ -48,6 +48,23 @@ const APPROVAL_HARD_STOP_LIMIT = 500;
 const ID = /^[a-f0-9]{16}$/;
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 
+/**
+ * The optional change association, as both a request and an outcome carry it.
+ *
+ * Absent is the ordinary case - most messages are about the thread - so it is
+ * omitted rather than stored empty, and a value that is not a block id is
+ * refused rather than dropped: a silently discarded association would show the
+ * reviewer a conversation missing the message they just sent.
+ */
+const aboutBlock = (value: unknown): { readonly aboutBlockId?: string } => {
+  if (value === undefined) return {};
+  const blockId = text({ value, field: "aboutBlockId", limit: 300 });
+  if (!BLOCK_ID.test(blockId)) {
+    throw new AgentExchangeRejected('"aboutBlockId" must name a block');
+  }
+  return { aboutBlockId: blockId };
+};
+
 export type AgentOutcomeState =
   "answered" | "changed" | "warning" | "needs-input" | "declined";
 
@@ -93,6 +110,18 @@ export type AgentReplyRequest = AgentRequestBase & {
   readonly kind: "reply";
   readonly commentId: string;
   readonly body: string;
+  /**
+   * The block the reviewer was looking at when they wrote this, where they
+   * wrote it about one change rather than about the thread.
+   *
+   * A thread carries several changes, and a reviewer standing in front of one
+   * of them is not talking about the others. The block is what identifies it:
+   * a place id belongs to one revision and stops naming anything the moment
+   * the agent publishes the next one, while the block the change is about
+   * survives being reworded again - which is exactly the conversation this
+   * association has to hold together.
+   */
+  readonly aboutBlockId?: string;
 };
 
 export type AgentChatRequest = AgentRequestBase & {
@@ -136,6 +165,15 @@ export type AgentOutcome = {
   readonly commentId: string;
   readonly state: AgentOutcomeState;
   readonly message: string;
+  /**
+   * The change this answers, copied from the request it answers.
+   *
+   * The runtime stamps it rather than the agent supplying it: an answer is
+   * about whatever was asked, so making the agent repeat the association would
+   * be asking it to restate a fact the runtime already holds - and would put
+   * the association at risk of disagreeing with the question.
+   */
+  readonly aboutBlockId?: string;
   /** One scannable line, present exactly when the state is "warning". */
   readonly summary?: string;
   readonly changeTargets?: ReadonlyArray<string>;
@@ -666,6 +704,7 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
       kind: "reply",
       commentId: exchangeCommentId(value.commentId, "commentId"),
       body: text({ value: value.body, field: "body" }),
+      ...aboutBlock(value.aboutBlockId),
       attachments: base.attachments,
     };
   }
@@ -860,6 +899,19 @@ const outcome = ({
     state,
     message: text({ value: value.message, field: "message" }),
     ...(state === "warning" ? { summary: warningSummary(value.summary) } : {}),
+    // Taken from the question rather than from the answer: the agent is not
+    // asked to restate which change it was replying about. A feedback package
+    // carries the association on the comment being answered, because there the
+    // comment is the message.
+    ...aboutBlock(
+      request.kind === "reply"
+        ? request.aboutBlockId
+        : request.kind === "feedback"
+          ? request.comments.find(
+              (candidate) => candidate.id === checkedCommentId,
+            )?.aboutBlockId
+          : undefined,
+    ),
   };
   if (state !== "changed") {
     return result;
@@ -1120,6 +1172,7 @@ export const validateAgentResponse = (value: unknown): AgentResponse => {
       ...(entry.state === "warning"
         ? { summary: warningSummary(entry.summary) }
         : {}),
+      ...aboutBlock(entry.aboutBlockId),
     };
     if (entry.state !== "changed") {
       return result;
@@ -1451,6 +1504,7 @@ export const messageAgentRequest = ({
   createdAt,
   body,
   commentId,
+  aboutBlockId,
   attachments,
 }: {
   readonly kind: "reply" | "chat";
@@ -1461,6 +1515,8 @@ export const messageAgentRequest = ({
   readonly createdAt: string;
   readonly body: string;
   readonly commentId?: string;
+  /** The change the reviewer was reviewing when they wrote this, if one. */
+  readonly aboutBlockId?: string;
   readonly attachments?: ReadonlyArray<ReviewImageAttachment>;
 }): AgentReplyRequest | AgentChatRequest => {
   const checkedAttachments = validateAttachments(attachments ?? []);
@@ -1483,6 +1539,7 @@ export const messageAgentRequest = ({
     kind,
     commentId: exchangeCommentId(commentId, "commentId"),
     body: checkedBody,
+    ...aboutBlock(aboutBlockId),
   };
 };
 

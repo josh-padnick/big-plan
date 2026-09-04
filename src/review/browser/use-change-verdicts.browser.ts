@@ -40,7 +40,10 @@ import {
   runtimeIdentity,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
-import { isTerminalReviewRuntimeRefusal } from "./review-runtime-request.js";
+import {
+  isReviewSessionLapsed,
+  isTerminalReviewRuntimeRefusal,
+} from "./review-runtime-request.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import { toast } from "./ui.browser.js";
 
@@ -59,6 +62,17 @@ const VERDICT_REFUSED_TOAST_ID = "big-plan-change-verdict-refused";
 // which is a different fact from a gesture that did not reach the record.
 const VERDICT_READ_TOAST_ID = "big-plan-change-verdict-read";
 
+/**
+ * Announced the moment a verdict write that moved the plan source has landed.
+ *
+ * The article is fetched off the agent snapshot, which is polled, so without
+ * this a rejection sits on screen with the old plan under it until the next
+ * poll happens along - while an acceptance, which moves no bytes, looks
+ * instant. The event closes that gap by telling the reader's page to go and
+ * look now rather than on the tick.
+ */
+export const PLAN_SOURCE_MOVED_EVENT = "bigplan:plan-source-moved";
+
 /** One gesture on its way to the record. */
 export type PendingVerdict = {
   readonly op: "accept" | "reject" | "undo";
@@ -66,6 +80,14 @@ export type PendingVerdict = {
   readonly to: string;
   readonly placeIds: ReadonlyArray<string>;
   readonly onlyUndecided?: boolean;
+  /**
+   * Whether recording this gesture rewrites the plan source. Rejecting does,
+   * and so does undoing a rejection; accepting and undoing an acceptance move
+   * no bytes at all. The caller knows which, because it knows what the places
+   * held before the gesture, and everything that has to wait for the article
+   * to catch up keys off this rather than off the operation's name.
+   */
+  readonly movesPlanSource?: boolean;
 };
 
 /** What every surface that shows a change set's standing reads. */
@@ -78,7 +100,14 @@ export type ChangeVerdictsValue = {
   readonly autoAccepted: ReadonlySet<string>;
   /** False while the runtime has told this page it may not record anything. */
   readonly canRecord: boolean;
-  readonly recordChangeVerdicts: (input: PendingVerdict) => void;
+  /**
+   * Queues one gesture and answers when the record has stopped carrying it -
+   * because it landed, or because the runtime refused it. A caller with a
+   * second step that depends on the first, such as deleting a thread once its
+   * open changes are rejected, needs that answer; every other caller ignores
+   * it exactly as before.
+   */
+  readonly recordChangeVerdicts: (input: PendingVerdict) => Promise<void>;
   /** Re-read after a server-side operation records verdicts outside this hook. */
   readonly refresh: () => void;
 };
@@ -112,6 +141,9 @@ const overlay = ({
   return keys;
 };
 
+/** One queued gesture, with the answer its caller is waiting on. */
+type QueuedVerdict = PendingVerdict & { readonly settle: () => void };
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     window.setTimeout(resolve, ms);
@@ -137,7 +169,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
     () => identity !== null && !isReadOnlyReview(),
   );
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const queue = useRef<Array<PendingVerdict>>([]);
+  const queue = useRef<Array<QueuedVerdict>>([]);
   const isFlushing = useRef(false);
   const appliedRevision = useRef(-1);
   const isMounted = useRef(true);
@@ -194,6 +226,10 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           );
           queue.current = queue.current.filter((entry) => entry !== head);
           setPending([...queue.current]);
+          head.settle();
+          if (head.movesPlanSource === true) {
+            document.dispatchEvent(new CustomEvent(PLAN_SOURCE_MOVED_EVENT));
+          }
           failures = 0;
           toast.dismiss(VERDICT_RETRY_TOAST_ID);
         } catch (error: unknown) {
@@ -203,12 +239,18 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           if (isTerminalReviewRuntimeRefusal(error)) {
             queue.current = queue.current.filter((entry) => entry !== head);
             setPending([...queue.current]);
+            head.settle();
             failures = 0;
             toast.dismiss(VERDICT_RETRY_TOAST_ID);
+            // A write does earn a notice even when the session lapsed, because
+            // unlike a read it had something to lose. What it must not do is
+            // hand back the runtime's words about a token: the reader needs
+            // the same recovery the session banner names.
             toast.error("Change verdict not saved", {
               id: VERDICT_REFUSED_TOAST_ID,
-              description:
-                error instanceof Error
+              description: isReviewSessionLapsed(error)
+                ? "This review session ended, so nothing was recorded. Restart `big-plan review` and open the new URL it prints."
+                : error instanceof Error
                   ? error.message
                   : "The review runtime refused this change.",
               duration: Infinity,
@@ -233,19 +275,35 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
   }, [applyResponse, identity]);
 
   const recordChangeVerdicts = useCallback(
-    (input: PendingVerdict): void => {
-      if (input.placeIds.length === 0) return;
+    (input: PendingVerdict): Promise<void> => {
+      if (input.placeIds.length === 0) return Promise.resolve();
       // One gesture can name more places than a single mutation may carry, so
       // it is queued as successive batches. The overlay reads the whole queue,
       // so every place stays shown while its own batch is still in flight, and
       // a refusal takes back only the batch the runtime refused.
+      const batches = changeVerdictBatches(input.placeIds);
+      // The gesture is one answer to its caller even though it is several
+      // writes, so it settles when the last of its batches has left the queue.
+      let outstanding = batches.length;
+      let resolve: () => void = () => undefined;
+      const settled = new Promise<void>((done) => {
+        resolve = done;
+      });
+      const settle = (): void => {
+        outstanding -= 1;
+        if (outstanding === 0) resolve();
+      };
       queue.current = [
         ...queue.current,
-        ...changeVerdictBatches(input.placeIds).map((placeIds) => ({
+        ...batches.map((placeIds) => ({
           op: input.op,
           from: input.from,
           to: input.to,
           placeIds,
+          settle,
+          ...(input.movesPlanSource === undefined
+            ? {}
+            : { movesPlanSource: input.movesPlanSource }),
           ...(input.onlyUndecided === undefined
             ? {}
             : { onlyUndecided: input.onlyUndecided }),
@@ -253,6 +311,7 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
       ];
       setPending([...queue.current]);
       void flush();
+      return settled;
     },
     [flush],
   );
@@ -275,6 +334,16 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
           await sleep(REVIEW_POLL_INTERVAL_MS);
           continue;
         } catch (error: unknown) {
+          // The session this page belongs to is gone, so there is nothing to
+          // read and nothing this notice could add: the session poll already
+          // says the review is unreachable and how to get a live one back.
+          // Saying it again here, in this record's own words and about a
+          // token, would leave the reader a second permanent notice they
+          // cannot act on (BIG-19 round 3).
+          if (isReviewSessionLapsed(error)) {
+            toast.dismiss(VERDICT_READ_TOAST_ID);
+            return;
+          }
           // A refused read is the runtime's answer, not a lost one, so it is
           // reported once instead of collected forever.
           if (isTerminalReviewRuntimeRefusal(error)) {

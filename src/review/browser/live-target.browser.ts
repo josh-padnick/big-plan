@@ -13,6 +13,7 @@
 // browser-only suffix.
 
 import type { DiffLocation } from "../shared/review-wire.js";
+import { isPlanDomBehind as behindBySnapshots } from "./plan-dom-lag.js";
 import {
   candidateMatchesLiveKind,
   candidateMatchesLiveText,
@@ -38,7 +39,50 @@ export type LiveTargetMissReason =
   // that must paint something asks for this distinction.
   | "unlaid-out"
   // A qualified baseline address has no retained baseline rendering.
-  | "snapshot-not-retained";
+  | "snapshot-not-retained"
+  // The name is not in the article yet because the article itself is stale: a
+  // write has already moved the plan source and the swap has not arrived. This
+  // is the one miss that is not evidence of anything about the plan, so a
+  // caller that renders absence must wait rather than draw its fallback.
+  | "plan-dom-behind";
+
+// The two snapshot ids the page holds, kept here because this is where every
+// caller asks whether a name is missing, and because a resolver that had to be
+// handed them would let a call site opt out of the distinction by not passing
+// them.
+let snapshots = { displayedSnapshot: "", currentSnapshot: "" };
+
+/**
+ * Publishes what the article on screen was rendered from and what the runtime
+ * says the plan is at now.
+ *
+ * The controller owns both and learns them on every poll and every swap, so
+ * every writer of the plan is covered by one fact - which is what the
+ * predecessor, a timer only the reviewer's own verdicts ever started, was not.
+ */
+export const publishPlanSnapshots = (next: {
+  readonly displayedSnapshot: string;
+  readonly currentSnapshot: string;
+}): void => {
+  snapshots = next;
+};
+
+/** Whether the article on screen is a revision behind the plan. */
+export const isPlanDomBehind = (): boolean => behindBySnapshots(snapshots);
+
+/**
+ * Reports a miss under the lag that explains it.
+ *
+ * Only a miss about a name is rewritten. A document with no article at all is
+ * a different failure and stays what it is, because waiting would never fix
+ * it.
+ */
+const missing = (
+  reason: LiveTargetMissReason,
+): { readonly missing: LiveTargetMissReason } =>
+  reason !== "no-article" && isPlanDomBehind()
+    ? { missing: "plan-dom-behind" }
+    : { missing: reason };
 
 export type LiveTargetResult =
   { readonly found: HTMLElement } | { readonly missing: LiveTargetMissReason };
@@ -62,11 +106,12 @@ export type LiveCandidate<TElement> = {
  */
 export const pickLiveCandidate = <TElement>(
   candidates: ReadonlyArray<LiveCandidate<TElement>>,
-): { readonly found: TElement } | { readonly missing: "unknown-id" } => {
+):
+  { readonly found: TElement } | { readonly missing: LiveTargetMissReason } => {
   const preferred =
     candidates.find((candidate) => candidate.isVisible) ?? candidates.at(0);
   return preferred === undefined
-    ? { missing: "unknown-id" }
+    ? missing("unknown-id")
     : { found: preferred.element };
 };
 
@@ -124,7 +169,7 @@ export const baselineMissReason = ({
   readonly snapshotPresent: boolean;
 }): LiveTargetResult =>
   "missing" in result && result.missing === "unknown-id" && !snapshotPresent
-    ? { missing: "snapshot-not-retained" }
+    ? missing("snapshot-not-retained")
     : result;
 
 /**
@@ -184,7 +229,7 @@ export const liveVisibleBlock = (blockId: string): LiveTargetResult => {
   if ("missing" in resolved) return resolved;
   return resolved.found.getClientRects().length > 0
     ? resolved
-    : { missing: "unlaid-out" };
+    : missing("unlaid-out");
 };
 
 /**
@@ -305,7 +350,7 @@ export const liveLensAnchor = (
     }
     return { found: resolved.found, placement: candidate.placement };
   }
-  return { missing: lensMissReason(misses) };
+  return missing(lensMissReason(misses));
 };
 
 /** The component-owned diff root currently carrying a compiled block. */

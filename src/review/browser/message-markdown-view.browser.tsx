@@ -13,6 +13,7 @@
 import type { ReactNode } from "react";
 import type { MessageNode } from "../shared/message-markdown.js";
 import type { ReviewerMarkdownNode } from "../shared/reviewer-markdown.js";
+import { reviewImageSource } from "../shared/review-image.js";
 import { ReviewImage } from "./review-image.browser.js";
 
 /**
@@ -121,7 +122,14 @@ export const renderReviewerNode = (
   if (node.type === "code")
     return <CodeBlock key={key} value={node.value} language={node.language} />;
   if (node.type === "image") {
-    return <ReviewImage key={key} id={node.id} alt={node.alt} />;
+    return (
+      <ReviewImage
+        key={key}
+        source={reviewImageSource(node.id)}
+        alt={node.alt}
+        className="mt-2"
+      />
+    );
   }
   const children = node.children.map((child, index) =>
     renderReviewerNode(child, `${key}-${index}`),

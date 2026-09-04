@@ -571,7 +571,15 @@ export const Tooltip = ({
           </span>,
           document.body,
         );
-  if (asChild) {
+  // A disabled control dispatches no pointer events, so a tooltip cloned onto
+  // one never opens - and a disabled control is exactly when the reader most
+  // needs to be told what it does and why they cannot press it. The wrapper
+  // form receives those events instead, so an unpressable child is given one
+  // whether the caller asked for asChild or not.
+  const isChildDisabled =
+    asChild &&
+    (children.props as { readonly disabled?: boolean }).disabled === true;
+  if (asChild && !isChildDisabled) {
     return (
       <>
         {cloneElement(children, {

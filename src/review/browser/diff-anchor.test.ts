@@ -79,7 +79,10 @@ describe("lensAnchorCandidates", () => {
     ).toEqual([{ blockId: "approach/paragraph-1", placement: "after" }]);
   });
 
-  it("should refuse neighbour anchors once the plan moved past the change", () => {
+  it("should stand a superseded removal beside its neighbours", () => {
+    // A neighbour describes a revision the reader has moved past, so it is a
+    // worse answer than the block itself - and a far better one than nowhere,
+    // which used to mean a card at the foot of the document.
     expect(
       lensAnchorCandidates(
         location({
@@ -90,10 +93,21 @@ describe("lensAnchorCandidates", () => {
         }),
         { isSuperseded: true },
       ),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        blockId: "approach/paragraph-3",
+        placement: "before",
+        expectedKind: "paragraph",
+      },
+      {
+        blockId: "approach/paragraph-1",
+        placement: "after",
+        expectedKind: "paragraph",
+      },
+    ]);
   });
 
-  it("should carry the result snapshot's text when the id crosses a snapshot boundary", () => {
+  it("should hold superseded prose to its kind rather than its recorded text", () => {
     expect(
       lensAnchorCandidates(location({ newBlockId: "approach/paragraph-1" }), {
         isSuperseded: true,
@@ -102,12 +116,12 @@ describe("lensAnchorCandidates", () => {
       {
         blockId: "approach/paragraph-1",
         placement: "replace",
-        expectedText: "now",
+        expectedKind: "paragraph",
       },
     ]);
   });
 
-  it("should carry a picture identity when the id crosses a snapshot boundary", () => {
+  it("should not hold superseded prose to a recorded picture either", () => {
     expect(
       lensAnchorCandidates(
         location({
@@ -125,12 +139,7 @@ describe("lensAnchorCandidates", () => {
       {
         blockId: "approach/image-1",
         placement: "replace",
-        expectedText: "now",
-        expectedPicture: {
-          aspect: "image",
-          source: "./assets/after.png",
-          alt: "Map",
-        },
+        expectedKind: "image",
       },
     ]);
   });
