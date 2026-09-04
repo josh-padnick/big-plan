@@ -539,6 +539,7 @@ export const ChangedAgainBadge = () => (
 export const AgentChangeDigest = ({
   diff,
   changeSetId,
+  tourId: tourIdInput,
   agentIdentity,
   placeIds,
   spilloverCount,
@@ -558,6 +559,11 @@ export const AgentChangeDigest = ({
   readonly diff: SnapshotDiff | null;
   /** The change set this digest belongs to, and whose verdicts it records. */
   readonly changeSetId: string;
+  /**
+   * Which of the thread's comparisons this card is, so the bar follows the
+   * right one. Defaults to the change set, for a card that has only one.
+   */
+  readonly tourId?: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly placeIds?: ReadonlyArray<string>;
   readonly spilloverCount?: number;
@@ -600,7 +606,7 @@ export const AgentChangeDigest = ({
 }) => {
   const {
     activeDiff,
-    activeChangeSetId,
+    activeTourId,
     activeIsSuperseded,
     activePlaceId,
     isRecordingVerdict,
@@ -610,6 +616,7 @@ export const AgentChangeDigest = ({
     closeTour,
     openTour,
   } = useDiffTour();
+  const tourId = tourIdInput ?? changeSetId;
   const available =
     diff === null
       ? []
@@ -620,13 +627,12 @@ export const AgentChangeDigest = ({
   const isExpanded = expandedChoice ?? available.length <= 3;
   const placeIdsInTour = available.map((place) => place.placeId);
   const isBehind = tourIsBehind({
-    activeChangeSetId,
+    activeTourId,
     activeDiff,
-    changeSetId,
+    tourId,
     diff,
   });
-  const ownsOpenTour =
-    changeSetId !== undefined && activeChangeSetId === changeSetId;
+  const ownsOpenTour = activeTourId === tourId;
   useEffect(() => {
     // The plan can advance while the reviewer is still reading a change, and
     // when it does the comparison on screen is about a revision the plan has
@@ -638,6 +644,7 @@ export const AgentChangeDigest = ({
     if ((activeIsSuperseded ?? false) === (isSuperseded ?? false)) return;
     openTour({
       diff,
+      tourId,
       changeSetId,
       ...(activePlaceId === null ? {} : { startPlaceId: activePlaceId }),
       placeIds: placeIdsInTour,
@@ -684,6 +691,7 @@ export const AgentChangeDigest = ({
     });
     openTour({
       diff,
+      tourId,
       changeSetId,
       ...(startPlaceId === undefined ? {} : { startPlaceId }),
       placeIds: placeIdsInTour,
@@ -841,6 +849,7 @@ export const AgentChangeDigest = ({
                   onClick={() =>
                     openTour({
                       diff,
+                      tourId,
                       changeSetId,
                       placeIds: placeIdsInTour,
                       startPlaceId: entry.placeId,
@@ -946,6 +955,7 @@ export const AgentChangeDigest = ({
             }
             openTour({
               diff,
+              tourId,
               changeSetId,
               placeIds: placeIdsInTour,
               isSuperseded,

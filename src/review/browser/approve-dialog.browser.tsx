@@ -1189,6 +1189,9 @@ export const ApproveControl = ({
     if (diff !== undefined) {
       openTour({
         diff,
+        // The approve dialog jumps to a set rather than to one of a thread's
+        // two comparisons, so the set is both what it shows and what it owns.
+        tourId: changeSet.id,
         changeSetId: changeSet.id,
         placeIds: changeSet.placeIds,
       });

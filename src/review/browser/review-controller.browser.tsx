@@ -3657,6 +3657,7 @@ const ChangeAttachment = ({
   from,
   to,
   changeSetId,
+  tourId,
   agentIdentity,
   changeTargets,
   planMovedSince = false,
@@ -3671,8 +3672,10 @@ const ChangeAttachment = ({
   readonly identity: RuntimeIdentity;
   readonly from: string;
   readonly to: string;
-  /** The thread that owns this change set, so the stepper follows its rounds. */
+  /** The change set that owns this work, and whose verdicts it records. */
   readonly changeSetId: string;
+  /** Which of the thread's comparisons this is, so the bar follows one. */
+  readonly tourId?: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly changeTargets?: ReadonlyArray<string>;
   /**
@@ -3721,6 +3724,7 @@ const ChangeAttachment = ({
     <AgentChangeDigest
       diff={diff}
       changeSetId={changeSetId}
+      {...(tourId === undefined ? {} : { tourId })}
       agentIdentity={agentIdentity}
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
@@ -3845,12 +3849,14 @@ const StalePremiseNotice = ({
           spilloverCount={
             changedOutsideTarget ? undefined : attributed.spilloverCount
           }
-          // Addressed by the thread it belongs to *and* by which of the
-          // thread's two comparisons this is, so when this one advances the
-          // tour re-opens on the recomputed diff, and the thread's proposed
-          // revision - a different set that happens to share the thread - is
-          // never mistaken for it.
-          changeSetId={changeSetTourId({
+          changeSetId={comment.id}
+          // The bar is told which of the thread's two comparisons this is, so
+          // when this one advances it re-opens on the recomputed diff and the
+          // thread's proposed revision is never mistaken for it. The verdict
+          // owner above stays the thread itself, because a decision belongs to
+          // the work rather than to the view that produced it - and nothing
+          // here records one anyway.
+          tourId={changeSetTourId({
             threadId: comment.id,
             kind: "premise",
           })}
@@ -4621,7 +4627,8 @@ const SentThread = ({
                 identity={identity}
                 from={threadChange.from}
                 to={threadChange.to}
-                changeSetId={changeSetTourId({
+                changeSetId={comment.id}
+                tourId={changeSetTourId({
                   threadId: comment.id,
                   kind: "changes",
                 })}
@@ -4828,7 +4835,7 @@ export const ReviewController = () => {
     setPlacesDecided,
     standingOf,
     syncTourChat,
-    activeChangeSetId,
+    activeTourId,
     activeDiff,
     activeIsSuperseded,
     syncTourDiff,
@@ -7979,14 +7986,14 @@ export const ReviewController = () => {
   // elsewhere is not touched: it gets the latest set when it arrives there,
   // because arriving is itself an open.
   const openTourSet = useMemo(() => {
-    if (activeChangeSetId === null) return undefined;
-    const separator = activeChangeSetId.lastIndexOf(":");
+    if (activeTourId === null) return undefined;
+    const separator = activeTourId.lastIndexOf(":");
     if (separator === -1) return undefined;
-    const threadId = activeChangeSetId.slice(0, separator);
-    const kind = activeChangeSetId.slice(separator + 1) as ChangeSetTourKind;
+    const threadId = activeTourId.slice(0, separator);
+    const kind = activeTourId.slice(separator + 1) as ChangeSetTourKind;
     if (kind !== "changes" && kind !== "premise") return undefined;
-    return { changeSetId: activeChangeSetId, threadId, kind };
-  }, [activeChangeSetId]);
+    return { tourId: activeTourId, threadId, kind };
+  }, [activeTourId]);
   const openTourComment = useMemo(
     () =>
       openTourSet === undefined
@@ -8062,7 +8069,7 @@ export const ReviewController = () => {
             ? diff.places.map((place) => place.placeId)
             : attributed.placeIds;
         syncTourDiff({
-          changeSetId: openTourSet.changeSetId,
+          tourId: openTourSet.tourId,
           diff,
           placeIds,
           isSuperseded,

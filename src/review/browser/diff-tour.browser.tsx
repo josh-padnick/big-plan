@@ -52,7 +52,17 @@ import { ChangedAgainBadge } from "./agent-message.browser.js";
 
 type OpenTour = {
   readonly diff: SnapshotDiff;
-  /** The change set this tour is reviewing, and whose verdicts it records. */
+  /**
+   * Which comparison the bar is showing, so it follows the right one when a
+   * thread holds two. This is the bar's own identity and nothing else's.
+   */
+  readonly tourId: string;
+  /**
+   * The change set whose verdicts this tour records. It is deliberately not
+   * the tour id: a thread's two comparisons are two things to look at but one
+   * set of work, and a verdict addressed by which view produced it would be a
+   * verdict no other surface could find.
+   */
   readonly changeSetId: string;
   readonly placeIds: ReadonlyArray<string>;
   readonly startPlaceId?: string;
@@ -93,7 +103,8 @@ type OpenTour = {
 
 type DiffTourValue = {
   readonly activeDiff: SnapshotDiff | null;
-  readonly activeChangeSetId: string | null;
+  /** Which comparison the bar is showing, for the card that owns it. */
+  readonly activeTourId: string | null;
   /**
    * Whether the open tour is comparing a revision the plan has since moved
    * past. It lives here rather than only in the card that opened the tour
@@ -181,7 +192,7 @@ type DiffTourValue = {
    * when the set's bounds move.
    */
   readonly syncTourDiff: (input: {
-    readonly changeSetId: string;
+    readonly tourId: string;
     readonly diff: SnapshotDiff;
     readonly placeIds: ReadonlyArray<string>;
     readonly isSuperseded: boolean;
@@ -398,18 +409,18 @@ export const DiffTourProvider = ({
     );
   };
   const syncTourDiff = ({
-    changeSetId,
+    tourId,
     diff,
     placeIds,
     isSuperseded,
   }: {
-    readonly changeSetId: string;
+    readonly tourId: string;
     readonly diff: SnapshotDiff;
     readonly placeIds: ReadonlyArray<string>;
     readonly isSuperseded: boolean;
   }): void => {
     setTour((current) => {
-      if (current === null || current.changeSetId !== changeSetId) {
+      if (current === null || current.tourId !== tourId) {
         return current;
       }
       const isSameComparison =
@@ -476,7 +487,7 @@ export const DiffTourProvider = ({
   const value = useMemo<DiffTourValue>(
     () => ({
       activeDiff: tour?.diff ?? null,
-      activeChangeSetId: tour?.changeSetId ?? null,
+      activeTourId: tour?.tourId ?? null,
       activeIsSuperseded: tour?.isSuperseded ?? null,
       activeChatThreadId: tour?.chatThreadId ?? null,
       activeChangeBlockId: activeChangeBlockId ?? null,
