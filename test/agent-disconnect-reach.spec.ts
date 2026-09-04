@@ -151,6 +151,9 @@ test("should never let a Disconnect click on an unusable session go unanswered",
         "offline",
       );
       await expect(card).toContainText("Review session unreachable");
+      await expect(agentStatusTrigger(page)).toHaveAccessibleName(
+        "Agent Status: Review session unreachable",
+      );
       await expect(disconnect).toBeDisabled();
       await expect(reason).toHaveText("Review session unreachable");
       await page.screenshot({
