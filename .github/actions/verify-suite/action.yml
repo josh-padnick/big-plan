@@ -1,0 +1,67 @@
+# The single build-and-test sequence that CI's lint job and the release Verify
+# job MUST run in the same environment. Their history is why this exists: the
+# Verify job was a hand-copied second draft of lint's steps, drifted from it,
+# and let a release go red on visual e2e tests that lint had been passing on the
+# very same commit. The browser-journey specs assert font-metric ratios and a
+# pixel snapshot that only reproduce on the self-hosted runner both callers use;
+# a release verified on a different runner image cannot share lint's green.
+#
+# So the two jobs no longer keep their own copies of setup + test. They call
+# this action, on the same `self-hosted` runner, and each adds only its own
+# preamble around it: the lint job its merge-guard checks, the Verify job its
+# release-tag check. Anything that belongs to BOTH environments belongs here, so
+# there is one place to change and no second copy to fall behind.
+name: Build and run the full test suite
+description: >-
+  Shared setup + full unit and browser test sequence for CI lint and release
+  verification. Run it on the self-hosted runner; the visual e2e snapshots are
+  captured there and reproduce nowhere else.
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        # Reads the packageManager field so CI and local bun stay in lockstep.
+        bun-version-file: package.json
+    - run: bun install --frozen-lockfile
+      shell: bash
+    - name: Runtime dependencies must have no high or critical vulnerabilities
+      # Thin call: the script owns classification and the pass/fail decision.
+      # A high/critical runtime-dependency advisory fails closed and is never
+      # retried; only a confirmed registry/transport error is retried. Running
+      # it here means a release is gated by the same audit as every CI push.
+      # See scripts/npm-audit-gate/README.md.
+      run: node scripts/npm-audit-gate/audit-runtime-dependencies.mjs
+      shell: bash
+    - run: bun run lint
+      shell: bash
+    - run: bun run build
+      shell: bash
+    # Generated modules are committed; build just regenerated them, so any
+    # difference means a source changed without its generated output.
+    - name: Generated files must not drift from their sources
+      shell: bash
+      run: |
+        if [ -n "$(git status --porcelain -- '*.generated.ts' '*.generated.css')" ]; then
+          git status --porcelain -- '*.generated.ts' '*.generated.css'
+          echo "::error::Generated files drifted from their sources. Run 'bun run gen' and commit the result."
+          exit 1
+        fi
+    # `bun run test` runs the Mermaid compile-time renderer tests, which need
+    # the pinned Chromium, so install it BEFORE the tests, not after. The
+    # self-hosted runner keeps a persistent browser cache, so this is a fast
+    # no-op hit once populated; installing first is the order that also holds on
+    # a runner without that cache.
+    - name: Install the pinned Playwright Chromium
+      run: bunx playwright install chromium
+      shell: bash
+    - run: bun run test
+      shell: bash
+    - name: Run browser tests in proxy-default mode
+      run: bun run test:e2e
+      shell: bash
+    - name: Run browser tests through the redirect escape hatch
+      run: bun run test:e2e
+      shell: bash
+      env:
+        BIG_PLAN_PROXY: "0"
