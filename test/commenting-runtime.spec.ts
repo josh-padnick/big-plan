@@ -9463,6 +9463,34 @@ const verification = "first";
     await expect(stepper).toContainText("2 of 2");
     await expect(lens).toContainText('const verification = "revised";');
     await expect(lens).not.toContainText('const delivery = "revised";');
+    await page.keyboard.press("Escape");
+
+    // BIG-289: the thread's proposed changes are one presentation rendered once
+    // at the foot of the conversation, below every turn - never a second card,
+    // and never one floating above a later message. The two rounds did not
+    // change the plan out from under each other, so there is no heads-up.
+    await expect(
+      sentThread.locator("[data-review-proposed-changes]"),
+    ).toHaveCount(1);
+    await expect(sentThread).not.toContainText(
+      "Plan changed since this comment",
+    );
+    await expect(sentThread).not.toContainText(
+      "Plan updated since this thread began.",
+    );
+    const changesAreBelowEveryTurn = await sentThread.evaluate((thread) => {
+      const card = thread.querySelector("[data-review-proposed-changes]");
+      const turns = [...thread.querySelectorAll("[data-review-message]")];
+      const lastTurn = turns.at(-1);
+      if (card === null || lastTurn === undefined) return false;
+      // The card follows the last turn in document order iff that turn precedes
+      // it, which is exactly the bottom-of-thread placement BIG-289 requires.
+      return Boolean(
+        card.compareDocumentPosition(lastTurn) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+      );
+    });
+    expect(changesAreBelowEveryTurn).toBe(true);
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
