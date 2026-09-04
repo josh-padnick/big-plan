@@ -4605,8 +4605,7 @@ const SentThread = ({
                 chatThreadId={comment.id}
               />
             </ProposedChangesTurn>
-          ) : identity !== null &&
-            latestExchange?.response === undefined ? (
+          ) : identity !== null && latestExchange?.response === undefined ? (
             <StalePremiseNotice
               comment={comment}
               identity={identity}

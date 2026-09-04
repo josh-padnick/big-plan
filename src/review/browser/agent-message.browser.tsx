@@ -481,11 +481,7 @@ export const AgentChangeIdentity = ({
 export const PLAN_MOVED_SINCE_LABEL = "Plan updated since this thread began.";
 
 /** Names who produced a change set, and flags a plan that moved under it. */
-export const PlanMovedSinceNote = ({
-  detail,
-}: {
-  readonly detail: string;
-}) => (
+export const PlanMovedSinceNote = ({ detail }: { readonly detail: string }) => (
   <p
     className="m-0 flex items-center gap-1 text-2xs text-muted"
     data-review-plan-moved=""
@@ -874,7 +870,9 @@ export const AgentChangeDigest = ({
             className="ml-auto"
             size="status"
             tone={allAccepted ? "statusAccent" : "statusNeutral"}
-            data-review-change-set-verdict={allAccepted ? "accepted" : "decided"}
+            data-review-change-set-verdict={
+              allAccepted ? "accepted" : "decided"
+            }
           >
             {allAccepted ? "Accepted" : "Decided"}
           </Badge>

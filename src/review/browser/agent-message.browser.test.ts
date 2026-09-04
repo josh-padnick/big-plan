@@ -20,7 +20,9 @@ describe("plan-moved-since heads-up", () => {
     // The marker is a plain heads-up, not a call to action: the exact copy and
     // nothing that reads like a button.
     expect(html).toContain(PLAN_MOVED_SINCE_LABEL);
-    expect(PLAN_MOVED_SINCE_LABEL).toBe("Plan updated since this thread began.");
+    expect(PLAN_MOVED_SINCE_LABEL).toBe(
+      "Plan updated since this thread began.",
+    );
     expect(html).toContain('data-review-plan-moved=""');
     // The detail lives on the info affordance, so a reader gets it by hovering
     // and a test reads it without waiting out the tooltip's open delay.

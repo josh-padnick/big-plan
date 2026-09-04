@@ -9487,7 +9487,7 @@ const verification = "first";
       // it, which is exactly the bottom-of-thread placement BIG-289 requires.
       return Boolean(
         card.compareDocumentPosition(lastTurn) &
-          Node.DOCUMENT_POSITION_PRECEDING,
+        Node.DOCUMENT_POSITION_PRECEDING,
       );
     });
     expect(changesAreBelowEveryTurn).toBe(true);
