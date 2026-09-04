@@ -475,8 +475,8 @@ export const AgentChangeIdentity = ({
 
 /**
  * The heads-up shown when a thread's change set reads against a plan that other
- * work has moved since the thread's own result. It is exact copy the captain
- * approved (BIG-289): a plain statement, not a call to action.
+ * work has moved since the thread's own result. It uses the exact copy the
+ * captain approved (BIG-289): a plain statement, not a call to action.
  */
 export const PLAN_MOVED_SINCE_LABEL = "Plan updated since this thread began.";
 
