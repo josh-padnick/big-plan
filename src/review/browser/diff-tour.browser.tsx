@@ -482,6 +482,15 @@ export const DiffTourProvider = ({
       : dispositionOf(tour.diff, active.placeId);
   const isActiveAccepted = activeDisposition === "accepted";
   const isActiveRejected = activeDisposition === "rejected";
+  // Whether the current change is one the reviewer has already answered. A
+  // premise view is a comparison, not a proposal, so it is never "decided": it
+  // carries no verdict and its bar keeps the undecided shape. The decided bar
+  // is a different row from the undecided one - it drops Chat (the decision is
+  // made, so the conversation belongs in the thread the top-row link reaches),
+  // and it moves the verdict badge to the far right - so it is worth one name.
+  const isPremiseView = tour?.isPremiseView === true;
+  const isActiveDecided =
+    !isPremiseView && (isActiveAccepted || isActiveRejected);
   const isShowingActiveChanges =
     active !== undefined && shownChangesPlaceId === active.placeId;
   useEffect(() => {
@@ -674,7 +683,10 @@ export const DiffTourProvider = ({
                 </Button>
               )}
             </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2 px-3 py-2">
+            <div
+              className="flex min-w-0 flex-wrap items-center gap-2 px-3 py-2"
+              data-review-bar-actions=""
+            >
               {showCompletionSummary && tour.isPremiseView !== true ? (
                 <>
                   <Button
@@ -721,8 +733,11 @@ export const DiffTourProvider = ({
                       instead. Chat is that second answer, so it sits in the
                       row beside the two verdicts - and it opens under the bar
                       rather than navigating away, because the change has to
-                      stay in view while they describe what it should say. */}
-                  {tour.chat === undefined ? null : (
+                      stay in view while they describe what it should say. Once
+                      the change is decided the conversation moves on: the
+                      reviewer talks in the thread, which the top-row link
+                      already reaches, so the decided row drops Chat. */}
+                  {isActiveDecided || tour.chat === undefined ? null : (
                     <Button
                       variant="outline"
                       size="micro"
@@ -734,17 +749,8 @@ export const DiffTourProvider = ({
                       Chat
                     </Button>
                   )}
-                  {tour.isPremiseView === true ? null : isActiveAccepted ||
-                    isActiveRejected ? (
+                  {isPremiseView ? null : isActiveDecided ? (
                     <>
-                      <Badge
-                        tone={
-                          isActiveRejected ? "statusDanger" : "statusAccent"
-                        }
-                        size="status"
-                      >
-                        {isActiveRejected ? "Rejected" : "Accepted"}
-                      </Badge>
                       {/* The evidence an accepted place no longer shows in the
                           plan is one control away, so the reviewer can check
                           what they accepted - and undo against the same view
@@ -790,6 +796,20 @@ export const DiffTourProvider = ({
                         <Icon icon={UNDO_2_ICON} />
                         Undo
                       </Button>
+                      {/* The verdict badge is the row's outcome, so it sits
+                          after the actions that produced it and reads as what
+                          the row settled on rather than another control. The
+                          set-wide overflow follows it at the far right, because
+                          it acts on the whole set, not on this decided change. */}
+                      <Badge
+                        tone={
+                          isActiveRejected ? "statusDanger" : "statusAccent"
+                        }
+                        size="status"
+                        data-review-verdict-badge=""
+                      >
+                        {isActiveRejected ? "Rejected" : "Accepted"}
+                      </Badge>
                     </>
                   ) : (
                     <>
