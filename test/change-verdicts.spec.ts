@@ -1123,7 +1123,7 @@ test("should lay out the review bar differently before and after a change is dec
       ]);
     });
 
-    await test.step("decided by rejecting: no Chat, and the badge closes the row at the far right", async () => {
+    await test.step("decided by rejecting: evidence, Undo, badge, then overflow", async () => {
       await stepper(page)
         .getByRole("button", { name: "Reject this change" })
         .click();
@@ -1138,15 +1138,35 @@ test("should lay out the review bar differently before and after a change is dec
           name: "Undo rejection for this change",
         }),
       ).toBeVisible();
-      // A rejected change has nothing to view - what it proposed is gone from
-      // the plan - so the row is Undo, then the verdict badge, then the
-      // set-wide overflow at the far right.
       expect(await barControls()).toEqual([
         "Exit review",
+        "View changes",
         "Undo rejection for this change",
         "badge:Rejected",
         "More change set actions",
       ]);
+      await expect(page.locator("article")).toContainText(
+        "The worker retries a failed job once before it gives up.",
+      );
+      await expect(
+        page.locator("article").getByText("three times before it gives up"),
+      ).toHaveCount(0);
+
+      await stepper(page).getByRole("button", { name: "View changes" }).click();
+      const lens = page.locator("[data-review-diff-lens]");
+      await expect(lens).toContainText("What changed");
+      await expect(lens.locator("del")).toContainText("once");
+      await expect(lens.locator("ins").first()).toContainText("three");
+      await expect(stepper(page)).toContainText("Rejected");
+
+      await stepper(page).getByRole("button", { name: "Hide changes" }).click();
+      await expect(lens).toHaveCount(0);
+      await expect(page.locator("article")).toContainText(
+        "The worker retries a failed job once before it gives up.",
+      );
+      await expect(
+        page.locator("article").getByText("three times before it gives up"),
+      ).toHaveCount(0);
     });
 
     await test.step("decided by accepting: View changes and Undo, then the overflow, then the badge", async () => {

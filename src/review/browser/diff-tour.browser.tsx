@@ -493,9 +493,6 @@ export const DiffTourProvider = ({
     !isPremiseView && (isActiveAccepted || isActiveRejected);
   const isShowingActiveChanges =
     active !== undefined && shownChangesPlaceId === active.placeId;
-  useEffect(() => {
-    if (isActiveRejected) setShownChangesPlaceId(null);
-  }, [isActiveRejected]);
   const standing =
     tour === null
       ? null
@@ -579,13 +576,7 @@ export const DiffTourProvider = ({
       {children}
       {tour === null || active === undefined ? null : (
         <>
-          {/* A rejected change has no lens. What it proposed is gone from the
-              plan, so rendering its lens anywhere would put the rejected
-              wording back on the page. The restored baseline standing in its
-              place is the whole answer, exactly as an accepted change reads as
-              plan content. The lens is left out of the tree rather than asked
-              to render nothing, so no part of it mounts. */}
-          {isActiveRejected ? null : (
+          {!isActiveRejected || isShowingActiveChanges ? (
             <DiffLensPortal
               diff={tour.diff}
               place={active}
@@ -595,7 +586,7 @@ export const DiffTourProvider = ({
               isShowingChanges={isShowingActiveChanges}
               revealKey={revealCount}
             />
-          )}
+          ) : null}
           <div
             // The bar floats clear of the viewport edge rather than hugging
             // it, and holds a wide enough measure that the change it is
@@ -751,31 +742,23 @@ export const DiffTourProvider = ({
                   )}
                   {isPremiseView ? null : isActiveDecided ? (
                     <>
-                      {/* The evidence an accepted place no longer shows in the
-                          plan is one control away, so the reviewer can check
-                          what they accepted - and undo against the same view
-                          that produced the acceptance. */}
-                      {isActiveRejected ? null : (
-                        <Button
-                          variant="outline"
-                          size="micro"
-                          aria-pressed={isShowingActiveChanges}
-                          onClick={() =>
-                            setShownChangesPlaceId(
-                              isShowingActiveChanges ? null : active.placeId,
-                            )
+                      <Button
+                        variant="outline"
+                        size="micro"
+                        aria-pressed={isShowingActiveChanges}
+                        onClick={() =>
+                          setShownChangesPlaceId(
+                            isShowingActiveChanges ? null : active.placeId,
+                          )
+                        }
+                      >
+                        <Icon
+                          icon={
+                            isShowingActiveChanges ? EYE_OFF_ICON : EYE_ICON
                           }
-                        >
-                          <Icon
-                            icon={
-                              isShowingActiveChanges ? EYE_OFF_ICON : EYE_ICON
-                            }
-                          />
-                          {isShowingActiveChanges
-                            ? "Hide changes"
-                            : "View changes"}
-                        </Button>
-                      )}
+                        />
+                        {isShowingActiveChanges ? "Hide changes" : "View changes"}
+                      </Button>
                       {/* One control takes back whichever verdict the change
                           holds, and says the same word either way: the change
                           returns to undecided, and what it returns from is
