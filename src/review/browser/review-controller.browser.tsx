@@ -4781,6 +4781,7 @@ export const ReviewController = () => {
     syncTourChat,
     activeChangeSetId,
     activeDiff,
+    activeIsSuperseded,
     syncTourDiff,
   } = useDiffTour();
   const identity = useMemo(runtimeIdentity, []);
@@ -7957,7 +7958,12 @@ export const ReviewController = () => {
     if (identity === null || openTourSet === undefined) return;
     if (openTourBounds === undefined) return;
     const { from, to, isSuperseded, changeTargets } = openTourBounds;
-    if (activeDiff?.from === from && activeDiff.to === to) return;
+    if (
+      activeDiff?.from === from &&
+      activeDiff.to === to &&
+      activeIsSuperseded === isSuperseded
+    )
+      return;
     let current = true;
     void cachedSnapshotDiff(identity, from, to)
       .then((diff) => {
@@ -7981,7 +7987,14 @@ export const ReviewController = () => {
     return () => {
       current = false;
     };
-  }, [activeDiff, identity, openTourBounds, openTourSet, syncTourDiff]);
+  }, [
+    activeDiff,
+    activeIsSuperseded,
+    identity,
+    openTourBounds,
+    openTourSet,
+    syncTourDiff,
+  ]);
 
   const agentStatus: AgentStatus = projectLatestAgentStatus({
     requests: agent.requests,
