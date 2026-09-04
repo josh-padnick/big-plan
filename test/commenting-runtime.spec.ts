@@ -5609,12 +5609,13 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await rail
       .getByRole("button", { name: "Review change", exact: true })
       .click();
-    // The retired experiment is gone from the plan, so there is no place in it
-    // for the comparison to stand. The reviewer reads the change set's own
-    // account of it in the rail instead of meeting a card marooned below the
-    // last slide, as far from the content as the page goes.
+    // The retired experiment is gone, but its surviving neighbour still gives
+    // the comparison an in-context place to stand. The reviewer sees the
+    // change there instead of meeting a card marooned below the whole plan.
     await expect(rail).toContainText("Retired experiment");
-    await expect(page.locator("main [data-review-diff-lens]")).toHaveCount(0);
+    const retiredChangeLens = page.locator("main [data-review-diff-lens]");
+    await expect(retiredChangeLens).toHaveCount(1);
+    await expect(retiredChangeLens).toContainText("Retired experiment");
     await page.screenshot({
       path: testInfo.outputPath("retired-change.png"),
     });
