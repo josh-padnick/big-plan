@@ -65,7 +65,7 @@ export type ChangeVerdictMutation = {
   readonly decidedAt: string;
   /** The trusted boundary that created this mutation, never browser input. */
   readonly actor: ChangeVerdictActor;
-  /** Bulk acceptance may decide only places that are still undecided. */
+  /** A bulk verdict may decide only places that are still undecided. */
   readonly onlyUndecided?: boolean;
 };
 
@@ -299,10 +299,10 @@ export const validateChangeVerdictMutation = ({
   }
   if (
     candidate.onlyUndecided !== undefined &&
-    (candidate.op !== "accept" || candidate.onlyUndecided !== true)
+    (candidate.op === "undo" || candidate.onlyUndecided !== true)
   ) {
     throw new ChangeVerdictsRejected(
-      '"onlyUndecided" may only be true for an "accept" mutation',
+      '"onlyUndecided" may only be true for an "accept" or "reject" mutation',
     );
   }
   return {

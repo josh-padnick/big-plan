@@ -303,7 +303,6 @@ describe("validateChangeVerdictMutation", () => {
 
   it.each([
     { op: "accept", onlyUndecided: false },
-    { op: "reject", onlyUndecided: true },
     { op: "undo", onlyUndecided: true },
   ])(
     "refuses onlyUndecided=$onlyUndecided for a $op mutation",
@@ -320,7 +319,7 @@ describe("validateChangeVerdictMutation", () => {
           },
           now: NOW,
         }),
-      ).toThrow(/may only be true for an "accept" mutation/u);
+      ).toThrow(/may only be true for an "accept" or "reject" mutation/u);
     },
   );
 });
@@ -353,6 +352,24 @@ describe("applyChangeVerdictMutation", () => {
     expect(next.decided).toEqual([
       row({ placeId: "p1", verdict: "rejected", actor: "reviewer" }),
       row({ placeId: "p2", actor: "reviewer" }),
+    ]);
+  });
+
+  it("rejects only still-undecided places when a bulk decision races an acceptance", () => {
+    const accepted = applyChangeVerdictMutation({
+      verdicts: empty,
+      mutation: accept(["p1"]),
+    });
+    const next = applyChangeVerdictMutation({
+      verdicts: accepted,
+      mutation: {
+        ...mutate("reject", ["p1", "p2"]),
+        onlyUndecided: true,
+      },
+    });
+    expect(next.decided).toEqual([
+      row({ placeId: "p1", actor: "reviewer" }),
+      row({ placeId: "p2", verdict: "rejected", actor: "reviewer" }),
     ]);
   });
 
