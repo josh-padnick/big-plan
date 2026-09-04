@@ -1204,7 +1204,7 @@ test("should lay out the review bar differently before and after a change is dec
 
     await page.goto("about:blank");
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
