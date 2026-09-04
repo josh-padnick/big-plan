@@ -1,0 +1,11 @@
+{
+  "status": 1,
+  "stderr": "npm error code ECONNRESET",
+  "stdoutJson": {
+    "error": {
+      "code": "ECONNRESET",
+      "summary": "request to https://registry.npmjs.org/-/npm/v1/security/advisories/bulk failed, reason: socket hang up",
+      "detail": "The connection to the registry was reset."
+    }
+  }
+}

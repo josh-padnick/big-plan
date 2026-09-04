@@ -1,0 +1,11 @@
+{
+  "status": 1,
+  "stderr": "npm error code ENETUNREACH",
+  "stdoutJson": {
+    "error": {
+      "code": "ENETUNREACH",
+      "summary": "request to https://registry.npmjs.org/-/npm/v1/security/advisories/bulk failed, reason: connect ENETUNREACH 2606:4700::6810:1b23:443",
+      "detail": "This is a problem related to network connectivity."
+    }
+  }
+}

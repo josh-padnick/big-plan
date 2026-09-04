@@ -1,0 +1,11 @@
+{
+  "status": 1,
+  "stderr": "npm error code ETIMEDOUT",
+  "stdoutJson": {
+    "error": {
+      "code": "ETIMEDOUT",
+      "summary": "network timeout at: https://registry.npmjs.org/-/npm/v1/security/advisories/bulk",
+      "detail": "The registry did not respond in time."
+    }
+  }
+}
