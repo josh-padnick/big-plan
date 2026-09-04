@@ -242,6 +242,15 @@ export const useChangeVerdicts = (): ChangeVerdictsValue => {
                 from: head.from,
                 to: head.to,
                 places: head.places,
+                // The gesture asked to decide only what nobody had decided,
+                // and the runtime is the only party that can hold to that: it
+                // reads the record under the lock this page never takes.
+                // Dropping the flag here left the guard unenforceable, so a
+                // bulk gesture could overwrite a verdict recorded while it was
+                // in flight.
+                ...(head.onlyUndecided === undefined
+                  ? {}
+                  : { onlyUndecided: head.onlyUndecided }),
               },
             }),
           );

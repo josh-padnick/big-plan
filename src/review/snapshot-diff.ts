@@ -32,19 +32,28 @@ export type SnapshotDiffLocation = DiffLocation & {
 // vocabulary shared with browser delivery.
 export type SnapshotDiffPlace = DiffPlace;
 
+// Compiler source positions are stripped here for the same reason
+// `sameComponentModel` strips them: they are diagnostic provenance rather than
+// plan meaning. A revision anywhere above a component moves every HAST position
+// inside its model, and hashing those would report an untouched component as
+// changed - which, since the content digest is built from this, would re-open a
+// verdict the reviewer gave over content that never moved.
 export const blockEvidence = (block: SnapshotBlock | undefined): string =>
   block === undefined
     ? ""
     : createHash("sha256")
         .update(
-          JSON.stringify({
-            kind: block.kind,
-            text: block.text,
-            model: block.model ?? null,
-            presentation: block.presentation ?? null,
-            tableHeaders: block.tableHeaders ?? null,
-            isTableHeader: block.isTableHeader ?? false,
-          }),
+          JSON.stringify(
+            {
+              kind: block.kind,
+              text: block.text,
+              model: block.model ?? null,
+              presentation: block.presentation ?? null,
+              tableHeaders: block.tableHeaders ?? null,
+              isTableHeader: block.isTableHeader ?? false,
+            },
+            (key, value: unknown) => (key === "position" ? undefined : value),
+          ),
         )
         .digest("hex");
 

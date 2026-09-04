@@ -38,6 +38,7 @@ Rollback is automatic too.
 
 const decided = (
   entries: ReadonlyArray<{
+    readonly changeSetId: string;
     readonly from: string;
     readonly to: string;
     readonly placeId: string;

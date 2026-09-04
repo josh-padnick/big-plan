@@ -340,45 +340,60 @@ export const carryForwardChangeVerdicts = async ({
     }
   }
   if (diffsBySpan.size === 0) return;
-  await updateStoredChangeVerdicts({
-    store,
-    change: (stored) => {
-      // The record is re-read under its lock, so a verdict recorded between the
-      // scan and the write is carried too when it sits at the same superseded
-      // span, and left alone when it does not.
-      const spans = spansBehind({ revisions, verdicts: stored }).filter(
-        (span) => diffsBySpan.has(`${span.changeSetId}:${span.staleTo}`),
-      );
-      if (spans.length === 0) return stored;
-      let decided = stored.decided;
-      for (const span of spans) {
-        const superseded = (entry: ChangeVerdict): boolean =>
-          entry.changeSetId === span.changeSetId &&
-          entry.from === span.from &&
-          entry.to === span.staleTo;
-        const diffs = diffsBySpan.get(`${span.changeSetId}:${span.staleTo}`);
-        if (diffs === undefined) continue;
-        const carried = carriedVerdicts({
-          ...diffs,
-          decided: decided.filter(superseded),
-        });
-        const currentPlaceIds = new Set(
-          decided.flatMap((entry) =>
+  // The write is contained rather than allowed to fail its caller. A commit
+  // calls this after its revision is published, inside the boundary that
+  // decides whether the commit failed, so verdict-lock contention or a refused
+  // write there would fail a commit whose bytes are already in the plan -
+  // turning a deferred convenience into a lost publish.
+  //
+  // Containing it is honest rather than silent, because carrying is idempotent
+  // and re-attempted on every read of the verdict record: a failed attempt
+  // leaves the rows exactly where they were and the next read carries them.
+  // Nothing is lost by not carrying now; a published revision is lost by
+  // refusing the commit.
+  try {
+    await updateStoredChangeVerdicts({
+      store,
+      change: (stored) => {
+        // The record is re-read under its lock, so a verdict recorded between the
+        // scan and the write is carried too when it sits at the same superseded
+        // span, and left alone when it does not.
+        const spans = spansBehind({ revisions, verdicts: stored }).filter(
+          (span) => diffsBySpan.has(`${span.changeSetId}:${span.staleTo}`),
+        );
+        if (spans.length === 0) return stored;
+        let decided = stored.decided;
+        for (const span of spans) {
+          const superseded = (entry: ChangeVerdict): boolean =>
             entry.changeSetId === span.changeSetId &&
             entry.from === span.from &&
-            entry.to === span.currentTo
-              ? [entry.placeId]
-              : [],
-          ),
-        );
-        decided = [
-          ...decided.filter((entry) => !superseded(entry)),
-          ...carried.filter((entry) => !currentPlaceIds.has(entry.placeId)),
-        ];
-      }
-      return decided === stored.decided
-        ? stored
-        : { version: 1, revision: stored.revision + 1, decided };
-    },
-  });
+            entry.to === span.staleTo;
+          const diffs = diffsBySpan.get(`${span.changeSetId}:${span.staleTo}`);
+          if (diffs === undefined) continue;
+          const carried = carriedVerdicts({
+            ...diffs,
+            decided: decided.filter(superseded),
+          });
+          const currentPlaceIds = new Set(
+            decided.flatMap((entry) =>
+              entry.changeSetId === span.changeSetId &&
+              entry.from === span.from &&
+              entry.to === span.currentTo
+                ? [entry.placeId]
+                : [],
+            ),
+          );
+          decided = [
+            ...decided.filter((entry) => !superseded(entry)),
+            ...carried.filter((entry) => !currentPlaceIds.has(entry.placeId)),
+          ];
+        }
+        return decided === stored.decided
+          ? stored
+          : { version: 1, revision: stored.revision + 1, decided };
+      },
+    });
+  } catch {
+    return;
+  }
 };
