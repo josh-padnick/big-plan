@@ -75,9 +75,19 @@ jobs:
   # action on the identical self-hosted runner Verify uses, so it exercises the
   # full unit + browser (e2e) sequence, not a unit-only subset - the earlier
   # unit-only dry-run is exactly what let visual e2e drift reach a release.
+  #
+  # Same-repository pull requests only. This job runs on the self-hosted runner,
+  # and this repository's policy (see ci.yml) is that external contributions
+  # must never execute a workflow on the local machine. A fork PR's head repo is
+  # not this repository, so the guard keeps a fork's code - including any edit to
+  # this very workflow or to the composite action it calls - off the runner,
+  # while every trusted in-repo branch (the only kind that reaches a release)
+  # still gets the full dry-run.
   verify-dry-run:
     name: Verify dry-run
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
     timeout-minutes: 30
     steps:
