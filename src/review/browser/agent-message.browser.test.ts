@@ -4,8 +4,32 @@ import { describe, expect, it } from "vitest";
 import {
   AgentChangeIdentity,
   AgentStatePill,
+  PLAN_MOVED_SINCE_LABEL,
+  PlanMovedSinceNote,
   RequestStatusStrip,
 } from "./agent-message.browser.js";
+
+describe("plan-moved-since heads-up", () => {
+  it("should state the captain's exact copy beside an info affordance carrying the detail", () => {
+    const detail =
+      "Other work updated the plan after this thread landed its changes.";
+    const html = renderToStaticMarkup(
+      createElement(PlanMovedSinceNote, { detail }),
+    );
+
+    // The marker is a plain heads-up, not a call to action: the exact copy and
+    // nothing that reads like a button.
+    expect(html).toContain(PLAN_MOVED_SINCE_LABEL);
+    expect(PLAN_MOVED_SINCE_LABEL).toBe("Plan updated since this thread began.");
+    expect(html).toContain('data-review-plan-moved=""');
+    // The detail lives on the info affordance, so a reader gets it by hovering
+    // and a test reads it without waiting out the tooltip's open delay.
+    expect(html).toContain(`aria-label="${detail}"`);
+    expect(html).toContain('role="img"');
+    // A heads-up carries no action affordance of its own.
+    expect(html).not.toContain("<button");
+  });
+});
 
 describe("agent change identity", () => {
   it("should show the declared model and client in the change digest", () => {

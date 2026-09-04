@@ -87,8 +87,22 @@ export type ThreadChange = {
   readonly requestId: string;
   /** The thread's baseline: the plan before this thread proposed anything. */
   readonly from: string;
-  /** The thread's result: the plan as its committed replies leave it. */
+  /**
+   * The thread's result: the plan as its committed replies leave it. The diff
+   * stays bounded here rather than following the plan to wherever later work
+   * has taken it, because a recorded accept/reject verdict is content-pinned to
+   * exactly these two snapshots (see change-verdict.ts) - re-bounding the diff
+   * to the current plan would silently drop every decision the reviewer already
+   * made on this thread the moment other work moved the plan.
+   */
   readonly to: string;
+  /**
+   * Whether the plan has moved on since this thread's own committed result -
+   * other work landed after it that the reviewer is not being asked to decide
+   * on here. It is a heads-up, not an action: the surface flags it beside the
+   * thread's own change set rather than folding the later work into it.
+   */
+  readonly movedSince: boolean;
   readonly agentIdentity?: AgentModelIdentity;
   readonly changeTargets?: ReadonlyArray<string>;
 };
@@ -102,10 +116,11 @@ export type ThreadChange = {
  * first changed reply answers for it until the fold has been read, so a diff
  * appears with the reply rather than after a round trip.
  *
- * The result is taken from the thread's latest committed reply whenever the
- * plan still stands on it. That keeps the rendered diff equal to what the
- * reader is looking at during the moment between a reply landing and the fold
- * being re-read, when the fold still describes the previous round.
+ * The result is the thread's own, so a verdict recorded against it survives
+ * other work moving the plan (verdicts are content-pinned to the diff's two
+ * snapshots). When the plan has moved past that result the fold reports it as
+ * `movedSince` so the surface can flag a heads-up beside the set rather than
+ * re-bounding the diff and dropping the reviewer's decisions with it.
  */
 export const threadChangeFor = ({
   changeSets,
@@ -136,6 +151,10 @@ export const threadChangeFor = ({
   const changeTargets = threadChangeTargets(
     changed.map((exchange) => exchange.outcome?.changeTargets),
   );
+  // The plan moving past the thread's own latest result is what the heads-up
+  // marks. It is read from the latest committed reply rather than the fold, so
+  // the reply that just landed - and briefly leads the not-yet-re-read fold -
+  // is not mistaken for someone else's later work.
   return {
     requestId: latest.request.requestId,
     from: committed?.from ?? first.baselineSnapshot,
@@ -143,6 +162,7 @@ export const threadChangeFor = ({
       committed === undefined || latestResult === currentSnapshot
         ? latestResult
         : committed.to,
+    movedSince: latestResult !== currentSnapshot,
     ...(latest.request.claimedModel === undefined
       ? {}
       : { agentIdentity: latest.request.claimedModel }),

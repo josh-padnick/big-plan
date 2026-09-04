@@ -215,7 +215,42 @@ describe("threadChangeFor", () => {
       requestId: "req-2",
       from: BASELINE,
       to: ROUND_TWO,
+      movedSince: false,
       changeTargets: ["block-a", "block-b"],
+    });
+  });
+
+  it("should keep the diff at the thread's result but flag when the plan moved past it", () => {
+    const DRIFTED = "d".repeat(64);
+    expect(
+      threadChangeFor({
+        changeSets: [
+          changeSet({
+            changeSetId: "c0de",
+            baseSnapshot: BASELINE,
+            resultSnapshot: ROUND_ONE,
+          }),
+        ],
+        commentId: "c0de",
+        currentSnapshot: DRIFTED,
+        exchanges: [
+          exchange({
+            requestId: "req-1",
+            baselineSnapshot: BASELINE,
+            resultSnapshot: ROUND_ONE,
+            changeTargets: ["block-a"],
+          }),
+        ],
+      }),
+      // The diff stays baseline -> the thread's own result so the reviewer's
+      // content-pinned verdicts survive the drift; movedSince carries the
+      // heads-up that later work has moved the plan on.
+    ).toEqual({
+      requestId: "req-1",
+      from: BASELINE,
+      to: ROUND_ONE,
+      movedSince: true,
+      changeTargets: ["block-a"],
     });
   });
 
@@ -241,7 +276,7 @@ describe("threadChangeFor", () => {
     ).toMatchObject({ from: BASELINE, to: ROUND_TWO });
   });
 
-  it("should end at the latest reply while the fold still describes the round before it", () => {
+  it("should not flag a heads-up for the reply that just landed ahead of the fold", () => {
     expect(
       threadChangeFor({
         changeSets: [
@@ -266,7 +301,12 @@ describe("threadChangeFor", () => {
           }),
         ],
       }),
-    ).toMatchObject({ requestId: "req-2", from: BASELINE, to: ROUND_TWO });
+    ).toMatchObject({
+      requestId: "req-2",
+      from: BASELINE,
+      to: ROUND_TWO,
+      movedSince: false,
+    });
   });
 
   it("should report nothing while the thread has answered without changing the plan", () => {

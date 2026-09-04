@@ -3644,6 +3644,7 @@ const ChangeAttachment = ({
   changeSetId,
   agentIdentity,
   changeTargets,
+  planMovedSince = false,
   currentSnapshot,
   onStatus,
   onResolve,
@@ -3658,6 +3659,12 @@ const ChangeAttachment = ({
   readonly changeSetId?: string;
   readonly agentIdentity?: AgentModelIdentity;
   readonly changeTargets?: ReadonlyArray<string>;
+  /**
+   * Whether the plan has moved past this thread's own result. The diff stays
+   * bounded to that result so the reviewer's verdicts survive; this only asks
+   * for the heads-up marker that says later work has moved the plan on.
+   */
+  readonly planMovedSince?: boolean;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
   readonly onResolve?: () => void;
@@ -3698,6 +3705,12 @@ const ChangeAttachment = ({
       placeIds={attributed?.placeIds}
       spilloverCount={attributed?.spilloverCount}
       isSuperseded={currentSnapshot !== "" && currentSnapshot !== to}
+      {...(planMovedSince
+        ? {
+            planMovedDetail:
+              "Other work has updated the plan since this thread's changes were made. This still shows this thread's own changes; the later work is not part of it and needs nothing from you here.",
+          }
+        : {})}
       isLoading={isLoading}
       onLoad={() => void load()}
       onResolve={onResolve}
@@ -4445,20 +4458,10 @@ const SentThread = ({
                           ? undefined
                           : delivery
                       }
-                    >
-                      {response === undefined ? (
-                        <StalePremiseNotice
-                          comment={comment}
-                          identity={identity}
-                          currentSnapshot={currentSnapshot}
-                          onStatus={onReplySent}
-                          // A tour with no thread label is the worst state for
-                          // a reviewer already asking which thread they are
-                          // in, and this notice is reached from inside one.
-                          thread={{ label: comment.body, onOpen: onJump }}
-                        />
-                      ) : null}
-                    </MessageTurn>
+                    />
+                    {/* BIG-289: the premise-to-current digest no longer renders
+                        inline under a pending reply; it is folded into the one
+                        change-set presentation at the foot of the thread. */}
                     {requestOutcome === undefined || response === undefined ? (
                       suppressPendingStatus ? null : sharedConnectionState ? (
                         <button
@@ -4563,48 +4566,55 @@ const SentThread = ({
                         ) : null}
                       </MessageTurn>
                     )}
-                    {/* One thread proposes one change set, so the diff hangs
-                        off the reply that most recently advanced it and spans
-                        every round behind it. An earlier round shows no
-                        superseded before-and-after of its own; its badge
-                        already says the plan was updated. */}
-                    {requestOutcome !== undefined &&
-                    response !== undefined &&
-                    requestOutcome.state === "changed" &&
-                    identity !== null &&
-                    threadChange?.requestId === request.requestId ? (
-                      <ProposedChangesTurn>
-                        <ChangeAttachment
-                          key={`${comment.id}:${threadChange.from}:${threadChange.to}`}
-                          identity={identity}
-                          from={threadChange.from}
-                          to={threadChange.to}
-                          changeSetId={changeSetTourId({
-                            threadId: comment.id,
-                            kind: "changes",
-                          })}
-                          {...(threadChange.agentIdentity === undefined
-                            ? {}
-                            : { agentIdentity: threadChange.agentIdentity })}
-                          {...(threadChange.changeTargets === undefined
-                            ? {}
-                            : { changeTargets: threadChange.changeTargets })}
-                          currentSnapshot={currentSnapshot}
-                          onStatus={onReplySent}
-                          onResolve={onResolve}
-                          onDeleteThread={
-                            canDeleteComment ? onDelete : undefined
-                          }
-                          thread={{ label: comment.body, onOpen: onJump }}
-                          chatThreadId={comment.id}
-                        />
-                      </ProposedChangesTurn>
-                    ) : null}
                   </div>
                 );
               },
             )
           )}
+          {/* One thread, one proposed-change presentation, always at the foot
+              of the conversation below every turn. A thread that committed a
+              revision shows its own change set read against the current plan,
+              with a heads-up when other work has moved the plan since; a thread
+              that has committed nothing but sits on a plan that drifted under a
+              still-open reply shows that drift in the same place. The two are
+              mutually exclusive, so the reviewer never sees two change cards or
+              one floating above later messages. */}
+          {identity !== null && threadChange !== undefined ? (
+            <ProposedChangesTurn>
+              <ChangeAttachment
+                key={`${comment.id}:${threadChange.from}:${threadChange.to}`}
+                identity={identity}
+                from={threadChange.from}
+                to={threadChange.to}
+                changeSetId={changeSetTourId({
+                  threadId: comment.id,
+                  kind: "changes",
+                })}
+                {...(threadChange.agentIdentity === undefined
+                  ? {}
+                  : { agentIdentity: threadChange.agentIdentity })}
+                {...(threadChange.changeTargets === undefined
+                  ? {}
+                  : { changeTargets: threadChange.changeTargets })}
+                planMovedSince={threadChange.movedSince}
+                currentSnapshot={currentSnapshot}
+                onStatus={onReplySent}
+                onResolve={onResolve}
+                onDeleteThread={canDeleteComment ? onDelete : undefined}
+                thread={{ label: comment.body, onOpen: onJump }}
+                chatThreadId={comment.id}
+              />
+            </ProposedChangesTurn>
+          ) : identity !== null &&
+            latestExchange?.response === undefined ? (
+            <StalePremiseNotice
+              comment={comment}
+              identity={identity}
+              currentSnapshot={currentSnapshot}
+              onStatus={onReplySent}
+              thread={{ label: comment.body, onOpen: onJump }}
+            />
+          ) : null}
         </div>
         {identity === null ? null : (
           <div className="mt-3 border-t border-edge pt-3">

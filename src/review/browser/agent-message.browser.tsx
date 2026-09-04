@@ -12,6 +12,7 @@ import {
 } from "react";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { INFO_ICON } from "../../icons/lucide/info.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
@@ -472,6 +473,37 @@ export const AgentChangeIdentity = ({
   );
 };
 
+/**
+ * The heads-up shown when a thread's change set reads against a plan that other
+ * work has moved since the thread's own result. It is exact copy the captain
+ * approved (BIG-289): a plain statement, not a call to action.
+ */
+export const PLAN_MOVED_SINCE_LABEL = "Plan updated since this thread began.";
+
+/** Names who produced a change set, and flags a plan that moved under it. */
+export const PlanMovedSinceNote = ({
+  detail,
+}: {
+  readonly detail: string;
+}) => (
+  <p
+    className="m-0 flex items-center gap-1 text-2xs text-muted"
+    data-review-plan-moved=""
+  >
+    {PLAN_MOVED_SINCE_LABEL}
+    <Tooltip label={detail}>
+      <span
+        tabIndex={0}
+        role="img"
+        aria-label={detail}
+        className="inline-flex cursor-help text-subtle [&>svg]:size-3.5 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      >
+        <Icon icon={INFO_ICON} />
+      </span>
+    </Tooltip>
+  </p>
+);
+
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
   diff,
@@ -481,6 +513,7 @@ export const AgentChangeDigest = ({
   spilloverCount,
   isSuperseded,
   isPremiseView,
+  planMovedDetail,
   isLoading,
   onLoad,
   actionLabel,
@@ -498,6 +531,11 @@ export const AgentChangeDigest = ({
   readonly isSuperseded?: boolean;
   /** True when this digest compares the reviewer's premise with the plan now. */
   readonly isPremiseView?: boolean;
+  /**
+   * The tooltip that explains a plan that moved under this thread, present only
+   * when it has. Presence is what renders the heads-up marker.
+   */
+  readonly planMovedDetail?: string;
   readonly isLoading: boolean;
   readonly onLoad: () => void;
   readonly actionLabel?: string;
@@ -676,6 +714,9 @@ export const AgentChangeDigest = ({
   return (
     <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 border-t border-edge pt-2">
       <AgentChangeIdentity identity={agentIdentity} />
+      {planMovedDetail === undefined ? null : (
+        <PlanMovedSinceNote detail={planMovedDetail} />
+      )}
       <button
         type="button"
         className="flex w-full cursor-pointer items-center gap-1 rounded-sm bg-transparent px-1 py-0.5 text-left text-2xs font-bold text-muted hover:bg-surface hover:text-accent [&>svg]:size-3"
