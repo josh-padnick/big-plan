@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  attachedAgentLead,
   connectionEventEnded,
   connectionLogRowReading,
   connectionMarkerClassName,
@@ -148,6 +149,27 @@ describe("connectionLogRowReading", () => {
 });
 
 describe("summarizeAgentConnection", () => {
+  it("should report which way the latest edge went, so a since-row names it truthfully", () => {
+    // The card once labelled the agent's connect time "Unreachable since"
+    // while the page could not use its session (BIG-282).
+    const connected = summarizeAgentConnection({
+      events: [
+        { eventId: "a", connected: true, at: "2026-08-08T19:59:00.000Z" },
+      ],
+    });
+    expect(connected.latestConnected).toBe(true);
+    const gone = summarizeAgentConnection({
+      events: [
+        { eventId: "a", connected: true, at: "2026-08-08T19:59:00.000Z" },
+        { eventId: "b", connected: false, at: "2026-08-08T20:01:00.000Z" },
+      ],
+    });
+    expect(gone.latestConnected).toBe(false);
+    expect(summarizeAgentConnection({ events: [] }).latestConnected).toBe(
+      undefined,
+    );
+  });
+
   const at = (minute: number) =>
     `2026-08-19T10:${String(minute).padStart(2, "0")}:00.000Z`;
   const quietEdge = (minute: number) => ({
@@ -301,5 +323,25 @@ describe("connectionMarkerClassName", () => {
     }).split(" ");
     expect(utilities).toContain("bg-paper");
     expect(utilities).toContain("border-muted");
+  });
+});
+
+describe("attachedAgentLead", () => {
+  it("should say the primary is answering only while the card says so", () => {
+    // "Already answering" under a card reading stalled, errored, or gone was
+    // the contradiction the captain read as two cards disagreeing (BIG-264).
+    expect(attachedAgentLead({ state: "idle" })).toContain("already answering");
+    expect(attachedAgentLead({ state: "working" })).toContain(
+      "already answering",
+    );
+    expect(attachedAgentLead({ state: "stalled" })).toContain(
+      "has not reported for a while",
+    );
+    expect(attachedAgentLead({ state: "errored" })).toContain(
+      "reported a problem",
+    );
+    expect(attachedAgentLead({ state: "disconnected" })).toContain(
+      "still holds this review",
+    );
   });
 });

@@ -105,6 +105,12 @@ export type AgentRequest = TerminalAgentRequest & {
   readonly kind: "feedback" | "reply" | "chat" | "push" | "approval";
   readonly body?: string;
   readonly commentId?: string;
+  /**
+   * The change this message is about, where the reviewer wrote it while
+   * reviewing one rather than the thread as a whole. Browser-safe: it is a
+   * block id the reader can already point at.
+   */
+  readonly aboutBlockId?: string;
   readonly commentIds: ReadonlyArray<string>;
   readonly origin?: "prompt" | "about";
   readonly threadId?: string;
@@ -884,6 +890,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
                 : {}),
             ...(typeof request.commentId === "string"
               ? { commentId: request.commentId }
+              : {}),
+            ...(typeof request.aboutBlockId === "string"
+              ? { aboutBlockId: request.aboutBlockId }
               : {}),
             ...(request.kind === "push" &&
             pushOrigin !== undefined &&

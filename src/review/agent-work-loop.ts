@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { lintPlan } from "../lint/lint-plan.js";
 import { renderDocument } from "../render/render-document.js";
 import { OPERATOR_AGENT_PROMPT } from "./agent-prompt.generated.js";
@@ -114,6 +115,7 @@ export type AgentWorkLoopAction =
       readonly planPath: string;
       readonly executablePath: string;
       readonly shouldWait: boolean;
+      readonly connectionSummary?: boolean;
       readonly modelName?: string;
       readonly modelEffort?: string;
       readonly modelClient?: string;
@@ -200,6 +202,11 @@ export class AgentWorkLoopRejected extends Error {
 const fail = (message: string): never => {
   throw new AgentWorkLoopRejected(message);
 };
+
+const failResponseCorrection = (reason: string): never =>
+  fail(
+    `change response_file and run the same respond_command again: ${reason}`,
+  );
 
 /** Opens one agent-initiated thread or continuation with a claimed stage. */
 const pushWork = async ({
@@ -825,6 +832,7 @@ Reviewer image references included in a changed candidate are materialized into 
 const nextWork = async ({
   planPath,
   shouldWait,
+  connectionSummary = false,
   executablePath,
   modelName,
   modelEffort,
@@ -836,6 +844,7 @@ const nextWork = async ({
 }: {
   readonly planPath: string;
   readonly shouldWait: boolean;
+  readonly connectionSummary?: boolean;
   readonly executablePath: string;
   readonly modelName?: string;
   readonly modelEffort?: string;
@@ -1513,6 +1522,18 @@ const nextWork = async ({
       }
       return {
         pending: true,
+        ...(connectionSummary
+          ? {
+              connection_summary: {
+                server: session.url,
+                port: Number(new URL(session.url).port),
+                store: session.store.root,
+                session_id: session.sessionId,
+                role,
+                pending_requests: outstandingAgentRequests(snapshot).length,
+              },
+            }
+          : {}),
         plan: session.planPath,
         candidate_plan: stage.candidatePath,
         ...(inheritedDraft === undefined
@@ -1526,6 +1547,12 @@ const nextWork = async ({
         agent_token: claimedBy,
         connection_token: rosterWriterId,
         respond_command: respondCommand,
+        protocol: fileURLToPath(
+          new URL(
+            "../../docs/src/content/docs/for-agents/review-protocol.md",
+            import.meta.url,
+          ),
+        ),
         note_command: noteCommand,
         next_command: nextCommand,
         rules:
@@ -1557,6 +1584,8 @@ const nextWork = async ({
                 'A warning outcome must also carry summary: one short line naming the boundary it would cross, 80 characters max, such as "Would mix languages in one list"',
                 "For a feedback batch, note each transition as Comment i of N - slide title",
                 "Return exactly one outcome per requested comment",
+                "Outcome states are answered, changed, warning, needs-input, and declined. Use changed only after making a real candidate_plan revision.",
+                "For changed, changeTargets is required. Each entry is the exact id of a block this revision changed, in presentation order; ids contain only lowercase letters, digits, slash, underscore, dot, or hyphen, begin with a letter or digit, and are at most 300 characters.",
                 "Open every work.attachments path with the harness image-viewing capability before choosing an outcome",
                 ...(inheritedDraft === undefined
                   ? []
@@ -1639,10 +1668,14 @@ const respond = async ({
   try {
     responseDraft = JSON.parse(await readFile(resolve(responsePath), "utf8"));
   } catch (error: unknown) {
-    return fail(`Cannot read the response JSON: ${String(error)}`);
+    return failResponseCorrection(
+      `Cannot read the response JSON: ${String(error)}`,
+    );
   }
   if (!isRecord(responseDraft) || typeof responseDraft.requestId !== "string") {
-    return fail("The response JSON must name its agent request");
+    return failResponseCorrection(
+      "The response JSON must name its agent request",
+    );
   }
   const request = snapshot.requests.find(
     (candidate) => candidate.requestId === responseDraft.requestId,
@@ -1651,7 +1684,9 @@ const respond = async ({
     return fail("The reviewer canceled this agent request");
   }
   if (request === undefined || requestIsTerminal(request)) {
-    return fail("The response does not answer the current pending request");
+    return failResponseCorrection(
+      "its requestId does not match the current pending request",
+    );
   }
   // The agent answers from the candidate it has been editing, and that
   // candidate's generation is the claim it really holds. A displaced agent
@@ -1773,14 +1808,20 @@ const respond = async ({
           commentId: request.commentId,
         })
       : snapshot;
-  const response = validateAgentResponseDraft({
-    value: responseDraft,
-    request,
-    commentsById: commentsFromExchange(validationSnapshot),
-    changedBlocks,
-    currentSnapshot,
-    now: new Date().toISOString(),
-  });
+  let response;
+  try {
+    response = validateAgentResponseDraft({
+      value: responseDraft,
+      request,
+      commentsById: commentsFromExchange(validationSnapshot),
+      changedBlocks,
+      currentSnapshot,
+      now: new Date().toISOString(),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return failResponseCorrection(error.message);
+  }
   try {
     await commitStagedPlanMutation({
       store: session.store,
@@ -1997,6 +2038,9 @@ export const runAgentWorkLoopAction = async (
     return nextWork({
       planPath: action.planPath,
       shouldWait: action.shouldWait,
+      ...(action.connectionSummary === undefined
+        ? {}
+        : { connectionSummary: action.connectionSummary }),
       executablePath: action.executablePath,
       ...(action.agentToken === undefined
         ? {}

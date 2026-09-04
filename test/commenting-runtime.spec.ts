@@ -1932,16 +1932,19 @@ test.describe("a drafts write prepared against content the store moved past", ()
       const expand = rail.getByRole("button", {
         name: `Expand staged comment: ${body}`,
       });
-      if (await expand.isVisible()) await expand.click();
       const card = rail
         .locator(".review-staged-card")
         .filter({ hasText: body });
+      const send = card.getByRole("button", { name: "Send this" });
+      await expect(expand.or(send)).toBeVisible();
+      if (await expand.isVisible()) await expand.click();
+      await expect(send).toBeVisible();
       const submitted = targetPage.waitForResponse(
         (response) =>
           response.url().endsWith("/api/feedback") &&
           response.request().method() === "POST",
       );
-      await card.getByRole("button", { name: "Send this" }).click();
+      await send.click();
       return (await submitted).status();
     };
 
@@ -3927,6 +3930,7 @@ test("should restore and submit staged comments through the local review runtime
   page,
   reviewRuntimeUrl,
 }, testInfo) => {
+  test.setTimeout(60_000);
   await page.goto(reviewRuntimeUrl);
 
   const agentStatus = agentStatusTrigger(page);
@@ -4926,7 +4930,7 @@ test("should restore and submit staged comments through the local review runtime
     sentThread.getByRole("button", { name: "Expand thread", exact: true }),
   ).toBeVisible();
   await expect(
-    sentThread.getByRole("button", { name: "Revert response" }),
+    sentThread.getByRole("button", { name: "Delete thread" }),
   ).toBeVisible();
   await expect(
     sentThread.getByRole("button", { name: "Resolve thread" }),
@@ -4991,7 +4995,7 @@ test("should restore and submit staged comments through the local review runtime
     );
   expect(changedNextStepLabels).toEqual([
     "Minimize thread",
-    "Revert response",
+    "Delete thread",
     "Resolve thread",
   ]);
   await kernel.getByRole("button", { name: /Review change/u }).click();
@@ -5017,15 +5021,15 @@ test("should restore and submit staged comments through the local review runtime
     changeSetDock.getByRole("group", { name: "Change display" }),
   ).toHaveCount(0);
   await sentThread
-    .getByRole("button", { name: "Revert response" })
+    .getByRole("button", { name: "Delete thread" })
     .last()
     .click();
-  const layeredRevertDialog = page.getByRole("alertdialog", {
-    name: "Revert response?",
+  const layeredDeleteDialog = page.getByRole("alertdialog", {
+    name: "Delete this thread?",
   });
-  await expect(layeredRevertDialog).toBeVisible();
+  await expect(layeredDeleteDialog).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(layeredRevertDialog).toHaveCount(0);
+  await expect(layeredDeleteDialog).toHaveCount(0);
   await expect(page.locator("[data-review-diff-stepper]")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
@@ -5170,14 +5174,21 @@ test("should restore and submit staged comments through the local review runtime
     }),
   );
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  // A runtime that answers and refuses is out of date for this tab, not
+  // unreachable: the remedy is a reload rather than a restart. The rail's
+  // status line and every thread's reply chip now read the same block, so the
+  // line is named by its role rather than by a text every chip shares
+  // (BIG-282).
   await expect(
-    rail.getByText("Review session unreachable", { exact: true }),
+    rail.getByRole("button", {
+      name: "Review session out of date - open Agent Status",
+    }),
   ).toBeVisible({ timeout: 6_000 });
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
   await expect(
-    rail.getByRole("img", { name: "Review session unreachable" }),
+    rail.getByRole("img", { name: "Review session out of date" }),
   ).toBeVisible();
   await rail.getByRole("button", { name: "Delete staged comment" }).click();
   await page
@@ -5197,7 +5208,7 @@ test("should restore and submit staged comments through the local review runtime
   ).toBeDisabled();
   await expect(
     offlineComposer.getByRole("button", {
-      name: "Review session unreachable",
+      name: "Review session out of date",
     }),
   ).toBeVisible();
   await offlineComposer.getByRole("button", { name: "Cancel" }).click();
@@ -5205,52 +5216,76 @@ test("should restore and submit staged comments through the local review runtime
     "Connected to the local review runtime.",
   );
   await page.unroute("**/api/agent");
-  const revertResponse = page.waitForResponse(
+  await page.reload();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await expect(
+    rail.getByText("The agent is connected and waiting for feedback.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await continuedThread
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
+  // Deleting a thread that changed the plan rejects everything the reviewer
+  // never decided, and leaves alone everything they did. This thread was
+  // resolved earlier, which accepted the changes it still had open (BIG-168),
+  // so the confirmation has to name the one place that remains undecided and
+  // nothing else - and the plan has to keep the accepted work afterwards.
+  const threadDeleteResponse = page.waitForResponse(
     (response) =>
-      response.url().endsWith("/api/revert-agent-changes") &&
+      response.url().endsWith("/api/comments-delete") &&
       response.request().method() === "POST",
   );
   await continuedThread
-    .getByRole("button", { name: "Revert response" })
+    .getByRole("button", { name: "Delete thread" })
+    .first()
     .click();
-  const revertDialog = page.getByRole("alertdialog", {
-    name: "Revert response?",
+  const threadDeleteDialog = page.getByRole("alertdialog", {
+    name: "Delete this thread?",
   });
-  await expect(revertDialog).toContainText(
-    "Earlier changes stay in place - this is not a reset to the original plan.",
+  await expect(threadDeleteDialog).toContainText(
+    "Deleting this thread permanently removes it, and permanently deletes the following content from the plan.",
   );
-  await expect(revertDialog).toContainText(
-    "The comment and thread will remain until you delete them.",
+  await expect(threadDeleteDialog).toContainText(
+    "Changes you already accepted stay in the plan.",
   );
-  await revertDialog.getByRole("button", { name: "Revert response" }).click();
-  expect((await revertResponse).status()).toBe(200);
-  expect(await readFile(session.plan, "utf8")).toBe(beforeSource);
-  // The revert refreshes the plan in place instead of reloading, so the
-  // thread it was confirmed from stays open with its controls reachable.
+  const loss = threadDeleteDialog.locator("[data-review-plan-loss]");
+  await expect(loss).toBeVisible();
+  await expect(loss).toContainText("What you will lose");
+  // Every row is a slide as the plan draws it collapsed: its own title over
+  // the count of what goes, and nothing of the content until it is opened.
+  const lossSlides = loss.locator("[data-review-loss-slide]");
+  await expect(lossSlides.first()).toBeVisible();
+  await expect(loss).toContainText(/\d+ changes?/u);
+  const lossToggles = lossSlides.getByRole("button");
+  for (const toggle of await lossToggles.all()) {
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  }
+  // The box names only what is going. An accepted change is not going, so the
+  // passage the resolve accepted is absent from it, and so is the paragraph
+  // the rejection brings back rather than removes. The rows carry their
+  // content behind `hidden`, so what a reader can see is asserted through the
+  // disclosure state rather than through the text.
+  await expect(loss).toContainText("one slide");
+  await expect(loss).not.toContainText("atomically");
+  await expect(loss).not.toContainText("Keep every reviewer note safe");
+  await threadDeleteDialog
+    .getByRole("button", { name: "Delete thread" })
+    .click();
+  expect((await threadDeleteResponse).status()).toBe(200);
+  // The accepted change stayed in the plan; the undecided one went back to the
+  // thread's baseline; the thread itself is gone.
+  const afterDelete = await readFile(session.plan, "utf8");
+  expect(afterDelete).toContain("atomically");
+  expect(afterDelete).toContain(
+    "Keep every reviewer note safe while the plan is discussed.",
+  );
   await expect(page.locator("article")).toContainText(
     "Keep every reviewer note safe while the plan is discussed.",
     { timeout: 15_000 },
   );
-  await expect(
-    continuedThread.getByPlaceholder("Reply to the agent…"),
-  ).toBeVisible();
-  await expect(
-    continuedThread.getByRole("button", { name: "Response reverted" }).first(),
-  ).toBeVisible();
-  const revertedThread = rail
-    .locator("[data-review-sent-thread]")
-    .filter({ hasText: "Name the operator recovery path." });
-  await revertedThread
-    .getByRole("button", { name: "Delete comment" })
-    .first()
-    .click();
-  const revertedDeleteDialog = page.getByRole("alertdialog", {
-    name: "Delete comment?",
-  });
-  await expect(revertedDeleteDialog).toContainText(
-    "The reverted plan changes stay reverted.",
-  );
-  await revertedDeleteDialog.getByRole("button", { name: "Delete" }).click();
   await expect(rail).not.toContainText("Name the operator recovery path.");
 });
 
@@ -5389,7 +5424,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
       .click();
     await expect(rail).toContainText("Plan changed since this comment");
     await expect(rail).toContainText(
-      "This compares the plan when you commented with the current plan.",
+      "The plan has changed since you first requested a change.",
     );
     const originalPresentation = await page
       .locator("article > p[data-authored-prose]")
@@ -5437,7 +5472,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
       return { left: Math.round(rect.left), top: Math.round(rect.top) };
     });
     await rail
-      .getByRole("button", { name: "Review premise → current" })
+      .getByRole("button", { name: "Review changes", exact: true })
       .click();
     await expect(page.locator("[data-review-diff-lens]")).toContainText(
       "What changed",
@@ -5451,7 +5486,12 @@ test("should preview stale, historical, and multi-place causal diffs through the
       rail.locator(".review-staged-card[data-review-associated=true]"),
     ).toHaveCount(1);
     const singletonStepper = page.locator("[data-review-diff-stepper]");
-    await expect(singletonStepper).toContainText("Reviewing change set");
+    // This is the reviewer's own comment against a plan that has moved on, so
+    // the tour says whose question it is answering and shows only what has
+    // changed since. There is no proposal here to accept or reject - the agent
+    // has not answered yet - so offering a verdict would ask the reviewer to
+    // decide something nobody has put to them.
+    await expect(singletonStepper).toContainText("Since your comment");
     await expect(singletonStepper).toContainText("1 of 1");
     await expect(
       singletonStepper.getByRole("button", { name: "Previous change" }),
@@ -5462,24 +5502,17 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(
       singletonStepper.getByRole("group", { name: "Change display" }),
     ).toHaveCount(0);
-    await singletonStepper
-      .getByRole("button", { name: "Accept this change" })
-      .click();
-    const acceptedChange = rail.locator("[data-review-changes-accepted]");
-    await expect(acceptedChange).toContainText("Change set accepted");
     await expect(
-      singletonStepper.getByRole("button", { name: "Resolve thread" }),
-    ).toBeVisible();
-    await singletonStepper
-      .getByRole("button", { name: "Back to review" })
-      .click();
-    await singletonStepper
-      .getByRole("button", { name: "Unaccept this change" })
-      .click();
-    await expect(acceptedChange).toHaveCount(0);
-    // Unaccepting returns the change to the state it was proposed in, which is
-    // the state the presentation fidelity below is about: the lens is back, so
-    // the reader is reading the same evidence they were asked to decide on.
+      singletonStepper.getByRole("button", { name: "Accept this change" }),
+    ).toHaveCount(0);
+    await expect(
+      singletonStepper.getByRole("button", { name: "Reject this change" }),
+    ).toHaveCount(0);
+    await expect(
+      singletonStepper.getByRole("button", { name: "More change actions" }),
+    ).toHaveCount(0);
+    // The comparison the reviewer is reading carries the plan's own
+    // presentation, whichever tour opened it.
     const diffLens = page.locator("[data-review-diff-lens]");
     await expect(diffLens.locator("ins")).toHaveCSS(
       "background-color",
@@ -5552,20 +5585,13 @@ test("should preview stale, historical, and multi-place causal diffs through the
         }),
       )
       .toBe(true);
-    // A superseded change keeps its evidence whatever its verdict: the plan has
-    // already moved past this revision, so there is no current plan content for
-    // an acceptance to read as, and the archived copy stays the only record.
-    await singletonStepper
-      .getByRole("button", { name: "Accept this change" })
-      .click();
-    await expect(page.locator("[data-review-diff-lens]")).toContainText(
-      "What changed - plan revised again",
-    );
-    await singletonStepper
-      .getByRole("button", { name: "Resolve thread" })
-      .click();
+    // Nothing here is the reviewer's to decide, so the tour ends by leaving
+    // rather than by a verdict, and the thread is answered from the rail where
+    // the comment itself lives.
+    await singletonStepper.getByRole("button", { name: "Exit review" }).click();
     await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
+    await rail.getByRole("button", { name: "Mark addressed" }).click();
     await rail.getByText("Resolved (1)").click();
     await rail.getByRole("button", { name: "Unresolve", exact: true }).click();
 
@@ -5580,16 +5606,23 @@ test("should preview stale, historical, and multi-place causal diffs through the
       .filter({ hasText: "2 / Delivery contract" });
     await expect(deliverySection).toBeVisible();
     await expect(deliverySection.locator("svg")).toHaveCount(0);
-    await rail.getByRole("button", { name: "Review change" }).click();
-    const historicalChange = page
-      .locator("main")
-      .getByRole("region", { name: "Updated", exact: true });
-    await expect(historicalChange).toContainText("Retired experiment");
-    await expect(
-      rail.getByRole("region", { name: "Updated", exact: true }),
-    ).toHaveCount(0);
+    await rail
+      .getByRole("button", { name: "Review change", exact: true })
+      .click();
+    // The retired experiment is gone, but its surviving neighbour still gives
+    // the comparison an in-context place to stand. The reviewer sees the
+    // change there instead of meeting a card marooned below the whole plan.
+    await expect(rail).toContainText("Retired experiment");
+    const retiredChangeLens = page.locator("[data-review-diff-lens]");
+    await expect(retiredChangeLens).toHaveCount(1);
+    await expect(retiredChangeLens).toContainText("Retired experiment");
+    expect(
+      await retiredChangeLens.evaluate(
+        (lens) => lens.closest("[data-slide]") !== null,
+      ),
+    ).toBe(true);
     await page.screenshot({
-      path: testInfo.outputPath("historical-change.png"),
+      path: testInfo.outputPath("retired-change.png"),
     });
     await page.keyboard.press("Escape");
 
@@ -5617,12 +5650,12 @@ test("should preview stale, historical, and multi-place causal diffs through the
         '[data-review-diff-stepper] button[aria-label^="Open comment thread:"]',
       ),
     ).toHaveCount(0);
-    await expect(
-      page.getByRole("button", {
-        name: "Unaccept this change",
-      }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Next change" }).click();
+    // Deciding a change moves the reviewer on to the next one, and stepping
+    // back to a decided change shows the verdict rather than asking again.
+    await page.getByRole("button", { name: "Accept this change" }).click();
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      `2 of ${planWideChangeCount}`,
+    );
     await page.getByRole("button", { name: "Accept this change" }).click();
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       `3 of ${planWideChangeCount}`,
@@ -5630,7 +5663,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await page.getByRole("button", { name: "Previous change" }).click();
     await expect(
       page.getByRole("button", {
-        name: "Unaccept this change",
+        name: "Undo acceptance for this change",
       }),
     ).toBeVisible();
     await deliverySection
@@ -5931,7 +5964,7 @@ The release gets a full soak.
       ).toHaveCount(1);
     });
 
-    await test.step("archive a missing Decision without publishing its identity", async () => {
+    await test.step("show nothing at all for a Decision the plan no longer holds", async () => {
       await page
         .locator("article [data-block-id]")
         .evaluateAll((nodes) => nodes.forEach((node) => node.remove()));
@@ -5939,17 +5972,12 @@ The release gets a full soak.
         .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
         .last()
         .click();
-      const archive = page.locator("[data-review-historical-changes]");
-      const historical = archive.getByRole("region", { name: "Updated" });
-      await expect(historical).toBeVisible();
-      // The archive replays the Decision's own card rather than a scrubbed
-      // stand-in, carrying neither its address nor any way to answer it: a
-      // change the plan no longer holds is evidence, not a live question.
-      await expect(historical.locator("[data-component-diff]")).toHaveCount(1);
-      await expect(historical.locator("[data-block-id]")).toHaveCount(0);
-      await expect(
-        historical.locator("[inert] [data-component-diff]"),
-      ).toHaveCount(1);
+      // A change whose block is gone has nowhere in the plan to stand, and the
+      // foot of the document is not a place: it is as far from the content as
+      // the page allows. So it renders nothing, and the reviewer keeps the
+      // step's own account of the change rather than a card in exile.
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+      await expect(page.locator("[data-component-diff]")).toHaveCount(0);
       await expect(
         page.getByRole("button", {
           name: "Comment on How should we ship this release?",
@@ -6059,14 +6087,14 @@ Triage lives on one screen.
   }
 });
 
-test("should fit a component diff the archive replays, not draw it at its authored size", async ({
+test("should fit a component diff the lens replays, not draw it at its authored size", async ({
   page,
 }) => {
-  // The archived replay installs a component's own diff view into a host of
-  // its own. A component that sizes itself in the browser has no layout until
-  // the shell runs over it, and nothing throws when it does not: the reader
-  // simply meets a screen drawn at its authored 1200px inside a column half
-  // that wide, at the foot of the document.
+  // The lens installs a component's own diff view over the block's root. A
+  // component that sizes itself in the browser has no layout until the shell
+  // runs over it, and nothing throws when it does not: the reader simply
+  // meets a screen drawn at its authored 1200px inside a column half that
+  // wide.
   await page.setViewportSize({ width: 1280, height: 900 });
   const directory = await mkdtemp(join(tmpdir(), "big-plan-replay-fit-"));
   const planPath = join(directory, "plan.mdx");
@@ -6122,23 +6150,21 @@ Triage lives on one screen.
       await page.getByRole("button", { name: "Exit review" }).first().click();
     });
 
-    await test.step("fit the replay the archive stands in for the block with", async () => {
-      // Emptying the plan of its addresses is what leaves the change with
-      // nowhere of its own to stand, which is the only path to the archive.
-      await page
-        .locator("article [data-block-id]")
-        .evaluateAll((nodes) => nodes.forEach((node) => node.remove()));
+    await test.step("fit the replayed component the lens installs in place", async () => {
+      // The lens installs a copy of the component's own diff over the block's
+      // root, and that copy reaches the browser with no plan identity on it.
+      // The shell still has to run its wireframe fit over that markup, and
+      // nothing about the swap tells it to unless the replacement is
+      // announced - so this is the assertion that the announcement happened.
       await rail
         .getByRole("button", { name: /Review changes?(?: \(\d+\))?/u })
         .last()
         .click();
-      const archive = page.locator("[data-review-historical-changes]");
-      await expect(
-        archive.getByRole("region", { name: "Updated" }),
-      ).toBeVisible();
+      const diff = page.locator("[data-component-diff]");
+      await expect(diff).toBeVisible();
       // Only the side the reader can see has a box to be fitted into; the
       // other side of the toggle is not laid out at all until it is shown.
-      const shownScreen = archive.locator(
+      const shownScreen = diff.locator(
         "[data-wireframe-screen][data-wireframe-current]:visible",
       );
       const frame = shownScreen.locator(".wireframe-frame").first();
@@ -8096,9 +8122,10 @@ test.describe("a replacement behind the stable address", () => {
 
 // Block ids are structural paths, so an id minted for a superseded revision
 // can still resolve in the current document while naming different content.
-// The lens must detect that drift and fall back to the historical archive
-// instead of rendering the change beside the wrong block.
-test("should archive a superseded change whose block id now names different content", async ({
+// That is the reader's own situation - the plan moved on under a change they
+// have not answered - so the lens says so in place, holding the address to
+// the kind of block it named rather than to the words it recorded.
+test("should review a superseded change in place when its block id now names different content", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -8284,45 +8311,40 @@ Reviewers confirm the output by hand.
       await expect(drifted).toContainText("A canary rollout now guards");
     });
 
-    await test.step("reviewing the superseded change lands in the archive, not beside the drifted block", async () => {
+    await test.step("review the superseded change over the block it is about", async () => {
       await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
       await rail
         .getByRole("button", { name: /Expand thread:/u })
         .first()
         .click();
       await rail.getByRole("button", { name: "Review change" }).click();
-      const archive = page.locator("[data-review-historical-changes]");
-      await expect(archive).toHaveCount(1);
-      const lens = archive.locator("[data-review-diff-lens]");
-      await expect(lens).toContainText("Updated");
+      // The plan revised this paragraph again after the change was proposed,
+      // so its recorded text no longer matches what stands there. The address
+      // and the kind still do, and that is the whole of the claim: this is
+      // where the change happened, and the reader is told the ground has
+      // moved rather than being sent to the foot of the document to read
+      // about it out of context.
+      const lens = page.locator("[data-review-diff-lens]");
+      await expect(lens).toHaveCount(1);
+      await expect(lens).toContainText("plan revised again");
       await expect(lens).toContainText("checks before merge");
       await expect(lens.locator("ins")).toContainText("automated");
-      // Every lens host must be the archive's own; none may sit beside the
-      // block whose id the superseded diff can still resolve.
-      await expect(
-        page.locator(
-          "[data-review-diff-lens-host]:not([data-review-historical-diff])",
-        ),
-      ).toHaveCount(0);
-      await expect(drifted).toBeVisible();
       const placement = await page.evaluate(() => {
-        const archiveElement = document.querySelector(
-          "[data-review-historical-changes]",
-        );
+        const host = document.querySelector("[data-review-diff-lens-host]");
         const slides = document.querySelectorAll("[data-slide]");
         const lastSlide = slides.item(slides.length - 1);
-        if (archiveElement === null || lastSlide === null) return null;
+        if (host === null || lastSlide === null) return null;
         return {
           isAfterLastSlide:
-            (lastSlide.compareDocumentPosition(archiveElement) &
+            (lastSlide.compareDocumentPosition(host) &
               Node.DOCUMENT_POSITION_FOLLOWING) !==
             0,
-          isOutsideSlides: archiveElement.closest("[data-slide]") === null,
+          isInsideSlides: host.closest("[data-slide]") !== null,
         };
       });
       expect(placement).toEqual({
-        isAfterLastSlide: true,
-        isOutsideSlides: true,
+        isAfterLastSlide: false,
+        isInsideSlides: true,
       });
     });
   } finally {
@@ -8331,7 +8353,7 @@ Reviewers confirm the output by hand.
   }
 });
 
-test("should archive a historical component inside an article that has no slides", async ({
+test("should render no change at all inside an article that has no slides", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -8524,22 +8546,16 @@ The current plan contains no slides.
       .first()
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
-    const archive = page.locator("[data-review-historical-changes]");
-    await expect(archive).toHaveCount(1);
-    // A plan with no slides still has an article, which is where the archive
-    // must land: appended after the last slide when there is one, and to the
-    // article itself when there is not.
-    expect(
-      await archive.evaluate((element) => element.closest("article") !== null),
-    ).toBe(true);
-    // The archived change is the wireframe's own card, replayed as evidence:
-    // it shows what changed, publishes no address, and offers nothing to act
-    // on, because the block it describes is no longer in the plan.
-    const archived = archive.locator("[data-component-diff]");
-    await expect(archived).toContainText("Automated queue");
-    await expect(archive.locator("[data-block-id]")).toHaveCount(0);
-    await expect(archive.locator("[inert] [data-component-diff]")).toHaveCount(
-      1,
+    // Every block the change described is gone, so there is nowhere in the
+    // plan for it to stand and nothing is rendered. The review step still
+    // names the change, and the thread still holds the agent's account of it;
+    // what does not happen is a card stranded below the plan, which is where
+    // this used to land and the furthest point on the page from the content
+    // it was about.
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+    await expect(page.locator("[data-component-diff]")).toHaveCount(0);
+    await expect(page.locator("article")).toContainText(
+      "The current plan contains no slides.",
     );
   } finally {
     await closeReviewRuntime({ page, runtime });
@@ -8928,7 +8944,7 @@ test("should open a digest entry in the slide its section header names", async (
     await entry.click();
 
     const lens = page.locator(
-      "[data-review-diff-lens-host]:not([data-review-historical-diff]) [data-review-diff-lens]",
+      "[data-review-diff-lens-host] [data-review-diff-lens]",
     );
     await expect(lens).toHaveCount(1);
     // The slide the reader actually arrived in must be the slide the entry's
@@ -9628,9 +9644,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       });
     });
 
-    const lensHost = page.locator(
-      "[data-review-diff-lens-host]:not([data-review-historical-diff])",
-    );
+    const lensHost = page.locator("[data-review-diff-lens-host]");
     const anchorKicker = async (): Promise<string | null> =>
       lensHost.evaluate(
         (element) =>

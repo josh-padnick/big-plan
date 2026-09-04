@@ -59,6 +59,17 @@ export type ReviewComment = {
   readonly createdAt: string;
   readonly premiseSnapshot: string;
   readonly target: CommentTarget;
+  /**
+   * The change this comment was written about, where it was written from the
+   * change drawer rather than as a note on the plan.
+   *
+   * A comment is the first thing said in its thread, and a drawer that shows
+   * one change's conversation has to be able to recognise it. Every later
+   * message carries the association on its reply; without it here, the one
+   * message the reviewer sent from the drawer is the one message the drawer
+   * cannot show them.
+   */
+  readonly aboutBlockId?: string;
 };
 
 /** What the renderer knows about the blocks a comment may point at. */
@@ -603,6 +614,10 @@ const validateCommentList = ({
         premiseSnapshotFor?.(comment, id) ??
         asSnapshotDigest(comment.premiseSnapshot),
       target: targetFor(comment, id),
+      ...(typeof comment.aboutBlockId === "string" &&
+      comment.aboutBlockId !== ""
+        ? { aboutBlockId: comment.aboutBlockId }
+        : {}),
     };
   });
   if (new Set(comments.map((comment) => comment.id)).size !== comments.length) {

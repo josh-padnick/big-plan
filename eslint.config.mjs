@@ -32,6 +32,16 @@ const PLAN_IDENTITY_SELECTOR = {
     "Resolve plan identity through live-target.browser.ts (liveBlock, liveBaselineBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, the visible-copy preference, and the drift check.",
 };
 
+// Plan content belongs only at its live plan location. These selectors fence
+// the former foot-of-page fallback shapes so an unanchored change stays absent;
+// structural supersession belongs to diff-anchor.ts instead.
+const FOOT_OF_PAGE_SELECTOR = {
+  selector:
+    'TemplateElement[value.raw=/data-review-historical/], Literal[value=/data-review-historical/], MemberExpression[property.name="reviewHistoricalChanges"], MemberExpression[property.name="reviewHistoricalDiff"], CallExpression[callee.property.name="after"][callee.object.name=/[Ss]lide/]',
+  message:
+    "Plan content belongs in the plan: a change with no live anchor renders nothing. The foot-of-page historical archive was removed in BIG-19; anchor superseded locations by structural address in diff-anchor.ts instead of appending after the last slide.",
+};
+
 // Anything laid out as a grid in a bounded column must say what its column
 // is. A grid item keeps `min-width: auto`, so an implicit track is floored at
 // the widest item's min-content width and the whole container grows past the
@@ -665,6 +675,7 @@ export default tseslint.config(
       "no-restricted-syntax": [
         "error",
         PLAN_IDENTITY_SELECTOR,
+        FOOT_OF_PAGE_SELECTOR,
         GRID_TRACK_SELECTOR,
       ],
     },
@@ -675,7 +686,11 @@ export default tseslint.config(
     // deliberate answer for; they are out of the grid fence only.
     files: ["src/render/shell/*-script.ts"],
     rules: {
-      "no-restricted-syntax": ["error", PLAN_IDENTITY_SELECTOR],
+      "no-restricted-syntax": [
+        "error",
+        PLAN_IDENTITY_SELECTOR,
+        FOOT_OF_PAGE_SELECTOR,
+      ],
     },
   },
   {

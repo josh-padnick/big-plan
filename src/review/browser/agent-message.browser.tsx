@@ -25,10 +25,7 @@ import { ACKNOWLEDGED_STATUS_LABEL } from "../shared/agent-status.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
-import {
-  UNRECORDABLE_ACCEPTANCE_LABEL,
-  useDiffTour,
-} from "./diff-tour.browser.js";
+import { useDiffTour } from "./diff-tour.browser.js";
 import {
   AgentIdentityChip,
   AgentIdentityText,
@@ -40,7 +37,7 @@ import {
 } from "./message-markdown-view.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
 import { advancedTourPlaceId, tourIsBehind } from "./tour-advance.js";
-import { Badge, Button, Tooltip, WorkingMark } from "./ui.browser.js";
+import { Badge, Tooltip, WorkingMark } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
@@ -483,14 +480,14 @@ export const AgentChangeDigest = ({
   placeIds,
   spilloverCount,
   isSuperseded,
+  isPremiseView,
   isLoading,
   onLoad,
   actionLabel,
   onResolve,
-  onRevert,
-  canRevert,
+  onDeleteThread,
   thread,
-  onKeepChatting,
+  chatThreadId,
 }: {
   readonly diff: SnapshotDiff | null;
   /** The thread that owns this change set, where the set has one. */
@@ -499,26 +496,32 @@ export const AgentChangeDigest = ({
   readonly placeIds?: ReadonlyArray<string>;
   readonly spilloverCount?: number;
   readonly isSuperseded?: boolean;
+  /** True when this digest compares the reviewer's premise with the plan now. */
+  readonly isPremiseView?: boolean;
   readonly isLoading: boolean;
   readonly onLoad: () => void;
   readonly actionLabel?: string;
   readonly onResolve?: () => void;
-  readonly onRevert?: () => void;
-  readonly canRevert?: boolean;
+  /** Opens the confirmation that deletes the thread this change set belongs to. */
+  readonly onDeleteThread?: () => void;
   readonly thread?: {
     readonly label: string;
     readonly onOpen: () => void;
   };
-  readonly onKeepChatting?: () => void;
+  /**
+   * The thread the change drawer chats in. An id rather than the conversation:
+   * the exchange outlives this card, and one owner that always holds it
+   * publishes the turns against this id.
+   */
+  readonly chatThreadId?: string;
 }) => {
   const {
     activeDiff,
     activeChangeSetId,
+    activeIsSuperseded,
     activePlaceId,
-    canRecordAcceptance,
     isPlaceAccepted,
     dispositionOf,
-    setPlacesDecided,
     standingOf,
     closeTour,
     openTour,
@@ -538,6 +541,44 @@ export const AgentChangeDigest = ({
     changeSetId,
     diff,
   });
+  const ownsOpenTour =
+    changeSetId !== undefined && activeChangeSetId === changeSetId;
+  useEffect(() => {
+    // The plan can advance while the reviewer is still reading a change, and
+    // when it does the comparison on screen is about a revision the plan has
+    // left behind. Saying so is the whole difference between evidence and a
+    // wrong claim about what the plan says, so the tour is handed the fact as
+    // it stands now rather than as it stood when the tour opened. It keeps its
+    // place: only what the header says about the ground changes.
+    if (!ownsOpenTour || diff === null) return;
+    if ((activeIsSuperseded ?? false) === (isSuperseded ?? false)) return;
+    openTour({
+      diff,
+      changeSetId,
+      ...(activePlaceId === null ? {} : { startPlaceId: activePlaceId }),
+      placeIds: placeIdsInTour,
+      isSuperseded: isSuperseded === true,
+      isPremiseView,
+      onResolve,
+      onDeleteThread,
+      thread,
+      chatThreadId,
+    });
+  }, [
+    activeIsSuperseded,
+    activePlaceId,
+    changeSetId,
+    chatThreadId,
+    diff,
+    isPremiseView,
+    isSuperseded,
+    onDeleteThread,
+    onResolve,
+    openTour,
+    ownsOpenTour,
+    placeIdsInTour,
+    thread,
+  ]);
   useEffect(() => {
     // The reviewer is reading this thread's change set, and the thread just
     // committed another round, so the stepper is handed the set as it now
@@ -557,23 +598,23 @@ export const AgentChangeDigest = ({
       ...(startPlaceId === undefined ? {} : { startPlaceId }),
       placeIds: placeIdsInTour,
       isSuperseded,
+      isPremiseView,
       onResolve,
-      onRevert,
-      canRevert,
+      onDeleteThread,
       thread,
-      onKeepChatting,
+      chatThreadId,
     });
   }, [
     activeDiff,
     activePlaceId,
-    canRevert,
     changeSetId,
     diff,
     isBehind,
     isSuperseded,
-    onKeepChatting,
+    isPremiseView,
+    chatThreadId,
+    onDeleteThread,
     onResolve,
-    onRevert,
     openTour,
     placeIdsInTour,
     thread,
@@ -701,11 +742,11 @@ export const AgentChangeDigest = ({
                       placeIds: placeIdsInTour,
                       startPlaceId: entry.placeId,
                       isSuperseded,
+                      isPremiseView,
                       onResolve,
-                      onRevert,
-                      canRevert,
+                      onDeleteThread,
                       thread,
-                      onKeepChatting,
+                      chatThreadId,
                     })
                   }
                 >
@@ -774,11 +815,11 @@ export const AgentChangeDigest = ({
               ...(changeSetId === undefined ? {} : { changeSetId }),
               placeIds: placeIdsInTour,
               isSuperseded,
+              isPremiseView,
               onResolve,
-              onRevert,
-              canRevert,
+              onDeleteThread,
               thread,
-              onKeepChatting,
+              chatThreadId,
             });
           }}
         >
@@ -791,32 +832,6 @@ export const AgentChangeDigest = ({
                   ? "Review change"
                   : `Review changes (${available.length})`))}
         </button>
-        {available.length <= 1 || allDecided ? null : (
-          <Button
-            variant="accentOutline"
-            size="micro"
-            disabled={!canRecordAcceptance}
-            aria-label={
-              canRecordAcceptance
-                ? "Accept all changes"
-                : UNRECORDABLE_ACCEPTANCE_LABEL
-            }
-            onClick={() => {
-              const undecided = available
-                .filter(
-                  (place) => dispositionOf(diff, place.placeId) === "undecided",
-                )
-                .map((place) => place.placeId);
-              if (undecided.length > 0) {
-                setPlacesDecided(diff, undecided, "accepted", {
-                  onlyUndecided: true,
-                });
-              }
-            }}
-          >
-            Accept all
-          </Button>
-        )}
       </div>
     </div>
   );

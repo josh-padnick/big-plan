@@ -571,7 +571,15 @@ export const Tooltip = ({
           </span>,
           document.body,
         );
-  if (asChild) {
+  // A disabled control dispatches no pointer events, so a tooltip cloned onto
+  // one never opens - and a disabled control is exactly when the reader most
+  // needs to be told what it does and why they cannot press it. The wrapper
+  // form receives those events instead, so an unpressable child is given one
+  // whether the caller asked for asChild or not.
+  const isChildDisabled =
+    asChild &&
+    (children.props as { readonly disabled?: boolean }).disabled === true;
+  if (asChild && !isChildDisabled) {
     return (
       <>
         {cloneElement(children, {
@@ -623,8 +631,61 @@ type AlertDialogProps = {
   readonly footerAlign?: "end" | "split";
   /** Disables both choices while the dialog's action is in flight. */
   readonly pending?: boolean;
+  readonly actionDisabled?: boolean;
   /** When set, the panel hangs below this control instead of the viewport center. */
   readonly anchorRef?: RefObject<HTMLElement | null>;
+};
+
+/*
+The async clipboard, then the synchronous fallback that still works where it is
+absent.
+
+`navigator.clipboard` exists only on a secure context, and a Big Plan review is
+routinely read over plain http - a proxied tailnet origin is the case the captain
+hit - where it is `undefined`. Left there, the copy silently did nothing and the
+control never confirmed (BIG-281). The fallback selects the value in an offscreen
+textarea and asks the document to copy the selection, which every browser that
+lacks the async API still honours from inside a user gesture. It is reached
+synchronously - before any `await` - so the click that triggered it is still the
+gesture the copy runs under.
+*/
+const legacyExecCopy = (value: string): boolean => {
+  if (typeof document === "undefined") return false;
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  // Out of the layout and out of sight, but still selectable: a display:none or
+  // an unappended node cannot hold the selection execCommand copies from.
+  textarea.style.cssText =
+    "position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:none;opacity:0;pointer-events:none;";
+  const selection = document.getSelection();
+  const priorRange =
+    selection !== null && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : null;
+  const priorActiveElement = document.activeElement;
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let copied: boolean;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  document.body.removeChild(textarea);
+  if (
+    priorActiveElement instanceof HTMLElement &&
+    priorActiveElement.isConnected
+  ) {
+    priorActiveElement.focus();
+  }
+  // Leave the reader's own selection as it was, not collapsed onto our textarea.
+  if (priorRange !== null && selection !== null) {
+    selection.removeAllRanges();
+    selection.addRange(priorRange);
+  }
+  return copied;
 };
 
 /*
@@ -659,16 +720,27 @@ export const useCopyToClipboard = (value: string) => {
     }
     setCopied(false);
     setFailed(false);
-    try {
-      if (navigator.clipboard === undefined) throw new Error("Unavailable");
-      await navigator.clipboard.writeText(value);
-      if (!mounted.current || attempt !== copyAttempt.current) return;
-      setCopied(true);
-    } catch {
-      if (!mounted.current || attempt !== copyAttempt.current) return;
+    // The synchronous fallback first where the async API is absent, so the copy
+    // runs inside the click gesture rather than after an await has spent it.
+    let didCopy: boolean;
+    if (navigator.clipboard?.writeText === undefined) {
+      didCopy = legacyExecCopy(value);
+    } else {
+      try {
+        await navigator.clipboard.writeText(value);
+        didCopy = true;
+      } catch {
+        // A present-but-refused clipboard (permission, transient failure) still
+        // gets the fallback its absence would have.
+        didCopy = legacyExecCopy(value);
+      }
+    }
+    if (!mounted.current || attempt !== copyAttempt.current) return;
+    if (!didCopy) {
       setFailed(true);
       return;
     }
+    setCopied(true);
     resetTimeout.current = window.setTimeout(() => {
       resetTimeout.current = undefined;
       setCopied(false);
@@ -713,6 +785,7 @@ export const AlertDialog = ({
   width = "default",
   footerAlign = "end",
   pending = false,
+  actionDisabled = false,
   anchorRef,
 }: AlertDialogProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -900,7 +973,7 @@ export const AlertDialog = ({
             variant={resolvedActionVariant}
             size="md"
             onClick={onAction}
-            disabled={pending}
+            disabled={pending || actionDisabled}
             aria-describedby={footnote === undefined ? undefined : footnoteId}
             className={
               width === "wide" && footerAlign === "split"

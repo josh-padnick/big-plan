@@ -3,13 +3,16 @@
 // projection and local disclosure/copy interactions.
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
-import { agentSessionAffordance } from "../shared/agent-session-link.js";
+import {
+  agentSessionAffordance,
+  agentSessionReference,
+} from "../shared/agent-session-link.js";
 import {
   AGENT_SESSION_ENDED_REASON,
   agentActivityIsAttached,
@@ -17,6 +20,10 @@ import {
   agentHasEverConnected,
 } from "../shared/agent-status.js";
 import { AGENT_DISCONNECTED_REASON } from "../shared/agent-disconnect.js";
+import {
+  reviewWriteRefusal,
+  type ReviewWriteBlocked,
+} from "./review-write-availability.js";
 import type {
   AgentHealth,
   AgentHealthIndicator,
@@ -206,6 +213,8 @@ export const summarizeAgentConnection = ({
 }): {
   readonly everConnected: boolean;
   readonly sinceAtMs: number | undefined;
+  /** Which way the latest edge went, so the row can say what its time is. */
+  readonly latestConnected: boolean | undefined;
   readonly quietPeriods: number;
   readonly sessionsEnded: number;
   readonly resumed: number;
@@ -256,10 +265,36 @@ export const summarizeAgentConnection = ({
   return {
     everConnected: agentHasEverConnected({ events }),
     sinceAtMs: latest === undefined ? undefined : latest.atMs,
+    latestConnected: latest === undefined ? undefined : latest.connected,
     quietPeriods,
     sessionsEnded,
     resumed,
   };
+};
+
+/**
+ * What the connect section says about the agent already on the review.
+ *
+ * "Already answering" was stated whenever an agent was attached, and read as
+ * the card's contradiction when the card directly above it said the agent was
+ * stalled, in error, or gone with its seat still held (BIG-264). The sentence
+ * now follows the card's own reading, and the sentences after it - that a new
+ * agent joins as an observer, and that the reviewer can make it the primary -
+ * are the same in every case, because they are.
+ */
+export const attachedAgentLead = (
+  activity: Pick<CurrentAgentActivity, "state">,
+): string => {
+  switch (activity.state) {
+    case "stalled":
+      return "The primary agent is attached but has not reported for a while.";
+    case "errored":
+      return "The primary agent is attached but reported a problem.";
+    case "disconnected":
+      return "The primary agent has disconnected but still holds this review; disconnect it above to free the review.";
+    default:
+      return "An agent is already answering this review. This is the primary agent.";
+  }
 };
 
 /*
@@ -300,22 +335,65 @@ const DisconnectHelp = () => (
 const DisconnectAgentControl = ({
   dropsWork,
   isPending,
+  block,
   onDisconnect,
 }: {
   /** Whether the agent is holding an answer this would drop. */
   readonly dropsWork: boolean;
   /** Whether the reviewer has already asked and the agent has not yet gone. */
   readonly isPending: boolean;
+  /**
+   * Why the disconnect could not be sent right now, when it could not.
+   *
+   * The control is drawn inert with that reason rather than live with a
+   * refusal waiting behind it. Live, it opened a dialog promising the agent
+   * would be told, and the click then answered with nothing the reviewer could
+   * see: refused in the browser when the session was unreachable, refused by
+   * the runtime when the tab was out of date (BIG-282). The reason is the
+   * gate's own sentence, so the words here cannot drift from the refusal.
+   */
+  readonly block?: ReviewWriteBlocked;
   readonly onDisconnect: () => void;
 }) => {
   const [isConfirming, setIsConfirming] = useState(false);
+  const reasonId = useId();
+  const blockedReason =
+    block === undefined
+      ? undefined
+      : reviewWriteRefusal({ path: "disconnect-agent", availability: block });
   return (
-    <span className="ml-auto inline-flex shrink-0 items-center gap-1">
-      <DisconnectHelp />
+    <span className="ml-auto inline-flex shrink-0 flex-wrap items-center justify-end gap-1">
+      {blockedReason === undefined ? (
+        <DisconnectHelp />
+      ) : (
+        /* The reason sits in the row so a reader who never hovers still gets
+           it, and the button names it as its own description. The tooltip's
+           full sentence - cause, what became of the agent, the way back - is
+           reached from the mark, because the button itself is inert. */
+        <Tooltip label={blockedReason} placement="above" asChild>
+          <button
+            type="button"
+            className="inline-flex size-5 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 leading-none opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&>svg]:size-3.5"
+            aria-label="Why the agent cannot be disconnected right now"
+          >
+            <Icon icon={INFO_ICON} />
+          </button>
+        </Tooltip>
+      )}
+      {block === undefined ? null : (
+        <span
+          id={reasonId}
+          className="min-w-0 text-2xs text-muted"
+          data-review-agent-disconnect-block={block.block}
+        >
+          {block.label}
+        </span>
+      )}
       <Button
         variant="toned"
         size="micro"
-        disabled={isPending}
+        disabled={isPending || block !== undefined}
+        {...(block === undefined ? {} : { "aria-describedby": reasonId })}
         data-review-agent-disconnect=""
         onClick={() => setIsConfirming(true)}
       >
@@ -367,6 +445,7 @@ const CurrentActivityCard = ({
   isPrimary,
   disconnectRequestedAtMs,
   isDisconnectingAgent,
+  disconnectBlock,
   onViewRequest,
   onDisconnect,
 }: {
@@ -400,6 +479,8 @@ const CurrentActivityCard = ({
   readonly disconnectRequestedAtMs?: number;
   /** Whether a disconnect the reviewer confirmed has not been answered yet. */
   readonly isDisconnectingAgent: boolean;
+  /** Why a disconnect cannot be sent right now, when it cannot (BIG-282). */
+  readonly disconnectBlock?: ReviewWriteBlocked;
   readonly onViewRequest: (requestId: string, kind: string) => void;
   readonly onDisconnect: () => void;
 }) => {
@@ -453,20 +534,28 @@ const CurrentActivityCard = ({
   // Whether there is an agent for an identity to belong to. A session with none
   // has nothing to report and no gap to explain.
   // "Since" alone made the reader carry the card's state down to the row and
-  // apply it themselves. The label states it.
+  // apply it themselves. The label states it - and states the agent's own
+  // last transition, which is the only fact the time is. A page that cannot
+  // use its session used to label the agent's connect time "Unreachable
+  // since", dating the loss of the session by an event that was not one
+  // (BIG-264, BIG-282).
   const sinceLabel =
-    activity.state === "disconnected"
+    activity.state === "disconnected" || connection.latestConnected === false
       ? "Disconnected since"
-      : activity.state === "offline"
-        ? "Unreachable since"
-        : "Connected since";
+      : "Connected since";
   const sessionAffordance = agentSessionAffordance({
     ...(sessionUrl === undefined ? {} : { sessionUrl }),
     ...(sessionId === undefined ? {} : { sessionId }),
   });
-  /* The handle the fact row states. A declared session is the answer; an agent
-     that declared none is named by its roster id, the only name it has. */
-  const sessionHandle = sessionId ?? writerId;
+  /* What the fact row states and copies. The bare session id is the answer - the
+     one the connector declared, or the one its URL carries - and the reviewer
+     copies the whole id, never the URL that wraps it; an agent that declared no
+     session is named by its roster id, the only name it has (BIG-281). */
+  const sessionReference = agentSessionReference({
+    ...(sessionUrl === undefined ? {} : { sessionUrl }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+    ...(writerId === undefined ? {} : { writerId }),
+  });
   // Since and Events describe a connection at rest; the session identifies the
   // agent whatever it is doing. The working card carries the second without the
   // first, and every other state carries both.
@@ -475,7 +564,7 @@ const CurrentActivityCard = ({
     connection.sinceAtMs !== undefined &&
     connection.everConnected;
   const showsConnectionFacts =
-    showsSinceAndEvents || sessionHandle !== undefined;
+    showsSinceAndEvents || sessionReference !== undefined;
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
   /*
@@ -601,14 +690,16 @@ const CurrentActivityCard = ({
               </dd>
             </div>
           ) : null}
-          {sessionHandle === undefined ? null : (
-            /* The one place a session identifier is offered. It cannot be
-               followed, so it belongs with the facts a reader consults rather
-               than beside the state they are reading - and having it here is
-               what lets the identity line above it carry no session at all. */
+          {sessionReference === undefined ? null : (
+            /* The one place a session identifier is offered to copy. The link
+               above opens it where it can be opened; this hands over the whole
+               of it for anything else, and having it here is what lets the
+               identity line above carry no session at all. */
             <AgentSessionFact
-              handle={sessionHandle}
-              isCopyable={sessionId !== undefined}
+              handle={sessionReference.handle}
+              {...(sessionReference.copyValue === undefined
+                ? {}
+                : { copyValue: sessionReference.copyValue })}
             />
           )}
           {showsSinceAndEvents ? (
@@ -652,6 +743,9 @@ const CurrentActivityCard = ({
               isPending={
                 isDisconnectingAgent || disconnectRequestedAtMs !== undefined
               }
+              {...(disconnectBlock === undefined
+                ? {}
+                : { block: disconnectBlock })}
               onDisconnect={onDisconnect}
             />
           ) : null}
@@ -989,6 +1083,7 @@ export const AgentConnectionPanel = ({
   hasAttachedAgent,
   disconnectRequestedAtMs,
   isDisconnectingAgent,
+  disconnectBlock,
   onViewRequest,
   onDisconnect,
 }: {
@@ -1038,6 +1133,8 @@ export const AgentConnectionPanel = ({
   readonly disconnectRequestedAtMs?: number;
   /** Whether a disconnect the reviewer confirmed has not been answered yet. */
   readonly isDisconnectingAgent: boolean;
+  /** Why a disconnect cannot be sent right now, when it cannot (BIG-282). */
+  readonly disconnectBlock?: ReviewWriteBlocked;
   readonly onViewRequest: (requestId: string, kind: string) => void;
   readonly onDisconnect: () => void;
 }) => {
@@ -1092,6 +1189,7 @@ export const AgentConnectionPanel = ({
               ? {}
               : { disconnectRequestedAtMs })}
             isDisconnectingAgent={isDisconnectingAgent}
+            {...(disconnectBlock === undefined ? {} : { disconnectBlock })}
             onViewRequest={onViewRequest}
             onDisconnect={onDisconnect}
           />
@@ -1104,10 +1202,13 @@ export const AgentConnectionPanel = ({
       {roster === undefined ? null : <div className="mt-3">{roster}</div>}
       {/* Always present with respect to the AGENT: a section that comes and
           goes as an agent connects and drops teaches the reader it might not be
-          there when they need it. Withheld only when the review session itself
-          is unreachable, where a reconnect instruction would point at a URL
-          that is already dead. */}
-      {isReadOnly || !agentStatusIsAvailable ? null : (
+          there when they need it. Withheld only while this page cannot use the
+          review session, where a connect instruction would point at a URL that
+          is dead or a tab that is out of date, and its claim about the agent
+          would sit under a card saying the page cannot see it (BIG-264). */}
+      {isReadOnly ||
+      !agentStatusIsAvailable ||
+      activity.state === "offline" ? null : (
         <details
           className="group mt-3 rounded-md border border-edge text-xs text-muted"
           open={recoveryIsOpen}
@@ -1138,11 +1239,7 @@ export const AgentConnectionPanel = ({
               the one the cards above already use.
               */
               <>
-                <p className="m-0">
-                  An agent is already answering this review. This is the{" "}
-                  <strong className="font-semibold text-ink">primary</strong>{" "}
-                  agent.
-                </p>
+                <p className="m-0">{attachedAgentLead(activity)}</p>
                 {/*
                 "Read the plan", and not the conversation. An observer's
                 `agent next` returns the plan path and the review URL and

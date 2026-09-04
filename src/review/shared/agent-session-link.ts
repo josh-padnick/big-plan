@@ -68,6 +68,71 @@ export type AgentSessionAffordance =
   | { readonly kind: "none" };
 
 /**
+ * How a card states the session an agent is answering from: which value it
+ * shows the tail of, and which value its copy control hands over.
+ *
+ * The copyable value is the bare session id, never the URL that carries it. A
+ * reviewer matches it against the id their own tool printed, and a whole URL is
+ * a mouthful to check four characters of; the URL still opens from its own link
+ * (BIG-281). When the connector declared only a URL, the id is the conversation
+ * segment of it. A roster id is neither a session nor a URL: it names an agent
+ * inside Big Plan and nothing outside it, so it is shown as the only name a
+ * session has when it declared no id, and left uncopyable because there is
+ * nowhere to paste it. The tail is taken from whatever is shown.
+ */
+export type AgentSessionReference = {
+  /** The value whose tail the card shows: the bare id, URL, or roster id. */
+  readonly handle: string;
+  /** The bare session id to copy, absent when none can be resolved. */
+  readonly copyValue?: string;
+};
+
+/**
+ * The bare session id a URL carries: its last non-empty path segment, which is
+ * the conversation's own handle on every interface Big Plan links and the
+ * natural id on the CLI addresses it does not. A non-URL string is already an
+ * id. A URL with no path carries no bare id, so it remains display-only.
+ */
+const bareSessionId = (sessionUrl: string): string | undefined => {
+  let parsed: URL | undefined;
+  try {
+    parsed = new URL(sessionUrl);
+  } catch {
+    return sessionUrl;
+  }
+  const segments = parsed.pathname
+    .split("/")
+    .filter((segment) => segment !== "");
+  return segments[segments.length - 1];
+};
+
+/**
+ * Resolves the session a card states from what the connector declared and the
+ * roster id standing behind it, so every card shows and copies the same bare
+ * session id the same way (BIG-281).
+ */
+export const agentSessionReference = ({
+  sessionUrl,
+  sessionId,
+  writerId,
+}: {
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
+  readonly writerId?: string;
+}): AgentSessionReference | undefined => {
+  if (sessionId !== undefined) {
+    return { handle: sessionId, copyValue: sessionId };
+  }
+  if (sessionUrl !== undefined) {
+    const id = bareSessionId(sessionUrl);
+    return id === undefined
+      ? { handle: sessionUrl }
+      : { handle: id, copyValue: id };
+  }
+  return writerId === undefined ? undefined : { handle: writerId };
+};
+
+/**
  * Chooses what a session declaration earns: a link, a copyable identifier, or
  * nothing at all when nothing was declared.
  */

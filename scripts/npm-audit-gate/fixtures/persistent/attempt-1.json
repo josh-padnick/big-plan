@@ -1,0 +1,11 @@
+{
+  "status": 1,
+  "stderr": "npm error code E503",
+  "stdoutJson": {
+    "error": {
+      "code": "E503",
+      "summary": "503 Service Unavailable - GET https://registry.npmjs.org/-/npm/v1/security/advisories/bulk",
+      "detail": "The npm registry is temporarily unavailable."
+    }
+  }
+}

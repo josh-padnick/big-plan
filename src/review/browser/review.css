@@ -381,9 +381,15 @@ here; all values use the document theme's closed token vocabulary.
    document. Without room under the plan the last change in a set can never
    rise clear of it: the page runs out of scroll first. The reserve matches the
    bar's own height plus the offset it floats at, so the change that ends the
-   set reaches the same reading position as the one that opens it. */
+   set reaches the same reading position as the one that opens it.
+
+   The bar is not one height. Opening the chat drawer roughly triples it, and a
+   reserve sized for the closed bar leaves the change the reviewer is talking
+   about stuck behind the thing they are talking in. So the measured height is
+   published as a custom property, and the literal below is only the fallback
+   for the frame before the first measurement. */
 @layer components {
   :root[data-review-tour-open] main {
-    padding-bottom: 9rem;
+    padding-bottom: var(--review-tour-reserve, 9rem);
   }
 }

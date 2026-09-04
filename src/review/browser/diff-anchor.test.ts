@@ -79,7 +79,10 @@ describe("lensAnchorCandidates", () => {
     ).toEqual([{ blockId: "approach/paragraph-1", placement: "after" }]);
   });
 
-  it("should refuse neighbour anchors once the plan moved past the change", () => {
+  it("should stand a superseded removal beside its neighbours", () => {
+    // A neighbour describes a revision the reader has moved past, so it is a
+    // worse answer than the block itself, but it still keeps the change where
+    // it happened instead of leaving it without a live anchor.
     expect(
       lensAnchorCandidates(
         location({
@@ -90,10 +93,41 @@ describe("lensAnchorCandidates", () => {
         }),
         { isSuperseded: true },
       ),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        blockId: "approach/paragraph-3",
+        placement: "before",
+      },
+      {
+        blockId: "approach/paragraph-1",
+        placement: "after",
+      },
+    ]);
   });
 
-  it("should carry the result snapshot's text when the id crosses a snapshot boundary", () => {
+  it("should let paragraph neighbours anchor a superseded removed heading", () => {
+    const candidates = lensAnchorCandidates(
+      location({
+        kind: "heading",
+        status: "removed",
+        oldBlockId: "approach/heading-1",
+        beforeBlockId: "approach/paragraph-2",
+        afterBlockId: "approach/paragraph-1",
+      }),
+      { isSuperseded: true },
+    );
+    expect(candidates).toEqual([
+      { blockId: "approach/paragraph-2", placement: "before" },
+      { blockId: "approach/paragraph-1", placement: "after" },
+    ]);
+    expect(
+      candidates.every((candidate) =>
+        candidateMatchesLiveKind({ candidate, liveKind: "paragraph" }),
+      ),
+    ).toBe(true);
+  });
+
+  it("should hold superseded prose to its kind rather than its recorded text", () => {
     expect(
       lensAnchorCandidates(location({ newBlockId: "approach/paragraph-1" }), {
         isSuperseded: true,
@@ -102,12 +136,12 @@ describe("lensAnchorCandidates", () => {
       {
         blockId: "approach/paragraph-1",
         placement: "replace",
-        expectedText: "now",
+        expectedKind: "paragraph",
       },
     ]);
   });
 
-  it("should carry a picture identity when the id crosses a snapshot boundary", () => {
+  it("should not hold superseded prose to a recorded picture either", () => {
     expect(
       lensAnchorCandidates(
         location({
@@ -125,19 +159,14 @@ describe("lensAnchorCandidates", () => {
       {
         blockId: "approach/image-1",
         placement: "replace",
-        expectedText: "now",
-        expectedPicture: {
-          aspect: "image",
-          source: "./assets/after.png",
-          alt: "Map",
-        },
+        expectedKind: "image",
       },
     ]);
   });
 
   it("should hold a superseded component to the kind its id named", () => {
-    // A structural path is not an identity. Without this the historical card
-    // would stand over whatever component inherited the path, hiding a live
+    // A structural path is not an identity. Without this the change lens would
+    // stand over whatever component inherited the path, hiding a live
     // block behind a record of something else.
     const candidates = lensAnchorCandidates(
       location({
@@ -165,8 +194,8 @@ describe("lensAnchorCandidates", () => {
 
   it("should hold a superseded component to its place rather than its old text", () => {
     // A location that brought its own rendering reads the live block for
-    // nothing, so a text expectation could only exile a change the plan still
-    // has a place for into the archive at the foot of the document.
+    // nothing, so a text expectation could only leave a change without an
+    // anchor even though the plan still has a place for it.
     expect(
       lensAnchorCandidates(
         location({

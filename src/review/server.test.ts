@@ -2877,7 +2877,9 @@ describe("review runtime feedback", () => {
       ]),
       responses: [],
       plan: runtime.planPath,
-      agentCommand: expect.stringContaining(`agent '${runtime.planPath}'`),
+      agentCommand: expect.stringContaining(
+        `agent connect '${runtime.planPath}'`,
+      ),
       recoveryPrompt: expect.stringContaining(
         "Reconnect to my existing Big Plan review",
       ),
@@ -4817,7 +4819,7 @@ describe("review runtime resolve invariant", () => {
       expect(refused.status).toBe(409);
       await expect(refused.json()).resolves.toMatchObject({
         error:
-          "Only a queued, canceled, or reverted comment can be deleted from the review",
+          "Only a queued or canceled comment, or a thread whose changes are all decided, can be deleted from the review",
       });
       // Stripping the claim would make the published answer unreadable for
       // good while the plan still carries its revision.

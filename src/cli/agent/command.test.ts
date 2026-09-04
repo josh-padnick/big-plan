@@ -1,9 +1,10 @@
 // Keeps the public CLI adapter responsible for rejecting malformed argument
 // shapes before they reach the review-owned work loop.
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   deriveSnapshotDigest,
@@ -88,6 +89,70 @@ describe("agent command adapter", () => {
     await expect(
       agentCommand(["note", "plan.mdx", "Reading the request", "--agent"]),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
+
+  // One connect call must hand back the whole picture - server, store,
+  // session, role, and how many requests are waiting - so a fresh agent never
+  // reads source or store files to reconstruct where it just attached.
+  it("should return a self-contained connection summary on connect", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-cli-connect-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this question.\n";
+    const servingExecutable = process.argv[1];
+    const wrapperExecutable = join(directory, "serve.mjs");
+    try {
+      process.argv[1] = wrapperExecutable;
+      await writeFile(planPath, source);
+      const review = await startReviewRuntime({ planPath });
+      try {
+        await writeAgentRequest({
+          store: review.store,
+          request: messageAgentRequest({
+            kind: "chat",
+            requestId: "dddddddddddddddd",
+            sessionId: review.sessionId,
+            planId: review.planId,
+            premiseSnapshot: deriveSnapshotDigest(source),
+            createdAt: "2026-08-12T12:00:00.000Z",
+            body: "What should we prioritize?",
+          }),
+        });
+        const result = await agentCommand(["connect", planPath]);
+        expect(result["connection_summary"]).toMatchObject({
+          server: review.url,
+          port: review.port,
+          session_id: review.sessionId,
+          role: expect.any(String),
+          pending_requests: expect.any(Number),
+        });
+        const summary = result["connection_summary"] as Record<string, unknown>;
+        expect(typeof summary["store"]).toBe("string");
+        if (typeof result["protocol"] !== "string") {
+          throw new Error("The connection did not provide its protocol path");
+        }
+        await expect(readFile(result["protocol"], "utf8")).resolves.toContain(
+          "title: Answer a live review request",
+        );
+        const productExecutable = fileURLToPath(
+          new URL("../../../bin/big-plan.mjs", import.meta.url),
+        );
+        expect(result).toMatchObject({
+          respond_command: expect.stringContaining(productExecutable),
+          note_command: expect.stringContaining(productExecutable),
+          next_command: expect.stringContaining(productExecutable),
+        });
+        expect(JSON.stringify(result)).not.toContain(wrapperExecutable);
+      } finally {
+        await review.close();
+      }
+    } finally {
+      if (servingExecutable === undefined) {
+        process.argv.splice(1, 1);
+      } else {
+        process.argv[1] = servingExecutable;
+      }
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it.each([

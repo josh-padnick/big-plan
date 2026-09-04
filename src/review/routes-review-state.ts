@@ -53,6 +53,7 @@ import {
 } from "./change-set-closure.js";
 import { closuresForResolvedThreads } from "./resolved-thread-acceptance.js";
 import { settlementRefusal } from "./review-route-settlement.js";
+import { threadChangesAllDecided } from "./thread-changes-decided.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
@@ -780,14 +781,30 @@ export const deleteSentComment = async (
       ),
   );
   const commentRequests = exchange.requests;
+  // A thread that changed the plan may be deleted once the reviewer has
+  // answered every change it proposed - accepted ones stay in the plan,
+  // rejected ones are already back out of it. What may not be deleted is a
+  // thread still holding a change nobody decided, because that would strand
+  // the change with nothing left on screen to explain or undo it.
+  const changesAllDecided =
+    answeredRequestIds.size === 0 || revertedChangedResponse
+      ? false
+      : await threadChangesAllDecided({
+          store,
+          planPath: resolvedPlanPath,
+          changeSetId: commentId,
+          verdicts: await context.changeVerdicts.read(),
+        });
   if (
-    (answeredRequestIds.size > 0 && !revertedChangedResponse) ||
+    (answeredRequestIds.size > 0 &&
+      !revertedChangedResponse &&
+      !changesAllDecided) ||
     commentRequests.length === 0
   ) {
     return refusal({
       status: 409,
       reason:
-        "Only a queued, canceled, or reverted comment can be deleted from the review",
+        "Only a queued or canceled comment, or a thread whose changes are all decided, can be deleted from the review",
     });
   }
   // Pickup locks the comment only while the claim on it still means something.

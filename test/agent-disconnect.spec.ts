@@ -169,8 +169,23 @@ test("should disconnect a working agent and free the review for the next one", a
       path: testInfo.outputPath("disconnect-connection-log.png"),
     });
 
-    // The review is free, and the question the first agent was holding is back
-    // in the queue for whoever attaches next.
+    // A healthy-page disconnect frees the seat without making the review
+    // unusable: the card names the departure, connection guidance remains,
+    // and the ordinary review controls stay live for the next agent.
+    await expect(activity).toHaveAttribute(
+      "data-review-current-activity",
+      "disconnected",
+    );
+    await expect(activity).toContainText("Agent disconnected");
+    await expect(
+      sidebar.getByText("Reconnect your agent", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }),
+    ).toBeEnabled();
+
+    // The question the first agent was holding is back in the queue for
+    // whoever attaches next.
     const second = await runAgentCli(["next", planPath, "--wait"]);
     expect(agentIdOf(second.stdout, "connection_token")).not.toBe(
       connectionToken,
@@ -231,6 +246,129 @@ test("should disconnect a waiting agent without the dropped-work warning", async
     expect(waitingOutput).toContain("disconnected: true");
   } finally {
     waiting.kill("SIGTERM");
+    await closeReviewRuntime({ page, runtime });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should offer to copy a stalled agent's session address (BIG-281)", async ({
+  page,
+}) => {
+  /*
+  The card states the session an agent is answering from in every state it can
+  be in, and a reviewer copies it to paste into the tool it belongs to. A
+  connector that declares a URL rather than an opaque handle is the common case,
+  and it used to leave the fact row with nothing to copy - the copy control only
+  ever handed over a bare handle (BIG-281). The stalled state is where the
+  captain caught it: the agent is present, the session is stated, and there was
+  no way to lift it.
+
+  This runs over an INSECURE origin, where `navigator.clipboard` is undefined -
+  a proxied tailnet http origin is the case the captain read the review on, and
+  where the copy first silently did nothing and never confirmed. The control
+  must fall back to the document copy command and still show its checkmark.
+  */
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    // Simulate the insecure origin: no async clipboard at all. The control's
+    // fallback selects an offscreen textarea and runs the document copy command,
+    // which we capture from the element it focuses.
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    document.execCommand = (command: string): boolean => {
+      if (command !== "copy") return false;
+      const active = document.activeElement;
+      if (active instanceof HTMLTextAreaElement) {
+        (
+          window as typeof window & { __bigPlanCopiedCode?: string }
+        ).__bigPlanCopiedCode = active.value;
+        return true;
+      }
+      return false;
+    };
+  });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-stalled-copy-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  const claimant = "cccccccccccccccc";
+  const sessionUrl = "https://claude.ai/code/session_018yMaCopyBig281bf1a";
+  // The bare session id the URL carries - what the control copies, never the URL.
+  const bareSessionId = "session_018yMaCopyBig281bf1a";
+  const pendingQuestion = async () =>
+    nextPendingAgentRequest(
+      await readAgentExchange({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+      }),
+      { claimedBy: claimant, nowMs: Date.now() },
+    );
+  try {
+    await page.goto(runtime.url);
+    await askPlanWideQuestion(page);
+    await expect.poll(pendingQuestion, { timeout: 20_000 }).toBeDefined();
+    const pending = await pendingQuestion();
+    if (pending === undefined) throw new Error("The question was not stored");
+
+    const stalledAtMs = Date.now() - AGENT_STALL_MS - 5_000;
+    await claimAgentRequest({
+      store: runtime.store,
+      activeSessionId: runtime.sessionId,
+      requestId: pending.requestId,
+      claimedBy: claimant,
+      connectionToken: "6666666666666666",
+      model: {
+        client: "claude-code 2.1.217",
+        name: "claude-opus-4-8",
+        sessionUrl,
+      },
+      baselineSnapshot: pending.premiseSnapshot,
+      now: new Date(stalledAtMs).toISOString(),
+      clock: () => stalledAtMs,
+    });
+
+    await agentStatusTrigger(page).click();
+    const card = agentSidebar(page).locator("[data-review-current-activity]");
+    await expect(card).toHaveAttribute(
+      "data-review-current-activity",
+      "stalled",
+      { timeout: 20_000 },
+    );
+
+    // The tail names the session the reviewer sees in their own tool, and the
+    // control hands over the whole bare id - not the four characters on screen,
+    // and not the URL that carries it (BIG-281).
+    await expect(card.locator("[data-review-agent-session-id]")).toHaveText(
+      "…bf1a",
+    );
+    const copy = card.locator("[data-review-agent-session-copy]");
+    await expect(copy).toHaveAttribute(
+      "data-review-agent-session-copy",
+      bareSessionId,
+    );
+    await copy.focus();
+    await copy.press("Enter");
+    // The fallback copied the bare id...
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as typeof window & { __bigPlanCopiedCode?: string })
+              .__bigPlanCopiedCode,
+        ),
+      )
+      .toBe(bareSessionId);
+    // ...and the control confirmed it, on the same insecure origin where it
+    // used to sit silent (BIG-281).
+    await expect(copy).toHaveAttribute(
+      "aria-label",
+      "agent session identifier copied",
+    );
+    await expect(copy).toBeFocused();
+  } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }

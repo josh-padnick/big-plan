@@ -9,10 +9,6 @@ import {
   reviewWritePathOutcome,
   type ReviewWriteAvailability,
 } from "./review-write-availability.js";
-import {
-  REVIEW_SESSION_UNREACHABLE_HEADLINE,
-  REVIEW_SESSION_UNREACHABLE_SUPPORTING,
-} from "../shared/agent-status.js";
 
 export type ReviewCommentSubmitAvailability =
   | { readonly state: "available" }
@@ -28,25 +24,17 @@ const COMMENT_OUTCOME = reviewWritePathOutcome("submit-comment");
 
 export const deriveReviewCommentSubmitAvailability = ({
   canSubmit,
-  runtimeIsUnreachable,
   writeAvailability,
 }: {
   readonly canSubmit: boolean;
-  readonly runtimeIsUnreachable: boolean;
   readonly writeAvailability: ReviewWriteAvailability;
 }): ReviewCommentSubmitAvailability => {
   if (canSubmit) return { state: "available" };
   const block = reviewWriteBlock(writeAvailability);
-  // Writes can land, so the runtime is not what is missing: the agent is.
+  // Writes can land, so the runtime is not what is missing: the agent is. A
+  // session this page cannot read is a block of its own, so nothing here has
+  // to ask poll health a second question the gate already answered (BIG-282).
   if (block === undefined) {
-    if (runtimeIsUnreachable) {
-      return {
-        state: "unavailable",
-        reason: "review-runtime",
-        label: REVIEW_SESSION_UNREACHABLE_HEADLINE,
-        status: `${REVIEW_SESSION_UNREACHABLE_HEADLINE}. ${COMMENT_OUTCOME} ${REVIEW_SESSION_UNREACHABLE_SUPPORTING}`,
-      };
-    }
     return {
       state: "unavailable",
       reason: "agent",

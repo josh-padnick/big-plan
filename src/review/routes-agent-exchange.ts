@@ -352,6 +352,11 @@ export const sendAgentRequest = async (
       ...(kind === "reply" && typeof payload.commentId === "string"
         ? { commentId: payload.commentId }
         : {}),
+      // Carried from the drawer: the reviewer wrote this while looking at one
+      // change, and the thread holds several.
+      ...(kind === "reply" && typeof payload.aboutBlockId === "string"
+        ? { aboutBlockId: payload.aboutBlockId }
+        : {}),
     });
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;

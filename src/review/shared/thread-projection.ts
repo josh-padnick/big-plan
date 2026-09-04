@@ -82,7 +82,12 @@ export type ThreadPresence = {
   readonly updatedAtMs?: number;
 };
 
-export type ThreadRuntime = "static" | "online" | "offline";
+/**
+ * How this document reaches a review session, for the strip on each request.
+ * "offline" and "out-of-date" are the two failing readings of the session
+ * (`ReviewSessionReach`), kept apart because each has its own way back.
+ */
+export type ThreadRuntime = "static" | "online" | "offline" | "out-of-date";
 export type ThreadSurface = "thread" | "chat";
 export type ThreadGroup = "needs-input" | "ready" | "working" | "queued";
 export type RequestDelivery = "Sent" | "Queued";
