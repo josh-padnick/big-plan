@@ -25,6 +25,7 @@ const S2 = "c".repeat(16);
 const SET = "cafe";
 const OTHER = "beef";
 const NOW = "2026-09-02T12:00:00.000Z";
+const AGGREGATE_DIGEST = "f".repeat(16);
 
 // Two sections, so this thread's own two changes are two review stops. The
 // point here is a set that advances, not one that overlaps another.
@@ -179,7 +180,7 @@ describe("carrying verdicts onto an advanced change set", () => {
     expect(carried.every((entry) => entry.actor === "reviewer")).toBe(true);
   });
 
-  it("carries one decided place onto every place it splits into", () => {
+  it("marks every result stale when one decided place splits", () => {
     const split = buildSnapshotDiff({
       from: S0,
       to: S2,
@@ -205,12 +206,13 @@ describe("carrying verdicts onto an advanced change set", () => {
         {
           ...first,
           locationIndexes: [0, 1],
+          contentDigest: AGGREGATE_DIGEST,
         },
       ],
     };
     const entry = verdict({
       placeId: first.placeId,
-      contentDigest: first.contentDigest,
+      contentDigest: AGGREGATE_DIGEST,
     });
 
     const carried = carriedVerdicts({
@@ -229,7 +231,105 @@ describe("carrying verdicts onto an advanced change set", () => {
         rejected: new Set(),
         decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
       }),
-    ).toMatchObject({ accepted: 2, stale: 0, open: 0 });
+    ).toMatchObject({ accepted: 0, stale: 2, open: 2 });
+  });
+
+  it("marks a merge stale when it absorbs an undecided place", () => {
+    const first = previous.places[0];
+    const nextFirst = next.places[0];
+    if (first === undefined || nextFirst === undefined) {
+      throw new Error("Expected changed places");
+    }
+    const merged = {
+      ...next,
+      places: [
+        {
+          ...nextFirst,
+          locationIndexes: [0, 1],
+          contentDigest: AGGREGATE_DIGEST,
+        },
+      ],
+    };
+    const carried = carriedVerdicts({
+      previous,
+      next: merged,
+      decided: [
+        verdict({
+          placeId: first.placeId,
+          contentDigest: first.contentDigest,
+        }),
+      ],
+    });
+
+    expect(
+      changeSetStanding({
+        changeSetId: SET,
+        from: S0,
+        to: S2,
+        places: merged.places,
+        accepted: new Set(carried.map(changeVerdictKey)),
+        rejected: new Set(),
+        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+      }),
+    ).toMatchObject({ accepted: 0, stale: 1, open: 1 });
+  });
+
+  it("marks a partial block overlap stale", () => {
+    const first = previous.places[0];
+    if (first === undefined) {
+      throw new Error("Expected changed places");
+    }
+    const combinedPrevious = {
+      ...previous,
+      places: [
+        {
+          ...first,
+          locationIndexes: [0, 1],
+          contentDigest: AGGREGATE_DIGEST,
+        },
+      ],
+    };
+    const carried = carriedVerdicts({
+      previous: combinedPrevious,
+      next,
+      decided: [
+        verdict({
+          placeId: first.placeId,
+          contentDigest: AGGREGATE_DIGEST,
+        }),
+      ],
+    });
+
+    expect(carried).toHaveLength(2);
+    expect(
+      changeSetStanding({
+        changeSetId: SET,
+        from: S0,
+        to: S2,
+        places: next.places,
+        accepted: new Set(carried.map(changeVerdictKey)),
+        rejected: new Set(),
+        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+      }),
+    ).toMatchObject({ accepted: 0, stale: 2, open: 2 });
+  });
+
+  it("keeps an identical unchanged block set accepted", () => {
+    const carried = carriedVerdicts({ previous, next, decided });
+    const alpha = carried[0];
+    const nextAlpha = next.places[0];
+    expect(alpha?.contentDigest).toBe(nextAlpha?.contentDigest);
+    expect(
+      changeSetStanding({
+        changeSetId: SET,
+        from: S0,
+        to: S2,
+        places: nextAlpha === undefined ? [] : [nextAlpha],
+        accepted: new Set(carried.map(changeVerdictKey)),
+        rejected: new Set(),
+        decidedDigests: decidedContentDigests({ revision: 1, decided: carried }),
+      }),
+    ).toMatchObject({ accepted: 1, stale: 0, open: 0 });
   });
 
   it("keeps the untouched change accepted and re-opens only what moved", () => {

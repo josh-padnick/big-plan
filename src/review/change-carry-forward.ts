@@ -77,13 +77,27 @@ const placeBlockIds = ({
 const hasSameBlockEvidence = ({
   previous,
   next,
+  before,
   place,
 }: {
   readonly previous: SnapshotDiff;
   readonly next: SnapshotDiff;
+  readonly before: DiffPlace;
   readonly place: DiffPlace;
-}): boolean =>
-  place.locationIndexes.every((index) => {
+}): boolean => {
+  const beforeBlockIds = placeBlockIds({ diff: previous, place: before });
+  const nextBlockIds = placeBlockIds({ diff: next, place });
+  if (
+    beforeBlockIds.size !== nextBlockIds.size ||
+    [...beforeBlockIds].some((blockId) => !nextBlockIds.has(blockId))
+  ) {
+    return false;
+  }
+  const beforeLocations = before.locationIndexes.flatMap((index) => {
+    const location = previous.locations.at(index);
+    return location === undefined ? [] : [location];
+  });
+  return place.locationIndexes.every((index) => {
     const location = next.locations.at(index);
     if (location === undefined) return false;
     const blockIds = new Set(
@@ -91,7 +105,7 @@ const hasSameBlockEvidence = ({
         (blockId): blockId is string => blockId !== undefined,
       ),
     );
-    return previous.locations.some(
+    return beforeLocations.some(
       (candidate) =>
         [candidate.newBlockId, candidate.oldBlockId].some(
           (blockId) => blockId !== undefined && blockIds.has(blockId),
@@ -102,6 +116,7 @@ const hasSameBlockEvidence = ({
         candidate.newText === location.newText,
     );
   });
+};
 
 /**
  * The verdicts of one advanced change set, re-addressed to its new span.
@@ -128,6 +143,9 @@ export const carriedVerdicts = ({
   const decidedByPlaceId = new Map(
     decided.map((entry) => [entry.placeId, entry]),
   );
+  const decidedPlaces = previous.places.filter((place) =>
+    decidedByPlaceId.has(place.placeId),
+  );
   for (const before of previous.places) {
     const entry = decidedByPlaceId.get(before.placeId);
     if (entry === undefined) continue;
@@ -140,12 +158,19 @@ export const carriedVerdicts = ({
         ),
     );
     for (const match of matches) {
+      const collisionCount = decidedPlaces.filter((place) => {
+        const candidateBlockIds = placeBlockIds({ diff: previous, place });
+        return [...placeBlockIds({ diff: next, place: match })].some((blockId) =>
+          candidateBlockIds.has(blockId),
+        );
+      }).length;
       claimed.add(match.placeId);
       carried.push({
         ...entry,
         to: next.to,
         placeId: match.placeId,
-        ...(hasSameBlockEvidence({ previous, next, place: match })
+        ...(collisionCount === 1 &&
+        hasSameBlockEvidence({ previous, next, before, place: match })
           ? { contentDigest: match.contentDigest }
           : {}),
       });
