@@ -315,8 +315,8 @@ const liveBlockText = (element: HTMLElement): string => {
  * Resolves where a What-changed lens belongs for one diff location, walking
  * the candidates in the order the diff prefers. A candidate whose id resolved
  * across a snapshot boundary must still hold the content the diff recorded;
- * one that does not is treated as missing, so the change falls back to the
- * honest historical archive instead of rendering beside the wrong block.
+ * one that does not is treated as missing, so the change stays absent instead
+ * of rendering beside or over the wrong block.
  */
 export const liveLensAnchor = (
   location: DiffLocation,

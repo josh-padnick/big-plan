@@ -48,21 +48,21 @@ export type LensAnchorCandidate = {
  * where in the plan did this happen - and it survives the agent revising the
  * block again, which the recorded text does not. Holding prose to that text
  * meant every later revision under an open lens turned the change into a
- * drifted block with no anchor, and the only answer the island had for that
- * was a card at the foot of the document, nowhere near the place it described.
+ * drifted block with no anchor. A structurally valid location keeps that
+ * superseded change beside the place it describes.
  *
  * It is still held to something, because a structural path is not an identity:
  * the same address can come to name entirely different content, and standing a
- * historical card over that hides live content behind a record of something
- * else. The kind is what survives a rewording - a paragraph revised again is
+ * change lens over that hides live content behind a record of something else.
+ * The kind is what survives a rewording - a paragraph revised again is
  * still the paragraph the change was about, and a paragraph replaced by a
  * table is not - so that is what the id must still name, for prose exactly as
  * for a component.
  *
  * Its neighbours follow, then nothing. A superseded neighbour describes a
  * revision the reader has moved past, so it is a worse answer than the block
- * itself - but it is a far better one than the foot of the page, because it is
- * still where the change happened.
+ * itself. If none resolves, the change stays absent rather than moving away
+ * from where it happened.
  */
 export const lensAnchorCandidates = (
   location: DiffLocation,
@@ -128,8 +128,8 @@ export const candidateMatchesLiveText = ({
  * tell one table from another table at the same address, and it is not trying
  * to: it separates "the component this change was about, revised again" from
  * "some other component that inherited this structural path", which is the
- * distinction that decides whether a historical card may stand over a live
- * block at all.
+ * distinction that decides whether a change lens may stand over a live block
+ * at all.
  */
 export const candidateMatchesLiveKind = ({
   candidate,

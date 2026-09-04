@@ -81,8 +81,8 @@ describe("lensAnchorCandidates", () => {
 
   it("should stand a superseded removal beside its neighbours", () => {
     // A neighbour describes a revision the reader has moved past, so it is a
-    // worse answer than the block itself - and a far better one than nowhere,
-    // which used to mean a card at the foot of the document.
+    // worse answer than the block itself, but it still keeps the change where
+    // it happened instead of leaving it without a live anchor.
     expect(
       lensAnchorCandidates(
         location({
@@ -145,8 +145,8 @@ describe("lensAnchorCandidates", () => {
   });
 
   it("should hold a superseded component to the kind its id named", () => {
-    // A structural path is not an identity. Without this the historical card
-    // would stand over whatever component inherited the path, hiding a live
+    // A structural path is not an identity. Without this the change lens would
+    // stand over whatever component inherited the path, hiding a live
     // block behind a record of something else.
     const candidates = lensAnchorCandidates(
       location({
@@ -174,8 +174,8 @@ describe("lensAnchorCandidates", () => {
 
   it("should hold a superseded component to its place rather than its old text", () => {
     // A location that brought its own rendering reads the live block for
-    // nothing, so a text expectation could only exile a change the plan still
-    // has a place for into the archive at the foot of the document.
+    // nothing, so a text expectation could only leave a change without an
+    // anchor even though the plan still has a place for it.
     expect(
       lensAnchorCandidates(
         location({

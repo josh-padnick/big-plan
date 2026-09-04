@@ -571,13 +571,11 @@ export const DiffTourProvider = ({
       {tour === null || active === undefined ? null : (
         <>
           {/* A rejected change has no lens. What it proposed is gone from the
-              plan, so nothing anchors it, and the archive that catches an
-              unanchored lens would put the rejected wording back on the page -
-              at the bottom, outside the section it came from, asserting the
-              very text the reviewer took out. The restored baseline standing
-              in its place is the whole answer, exactly as an accepted change
-              reads as plan content. The lens is left out of the tree rather
-              than asked to render nothing, so no part of it mounts. */}
+              plan, so rendering its lens anywhere would put the rejected
+              wording back on the page. The restored baseline standing in its
+              place is the whole answer, exactly as an accepted change reads as
+              plan content. The lens is left out of the tree rather than asked
+              to render nothing, so no part of it mounts. */}
           {isActiveRejected ? null : (
             <DiffLensPortal
               diff={tour.diff}
