@@ -11,7 +11,13 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, startReviewRuntime, test, type Page } from "./fixtures";
+import {
+  closeReviewRuntime,
+  expect,
+  startReviewRuntime,
+  test,
+  type Page,
+} from "./fixtures";
 
 const AFTER = `# Retry queue
 
@@ -607,7 +613,7 @@ test("should decide, undo, and delete a thread from the review bar", async ({
       recorded.filter((entry) => entry.verdict === "rejected"),
     ).toHaveLength(1);
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });

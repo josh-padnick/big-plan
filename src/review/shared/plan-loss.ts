@@ -86,6 +86,7 @@ export type PlanSlideLoss = {
 
 /** The image a location carries, on whichever side of the change has one. */
 const imageOf = (location: DiffLocation): PlanLossImage | undefined => {
+  if (location.status === "removed") return undefined;
   const presentation = location.newPresentation ?? location.oldPresentation;
   return presentation?.aspect === "image"
     ? { source: presentation.source, alt: presentation.alt }

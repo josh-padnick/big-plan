@@ -186,6 +186,27 @@ describe("projectPlanLoss", () => {
     expect(slides[0]?.changeCount).toBe(1);
   });
 
+  it("does not preview a picture that rejection brings back", () => {
+    const slides = projectPlanLoss({
+      diff: diffOf(
+        [
+          location({
+            kind: "image",
+            status: "removed",
+            oldPresentation: {
+              aspect: "image",
+              source: "restored.png",
+              alt: "Restored picture",
+            },
+          }),
+        ],
+        [place("p1", [0])],
+      ),
+    });
+    expect(slides[0]?.previews).toEqual([]);
+    expect(slides[0]?.changeCount).toBe(1);
+  });
+
   it("keeps only the slides the named places sit on", () => {
     const slides = projectPlanLoss({
       diff: diffOf(

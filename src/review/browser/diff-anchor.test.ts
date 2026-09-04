@@ -97,14 +97,34 @@ describe("lensAnchorCandidates", () => {
       {
         blockId: "approach/paragraph-3",
         placement: "before",
-        expectedKind: "paragraph",
       },
       {
         blockId: "approach/paragraph-1",
         placement: "after",
-        expectedKind: "paragraph",
       },
     ]);
+  });
+
+  it("should let paragraph neighbours anchor a superseded removed heading", () => {
+    const candidates = lensAnchorCandidates(
+      location({
+        kind: "heading",
+        status: "removed",
+        oldBlockId: "approach/heading-1",
+        beforeBlockId: "approach/paragraph-2",
+        afterBlockId: "approach/paragraph-1",
+      }),
+      { isSuperseded: true },
+    );
+    expect(candidates).toEqual([
+      { blockId: "approach/paragraph-2", placement: "before" },
+      { blockId: "approach/paragraph-1", placement: "after" },
+    ]);
+    expect(
+      candidates.every((candidate) =>
+        candidateMatchesLiveKind({ candidate, liveKind: "paragraph" }),
+      ),
+    ).toBe(true);
   });
 
   it("should hold superseded prose to its kind rather than its recorded text", () => {

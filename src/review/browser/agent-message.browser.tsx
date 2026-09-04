@@ -551,13 +551,13 @@ export const AgentChangeDigest = ({
     // it stands now rather than as it stood when the tour opened. It keeps its
     // place: only what the header says about the ground changes.
     if (!ownsOpenTour || diff === null) return;
-    if (activeIsSuperseded === isSuperseded) return;
+    if ((activeIsSuperseded ?? false) === (isSuperseded ?? false)) return;
     openTour({
       diff,
       changeSetId,
       ...(activePlaceId === null ? {} : { startPlaceId: activePlaceId }),
       placeIds: placeIdsInTour,
-      isSuperseded,
+      isSuperseded: isSuperseded === true,
       isPremiseView,
       onResolve,
       onDeleteThread,

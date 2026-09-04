@@ -7873,6 +7873,7 @@ export const ReviewController = () => {
       : [
           String(openChat.isSending),
           openChat.unavailable ?? "",
+          String(openChat.elsewhereCount),
           ...openChat.messages.map(
             (message) => `${message.id}:${message.awaiting ?? ""}`,
           ),

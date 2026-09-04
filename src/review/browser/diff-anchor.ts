@@ -78,7 +78,15 @@ export const lensAnchorCandidates = (
     return ordered.flatMap(([blockId, placement]) =>
       blockId === undefined
         ? []
-        : [{ blockId, placement, expectedKind: location.kind }],
+        : [
+            {
+              blockId,
+              placement,
+              ...(placement === "replace"
+                ? { expectedKind: location.kind }
+                : {}),
+            },
+          ],
     );
   }
   const ordered: ReadonlyArray<readonly [string | undefined, LensPlacement]> = [
