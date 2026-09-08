@@ -562,7 +562,13 @@ test("should decide, undo, and delete a thread from the review bar", async ({
     await stepper(page)
       .getByRole("button", { name: "Undo rejection for this change" })
       .click();
+    // Wait for the restored article before moving away from the undo's place.
+    await expect(page.locator("article")).toContainText(
+      "The worker retries a failed job three times before it gives up.",
+      { timeout: 15_000 },
+    );
     await stepper(page).getByRole("button", { name: "Next change" }).click();
+    await expect(stepper(page)).toContainText("2 of 2");
     await stepper(page)
       .getByRole("button", { name: "Undo rejection for this change" })
       .click();
