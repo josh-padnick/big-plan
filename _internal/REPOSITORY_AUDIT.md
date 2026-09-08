@@ -103,3 +103,26 @@ Removing them or changing packaging would be a separate distribution decision.
    Blanket deletion would remove information needed to preserve concurrency behavior.
 
 These follow-ups are deliberately contained instead of introducing new state models or storage contracts in a behavior-preserving cleanup.
+
+## Validation evidence and remaining limitation
+
+Build, lint, 3,088 unit and integration tests, the separate proxy benchmark, and 237 repository contract tests passed.
+Lint ran against a clean source copy so pre-existing untracked user artifacts were excluded.
+Astra at high effort reviewed the implementation and the final test synchronization change with no actionable findings.
+
+The final isolated browser run passed 269 of 270 journeys.
+The remaining failure is `test/commenting-runtime.spec.ts`, in "should restore and submit staged comments through the local review runtime": its functional assertions passed, but the console-health check caught a 409 response from `/api/drafts`.
+Three focused diagnostic runs of that journey passed without the response.
+The failure remains visible; no console allowance, retry, or skipped test was added to conceal it.
+All 70 commenting-runtime journeys passed in a separate file-level run.
+The same affected journey passed four parallel repetitions against an independent build of the original revision.
+Those different run conditions do not establish the conflict's provenance; a runtime regression has not been ruled out.
+
+The review-bar journey also exposed a navigation race in the test: it clicked Next before an undo installed the restored article.
+It now waits for the restored text before advancing and asserts the next change's position.
+The isolated suite passed that journey and the previously stalled Mermaid refresh journey.
+An earlier run stalled inside a test-owned Mermaid subprocess and required that subprocess to be terminated; that run is not counted as successful validation.
+
+The long commenting journey is also an organization smell: it combines many independent behaviors in approximately 1,400 lines.
+Follow-up work should split it along user journeys while preserving its recovery coverage, consistent with the existing browser-suite consolidation [issue #111](https://github.com/josh-padnick/big-plan/issues/111).
+A green local full-browser result has not been established, so this audit does not claim a regression-free deliverable.
