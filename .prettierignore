@@ -12,9 +12,8 @@ examples/*.html
 **/.big-plan/feedback/
 **/.big-plan/review/
 
-data/**/*.html
-docs/public/demo/
-docs/public/plans/
+_docs/public/demo/
+_docs/public/plans/
 playwright-report/
 test-results/
 bun.lock

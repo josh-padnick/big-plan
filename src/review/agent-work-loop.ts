@@ -1551,7 +1551,7 @@ const nextWork = async ({
         respond_command: respondCommand,
         protocol: fileURLToPath(
           new URL(
-            "../../docs/src/content/docs/for-agents/review-protocol.md",
+            "../../_docs/src/content/docs/for-agents/review-protocol.md",
             import.meta.url,
           ),
         ),

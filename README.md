@@ -11,7 +11,7 @@ Big Plan is built around one question: **what is the best way to review a plan a
 
 An agent writes its plan as structured MDX, and Big Plan renders it into a rich local review document.
 The static authoring contract combines Markdown with validated components for decisions, code, reference data, schemas, file trees, and API contracts.
-The [components](docs/src/content/docs/components/index.md) and [review](docs/src/content/docs/review/index.md) sections describe the capabilities that ship today.
+The [components](_docs/src/content/docs/components/index.md) and [review](_docs/src/content/docs/review/index.md) sections describe the capabilities that ship today.
 
 Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
 Everything runs locally, and the MDX file on your disk is the source of truth.
@@ -31,7 +31,7 @@ npx -y big-plan@latest guidance
 npx -y big-plan@latest render plan.mdx
 ```
 
-See the [Installation guide](docs/src/content/docs/intro/installation.md) for the explicit global-install alternative.
+See the [Installation guide](_docs/src/content/docs/intro/installation.md) for the explicit global-install alternative.
 
 ## Usage
 
@@ -49,7 +49,7 @@ npx -y big-plan@latest service status
 npx -y big-plan@latest agent <file.mdx>
 ```
 
-`guidance` prints the principles for writing a plan a human loves to review; the [`guidance` reference](docs/src/content/docs/reference/commands/guidance.md) owns which commands require a current acknowledgment.
+`guidance` prints the principles for writing a plan a human loves to review; the [`guidance` reference](_docs/src/content/docs/reference/commands/guidance.md) owns which commands require a current acknowledgment.
 `skill` prints the thin agent skill shell shipped with the package; `skill write <path>` installs that shell only when you ask (no silent overwrites).
 Validation checks that the plan can be compiled and rendered, then applies linting rules to the authored plan without writing an output file.
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
@@ -60,7 +60,7 @@ Rendered and compiled output sit next to the input by default, while the MDX fil
 See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
 MermaidDiagram rendering additionally uses the pinned headless Chromium renderer at compile time; on a clean install, provision it once with `bunx playwright@1.61.1 install chromium`.
 A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog holds saved appearance, colour-theme, and approval-message pages. Standalone documents open it from the gear; live reviews open it from **More actions**, alongside Markdown export.
-In a live authoritative review, **Approve plan** records the current plan, its decision answers, and that message, then sends them to the agent as an `approval` mailbox request; [Approve a plan](docs/src/content/docs/review/index.md) owns the complete workflow.
+In a live authoritative review, **Approve plan** records the current plan, its decision answers, and that message, then sends them to the agent as an `approval` mailbox request; [Approve a plan](_docs/src/content/docs/review/index.md) owns the complete workflow.
 
 Plans are prose plus validated components, like this callout:
 
@@ -91,16 +91,16 @@ Big Plan ships a **thin skill shell** under `assets/skill/SKILL.md`, embedded in
    The CLI also exposes axi-sdk's built-in `update` for global installs when you want that path explicitly.
 
 Agents should not re-copy long guidance into chat memory as policy; the installed CLI is authoritative each session.
-See [Use the skill](docs/src/content/docs/for-agents/index.md) for the agent-facing install path.
+See [Use the skill](_docs/src/content/docs/for-agents/index.md) for the agent-facing install path.
 
 The full authoring contract lives in the documentation:
 
-- [Use the skill](docs/src/content/docs/for-agents/index.md) - install the skill shell and keep it fresh via package upgrades.
-- [Writing plans](docs/src/content/docs/for-agents/index.md) - what a plan document is, how the guidance gate works, and where each kind of rule lives.
-- [Linting rules](docs/src/content/docs/reference/lint-rules.md) - every authoring rule and its conservative matching boundaries.
-- [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
-- [Reference](docs/src/content/docs/reference/commands/render.md) - one page per command, plus error codes, lint rules, configuration, and the files Big Plan writes.
-- [Review a plan](docs/src/content/docs/review/index.md) - one page per reviewer job, from starting a review to approving it.
+- [Use the skill](_docs/src/content/docs/for-agents/index.md) - install the skill shell and keep it fresh via package upgrades.
+- [Writing plans](_docs/src/content/docs/for-agents/index.md) - what a plan document is, how the guidance gate works, and where each kind of rule lives.
+- [Linting rules](_docs/src/content/docs/reference/lint-rules.md) - every authoring rule and its conservative matching boundaries.
+- [Components](_docs/src/content/docs/components/index.md) - the complete built-in component reference.
+- [Reference](_docs/src/content/docs/reference/commands/render.md) - one page per command, plus error codes, lint rules, configuration, and the files Big Plan writes.
+- [Review a plan](_docs/src/content/docs/review/index.md) - one page per reviewer job, from starting a review to approving it.
 
 To preview components locally from a source checkout, run `bun run build` first. Then run `node bin/big-plan.mjs guidance` once and render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`. The local executable reads the compiled files in `dist/`.
 To inspect supported fences in both light and dark appearances, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
@@ -127,23 +127,23 @@ See [AGENTS.md](AGENTS.md) for architecture, [_internal/ENGINEERING_PRACTICES.md
 
 ## Documentation
 
-The documentation site lives in `docs/`.
+The documentation site lives in `_docs/`.
 Install its standalone dependencies and start the development server with:
 
 ```sh
-cd docs
+cd _docs
 bun install
 bun run dev
 ```
 
-From `docs/`, build the static site with:
+From `_docs/`, build the static site with:
 
 ```sh
 bun run build
 ```
 
 Every push to `main` builds the root package and documentation site, then deploys
-`docs/dist` to GitHub Pages through [the docs workflow](.github/workflows/docs.yml).
+`_docs/dist` to GitHub Pages through [the docs workflow](.github/workflows/docs.yml).
 The one-time custom-domain setup requires repository and DNS-provider access;
 the captain must approve the outward-facing launch and run the repository wizard
 for the exact records, guided setup, and DNS/TLS verification:
@@ -152,11 +152,11 @@ for the exact records, guided setup, and DNS/TLS verification:
 ./scripts/docs-domain-wizard.sh
 ```
 
-After building the root package, regenerate the docs' light/dark component screenshot pairs from `docs/` with `bun run screenshots`.
+After building the root package, regenerate the docs' light/dark component screenshot pairs from `_docs/` with `bun run screenshots`.
 
 ## Security
 
-To report a vulnerability, follow [SECURITY.md](SECURITY.md).
+To report a vulnerability, follow the [security policy](.github/SECURITY.md).
 The full policy and Big Plan's security model are on the [security page](https://bigplan.dev/security/).
 
 ## License

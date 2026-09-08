@@ -210,5 +210,5 @@ Fixes ship as soon as they are ready, and disclosure is coordinated with the rep
 credited unless they ask otherwise.
 
 This page is the canonical security policy. The repository's
-[`SECURITY.md`](https://github.com/josh-padnick/big-plan/blob/main/SECURITY.md) points here rather
+[`.github/SECURITY.md`](https://github.com/josh-padnick/big-plan/blob/main/.github/SECURITY.md) points here rather
 than repeating it.

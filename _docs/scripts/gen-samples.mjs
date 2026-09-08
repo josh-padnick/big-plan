@@ -1,6 +1,6 @@
 // Renders the sample plans the docs link to, straight from the repository's own
 // example plans, so a sample page can never show a document the current CLI
-// would not produce. Run from docs/ via `bun run gen:demo`.
+// would not produce. Run from _docs/ via `bun run gen:demo`.
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CLI = join(ROOT, "bin", "big-plan.mjs");
-const PUBLIC = join(ROOT, "docs", "public");
+const PUBLIC = join(ROOT, "_docs", "public");
 
 // Each sample publishes its rendered document at /plans/<slug>/, beside the plain
 // source the docs invite readers to download. The docs page about a sample lives
@@ -17,7 +17,7 @@ const PUBLIC = join(ROOT, "docs", "public");
 const SAMPLES = [
   {
     slug: "rate-limiting",
-    source: join(ROOT, "docs", "src", "demo", "example-plan.md"),
+    source: join(ROOT, "_docs", "src", "demo", "example-plan.md"),
   },
   { slug: "retry-queue", source: join(ROOT, "examples", "deck.mdx") },
   {

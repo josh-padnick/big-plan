@@ -200,7 +200,7 @@ export default tseslint.config(
       // Local Copia tooling is a vendored runtime, not product source.
       ".copia/",
       "dist/",
-      "docs/",
+      "_docs/",
       "node_modules/",
       "**/*.generated.ts",
       "examples/",

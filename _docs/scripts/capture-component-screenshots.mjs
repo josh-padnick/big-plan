@@ -1,7 +1,7 @@
 // Captures the light and dark viewer and component screenshots embedded in
 // the docs. Renders fixtures with the local CLI, then screenshots the same
 // regions in both color schemes so each light/dark pair shares one crop. Run
-// from docs/ via `bun run screenshots` after building the renderer.
+// from _docs/ via `bun run screenshots` after building the renderer.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,10 +10,10 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const OUT_DIR = join(ROOT, "docs", "src", "assets", "components");
-const VIEWER_OUT_DIR = join(ROOT, "docs", "src", "assets");
+const OUT_DIR = join(ROOT, "_docs", "src", "assets", "components");
+const VIEWER_OUT_DIR = join(ROOT, "_docs", "src", "assets");
 const VIEWER_FIXTURE = readFileSync(
-  join(ROOT, "docs", "src", "demo", "example-plan.md"),
+  join(ROOT, "_docs", "src", "demo", "example-plan.md"),
   "utf8",
 );
 const CLI = join(ROOT, "bin", "big-plan.mjs");

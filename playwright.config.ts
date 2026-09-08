@@ -53,7 +53,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `node docs/node_modules/astro/bin/astro.mjs build --root docs && node docs/node_modules/astro/bin/astro.mjs preview --root docs --host 127.0.0.1 --port ${docsPort}`,
+    command: `node _docs/node_modules/astro/bin/astro.mjs build --root _docs && node _docs/node_modules/astro/bin/astro.mjs preview --root _docs --host 127.0.0.1 --port ${docsPort}`,
     url: docsUrl,
     reuseExistingServer: false,
   },

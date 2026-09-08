@@ -99,7 +99,7 @@ Read these owners before changing the corresponding runtime behavior:
 - **Writing authoritative plan source:** [staged-plan-mutation.ts](src/review/staged-plan-mutation.ts) is the only writer, including reviewer restoration and approval stamping.
 - **Recording committed revisions:** [change-set-commit.ts](src/review/change-set-commit.ts) is the only entry point into the revision log.
 
-The [subsystem boundaries](docs/subsystems.md) own the review semantics and cross-subsystem constraints behind these interfaces.
+The [subsystem boundaries](_docs/subsystems.md) own the review semantics and cross-subsystem constraints behind these interfaces.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the review layer owns the local human-agent exchange, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.
@@ -121,13 +121,13 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                                                                                                           |
 | `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                                                                                                                            |
 | `test/`                  | Critical browser journeys over complete rendered documents, plus the behavioral probes under `test/probes/`. Keep pure behavior in colocated unit tests.                                                                                                                                                                                    |
-| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                                                                                       |
+| `_docs/`                 | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `_docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                                                                                      |
 
 A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
 
 ## Subsystems
 
-[docs/subsystems.md](docs/subsystems.md) owns the subsystem partition Big Plan's product work is organized into: how many there are, their names, what each one covers, its code anchors, and the boundary rules between them.
+[_docs/subsystems.md](_docs/subsystems.md) owns the subsystem partition Big Plan's product work is organized into: how many there are, their names, what each one covers, its code anchors, and the boundary rules between them.
 
 State which subsystem new work belongs to before starting it; when work spans more than one, say so explicitly.
 
@@ -150,19 +150,19 @@ Every guidance fact has exactly one owning layer; everywhere else points to the 
 Route by the kind of fact:
 
 - A fact about one file lives in that file's header comment; a fact a check enforces lives in the check and its error message.
-- Current product capabilities and human or agent usage guidance live in `docs/`.
+- Current product capabilities and human or agent usage guidance live in `_docs/`.
 - How the product looks, and the scales and rules a visual decision picks from, live in [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md); token values stay in `src/render/global.css`.
 - Setup, build, run, and shortest-path usage procedures live in the root [README.md](README.md).
 - DCO, branches, pull requests, CI expectations, and other contribution workflow live in [CONTRIBUTING.md](CONTRIBUTING.md).
 - The npm release, promotion, and rollback procedure, and the changelog discipline that release follows, live in [RELEASING.md](RELEASING.md); the release history a reader sees lives in [CHANGELOG.md](CHANGELOG.md).
-- The vulnerability-reporting policy and Big Plan's security posture live on the docs site's Security page; the repo-root [SECURITY.md](SECURITY.md) points there and never restates it, because GitHub reads that file to offer its reporting affordance.
+- The vulnerability-reporting policy and Big Plan's security posture live on the docs site's Security page; [.github/SECURITY.md](.github/SECURITY.md) points there and never restates it, because GitHub reads that file to offer its reporting affordance.
 - A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
 - An architectural decision and its rationale live in an ADR when the decision needs a durable record.
 - A repeatable whole-task workflow becomes a skill only after the workflow has repeated and proven easy to get wrong.
 - How to measure what a real coding agent decides after reading text Big Plan wrote for it lives in [test/probes/README.md](test/probes/README.md); probes are evidence for prompt changes, never CI tests.
-- The installable Big Plan agent skill shell is authored at `assets/skill/SKILL.md`, embedded by `scripts/gen-skill.mjs`, and delivered by `big-plan skill`; live authoring rules stay in `big-plan guidance` (see `docs/src/content/docs/for-agents/index.md`).
+- The installable Big Plan agent skill shell is authored at `assets/skill/SKILL.md`, embedded by `scripts/gen-skill.mjs`, and delivered by `big-plan skill`; live authoring rules stay in `big-plan guidance` (see `_docs/src/content/docs/for-agents/index.md`).
 - Future work, sequencing, and delivery status live in temporary planning artifacts or issue tracking.
-- The seven-subsystem partition, including its code anchors and boundary rules, lives in [docs/subsystems.md](docs/subsystems.md).
+- The seven-subsystem partition, including its code anchors and boundary rules, lives in [_docs/subsystems.md](_docs/subsystems.md).
 - Product orientation, cross-directory architecture outside the subsystem partition, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
 - The gold-standard plan-quality testing workflow (context-free generation, co-refine, backport, re-verify) lives in this guide under [Gold-standard plan-quality testing](#gold-standard-plan-quality-testing).
 
@@ -201,7 +201,7 @@ Engineering practices own how to write the styling code; the design principles o
 This section owns the durable procedure for improving Big Plan's plan quality as a product.
 It is not unit testing, Playwright journey testing, or ordinary contribution verification.
 Those remain under [Engineering practices](#engineering-practices), `test/`, and [CONTRIBUTING.md](CONTRIBUTING.md).
-Current product capabilities and authoring guidance remain in `docs/`; point there rather than restating them.
+Current product capabilities and authoring guidance remain in `_docs/`; point there rather than restating them.
 The evaluation bar for plan quality is the two [plan-quality standards](#plan-quality-standards): pleasant to read, and understandable.
 
 ### What "good" means
