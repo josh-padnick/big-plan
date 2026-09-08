@@ -177,19 +177,8 @@ Correlate related diagnostics with an operation identifier when one is available
 
 ## Testing
 
-Automated tests are the safety system that makes fast change possible.
-The build must remain self-testing, and a red build is fixed immediately or the change is backed out.
-
-Choose tests by balancing the likelihood of a defect, the cost of that defect, and the maintenance cost of the test.
-A test earns its place only when it would fail on a plausible regression.
-Do not retest a framework, assert that a mock returns its fixture, or chase a coverage number.
-
-Use the lowest-cost rung that proves the behavior:
-
-1. **Unit tests** for pure TypeScript logic, colocated as `*.test.ts` or `*.test.tsx` and run by Vitest.
-2. **Contract and drift checks** for generated outputs, stylesheet invariants, architecture, and other repository-wide mechanical contracts.
-3. **Build and integration tests** for complete compilation and interactions across owned module boundaries.
-4. **Playwright journeys** for critical behavior in a complete rendered document that no lower rung can prove.
+Read [TESTING.md](TESTING.md) when choosing which behavior to test and the lowest test layer that proves it.
+That document owns test selection, the test ladder, and refactoring verification.
 
 Follow these authoring rules:
 
