@@ -77,6 +77,12 @@ Removing them or changing packaging would be a separate distribution decision.
 - **Local lint scope:** ESLint traversed nested Claude worktrees and a vendored Copia runtime.
   Exclude those non-source directories, as the formatter already does.
   An executable ESLint contract test checks the exclusions while keeping the working repository's source in scope.
+- **Concurrent verdict repair:** several reads could repair the same interrupted rejection, or overlap a reviewer write, and lose the source-digest check.
+  Four concurrent route requests reproduced three 500 responses before the fix.
+  Run the read-and-repair operation through the existing write gate, keeping the GET contract and source-digest guard unchanged.
+- **Docs server ownership:** the browser suite reused port 4321 and opened an unrelated FM Linear site.
+  Allocate a port per run, pass it to workers, and require the suite to start its own server.
+  Four parallel install-prompt journeys passed while the unrelated site kept running.
 
 ## Contained follow-ups
 

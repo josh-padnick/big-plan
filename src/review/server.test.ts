@@ -1615,7 +1615,7 @@ Two workers drain the queue every two seconds.
     });
   });
 
-  it("should reconcile persisted rejection bytes when verdict state is read", async () => {
+  it("should reconcile persisted rejection bytes when several readers arrive together", async () => {
     await withProposal(async ({ target, sessionToken, planPath, places }) => {
       const placeId = placeFor(places, "durable");
       await writeChangeVerdicts({
@@ -1637,16 +1637,19 @@ Two workers drain the queue every two seconds.
         },
       });
 
-      const response = await callRuntime({
-        target,
-        sessionToken,
-        path: "/api/change-verdicts",
-      });
+      const responses = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          callRuntime({ target, sessionToken, path: "/api/change-verdicts" }),
+        ),
+      );
 
-      expect(response.status).toBe(200);
+      expect(responses.map((response) => response.status)).toEqual([
+        200, 200, 200, 200,
+      ]);
       const source = await readFile(planPath, "utf8");
-      expect(source).toContain("wait in a durable queue.");
-      expect(source).not.toContain("durable Postgres queue");
+      expect(source).toBe(
+        PROPOSED.replace("durable Postgres queue", "durable queue"),
+      );
     });
   });
 

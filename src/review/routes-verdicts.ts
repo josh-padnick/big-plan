@@ -305,17 +305,24 @@ const reconcileRecordedRejections = async ({
  */
 export const readChangeVerdictState = async (
   context: ReviewRouteContext,
-): Promise<ReviewRouteResponse> => {
-  await carryForwardChangeVerdicts({
-    store: context.store,
-    sessionId: context.sessionId,
-    planId: context.planId,
-    planPath: context.resolvedPlanPath,
+): Promise<ReviewRouteResponse> =>
+  // This read can publish repaired plan bytes. Serialize the whole operation
+  // with reviewer writes so their verdict-first/source-second interval is not
+  // mistaken for an interrupted publication, or repaired by two readers.
+  context.writeGate.exclusively({
+    route: "GET /api/change-verdicts",
+    work: async () => {
+      await carryForwardChangeVerdicts({
+        store: context.store,
+        sessionId: context.sessionId,
+        planId: context.planId,
+        planPath: context.resolvedPlanPath,
+      });
+      const verdicts = await context.changeVerdicts.read();
+      await reconcileRecordedRejections({ context, verdicts });
+      return verdictState(verdicts);
+    },
   });
-  const verdicts = await context.changeVerdicts.read();
-  await reconcileRecordedRejections({ context, verdicts });
-  return verdictState(verdicts);
-};
 
 const restorePreviousVerdicts = ({
   current,
