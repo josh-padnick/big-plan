@@ -38,13 +38,12 @@ import {
   agentMutationJournalPath,
   anchorReviewStore,
   hasPreparedMutationJournal,
-  readStoreJson,
   removeAgentMutationStages,
   ReviewStorePathRejected,
   withReviewStoreLock,
   writeSnapshot,
-  writeStoreJson,
 } from "./store.js";
+import { readStoreJson, writeStoreJson } from "./store-files.js";
 import type { ReviewStore } from "./store.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";

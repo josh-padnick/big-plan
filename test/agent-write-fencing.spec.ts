@@ -11,11 +11,9 @@ import {
   readAgentExchange,
 } from "../src/review/agent-exchange.js";
 import { releaseClaimsForPrimacyHandoff } from "../src/review/request-mailbox.js";
-import {
-  grantAgentPrimacy,
-  readSnapshot,
-  writeStoreJson,
-} from "../src/review/store.js";
+import { readSnapshot } from "../src/review/store.js";
+import { grantAgentPrimacy } from "../src/review/agent-presence.js";
+import { writeStoreJson } from "../src/review/store-files.js";
 import type { ReviewStore } from "../src/review/store.js";
 import {
   agentIdOf,

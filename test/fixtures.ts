@@ -13,7 +13,7 @@ import { promisify } from "node:util";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 import type { AttachedAgent } from "../src/review/shared/agent-primacy.js";
-import { readAgentRoster } from "../src/review/store.js";
+import { readAgentRoster } from "../src/review/agent-presence.js";
 import type { ReviewStore } from "../src/review/store.js";
 import {
   startReviewRuntime as startDirectReviewRuntime,

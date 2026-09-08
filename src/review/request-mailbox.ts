@@ -34,12 +34,9 @@ import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js
 import {
   anchorReviewStore,
   appendAgentConnectionEvent,
-  appendProgressValue,
-  compactProgressLog,
   deleteAgentRequestValue,
   hasPreparedMutationJournal,
   highestAgentMutationStageGeneration,
-  nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
   readResolvedCommentIds,
@@ -50,6 +47,11 @@ import {
   writeAgentResponseValue,
   writeSnapshot,
 } from "./store.js";
+import {
+  appendProgressValue,
+  compactProgressLog,
+  nextProgressSequence,
+} from "./progress-log.js";
 import {
   changeSetIdsFor,
   recordCommittedRevision,
@@ -62,11 +64,8 @@ import {
 } from "./shared/agent-claim.js";
 import { agentConnectionReasonSupersedes } from "./shared/agent-status.js";
 import type { AgentModelIdentity } from "./shared/agent-model.js";
-import type {
-  AgentRequestDeletionResult,
-  ProgressEvent,
-  ReviewStore,
-} from "./store.js";
+import type { AgentRequestDeletionResult, ReviewStore } from "./store.js";
+import type { ProgressEvent } from "./progress-log.js";
 import type { MutationStage } from "./staged-plan-mutation.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;

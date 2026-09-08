@@ -48,9 +48,11 @@ import {
   Button,
   Tooltip,
   WorkingMark,
+} from "./ui.browser.js";
+import {
   copyControlLabel,
   useCopyToClipboard,
-} from "./ui.browser.js";
+} from "./use-copy-to-clipboard.browser.js";
 
 // The comment glyph that heads the subject block; it names what the block is
 // about, so it travels with the label rather than being set at each call.

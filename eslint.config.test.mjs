@@ -254,3 +254,17 @@ test("should fence a baseline plan-identity selector in an embedded shell script
   );
   assert.equal(messages.length, 1);
 });
+
+test("should ignore agent worktrees without excluding the working repository", async () => {
+  assert.equal(
+    await eslint.isPathIgnored(
+      ".claude/worktrees/other-checkout/src/cli/main.ts",
+    ),
+    true,
+  );
+  assert.equal(
+    await eslint.isPathIgnored(".copia/.runtime/package/dist/cli.mjs"),
+    true,
+  );
+  assert.equal(await eslint.isPathIgnored("src/cli/main.ts"), false);
+});

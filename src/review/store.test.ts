@@ -18,24 +18,14 @@ import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   appendAgentConnectionEvent,
-  appendProgressValue,
-  attachAgentToRoster,
   anchorReviewStore,
   deriveReviewPlanId,
   prepareStore,
   readAgentConnectionEvents,
-  readAgentDisconnectRequestFor,
-  readAgentDisconnectRequests,
-  readAgentPresence,
-  readProgress,
   readResolvedCommentIds,
   readSnapshot,
   reviewStoreFor,
-  writeAgentDisconnectRequest,
-  writeAgentHeartbeat,
-  writeAgentHeartbeatEnded,
   writeResolvedCommentIds,
-  writeStoreJson,
   writeSnapshot,
   writeSessionHeartbeatValue,
   withReviewStoreLock,
@@ -44,6 +34,17 @@ import {
   publishReviewImage,
   readReviewImage,
 } from "./store.js";
+import { appendProgressValue, readProgress } from "./progress-log.js";
+import {
+  attachAgentToRoster,
+  readAgentDisconnectRequestFor,
+  readAgentDisconnectRequests,
+  readAgentPresence,
+  writeAgentDisconnectRequest,
+  writeAgentHeartbeat,
+  writeAgentHeartbeatEnded,
+} from "./agent-presence.js";
+import { writeStoreJson } from "./store-files.js";
 
 const created: Array<string> = [];
 

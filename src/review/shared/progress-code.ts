@@ -74,3 +74,6 @@ export const progressStepCodeIsAgentOwned = (
 /** Narrows untrusted progress data to its lifecycle state vocabulary. */
 export const isProgressState = (value: unknown): value is ProgressState =>
   typeof value === "string" && PROGRESS_STATES.has(value);
+
+/** Bounds stored agent narration and connection reasons. */
+export const PROGRESS_TEXT_LIMIT = 160;

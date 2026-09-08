@@ -41,11 +41,11 @@
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
-import { lucideIconToMarkup } from "./lucide-icon-markup.js";
+import { lucideIconToHtml } from "./lucide-icon-html.js";
 
-const ICON_COMMENT = lucideIconToMarkup(MESSAGE_SQUARE_ICON);
-const ICON_REVERT = lucideIconToMarkup(ROTATE_CCW_ICON);
-const ICON_CLOSE = lucideIconToMarkup(X_ICON);
+const ICON_COMMENT = lucideIconToHtml({ icon: MESSAGE_SQUARE_ICON });
+const ICON_REVERT = lucideIconToHtml({ icon: ROTATE_CCW_ICON });
+const ICON_CLOSE = lucideIconToHtml({ icon: X_ICON });
 
 export const DIAGRAM_SCRIPT = `
 (() => {

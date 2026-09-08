@@ -195,6 +195,10 @@ export default tseslint.config(
     ignores: [
       // Runtime artifacts written by local agent runs, never authored source.
       ".agent-runs/",
+      // Agent worktrees are separate repositories with their own configuration.
+      ".claude/",
+      // Local Copia tooling is a vendored runtime, not product source.
+      ".copia/",
       "dist/",
       "docs/",
       "node_modules/",

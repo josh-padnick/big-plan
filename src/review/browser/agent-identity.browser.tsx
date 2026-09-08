@@ -24,7 +24,10 @@ import {
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { BrandIconView, Icon } from "./icon.browser.js";
-import { copyControlLabel, useCopyToClipboard } from "./ui.browser.js";
+import {
+  copyControlLabel,
+  useCopyToClipboard,
+} from "./use-copy-to-clipboard.browser.js";
 
 /** The quiet identity chip shared by agent-facing review entries. */
 export const AgentIdentityChip = ({

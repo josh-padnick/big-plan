@@ -23,12 +23,11 @@ import { inForceApproval, type ApprovalRecord } from "./shared/approval.js";
 import { SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 import {
   readApprovalRecord,
-  readStoreJson,
   writeApprovalBrief,
   writeApprovalRecord,
-  writeStoreJson,
   type ReviewStore,
 } from "./store.js";
+import { readStoreJson, writeStoreJson } from "./store-files.js";
 import {
   replacePlanSourceUnderPlanMutationLock,
   withPlanMutationLock,

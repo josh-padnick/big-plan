@@ -47,16 +47,18 @@ import {
 import {
   agentMutationJournalPath,
   readAgentConnectionEvents,
+  writeAgentResponseValue,
+  writeSnapshot,
+  withReviewStoreLock,
+} from "./store.js";
+import {
   readAgentDisconnectRequestFor,
   readAgentDisconnectRequests,
   readAgentPresence,
   writeAgentHeartbeat,
   writeAgentHeartbeatEnded,
-  writeAgentResponseValue,
-  writeSnapshot,
-  writeStoreJson,
-  withReviewStoreLock,
-} from "./store.js";
+} from "./agent-presence.js";
+import { writeStoreJson } from "./store-files.js";
 import {
   prepareReviewImageAssets,
   publishPreparedPlanAssets,
@@ -88,12 +90,12 @@ import {
   readResolvedCommentIds,
   readSessionHeartbeatValue,
   publishReviewImage,
-  readProgress,
   writeComments,
   writeChangeVerdicts,
   writeResolvedCommentIds,
   writeSnapshot,
 } from "./store.js";
+import { readProgress } from "./progress-log.js";
 
 const runtimeToken = async (target: ReviewRuntime): Promise<string> => {
   const descriptor: unknown = JSON.parse(

@@ -11,13 +11,10 @@ import {
   AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
 } from "../src/review/shared/agent-timing.js";
-import {
-  grantAgentPrimacy,
-  readProgress,
-  readStoreJson,
-  writeAgentRequestValue,
-  writeStoreJson,
-} from "../src/review/store.js";
+import { writeAgentRequestValue } from "../src/review/store.js";
+import { grantAgentPrimacy } from "../src/review/agent-presence.js";
+import { readProgress } from "../src/review/progress-log.js";
+import { readStoreJson, writeStoreJson } from "../src/review/store-files.js";
 import { releaseClaimsForPrimacyHandoff } from "../src/review/request-mailbox.js";
 import {
   agentIdOf,

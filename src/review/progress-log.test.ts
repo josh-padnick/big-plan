@@ -55,14 +55,13 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   };
 });
 
+const { prepareStore, reviewStoreFor } = await import("./store.js");
 const {
   appendProgressValue,
   compactProgressLog,
   nextProgressSequence,
-  prepareStore,
   readProgress,
-  reviewStoreFor,
-} = await import("./store.js");
+} = await import("./progress-log.js");
 const { appendProgressEvent } = await import("./request-mailbox.js");
 
 const SESSION = "a".repeat(16);

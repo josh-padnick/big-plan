@@ -21,6 +21,7 @@ import {
   AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
 } from "./shared/agent-timing.js";
+import { prepareStore, reviewStoreFor } from "./store.js";
 import {
   AgentDisconnectedByReviewer,
   attachAgentToRoster,
@@ -32,12 +33,10 @@ import {
   disconnectBarsWriter,
   grantAgentPrimacy,
   readAgentDisconnects,
-  prepareStore,
   readAgentRoster,
   recordAgentClaimToken,
   requestAgentPrimacy,
-  reviewStoreFor,
-} from "./store.js";
+} from "./agent-presence.js";
 
 const SESSION = "0123456789abcdef";
 const created: Array<string> = [];

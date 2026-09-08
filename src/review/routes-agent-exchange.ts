@@ -20,7 +20,8 @@ import {
   type AgentResponse,
 } from "./agent-exchange.js";
 import { readMutationStage } from "./staged-plan-mutation.js";
-import type { ProgressEvent, ReviewStore } from "./store.js";
+import type { ReviewStore } from "./store.js";
+import type { ProgressEvent } from "./progress-log.js";
 import {
   appendProgressEvent,
   cancelAgentRequest,
@@ -38,18 +39,19 @@ import {
   freezeRequestAttachments,
   randomId,
   readAgentConnectionEvents,
+  writeSnapshot,
+  type AgentRequestDeletionResult,
+} from "./store.js";
+import {
   readAgentDisconnectRequestFor,
   declineAgentPrimacy,
   detachAgentFromRoster,
   grantAgentPrimacy,
   readAgentPresence,
   readAgentRoster,
-  readProgress,
-  PROGRESS_EVENT_LIMIT,
   writeAgentDisconnectRequest,
-  writeSnapshot,
-  type AgentRequestDeletionResult,
-} from "./store.js";
+} from "./agent-presence.js";
+import { readProgress, PROGRESS_EVENT_LIMIT } from "./progress-log.js";
 import {
   imageReferencesForBodies,
   MAX_IMAGES_PER_MESSAGE,

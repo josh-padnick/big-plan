@@ -18,7 +18,7 @@ import {
   readAgentRoster,
   recordAgentClaimToken,
   requestAgentPrimacy,
-} from "../src/review/store.js";
+} from "../src/review/agent-presence.js";
 import {
   agentIdOf,
   agentSidebar,
