@@ -3,6 +3,9 @@
 
 import { expect, test } from "./fixtures";
 
+// Playwright publishes the URL captured after the preview server binds.
+test.use({ baseURL: process.env["BIG_PLAN_E2E_DOCS_URL"] });
+
 const AGENT_SETUP_PROMPT =
   "Set up Big Plan for me: read https://bigplan.dev/setup.md and follow it.";
 

@@ -2,35 +2,6 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { createServer } from "node:net";
-
-/** Chooses an available loopback port without reusing another app's server. */
-const availablePort = async (): Promise<number> => {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error === undefined ? resolve() : reject(error)));
-  });
-  if (address === null || typeof address === "string") {
-    throw new Error("The docs test server did not receive a TCP port");
-  }
-  return address.port;
-};
-
-// Workers reload this configuration, so inherit the port chosen by the runner.
-const inheritedPort = process.env["BIG_PLAN_E2E_DOCS_PORT"];
-const docsPort =
-  inheritedPort === undefined ? await availablePort() : Number(inheritedPort);
-if (!Number.isInteger(docsPort) || docsPort < 1 || docsPort > 65_535) {
-  throw new Error("BIG_PLAN_E2E_DOCS_PORT must be a valid TCP port");
-}
-process.env["BIG_PLAN_E2E_DOCS_PORT"] = String(docsPort);
-const docsUrl = `http://127.0.0.1:${docsPort}/`;
-
 export default defineConfig({
   testDir: "./test",
   // Browser journeys are the *.spec.ts files. The behavioral probes under
@@ -49,12 +20,16 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"], baseURL: docsUrl },
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
   webServer: {
-    command: `node _docs/node_modules/astro/bin/astro.mjs build --root _docs && node _docs/node_modules/astro/bin/astro.mjs preview --root _docs --host 127.0.0.1 --port ${docsPort}`,
-    url: docsUrl,
+    command:
+      "node _docs/node_modules/astro/bin/astro.mjs build --root _docs && node _docs/scripts/preview-for-tests.mjs",
+    wait: {
+      stdout:
+        /BIG_PLAN_DOCS_READY (?<big_plan_e2e_docs_url>http:\/\/127\.0\.0\.1:\d+\/)/,
+    },
     reuseExistingServer: false,
   },
 });

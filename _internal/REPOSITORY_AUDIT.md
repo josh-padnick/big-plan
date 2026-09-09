@@ -81,7 +81,7 @@ Removing them or changing packaging would be a separate distribution decision.
   Four concurrent route requests reproduced three 500 responses before the fix.
   Run the read-and-repair operation through the existing write gate, keeping the GET contract and source-digest guard unchanged.
 - **Docs server ownership:** the browser suite reused port 4321 and opened an unrelated FM Linear site.
-  Allocate a port per run, pass it to workers, and require the suite to start its own server.
+  Let Astro bind an ephemeral port and pass its actual URL to Playwright workers, so the suite always owns the server it uses.
   Four parallel install-prompt journeys passed while the unrelated site kept running.
 
 ## Contained follow-ups
