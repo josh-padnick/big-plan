@@ -1225,6 +1225,26 @@ describe("review store agent presence", () => {
 // BIG-190: a review outlives the agents attached to it, so the record of who
 // the reviewer disconnected has to outlive them too.
 describe("review store agent disconnect directives", () => {
+  it("should preserve concurrent disconnect directives for different agents", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const directives = Array.from({ length: 8 }, (_, index) => ({
+      writerId: String(index).padStart(16, "0"),
+      requestedAtMs: 10_000 + index,
+    }));
+
+    await Promise.all(
+      directives.map((directive) =>
+        writeAgentDisconnectRequest({ store, directive }),
+      ),
+    );
+
+    const recorded = await readAgentDisconnectRequests({ store });
+    expect(recorded).toHaveLength(directives.length);
+    expect(recorded).toEqual(expect.arrayContaining(directives));
+  });
+
   it("should keep one standing directive per disconnected agent", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });

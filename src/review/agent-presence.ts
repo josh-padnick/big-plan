@@ -326,19 +326,25 @@ export const writeAgentDisconnectRequest = async ({
 }: {
   readonly store: ReviewStore;
   readonly directive: AgentDisconnectDirective;
-}): Promise<void> => {
-  const kept = (await readAgentDisconnectRequests({ store })).filter(
-    // One standing directive per agent. A reviewer disconnecting the same
-    // agent twice is restating the same decision, not making a second one.
-    (existing) => existing.writerId !== directive.writerId,
-  );
-  await writeStoreJson({
-    path: store.agentDisconnectPath,
-    value: {
-      directives: [...kept, directive].slice(-REMEMBERED_DISCONNECTS),
+}): Promise<void> =>
+  withReviewStoreLock({
+    lockPath: store.agentRosterLockPath,
+    change: async () => {
+      const kept = (await readAgentDisconnectRequests({ store })).filter(
+        // One standing directive per agent. A reviewer disconnecting the same
+        // agent twice is restating the same decision, not making a second one.
+        (existing) => existing.writerId !== directive.writerId,
+      );
+      await writeStoreJson({
+        path: store.agentDisconnectPath,
+        value: {
+          directives: [...kept, directive].slice(-REMEMBERED_DISCONNECTS),
+        },
+      });
     },
+    timeoutError: () =>
+      new Error("Another process is updating agent disconnect directives"),
   });
-};
 
 const decodeDisconnectDirective = (
   value: unknown,
