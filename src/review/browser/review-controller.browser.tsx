@@ -6308,6 +6308,9 @@ export const ReviewController = () => {
           resultSnapshot: agent.currentSnapshot,
         });
         pendingSettleArrival.current = null;
+        const scrollingElement = document.documentElement;
+        const previousOverflowAnchor = scrollingElement.style.overflowAnchor;
+        scrollingElement.style.overflowAnchor = "none";
         try {
           replacePlanArticle(
             new DOMParser().parseFromString(html, "text/html"),
@@ -6318,10 +6321,17 @@ export const ReviewController = () => {
           // replacement from any source - a lens open, say - painting arrival
           // rings on blocks that arrival never touched.
           armedSettleTargets.current = null;
+          scrollingElement.style.overflowAnchor = previousOverflowAnchor;
           throw error;
         }
         setDisplayedSnapshot(agent.currentSnapshot);
         window.scrollTo({ left: scrollX, top: scrollY });
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            window.scrollTo({ left: scrollX, top: scrollY });
+            scrollingElement.style.overflowAnchor = previousOverflowAnchor;
+          }),
+        );
       })
       .catch((error: unknown) => {
         if (!current) return;

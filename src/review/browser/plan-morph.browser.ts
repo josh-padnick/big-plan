@@ -102,9 +102,8 @@ const captureSelection = (
     const block =
       node instanceof Element
         ? node.closest("[data-block-id], [data-collapse-id]")
-        : node.parentElement?.closest(
-            "[data-block-id], [data-collapse-id]",
-          ) ?? null;
+        : (node.parentElement?.closest("[data-block-id], [data-collapse-id]") ??
+          null);
     const blockKey = block === null ? null : keyOf(block);
     if (block === null || blockKey === null || !replacingKeys.has(blockKey)) {
       return { node, offset };
@@ -132,10 +131,7 @@ const endpointAfterReplacement = (
   }
   const block = replacements.get(endpoint.blockKey);
   if (block === undefined) return null;
-  let remaining = Math.min(
-    endpoint.textOffset,
-    block.textContent?.length ?? 0,
-  );
+  let remaining = Math.min(endpoint.textOffset, block.textContent?.length ?? 0);
   const walker = block.ownerDocument.createTreeWalker(
     block,
     block.ownerDocument.defaultView?.NodeFilter.SHOW_TEXT ?? 4,
@@ -184,14 +180,20 @@ const preserveSelectionThroughRender = (
   captured: CapturedSelection | null,
   replacements: ReadonlyMap<string, Element>,
 ): void => {
+  const view = captured === null ? null : currentView(captured.selection);
+  const scroll =
+    view === null ? null : { left: view.scrollX, top: view.scrollY };
   restoreSelection(captured, replacements);
   if (captured === null) return;
-  const view = currentView(captured.selection);
+  if (view !== null && scroll !== null) view.scrollTo(scroll);
   view?.requestAnimationFrame(() =>
     view.requestAnimationFrame(() => {
       const selection = view.getSelection();
       if (selection !== null && !selection.isCollapsed) return;
+      const left = view.scrollX;
+      const top = view.scrollY;
       restoreSelection(captured, replacements);
+      view.scrollTo({ left, top });
     }),
   );
 };
@@ -200,7 +202,7 @@ const preserveSelectionThroughRender = (
 const currentView = (selection: Selection): Window | null =>
   selection.anchorNode instanceof Document
     ? selection.anchorNode.defaultView
-    : selection.anchorNode?.ownerDocument?.defaultView ?? null;
+    : (selection.anchorNode?.ownerDocument?.defaultView ?? null);
 
 // The pristine server markup of every addressed node the reader is currently
 // shown, keyed by address. It is what a new render is compared against, so the
