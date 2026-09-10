@@ -19,11 +19,8 @@ import {
   commitStagedPlanMutation,
   recoverStagedPlanMutations,
 } from "./staged-plan-mutation.js";
-import {
-  agentMutationJournalPath,
-  readChangeVerdicts,
-  writeStoreJson,
-} from "./store.js";
+import { agentMutationJournalPath, readChangeVerdicts } from "./store.js";
+import { writeStoreJson } from "./store-files.js";
 import {
   acceptedChangeKeys,
   changeSetStanding,

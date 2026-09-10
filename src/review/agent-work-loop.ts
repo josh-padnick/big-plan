@@ -36,29 +36,31 @@ import {
 } from "./request-mailbox.js";
 import {
   anchorReviewStore,
+  deriveReviewPlanId,
+  prepareStore,
+  randomId,
+  readSnapshot,
+  reviewStoreFor,
+  writeAgentPrompt,
+  writeSnapshot,
+  ReviewStorePathRejected,
+} from "./store.js";
+import {
   attachAgentToRoster,
   clearInheritedDraft,
   closeAgentClaim,
-  deriveReviewPlanId,
   detachExitingAgent,
   disconnectBarsClaimToken,
-  prepareStore,
-  randomId,
   readAgentDisconnectRequestFor,
   readAgentDisconnects,
   readAgentRoster,
   recordAgentClaimToken,
   requestAgentPrimacy,
-  readSnapshot,
   refreshAgentByClaimToken,
-  reviewStoreFor,
-  writeAgentPrompt,
   writeAgentHeartbeat,
   writeAgentHeartbeatEnded,
-  writeSnapshot,
   AgentDisconnectedByReviewer,
-  ReviewStorePathRejected,
-} from "./store.js";
+} from "./agent-presence.js";
 import {
   agentForClaimToken,
   agentModelLabel,
@@ -1549,7 +1551,7 @@ const nextWork = async ({
         respond_command: respondCommand,
         protocol: fileURLToPath(
           new URL(
-            "../../docs/src/content/docs/for-agents/review-protocol.md",
+            "../../_docs/src/content/docs/for-agents/review-protocol.md",
             import.meta.url,
           ),
         ),

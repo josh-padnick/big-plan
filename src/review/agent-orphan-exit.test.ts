@@ -21,7 +21,7 @@ import {
 } from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { readAgentPresence } from "./store.js";
+import { readAgentPresence } from "./agent-presence.js";
 
 // The observed-end path is bounded by one wait iteration plus a file write.
 // Anything approaching this budget means the loop is no longer checking its

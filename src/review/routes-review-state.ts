@@ -58,7 +58,6 @@ import { threadChangesAllDecided } from "./thread-changes-decided.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
-  readAgentPresence,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
   readSnapshot,
@@ -68,6 +67,7 @@ import {
   writeResolvedCommentIds,
   writeSnapshot,
 } from "./store.js";
+import { readAgentPresence } from "./agent-presence.js";
 import {
   imageReferencesForBodies,
   MAX_IMAGES_PER_MESSAGE,

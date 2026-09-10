@@ -22,11 +22,8 @@ import {
   commitRequestTerminal,
 } from "../src/review/request-mailbox.js";
 import { diffSnapshots } from "../src/review/snapshot-diff.js";
-import {
-  reviewStoreFor,
-  writeAgentHeartbeat,
-  writeSnapshot,
-} from "../src/review/store.js";
+import { reviewStoreFor, writeSnapshot } from "../src/review/store.js";
+import { writeAgentHeartbeat } from "../src/review/agent-presence.js";
 import { renderDocument } from "../src/render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
 import {

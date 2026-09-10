@@ -3,12 +3,8 @@
 // descriptor still names the session that wrote it.
 
 import { unlink } from "node:fs/promises";
-import {
-  readSessionDescriptorValue,
-  readStoreJson,
-  writeStoreJson,
-  type ReviewStore,
-} from "./store.js";
+import { readSessionDescriptorValue, type ReviewStore } from "./store.js";
+import { readStoreJson, writeStoreJson } from "./store-files.js";
 import {
   reviewSessionIsRunning,
   withReviewSessionAuthority,

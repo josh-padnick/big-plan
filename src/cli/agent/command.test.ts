@@ -13,7 +13,7 @@ import {
   writeAgentRequest,
 } from "../../review/agent-exchange.js";
 import { startReviewRuntime } from "../../review/server.js";
-import { readAgentPresence } from "../../review/store.js";
+import { readAgentPresence } from "../../review/agent-presence.js";
 import { agentCommand } from "./command.js";
 
 describe("agent command adapter", () => {

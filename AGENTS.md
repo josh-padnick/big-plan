@@ -80,59 +80,26 @@ MDX plan source
   -> validate and human output -> linting rules on the authored plan
 ```
 
-Each component validates its authored attributes and content into plain data describing what it should show.
-Machine and human delivery give that data to the component's React view, cross one React-to-HAST boundary, and apply document-wide transforms; only what they publish differs.
-Live Markdown export uses the same compiler and component traversal, but gives the validated data to each component's framework-free Markdown presentation before applying Markdown-wide transforms.
-Human delivery packages the result as inert HTML.
-Machine delivery publishes the collected models as JSON, which is why it renders too: each model carries the block address its rendered root was given, and a block address only exists over a finished deck.
-That address is present only where the component's root became a block a reader can point at, so a component rendered privately inside another component's markup, and a slide, which is a scope rather than a block, each publish a model with no address.
-The two differ in exactly one other respect, and it is a consequence rather than a choice: machine delivery makes a component's model carry its nested components' presentation, because no later pass reaches a deferred placeholder that only a model holds.
+Components validate authored content into plain data.
+Human and machine delivery render that data through one React-to-HAST boundary, then apply document transforms.
+Machine delivery needs the rendered document because block addresses are assigned after layout structure is compiled.
+Markdown export uses framework-free component presentations over the same validated data.
+Validation renders in memory, discards the HTML, and applies authoring lint.
 
-Every component-root block descriptor carries the authored name and the model that produced it, joined by a delivery-local instance key that the pipeline strips before serialization.
-That join is what lets a document-wide pass read what a component asserted instead of sniffing the markup the component just rendered, and it is why a rendered document is byte-identical with the join in place.
-Validation renders the plan in memory while collecting the same component models in one pass.
-It discards the generated HTML, then applies its registered linting rules to the authored plan.
-React is a presentation-edge implementation tool.
-A rendered document ships a typed React interaction island for commenting plus the page envelope's first-paint preference bootstrap and the shell's self-contained viewer scripts for the [documented reader interactions](docs/src/content/docs/intro/ui-review.mdx).
-The browser React interaction island never client-renders or gates plan content.
-It may install a server-rendered article revision or component diff root, but every plan-DOM replacement crosses the single boundary described below.
-The plan remains fully readable when scripts are disabled, and Big Plan ships no separate script-free HTML variant.
-Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
+React owns presentation and the browser's review interaction island.
+Plan content remains server-rendered, readable without scripts, and unable to contribute executable code.
+The [renderer local map](src/render/README.md) owns pipeline placement.
+When changing model collection or block addressing, read [component delivery](src/render/markdown/component-pipeline/deliver.ts) and [block identity](src/render/markdown/block-identity.ts) for the delivery-specific model contract.
 
-Four runtime contracts hold that browser layer together, and each exists
-because breaking it fails silently rather than loudly.
-The review island may replace plan DOM only through `src/review/browser/plan-dom.browser.ts`, which announces the swap as `bigplan:article-replaced`.
-Every shell script and every island effect that holds a node re-resolves on that event, because a replaced article or component root detaches everything wired beneath it and a dead handler throws nothing.
-Installing markup that carries no plan identity - a component's own diff view replayed into a lens host, stripped of every address - is announced the same way and says so, because presentation wiring still has to run over it while everything that resolves plan identity has nothing to re-resolve and would tear the markup back down.
-`src/review/browser/live-target.browser.ts` resolves plan identity in one place.
-It scopes lookups to the live article and prefers the copy a reader can see when a name sits on more than one rendering, such as a diagram's theme variants.
-A component renders its own diff in place of its root, and the side that is not the plan reaches the browser without plan identity at all, so there is no replayed copy to exclude.
-It treats a compiler-addressed component diff replacement as live and returns either an element or the reason it is missing.
-A lint rule keeps it the only such place, because a raw selector silently returns a plausible wrong node instead of failing.
-Identity is deliberately not geometry: that resolver rightly answers with
-elements the browser never laid out, such as a block inside a collapsed slide,
-so a floating comment thread takes its rect from exactly one module,
-`src/review/browser/thread-anchor.browser.ts`, which climbs to the nearest
-laid-out ancestor and answers with a rect it measured or the reason it has none.
-Measuring anywhere else fails silently in the same shape, because an unlaid-out
-element still answers `getBoundingClientRect()` with an all-zero rect that is
-indistinguishable from a real measurement at the document origin and parks the
-thread in the left margin, the far side of the screen from its content.
-Absence is not one fact either, and that is the fourth contract.
-A name missing from the article can mean the plan no longer holds it, or it can mean a write has already moved the plan source and the swap has not arrived, and the two want different renderings: the first renders no fallback because the change set and review bar remain its record, while the second waits for the article to catch up.
-The same resolver owns that distinction and reports `plan-dom-behind` for every miss while the article is known to be stale, which `src/review/browser/plan-dom-lag.ts` decides and a plan-moving verdict write announces.
-Anything that renders absence switches on the reason rather than on a boolean, so a caller that has not considered "not yet" fails to compile instead of drawing a change below the whole plan.
+Read these owners before changing the corresponding runtime behavior:
 
-One server-side invariant is worth the same treatment, for the same reason.
-The authoritative plan source has exactly one writer, `src/review/staged-plan-mutation.ts`.
-Agent edits go into a claim-scoped stage, and a stage publishes only under the plan-mutation lock, only when the recorded holder, the claim generation, and the source's base digest all still hold, and only through one atomic rename that a journal written beforehand can settle after a crash.
-The reviewer's two writes cross the same boundary, through one restore primitive that takes that lock and re-proves the digest it was computed against before renaming, so a revision an agent published in the meantime refuses the write instead of disappearing under it.
-Rejecting a change is that primitive's only reviewer-facing form, because its bytes are derived rather than edited: the plan is always the agent's proposed revision with the whole rejected set of that revision restored to the thread's baseline, so an undo re-derives the plan the rejection never touched instead of inverting an earlier write.
-Approval stamps the reviewer's answers into the source as decided decisions, and it does so inside the approval commit's own hold of that lock, because an approval that pinned the pre-stamp revision would go stale against its own write.
-Anything that writes the plan outside that boundary reintroduces the failure the boundary exists to remove, and it does so silently: the bytes land, and nothing refuses them until a reviewer notices work they never approved.
-Its record for the Change Engine goes through `src/review/change-set-commit.ts` and nowhere else, which is what keeps a change set describing published revisions only.
-Every reviewer write records a revision there too, because the log is what says how the plan got from one digest to the next: a move missing from that chain ends it at the point a reviewer acted, and everything derived by walking the chain - which change set declared which block, above all - is lost for every later span.
-Neither reviewer provenance opens a change set, because neither proposes anything, and they differ in what they leave standing: a `reject` takes some places out and leaves the rest of the proposal under review at the span its own verdicts are addressed to, while a `revert` takes a whole response back out and ends the set where that response started, which is what stops approval from accepting a revision the plan no longer holds.
+- **Replacing plan DOM:** [plan-dom.browser.ts](src/review/browser/plan-dom.browser.ts) owns replacement and notification of subscribers.
+- **Resolving plan identity or absence:** [live-target.browser.ts](src/review/browser/live-target.browser.ts) owns lookups and missing-target reasons; [plan-dom-lag.ts](src/review/browser/plan-dom-lag.ts) owns revision lag.
+- **Positioning floating threads:** [thread-anchor.browser.ts](src/review/browser/thread-anchor.browser.ts) owns measurement of a laid-out anchor.
+- **Writing authoritative plan source:** [staged-plan-mutation.ts](src/review/staged-plan-mutation.ts) is the only writer, including reviewer restoration and approval stamping.
+- **Recording committed revisions:** [change-set-commit.ts](src/review/change-set-commit.ts) is the only entry point into the revision log.
+
+The [subsystem boundaries](_docs/subsystems.md) own the review semantics and cross-subsystem constraints behind these interfaces.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the review layer owns the local human-agent exchange, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.
@@ -154,23 +121,13 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                                                                                                           |
 | `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                                                                                                                            |
 | `test/`                  | Critical browser journeys over complete rendered documents, plus the behavioral probes under `test/probes/`. Keep pure behavior in colocated unit tests.                                                                                                                                                                                    |
-| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                                                                                       |
+| `_docs/`                 | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `_docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                                                                                      |
 
-Use these placement tests:
-
-- A public CLI action belongs in `src/cli/<command>/`; shared input and output safety belongs in `src/cli/_shared/`.
-- A built-in component belongs in `src/components/<component>/`; internal visual support that plan authors cannot use belongs in the appropriate underscore-prefixed support folder.
-- A validate-only authoring-quality check belongs in `src/lint/rules/`; structural acceptance remains in the renderer and component compilers.
-- Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; component-specific validation and presentation stay with the component.
-- Reading and navigation chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
-- Local comments, agent exchange, snapshot comparison, and review-only browser behavior belong in `src/review/`; shared browser-server contracts stay framework-free.
-- Anything that writes the authoritative plan source belongs behind `src/review/staged-plan-mutation.ts`; no other module may write that file.
-- A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.
-- A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
+A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
 
 ## Subsystems
 
-[docs/subsystems.md](docs/subsystems.md) owns the subsystem partition Big Plan's product work is organized into: how many there are, their names, what each one covers, its code anchors, and the boundary rules between them.
+[_docs/subsystems.md](_docs/subsystems.md) owns the subsystem partition Big Plan's product work is organized into: how many there are, their names, what each one covers, its code anchors, and the boundary rules between them.
 
 State which subsystem new work belongs to before starting it; when work spans more than one, say so explicitly.
 
@@ -193,19 +150,19 @@ Every guidance fact has exactly one owning layer; everywhere else points to the 
 Route by the kind of fact:
 
 - A fact about one file lives in that file's header comment; a fact a check enforces lives in the check and its error message.
-- Current product capabilities and human or agent usage guidance live in `docs/`.
+- Current product capabilities and human or agent usage guidance live in `_docs/`.
 - How the product looks, and the scales and rules a visual decision picks from, live in [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md); token values stay in `src/render/global.css`.
 - Setup, build, run, and shortest-path usage procedures live in the root [README.md](README.md).
 - DCO, branches, pull requests, CI expectations, and other contribution workflow live in [CONTRIBUTING.md](CONTRIBUTING.md).
 - The npm release, promotion, and rollback procedure, and the changelog discipline that release follows, live in [RELEASING.md](RELEASING.md); the release history a reader sees lives in [CHANGELOG.md](CHANGELOG.md).
-- The vulnerability-reporting policy and Big Plan's security posture live on the docs site's Security page; the repo-root [SECURITY.md](SECURITY.md) points there and never restates it, because GitHub reads that file to offer its reporting affordance.
+- The vulnerability-reporting policy and Big Plan's security posture live on the docs site's Security page; [.github/SECURITY.md](.github/SECURITY.md) points there and never restates it, because GitHub reads that file to offer its reporting affordance.
 - A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
 - An architectural decision and its rationale live in an ADR when the decision needs a durable record.
 - A repeatable whole-task workflow becomes a skill only after the workflow has repeated and proven easy to get wrong.
 - How to measure what a real coding agent decides after reading text Big Plan wrote for it lives in [test/probes/README.md](test/probes/README.md); probes are evidence for prompt changes, never CI tests.
-- The installable Big Plan agent skill shell is authored at `assets/skill/SKILL.md`, embedded by `scripts/gen-skill.mjs`, and delivered by `big-plan skill`; live authoring rules stay in `big-plan guidance` (see `docs/src/content/docs/for-agents/index.md`).
+- The installable Big Plan agent skill shell is authored at `assets/skill/SKILL.md`, embedded by `scripts/gen-skill.mjs`, and delivered by `big-plan skill`; live authoring rules stay in `big-plan guidance` (see `_docs/src/content/docs/for-agents/index.md`).
 - Future work, sequencing, and delivery status live in temporary planning artifacts or issue tracking.
-- The seven-subsystem partition, including its code anchors and boundary rules, lives in [docs/subsystems.md](docs/subsystems.md).
+- The seven-subsystem partition, including its code anchors and boundary rules, lives in [_docs/subsystems.md](_docs/subsystems.md).
 - Product orientation, cross-directory architecture outside the subsystem partition, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
 - The gold-standard plan-quality testing workflow (context-free generation, co-refine, backport, re-verify) lives in this guide under [Gold-standard plan-quality testing](#gold-standard-plan-quality-testing).
 
@@ -244,7 +201,7 @@ Engineering practices own how to write the styling code; the design principles o
 This section owns the durable procedure for improving Big Plan's plan quality as a product.
 It is not unit testing, Playwright journey testing, or ordinary contribution verification.
 Those remain under [Engineering practices](#engineering-practices), `test/`, and [CONTRIBUTING.md](CONTRIBUTING.md).
-Current product capabilities and authoring guidance remain in `docs/`; point there rather than restating them.
+Current product capabilities and authoring guidance remain in `_docs/`; point there rather than restating them.
 The evaluation bar for plan quality is the two [plan-quality standards](#plan-quality-standards): pleasant to read, and understandable.
 
 ### What "good" means

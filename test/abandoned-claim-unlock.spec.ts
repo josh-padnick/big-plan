@@ -4,11 +4,8 @@
 
 import { readAgentExchange } from "../src/review/agent-exchange.js";
 import { claimAgentRequest } from "../src/review/request-mailbox.js";
-import {
-  reviewStoreFor,
-  writeAgentHeartbeat,
-  writeAgentRequestValue,
-} from "../src/review/store.js";
+import { reviewStoreFor, writeAgentRequestValue } from "../src/review/store.js";
+import { writeAgentHeartbeat } from "../src/review/agent-presence.js";
 import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
 import { AGENT_RECOVERY_HORIZON_MS } from "../src/review/shared/agent-timing.js";
 import {
@@ -24,6 +21,8 @@ const COMMENT_BODY = "Name the recovery owner for the retry boundary.";
 
 /** Opens one sent thread's card, which the rail may already have open. */
 const expandThread = async (thread: Locator): Promise<void> => {
+  // Reload restores the rail before its asynchronously loaded threads.
+  await expect(thread).toBeVisible();
   const expand = thread.getByRole("button", { name: /^Expand .* comment:/u });
   if ((await expand.count()) > 0) await expand.click();
 };

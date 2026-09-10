@@ -11,7 +11,7 @@ import { recordChangeVerdicts } from "./routes-verdicts.js";
 import { prepareStore, reviewStoreFor, writeSnapshot } from "./store.js";
 import { recordCommittedRevision } from "./change-set-commit.js";
 import { writeAgentRequest } from "./agent-exchange.js";
-import { writeStoreJson } from "./store.js";
+import { writeStoreJson } from "./store-files.js";
 
 const CHANGE_SET_ID = "abcdef0123456789";
 const SESSION_ID = "fedcba9876543210";

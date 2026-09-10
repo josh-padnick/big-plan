@@ -74,16 +74,19 @@ import {
   deriveReviewPlanId,
   prepareStore,
   randomId,
-  readAgentDisconnectRequestFor,
-  readAgentPresence,
   readComments,
   readResolvedCommentIds,
   reviewStoreFor,
-  reviewStoreGrowth,
   writeComments,
   writeSnapshot,
 } from "./store.js";
-import type { ReviewStore, ReviewStoreGrowth } from "./store.js";
+import {
+  readAgentDisconnectRequestFor,
+  readAgentPresence,
+} from "./agent-presence.js";
+import { reviewStoreGrowth } from "./store-growth.js";
+import type { ReviewStore } from "./store.js";
+import type { ReviewStoreGrowth } from "./store-growth.js";
 import {
   createMutationRegistry,
   describeRuntimeFailure,

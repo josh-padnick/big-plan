@@ -7,7 +7,7 @@
 // Every decision here is pure and clock-injected. The runtime supplies the
 // clock and the I/O; the CLI owns writing the result to stderr.
 
-import type { ReviewStoreGrowth } from "./store.js";
+import type { ReviewStoreGrowth } from "./store-growth.js";
 
 /**
  * How long one mutation may run before the runtime stops waiting for it. A

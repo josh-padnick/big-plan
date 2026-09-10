@@ -48,8 +48,10 @@ import {
 } from "./shared/agent-primacy.js";
 import { MAX_IMAGE_BYTES, reviewImageId } from "./shared/review-image.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
-import { readProgress } from "./store.js";
+import { readProgress } from "./progress-log.js";
 import * as reviewStore from "./store.js";
+import * as storeFiles from "./store-files.js";
+import * as agentPresence from "./agent-presence.js";
 import { renderDocument } from "../render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import {
@@ -111,7 +113,7 @@ const heartbeatAroundAgentWait = ({
     .spyOn(reviewStore, "readSessionHeartbeatValue")
     .mockImplementation(async () => {
       if (!waiting) {
-        const presence = await reviewStore.readAgentPresence({
+        const presence = await agentPresence.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         });
@@ -278,7 +280,7 @@ describe("agent work loop", () => {
     const pushRuntime = await startReviewRuntime({ planPath });
 
     try {
-      await reviewStore.attachAgentToRoster({
+      await agentPresence.attachAgentToRoster({
         store: pushRuntime.store,
         sessionId: pushRuntime.sessionId,
         writerId: "primary-agent",
@@ -298,7 +300,7 @@ describe("agent work loop", () => {
         code: "primacy-lost",
       });
       await expect(
-        reviewStore.readAgentRoster({
+        agentPresence.readAgentRoster({
           store: pushRuntime.store,
           sessionId: pushRuntime.sessionId,
         }),
@@ -562,28 +564,28 @@ describe("agent work loop lifecycle", () => {
     await writeFile(planPath, source);
     const review = await startReviewRuntime({ planPath });
     try {
-      await reviewStore.attachAgentToRoster({
+      await agentPresence.attachAgentToRoster({
         store: review.store,
         sessionId: review.sessionId,
         writerId: "aaaaaaaaaaaaaaaa",
       });
-      await reviewStore.attachAgentToRoster({
+      await agentPresence.attachAgentToRoster({
         store: review.store,
         sessionId: review.sessionId,
         writerId: "bbbbbbbbbbbbbbbb",
       });
-      await reviewStore.grantAgentPrimacy({
+      await agentPresence.grantAgentPrimacy({
         store: review.store,
         sessionId: review.sessionId,
         writerId: "bbbbbbbbbbbbbbbb",
         inheritedDraftPath: "/stage/old/candidate.mdx",
       });
-      await reviewStore.grantAgentPrimacy({
+      await agentPresence.grantAgentPrimacy({
         store: review.store,
         sessionId: review.sessionId,
         writerId: "aaaaaaaaaaaaaaaa",
       });
-      await reviewStore.grantAgentPrimacy({
+      await agentPresence.grantAgentPrimacy({
         store: review.store,
         sessionId: review.sessionId,
         writerId: "bbbbbbbbbbbbbbbb",
@@ -602,7 +604,7 @@ describe("agent work loop lifecycle", () => {
       });
 
       const promoted = (
-        await reviewStore.readAgentRoster({
+        await agentPresence.readAgentRoster({
           store: review.store,
           sessionId: review.sessionId,
         })
@@ -648,16 +650,16 @@ describe("agent work loop lifecycle", () => {
         body: "Who is allowed to answer?",
       }),
     });
-    const recordClaim = reviewStore.recordAgentClaimToken;
+    const recordClaim = agentPresence.recordAgentClaimToken;
     const linking = vi
-      .spyOn(reviewStore, "recordAgentClaimToken")
+      .spyOn(agentPresence, "recordAgentClaimToken")
       .mockImplementationOnce(async (options) => {
-        await reviewStore.attachAgentToRoster({
+        await agentPresence.attachAgentToRoster({
           store: review.store,
           sessionId: review.sessionId,
           writerId: "successor",
         });
-        await reviewStore.grantAgentPrimacy({
+        await agentPresence.grantAgentPrimacy({
           store: review.store,
           sessionId: review.sessionId,
           writerId: "successor",
@@ -724,7 +726,7 @@ describe("agent work loop lifecycle", () => {
         pickup.response_file,
         JSON.stringify({ requestId, message: "This must not publish." }),
       );
-      await reviewStore.writeStoreJson({
+      await storeFiles.writeStoreJson({
         path: review.store.agentRosterPath,
         value: { sessionId: review.sessionId, agents: [] },
       });
@@ -786,11 +788,11 @@ describe("agent work loop lifecycle", () => {
       ) {
         throw new Error("Pickup did not return its response contract");
       }
-      const roster = await reviewStore.readAgentRoster({
+      const roster = await agentPresence.readAgentRoster({
         store: review.store,
         sessionId: review.sessionId,
       });
-      await reviewStore.writeStoreJson({
+      await storeFiles.writeStoreJson({
         path: review.store.agentRosterPath,
         value: {
           sessionId: review.sessionId,
@@ -846,19 +848,19 @@ describe("agent work loop lifecycle", () => {
         body: "Will a failed release stay visible?",
       }),
     });
-    const recordClaim = reviewStore.recordAgentClaimToken;
+    const recordClaim = agentPresence.recordAgentClaimToken;
     let restoreRequestWrite = (): void => undefined;
     const linking = vi
-      .spyOn(reviewStore, "recordAgentClaimToken")
+      .spyOn(agentPresence, "recordAgentClaimToken")
       .mockImplementationOnce(async (options) => {
-        await reviewStore.writeAgentDisconnectRequest({
+        await agentPresence.writeAgentDisconnectRequest({
           store: review.store,
           directive: {
             writerId: options.writerId,
             requestedAtMs: Date.now(),
           },
         });
-        await reviewStore.detachAgentFromRoster({
+        await agentPresence.detachAgentFromRoster({
           store: review.store,
           sessionId: review.sessionId,
           writerId: options.writerId,
@@ -932,7 +934,7 @@ describe("agent work loop lifecycle", () => {
         if (claimed?.claimedByConnection === undefined) {
           throw new Error("The claimed request did not name its connection");
         }
-        await reviewStore.writeAgentDisconnectRequest({
+        await agentPresence.writeAgentDisconnectRequest({
           store: review.store,
           directive: {
             writerId: claimed.claimedByConnection,
@@ -1758,7 +1760,7 @@ describe("agent work loop lifecycle", () => {
       // One agent connected, so the review has one agent - not a queue of
       // strangers, and never a question to the reviewer about a second agent
       // that does not exist.
-      const attached = await reviewStore.readAgentRoster({
+      const attached = await agentPresence.readAgentRoster({
         store: review.store,
         sessionId: review.sessionId,
       });
@@ -2542,7 +2544,7 @@ describe("agent work loop lifecycle", () => {
       await vi.waitFor(
         async () => {
           expect(
-            await reviewStore.readAgentPresence({
+            await agentPresence.readAgentPresence({
               store: review.store,
               sessionId: review.sessionId,
             }),
@@ -2767,7 +2769,7 @@ describe("agent work loop lifecycle", () => {
       // The reviewer, not the arriving agent, is the one being asked.
       await vi.waitFor(
         async () => {
-          const roster = await reviewStore.readAgentRoster({
+          const roster = await agentPresence.readAgentRoster({
             store: review.store,
             sessionId: review.sessionId,
           });
@@ -2792,13 +2794,13 @@ describe("agent work loop lifecycle", () => {
       reviewer's activity card is drawn from exactly this, and with both loops
       idle it alternated between the two of them twice a second (BIG-171).
       */
-      const presence = await reviewStore.readAgentPresence({
+      const presence = await agentPresence.readAgentPresence({
         store: review.store,
         sessionId: review.sessionId,
       });
       expect(presence.model?.name).toBe("claude-opus-5");
       const primaryWriterId = selectPrimaryAgent({
-        agents: await reviewStore.readAgentRoster({
+        agents: await agentPresence.readAgentRoster({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -2881,7 +2883,7 @@ describe("agent work loop lifecycle", () => {
       await vi.waitFor(
         async () => {
           const observer = pendingPrimacyRequest({
-            agents: await reviewStore.readAgentRoster({
+            agents: await agentPresence.readAgentRoster({
               store: review.store,
               sessionId: review.sessionId,
             }),
@@ -2896,7 +2898,7 @@ describe("agent work loop lifecycle", () => {
       );
 
       // The reviewer answers.
-      await reviewStore.grantAgentPrimacy({
+      await agentPresence.grantAgentPrimacy({
         store: review.store,
         sessionId: review.sessionId,
         writerId: observerWriterId,
@@ -2938,7 +2940,7 @@ describe("agent work loop lifecycle", () => {
     let observing: Promise<Record<string, unknown>> | undefined;
     try {
       // An agent already speaks for the plan, so the arriving loop observes.
-      await reviewStore.attachAgentToRoster({
+      await agentPresence.attachAgentToRoster({
         store: review.store,
         sessionId: review.sessionId,
         writerId: "incumbent",
@@ -2952,7 +2954,7 @@ describe("agent work loop lifecycle", () => {
       const observer = await vi.waitFor(
         async () => {
           const waiting = pendingPrimacyRequest({
-            agents: await reviewStore.readAgentRoster({
+            agents: await agentPresence.readAgentRoster({
               store: review.store,
               sessionId: review.sessionId,
             }),
@@ -2966,7 +2968,7 @@ describe("agent work loop lifecycle", () => {
         { timeout: 5_000 },
       );
 
-      await reviewStore.detachAgentFromRoster({
+      await agentPresence.detachAgentFromRoster({
         store: review.store,
         sessionId: review.sessionId,
         writerId: observer.writerId,
@@ -2980,7 +2982,7 @@ describe("agent work loop lifecycle", () => {
       // And it stays gone rather than re-raising the question it was answered
       // about.
       await expect(
-        reviewStore.readAgentRoster({
+        agentPresence.readAgentRoster({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -3008,7 +3010,7 @@ describe("agent work loop lifecycle", () => {
       const primary = await vi.waitFor(
         async () => {
           const seated = selectPrimaryAgent({
-            agents: await reviewStore.readAgentRoster({
+            agents: await agentPresence.readAgentRoster({
               store: review.store,
               sessionId: review.sessionId,
             }),
@@ -3020,7 +3022,7 @@ describe("agent work loop lifecycle", () => {
         { timeout: 5_000 },
       );
 
-      await reviewStore.detachAgentFromRoster({
+      await agentPresence.detachAgentFromRoster({
         store: review.store,
         sessionId: review.sessionId,
         writerId: primary.writerId,
@@ -3033,7 +3035,7 @@ describe("agent work loop lifecycle", () => {
       // The empty-seat rule must not hand the plan straight back to the agent
       // the reviewer just removed from it.
       await expect(
-        reviewStore.readAgentRoster({
+        agentPresence.readAgentRoster({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -3075,7 +3077,7 @@ describe("agent work loop lifecycle", () => {
       const primary = await vi.waitFor(
         async () => {
           const seated = selectPrimaryAgent({
-            agents: await reviewStore.readAgentRoster({
+            agents: await agentPresence.readAgentRoster({
               store: review.store,
               sessionId: review.sessionId,
             }),
@@ -3091,7 +3093,7 @@ describe("agent work loop lifecycle", () => {
       // pass whether or not the fix exists.
       await vi.waitFor(
         async () => {
-          const presence = await reviewStore.readAgentPresence({
+          const presence = await agentPresence.readAgentPresence({
             store: review.store,
             sessionId: review.sessionId,
           });
@@ -3104,7 +3106,7 @@ describe("agent work loop lifecycle", () => {
 
       // Only the registration goes, which is the half of a disconnect this
       // loop is being made to notice.
-      await reviewStore.detachAgentFromRoster({
+      await agentPresence.detachAgentFromRoster({
         store: review.store,
         sessionId: review.sessionId,
         writerId: primary.writerId,
@@ -3117,7 +3119,7 @@ describe("agent work loop lifecycle", () => {
       // An ended record is projected as a disconnected one carrying the moment
       // it ended, which is exactly what the card reads to stop drawing a
       // connected agent and to retire its Disconnect button.
-      const presence = await reviewStore.readAgentPresence({
+      const presence = await agentPresence.readAgentPresence({
         store: review.store,
         sessionId: review.sessionId,
       });
@@ -3157,7 +3159,7 @@ describe("agent work loop lifecycle", () => {
         executablePath,
       });
       const holder = (
-        await reviewStore.readAgentRoster({
+        await agentPresence.readAgentRoster({
           store: review.store,
           sessionId: review.sessionId,
         })
@@ -3166,7 +3168,7 @@ describe("agent work loop lifecycle", () => {
         throw new Error("The pickup did not register an agent");
       }
 
-      await reviewStore.detachAgentFromRoster({
+      await agentPresence.detachAgentFromRoster({
         store: review.store,
         sessionId: review.sessionId,
         writerId: holder.writerId,
@@ -3226,7 +3228,7 @@ describe("agent work loop lifecycle", () => {
         executablePath,
       });
       const holder = (
-        await reviewStore.readAgentRoster({
+        await agentPresence.readAgentRoster({
           store: review.store,
           sessionId: review.sessionId,
         })
@@ -3237,7 +3239,7 @@ describe("agent work loop lifecycle", () => {
 
       // The reviewer disconnected it three minutes ago, which is an ordinary
       // length for one turn and far past the window a waiting loop needs.
-      await reviewStore.detachAgentFromRoster({
+      await agentPresence.detachAgentFromRoster({
         store: review.store,
         sessionId: review.sessionId,
         writerId: holder.writerId,
@@ -3282,7 +3284,7 @@ describe("agent work loop lifecycle", () => {
       ).rejects.toMatchObject({ name: "AgentWorkLoopRejected" });
 
       await expect(
-        reviewStore.readAgentRoster({
+        agentPresence.readAgentRoster({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -3338,7 +3340,7 @@ describe("agent work loop lifecycle", () => {
         pending: true,
         work: { requestId: "abababababababab" },
       });
-      const roster = await reviewStore.readAgentRoster({
+      const roster = await agentPresence.readAgentRoster({
         store: review.store,
         sessionId: review.sessionId,
       });
@@ -3467,7 +3469,7 @@ describe("agent work loop lifecycle", () => {
         await vi.waitFor(
           async () => {
             expect(
-              await reviewStore.readAgentPresence({
+              await agentPresence.readAgentPresence({
                 store: review.store,
                 sessionId: review.sessionId,
               }),
@@ -3560,7 +3562,7 @@ describe("agent work loop lifecycle", () => {
       await vi.waitFor(
         async () => {
           expect(
-            await reviewStore.readAgentPresence({
+            await agentPresence.readAgentPresence({
               store: review.store,
               sessionId: review.sessionId,
             }),
@@ -3860,7 +3862,7 @@ describe("agent work loop lifecycle", () => {
       ).toEqual(expect.any(String));
       // One agent, one row: coming back is not arriving.
       await expect(
-        reviewStore.readAgentRoster({
+        agentPresence.readAgentRoster({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -4008,7 +4010,7 @@ describe("agent work loop lifecycle", () => {
       });
       const writerId = await vi.waitFor(
         async () => {
-          const presence = await reviewStore.readAgentPresence({
+          const presence = await agentPresence.readAgentPresence({
             store: review.store,
             sessionId: review.sessionId,
           });
@@ -4017,7 +4019,7 @@ describe("agent work loop lifecycle", () => {
         },
         { timeout: 8_000, interval: 25 },
       );
-      await reviewStore.writeAgentDisconnectRequest({
+      await agentPresence.writeAgentDisconnectRequest({
         store: review.store,
         directive: { writerId, requestedAtMs: Date.now() },
       });
@@ -4029,7 +4031,7 @@ describe("agent work loop lifecycle", () => {
       // The end is the loop's own report, which is what keeps the reviewer's
       // log stating a fact rather than the silence that follows one (BIG-156).
       await expect(
-        reviewStore.readAgentPresence({
+        agentPresence.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -4041,7 +4043,9 @@ describe("agent work loop lifecycle", () => {
       // to say who ended the session, and it is inert against every later agent
       // because none of them writes this writer id.
       await expect(
-        reviewStore.readAgentDisconnectRequests({ store: review.store }),
+        agentPresence.readAgentDisconnectRequests({
+          store: review.store,
+        }),
       ).resolves.toEqual([expect.objectContaining({ writerId })]);
     } finally {
       await review.close();
@@ -4078,7 +4082,7 @@ describe("agent work loop lifecycle", () => {
         baselineSnapshot: request.premiseSnapshot,
         now: new Date().toISOString(),
       });
-      await reviewStore.writeAgentDisconnectRequest({
+      await agentPresence.writeAgentDisconnectRequest({
         store: review.store,
         directive: { writerId: "1111111111111111", requestedAtMs: Date.now() },
       });
@@ -4136,7 +4140,7 @@ describe("agent work loop lifecycle", () => {
       // What the reviewer's disconnect does, in the order the route does it:
       // the directive names the connection the claim recorded, and the claim
       // itself goes back so the review is free for the next agent.
-      await reviewStore.writeAgentDisconnectRequest({
+      await agentPresence.writeAgentDisconnectRequest({
         store: review.store,
         directive: { writerId: connectionToken, requestedAtMs: Date.now() },
       });
@@ -4218,12 +4222,12 @@ describe("agent work loop lifecycle", () => {
       // last wrote to it, so the route has a name to address in the one state a
       // between-commands disconnect is taken in: nothing claimed, nothing live.
       await expect(
-        reviewStore.readAgentPresence({
+        agentPresence.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
       ).resolves.toMatchObject({ writerId: connectionToken });
-      await reviewStore.writeAgentDisconnectRequest({
+      await agentPresence.writeAgentDisconnectRequest({
         store: review.store,
         directive: { writerId: connectionToken, requestedAtMs: Date.now() },
       });
@@ -4241,7 +4245,7 @@ describe("agent work loop lifecycle", () => {
         disconnected: true,
       });
       await expect(
-        reviewStore.readAgentPresence({
+        agentPresence.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -4273,7 +4277,7 @@ describe("agent work loop lifecycle", () => {
       if (typeof connectionToken !== "string") {
         throw new Error("agent next returned no connection token");
       }
-      await reviewStore.writeAgentDisconnectRequest({
+      await agentPresence.writeAgentDisconnectRequest({
         store: review.store,
         directive: { writerId: connectionToken, requestedAtMs: Date.now() },
       });
@@ -4867,14 +4871,14 @@ describe("agent work loop lifecycle", () => {
       second loop - a second loop attaches as an observer now, and an observer
       is deliberately unable to say anything about the review's presence.
       */
-      await reviewStore.writeAgentHeartbeat({
+      await agentPresence.writeAgentHeartbeat({
         store: review.store,
         sessionId: review.sessionId,
         state: "waiting",
         writerId: String(pickup["connection_token"]),
       });
       expect(
-        await reviewStore.readAgentPresence({
+        await agentPresence.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -5170,7 +5174,7 @@ describe("agent work loop lifecycle", () => {
       // a reviewer can see which agent is attached while nothing is claimed.
       // The claim stays authoritative wherever both exist.
       await expect(
-        reviewStore.readAgentPresence({
+        agentPresence.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -5216,7 +5220,7 @@ describe("agent work loop lifecycle", () => {
         agentToken: pickup.agent_token,
       });
       await expect(
-        reviewStore.readAgentPresence({
+        agentPresence.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
@@ -5270,7 +5274,7 @@ describe("agent work loop lifecycle", () => {
         ],
       });
       await expect(
-        reviewStore.readAgentPresence({
+        agentPresence.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),

@@ -26,8 +26,8 @@ import {
   readAgentRoster,
   recordAgentClaimToken,
   writeAgentHeartbeat,
-} from "./store.js";
-import * as reviewStore from "./store.js";
+} from "./agent-presence.js";
+import * as agentPresence from "./agent-presence.js";
 import { selectPrimaryAgent } from "./shared/agent-primacy.js";
 import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import type { AttachedAgent } from "./shared/agent-primacy.js";
@@ -143,7 +143,7 @@ describe("the reviewer's primacy answer over the wire", () => {
       writerId: "1111111111111111",
     });
     const rosterRead = vi
-      .spyOn(reviewStore, "readAgentRoster")
+      .spyOn(agentPresence, "readAgentRoster")
       .mockRejectedValueOnce(new Error("roster read failed"));
 
     try {

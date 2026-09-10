@@ -562,7 +562,13 @@ test("should decide, undo, and delete a thread from the review bar", async ({
     await stepper(page)
       .getByRole("button", { name: "Undo rejection for this change" })
       .click();
+    // Wait for the restored article before moving away from the undo's place.
+    await expect(page.locator("article")).toContainText(
+      "The worker retries a failed job three times before it gives up.",
+      { timeout: 15_000 },
+    );
     await stepper(page).getByRole("button", { name: "Next change" }).click();
+    await expect(stepper(page)).toContainText("2 of 2");
     await stepper(page)
       .getByRole("button", { name: "Undo rejection for this change" })
       .click();
@@ -1140,6 +1146,7 @@ test("should lay out the review bar differently before and after a change is dec
       // Rejecting the first change advances to the still-open second one, so the
       // decided row is read by stepping back to the change that now holds a
       // verdict rather than by reading the change the tour moved on to.
+      await expect(stepper(page)).toContainText("2 of 2");
       await stepper(page)
         .getByRole("button", { name: "Previous change" })
         .click();
@@ -1185,9 +1192,15 @@ test("should lay out the review bar differently before and after a change is dec
       await stepper(page)
         .getByRole("button", { name: "Undo rejection for this change" })
         .click();
+      // Undo restores the article asynchronously. Wait for that replacement
+      // before accepting, so its refresh cannot overtake the next decision.
+      await expect(page.locator("article")).toContainText(
+        "The worker retries a failed job three times before it gives up.",
+      );
       await stepper(page)
         .getByRole("button", { name: "Accept this change" })
         .click();
+      await expect(stepper(page)).toContainText("2 of 2");
       await stepper(page)
         .getByRole("button", { name: "Previous change" })
         .click();

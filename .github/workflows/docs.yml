@@ -10,7 +10,7 @@ on:
       - main
   pull_request:
     paths:
-      - docs/**
+      - _docs/**
       - .github/workflows/docs.yml
 
 permissions:
@@ -46,17 +46,17 @@ jobs:
       - name: Install the pinned Playwright Chromium for compile-time Mermaid
         run: bunx playwright install chromium
       - name: Acknowledge current plan-writing guidance
-        working-directory: docs
+        working-directory: _docs
         run: node ../bin/big-plan.mjs guidance >/dev/null
       - name: Install docs dependencies
-        run: bun install --cwd docs --frozen-lockfile
+        run: bun install --cwd _docs --frozen-lockfile
       - name: Build docs
-        working-directory: docs
+        working-directory: _docs
         run: bun run build
       - name: Upload docs artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
-          path: docs/dist
+          path: _docs/dist
 
   deploy:
     name: Deploy docs

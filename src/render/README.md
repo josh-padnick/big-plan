@@ -1,13 +1,9 @@
+<!-- Owns renderer-local placement decisions beyond the root agent guide. -->
+
 # Renderer local map
 
 Start with the root [agent guide](../../AGENTS.md) and the [components local map](../components/README.md).
 This directory owns document-wide compilation and delivery; component semantics remain in their component slices, while public command I/O remains in the CLI.
-
-The renderer parses and validates a plan source through one shared pipeline.
-Each component's compilation function returns plain validated data paired with a presentation that consumes it.
-Both deliveries invoke the paired presentations through the single React-to-HAST boundary and apply the same document transforms; only what they publish differs, and the [agent guide](../../AGENTS.md) owns that contract.
-Machine delivery publishes the collected component models for JSON; human delivery adds the review shell and page envelope.
-An outline-aware presentation crosses that same boundary after the deck transform has computed the document outline it consumes.
 
 - Put plan-source parsing, document metadata, heading identity, and document-wide HAST transforms under `markdown/`; the module returns structured HAST and never serializes it.
 - Keep pre-HAST authoring validation, post-MDX component delivery, and the React-to-HAST adapter separated inside `markdown/component-pipeline/`.

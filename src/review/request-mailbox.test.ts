@@ -67,14 +67,14 @@ import {
   prepareStore,
   readAgentConnectionEvents,
   readAgentRequestValue,
-  readProgress,
   reviewStoreFor,
   withReviewStoreLock,
   writeAgentRequestValue,
   writeAgentResponseValue,
   writeResolvedCommentIds,
-  writeStoreJson,
 } from "./store.js";
+import { readProgress } from "./progress-log.js";
+import { writeStoreJson } from "./store-files.js";
 import {
   buildReviewImageReference,
   reviewImageId,

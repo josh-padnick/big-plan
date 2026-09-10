@@ -38,12 +38,8 @@ import {
   appendProgressEvent,
   cancelAgentRequest,
 } from "./request-mailbox.js";
-import {
-  randomId,
-  readAgentPresence,
-  readSnapshot,
-  writeSnapshot,
-} from "./store.js";
+import { randomId, readSnapshot, writeSnapshot } from "./store.js";
+import { readAgentPresence } from "./agent-presence.js";
 import { currentAnswers } from "./plan-inputs-store.js";
 import { reviewInputs } from "./input-contract.js";
 import {

@@ -18,24 +18,14 @@ import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   appendAgentConnectionEvent,
-  appendProgressValue,
-  attachAgentToRoster,
   anchorReviewStore,
   deriveReviewPlanId,
   prepareStore,
   readAgentConnectionEvents,
-  readAgentDisconnectRequestFor,
-  readAgentDisconnectRequests,
-  readAgentPresence,
-  readProgress,
   readResolvedCommentIds,
   readSnapshot,
   reviewStoreFor,
-  writeAgentDisconnectRequest,
-  writeAgentHeartbeat,
-  writeAgentHeartbeatEnded,
   writeResolvedCommentIds,
-  writeStoreJson,
   writeSnapshot,
   writeSessionHeartbeatValue,
   withReviewStoreLock,
@@ -44,6 +34,17 @@ import {
   publishReviewImage,
   readReviewImage,
 } from "./store.js";
+import { appendProgressValue, readProgress } from "./progress-log.js";
+import {
+  attachAgentToRoster,
+  readAgentDisconnectRequestFor,
+  readAgentDisconnectRequests,
+  readAgentPresence,
+  writeAgentDisconnectRequest,
+  writeAgentHeartbeat,
+  writeAgentHeartbeatEnded,
+} from "./agent-presence.js";
+import { writeStoreJson } from "./store-files.js";
 
 const created: Array<string> = [];
 
@@ -1224,6 +1225,26 @@ describe("review store agent presence", () => {
 // BIG-190: a review outlives the agents attached to it, so the record of who
 // the reviewer disconnected has to outlive them too.
 describe("review store agent disconnect directives", () => {
+  it("should preserve concurrent disconnect directives for different agents", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const directives = Array.from({ length: 8 }, (_, index) => ({
+      writerId: String(index).padStart(16, "0"),
+      requestedAtMs: 10_000 + index,
+    }));
+
+    await Promise.all(
+      directives.map((directive) =>
+        writeAgentDisconnectRequest({ store, directive }),
+      ),
+    );
+
+    const recorded = await readAgentDisconnectRequests({ store });
+    expect(recorded).toHaveLength(directives.length);
+    expect(recorded).toEqual(expect.arrayContaining(directives));
+  });
+
   it("should keep one standing directive per disconnected agent", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });

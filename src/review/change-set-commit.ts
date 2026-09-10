@@ -12,7 +12,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentResponse } from "./agent-exchange.js";
-import { randomId, readStoreJson, writeStoreJson } from "./store.js";
+import { randomId } from "./store.js";
+import { readStoreJson, writeStoreJson } from "./store-files.js";
 import type { ReviewStore } from "./store.js";
 import { CHANGE_SET_ID, SNAPSHOT_DIGEST } from "./shared/change-verdict.js";
 

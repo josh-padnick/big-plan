@@ -48,8 +48,8 @@ import {
   withReviewStoreLock,
   writeAgentRequestValue,
   writeSnapshot,
-  writeStoreJson,
 } from "./store.js";
+import { writeStoreJson } from "./store-files.js";
 import type { ReviewStore } from "./store.js";
 
 const SESSION = "1111111111111111";
