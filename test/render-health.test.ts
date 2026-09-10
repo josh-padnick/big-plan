@@ -47,6 +47,16 @@ describe("isRuntimeBackpressureError", () => {
     ).toBe(false);
   });
 
+  it("should preserve application errors that merely mention a 503", () => {
+    expect(
+      isRuntimeBackpressureError({
+        text: `Polling failed after a status of 503 (Service Unavailable)`,
+        locationUrl: "http://127.0.0.1:4173/plan/1111111111111111/api/drafts",
+        pageUrl: "http://127.0.0.1:4173/plan/1111111111111111/",
+      }),
+    ).toBe(false);
+  });
+
   it("should preserve an API failure belonging to a different plan", () => {
     expect(
       isRuntimeBackpressureError({

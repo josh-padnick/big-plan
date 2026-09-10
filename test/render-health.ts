@@ -11,7 +11,12 @@ export const isRuntimeBackpressureError = ({
   locationUrl,
   pageUrl,
 }: RuntimeBackpressureError): boolean => {
-  if (!text.includes("status of 503 (Service Unavailable)")) return false;
+  if (
+    text !==
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+  ) {
+    return false;
+  }
 
   try {
     const location = new URL(locationUrl);
