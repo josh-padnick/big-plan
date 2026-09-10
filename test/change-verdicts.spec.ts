@@ -1173,23 +1173,29 @@ test("should keep an accepted change as plan content after its own block is supe
       { timeout: 15_000 },
     );
 
-    // Surface one - the ordinary reading view. The accepted change is the
-    // plan's own paragraph, resolved by structural anchor onto the block that
-    // still stands there: not a "What changed" card marooned in the document,
-    // and carrying no word runs from the proposal it settled. That the block
-    // now holds later content is a fact about which revision it is on, not a
-    // question the reviewer has to answer a second time.
-    await expect(
-      page.locator("article [data-review-accepted-place]"),
-    ).toHaveCount(1);
-    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
-    await expect(page.locator("article ins, article del")).toHaveCount(0);
+    await test.step("the ordinary view keeps resolved plan content", async () => {
+      await page.getByRole("button", { name: "Exit review" }).click();
+      await expect(page.locator("article")).toContainText(
+        "The worker retries a failed job on an exponential backoff schedule.",
+      );
+      await expect(
+        page.locator("article [data-review-accepted-place]"),
+      ).toHaveCount(0);
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+      await expect(page.locator("article ins, article del")).toHaveCount(0);
+    });
 
     // Surface two - the open review tour. Stepping back onto the change shows
     // the recorded acceptance rather than re-proposing it, and the document
     // beside the bar still reads as the plan rather than the archived diff.
     await test.step("the tour keeps the superseded change accepted", async () => {
-      await page.getByRole("button", { name: "Back to review" }).click();
+      await feedbackRail()
+        .getByRole("button", { name: /Expand thread:/u })
+        .first()
+        .click();
+      await feedbackRail()
+        .getByRole("button", { name: "Review change" })
+        .click();
       await expect(
         page.getByRole("button", {
           name: "Undo acceptance for this change",
