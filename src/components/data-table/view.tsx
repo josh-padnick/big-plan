@@ -386,6 +386,7 @@ export const DataTable = ({
   renderCell,
   renderHeaderLabel,
   showGrouping = true,
+  showIdentity = true,
 }: {
   readonly model: CompiledDataTable;
   // Overrides supplied when a plain Markdown table is enhanced into this grid,
@@ -393,6 +394,10 @@ export const DataTable = ({
   readonly renderCell?: DataTableCellRenderer;
   readonly renderHeaderLabel?: DataTableHeaderRenderer;
   readonly showGrouping?: boolean;
+  // An enhanced plain Markdown table drops the figure identity - the table
+  // glyph, the "Table" label, and the row count - so it reads as the table the
+  // author wrote rather than as a named component, while keeping every control.
+  readonly showIdentity?: boolean;
 }) => (
   <figure
     className="data-table mb-6 w-fit max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)]"
@@ -403,18 +408,24 @@ export const DataTable = ({
     data-table-group-column={model.groupColumn}
   >
     <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 rounded-t-md bg-[var(--diff-header-bg)] px-2 py-1 max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-1">
-      <span className="data-table-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
-        {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
-        <span className="data-table-title min-w-0 truncate font-semibold text-ink">
-          {model.title ?? "Table"}
+      {showIdentity ? (
+        <span className="data-table-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
+          {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
+          <span className="data-table-title min-w-0 truncate font-semibold text-ink">
+            {model.title ?? "Table"}
+          </span>
+          <span
+            className="data-table-count min-w-0 text-xs text-muted"
+            data-table-count
+          >
+            {`${model.rows.length} rows`}
+          </span>
         </span>
-        <span
-          className="data-table-count min-w-0 text-xs text-muted"
-          data-table-count
-        >
-          {`${model.rows.length} rows`}
-        </span>
-      </span>
+      ) : (
+        // A zero-width spacer keeps the caption's justify-between so the controls
+        // stay at the right edge with no identity on the left.
+        <span className="data-table-identity min-w-0" aria-hidden />
+      )}
       <span className="data-table-controls flex shrink-0 items-center gap-2 max-[55.999rem]:w-full">
         <span className="data-table-settings-group inline-flex items-center gap-1">
           {model.filter ? <FilterField id={model.id} /> : null}

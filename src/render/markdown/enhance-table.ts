@@ -203,6 +203,7 @@ const enhanceTable = (table: Element, id: string): Element | undefined => {
     createElement(DataTable, {
       model,
       showGrouping: false,
+      showIdentity: false,
       renderHeaderLabel: ({ columnIndex }) =>
         cellToReact(headerCells[columnIndex]),
       renderCell: ({ rowIndex, columnIndex }) =>
