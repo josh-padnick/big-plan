@@ -145,19 +145,18 @@ const HeaderCell = ({
       ? {}
       : { "data-table-authored-sort": column.sort })}
   >
-    {/* Disabled server-side: without the viewer script the header is a plain
-        label, not a button that does nothing when pressed. */}
+    <span className="data-table-head-label">
+      {renderLabel === undefined
+        ? column.label
+        : renderLabel({ columnIndex: index, column })}
+    </span>
     <button
       type="button"
-      className="data-table-sort inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-[inherit] tracking-[inherit] text-[inherit] uppercase hover:text-ink disabled:cursor-default disabled:text-inherit disabled:hover:text-inherit"
+      className="data-table-sort ml-1 inline-flex cursor-pointer items-center border-0 bg-transparent p-0 font-[inherit] tracking-[inherit] text-[inherit] uppercase hover:text-ink disabled:cursor-default disabled:text-inherit disabled:hover:text-inherit"
+      aria-label={column.label}
       data-table-sort={index}
       disabled
     >
-      <span className="data-table-head-label">
-        {renderLabel === undefined
-          ? column.label
-          : renderLabel({ columnIndex: index, column })}
-      </span>
       <SortGlyphs />
     </button>
     <ColumnFitToggle column={column} index={index} />

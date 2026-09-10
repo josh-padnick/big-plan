@@ -3,6 +3,29 @@
 
 import { expect, test } from "./fixtures";
 
+test("should navigate a Markdown header link without sorting its column", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    has: page.getByRole("link", { name: "Status" }),
+  });
+  const header = table.locator("th").first();
+  const firstStatus = table.locator("tbody tr").first().locator("td").first();
+
+  await table.getByRole("link", { name: "Status" }).click();
+
+  await expect(page).toHaveURL(/#the-default-table$/);
+  await expect(header).toHaveAttribute("aria-sort", "none");
+  await expect(firstStatus).toHaveText("Pending");
+
+  await table.getByRole("button", { name: "Status", exact: true }).click();
+
+  await expect(header).toHaveAttribute("aria-sort", "ascending");
+  await expect(firstStatus).toHaveText("Active");
+});
+
 test("should keep the aggregate row pinned when sorting data rows", async ({
   page,
   dataTableViewerUrl,
