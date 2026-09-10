@@ -1,6 +1,6 @@
-// Owns the compile-time browser bridge for Mermaid. The caller sends every
-// Mermaid source in one batch so one Big Plan invocation launches one browser,
-// while the delivered document receives only sanitized SVG strings.
+// Owns the compile-time browser bridge and process-wide render cache for
+// Mermaid. Cache misses are batched into a pinned browser process, while the
+// delivered document receives only sanitized SVG strings.
 
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -1579,8 +1579,7 @@ export const prepareMermaidArtifacts = (
  *
  * This is how the review runtime keeps its heartbeat alive through a legitimate
  * render: it warms here, on the async path, before the request path renders the
- * same source synchronously. It is best-effort - a failure leaves the cache as
- * it was, and the synchronous path renders (and reports) exactly as before.
+ * same source synchronously. Renderer failures propagate to the caller.
  */
 export const warmMermaidArtifacts = async (
   tree: MarkdownRoot,

@@ -477,8 +477,8 @@ export const compileMarkdownModel = ({
  *
  * A live review runtime calls this before it serves or diffs a source, so the
  * synchronous request-path render only ever reads cache hits and never blocks
- * the heartbeat on a Chromium launch. It is best-effort: a source that cannot
- * even be parsed leaves the cache untouched and the synchronous path unchanged.
+ * the heartbeat on a Chromium launch. A source that cannot be parsed leaves the
+ * cache untouched; renderer failures propagate to the caller.
  */
 export const warmMarkdownRenderCache = async ({
   markdown,

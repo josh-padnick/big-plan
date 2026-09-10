@@ -235,7 +235,7 @@ const reconcileRecordedRejections = async ({
         ? rejected.filter((candidate) => candidate !== placeId)
         : [...rejected, placeId];
       try {
-        if (restored(neighbor) === currentSource) {
+        if ((await restored(neighbor)) === currentSource) {
           matchingNeighbors += 1;
         }
       } catch (error: unknown) {
