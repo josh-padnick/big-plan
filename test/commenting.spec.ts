@@ -2187,6 +2187,8 @@ test("should confirm deleting every staged comment from Comments", async ({
   const deleteDialog = page.getByRole("alertdialog", {
     name: "Delete all comments?",
   });
+  // The dialog's committed open state is the observable boundary after which
+  // its open effect has cleared the document selection, even on a loaded run.
   await expect(deleteDialog).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
