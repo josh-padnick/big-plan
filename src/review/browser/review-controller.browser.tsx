@@ -3181,6 +3181,12 @@ const StalePremiseNotice = ({
   );
 };
 
+// Auto-accept is a reviewer setting, not a message to a live agent, so this
+// stays operable even while the tab is reconnecting: arming it queues when a
+// write cannot land right now and applies the moment the runtime answers,
+// rather than sitting disabled behind a block the way a send does (BIG-302).
+// The block is surfaced as a quiet note, not a danger label, because nothing is
+// failing - the choice is simply pending.
 const AutoAcceptPrompt = ({
   block,
   onArm,
@@ -3191,17 +3197,13 @@ const AutoAcceptPrompt = ({
   <div className="mt-2 rounded-md bg-surface p-2 text-xs text-muted">
     <p className="m-0 font-semibold text-ink">Authoring at pace?</p>
     <p className="mt-0.5 mb-2">Stops asking for a verdict while you dictate.</p>
-    <Button
-      variant="outline"
-      size="micro"
-      disabled={block !== undefined}
-      data-tooltip={block?.cause}
-      onClick={onArm}
-    >
+    <Button variant="outline" size="micro" onClick={onArm}>
       Auto-accept all changes
     </Button>
     {block === undefined ? null : (
-      <p className="mt-1 mb-0 font-semibold text-danger">{block.label}</p>
+      <p className="mt-1 mb-0">
+        Not connected right now — this applies once the tab reconnects.
+      </p>
     )}
   </div>
 );
@@ -7782,9 +7784,13 @@ export const ReviewController = () => {
           writeAvailability={writeAvailability}
           pushedOrigin={pushedOrigin}
           onArmAutoAccept={
-            runtimeSession?.mode === "review"
-              ? () => setPendingAutoAcceptThreadId(comment.id)
-              : undefined
+            // Offered whenever the session is not already auto-accepting -
+            // including while the tab is reconnecting and the session reading
+            // is momentarily absent - so the reviewer can arm it and have the
+            // choice queued rather than being unable to reach it (BIG-302).
+            runtimeSession?.mode === "auto-accept"
+              ? undefined
+              : () => setPendingAutoAcceptThreadId(comment.id)
           }
           appliedSummaries={
             appliedThreadIds.has(comment.id) ? appliedSummaries : []
