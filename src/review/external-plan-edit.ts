@@ -41,6 +41,7 @@ export type ExternalPlanEditTracker = {
    */
   readonly settle: (
     readerProgress: ExternalEditReaderProgress,
+    excludedDigests?: ReadonlySet<string>,
   ) => Promise<void>;
 };
 
@@ -56,7 +57,7 @@ export const createExternalPlanEditTracker = ({
 }): ExternalPlanEditTracker => {
   let lastRejectedDigest: string | undefined;
   return {
-    settle: async (readerProgress) => {
+    settle: async (readerProgress, excludedDigests = new Set()) => {
       let source: string;
       try {
         source = await readFile(resolvedPlanPath, "utf8");
@@ -67,6 +68,11 @@ export const createExternalPlanEditTracker = ({
         return;
       }
       const digest = deriveSnapshotDigest(source);
+      // A committed exchange write can reach the live file before its response
+      // is visible. It is not an external edit during that window: publishing
+      // it here would let the browser display the revision before the same poll
+      // can explain which request produced it.
+      if (excludedDigests.has(digest)) return;
       // The reader is already on this content: either the file never changed,
       // or a committed exchange revision the poll observed a moment ago already
       // advanced onto it. Clear any remembered rejection so a later edit that
