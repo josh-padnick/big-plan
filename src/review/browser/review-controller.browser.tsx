@@ -263,6 +263,10 @@ import {
   isTerminalReviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
 } from "./review-runtime-request.js";
+import {
+  bootstrapMatchesDisplayedSnapshot,
+  reviewBootstrapSnapshot,
+} from "./review-bootstrap-snapshot.js";
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
   mergeLiveReviewRecovery,
@@ -717,16 +721,9 @@ const threadTime = (createdAt: string): string => {
 };
 
 const bootstrapSnapshot = (): string => {
-  try {
-    const value: unknown = JSON.parse(
-      rootElement.getAttribute("data-review-bootstrap") ?? "{}",
-    );
-    return isRecord(value) && typeof value.currentSnapshot === "string"
-      ? value.currentSnapshot
-      : "";
-  } catch {
-    return "";
-  }
+  return reviewBootstrapSnapshot(
+    rootElement.getAttribute("data-review-bootstrap"),
+  );
 };
 
 const localStorageKey = (planId: string): string =>
@@ -6267,16 +6264,25 @@ export const ReviewController = () => {
       .then((response) => (response.ok ? response.text() : null))
       .then((html) => {
         if (!current || html === null) return;
-        const article = new DOMParser()
-          .parseFromString(html, "text/html")
-          .querySelector("article");
+        const nextDocument = new DOMParser().parseFromString(html, "text/html");
+        if (
+          !bootstrapMatchesDisplayedSnapshot({
+            serialized: nextDocument.documentElement.getAttribute(
+              "data-review-bootstrap",
+            ),
+            displayedSnapshot,
+          })
+        ) {
+          return;
+        }
+        const article = nextDocument.querySelector("article");
         if (article !== null) seedPlanMorphBaseline(article);
       })
       .catch(() => undefined);
     return () => {
       current = false;
     };
-  }, [identity]);
+  }, [displayedSnapshot, identity]);
 
   useEffect(() => {
     if (
@@ -7666,6 +7672,13 @@ export const ReviewController = () => {
         refreshVerdicts();
         setPendingAutoAcceptThreadId(null);
       } catch (error) {
+        if (isTerminalReviewRuntimeRefusal(error)) {
+          setQueuedReviewMode(null);
+          dismissPendingReviewMode();
+          reportFailedWrite({ path: "review-mode", error });
+          setPendingAutoAcceptThreadId(null);
+          return;
+        }
         setQueuedReviewMode(request);
         reportPendingReviewMode(request.mode);
       } finally {
