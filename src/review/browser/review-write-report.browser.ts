@@ -53,6 +53,34 @@ export const reportFailedWrite = ({
   });
 };
 
+// Auto-accept is a reviewer setting, not a message to a live agent, so a tab
+// that cannot reach the runtime queues the change rather than dropping it. This
+// is the standing notice that says so, dismissed by id the moment the change
+// lands. It is not an error: nothing failed, and nothing was lost.
+const REVIEW_MODE_PENDING_TOAST_ID = "big-plan-review-mode-pending";
+
+/** Says a queued review-mode change is waiting for the tab to reconnect. */
+export const reportPendingReviewMode = (
+  mode: "review" | "auto-accept",
+): void => {
+  toast(
+    mode === "auto-accept"
+      ? "Auto-accept is pending"
+      : "Switching to review is pending",
+    {
+      id: REVIEW_MODE_PENDING_TOAST_ID,
+      description:
+        "This tab is reconnecting to the review session. Big Plan applies this the moment it is back — nothing was dropped.",
+      duration: Infinity,
+    },
+  );
+};
+
+/** Clears the pending review-mode notice once the change has landed. */
+export const dismissPendingReviewMode = (): void => {
+  toast.dismiss(REVIEW_MODE_PENDING_TOAST_ID);
+};
+
 /**
  * A read or a background write the page needed and could not get. The title
  * names what the reader is missing, because the runtime's sentence alone does

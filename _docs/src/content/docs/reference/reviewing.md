@@ -22,8 +22,9 @@ Pass `--idle-timeout 0` to say the same thing as the default, explicitly.
 A waiting agent receives that normal inactivity reason instead of a failed background command.
 When an already-open page loses contact with its review runtime, it reports that loss rather than claiming the server stopped, because a request that merely timed out can happen while the runtime is still running.
 If the deadline the page last knew has also passed, it reports that observation too.
-When the page has no unsaved browser-only input, Refresh is offered in either case so you can check whether the review is still running.
-If it does have unsaved input, Refresh stays disabled and the page asks you to keep the tab open instead.
+The page retries automatically, preserving your reading position and browser-only input while it waits.
+When no browser-only input is pending, **Reload now** remains available as an optional fallback rather than the way reconnection happens.
+If the runtime restarted with the same review token and store, the page adopts its new session id in place and then sends writes that were queued during the interruption.
 It does not say why contact was lost, because a page that has lost contact cannot tell an idle expiry from a runtime someone stopped, or from one that is still serving another tab.
 For the same reason it never tells you to start a new review runtime; the command is the only place that decides whether starting or taking over a runtime is allowed, and it answers that question for you.
 When a newer review session for that plan was recorded before contact was lost, the page also links to it as **Open latest review**.
@@ -144,12 +145,15 @@ When the agent continues a pushed thread, Big Plan adds another exchange to the 
 The card keeps the opener's presentation.
 An unresolved pushed card offers **Auto-accept all changes**.
 Its confirmation separates the immediate consequence - accepting the open changes in that thread - from the session-wide consequence that every later push arrives accepted, including pushes in other threads.
+Auto-accept is a reviewer setting, independent of whether an agent is connected.
+If the review runtime is temporarily unreachable, a mode change stays pending and applies when the page reconnects; turning auto-accept on then accepts the open changes named by the confirmation.
 While armed, the Chat tab shows when auto-accept was turned on and offers **Switch back to review**.
 Applied cards remain conversations: you can reply, receive a follow-up push, inspect each pushed revision's summary, or revert it.
 Switching back changes only later arrivals: it leaves the card and its conversation available, while the next pushed change arrives open for review.
 Starting a fresh review session always starts in review mode.
 
 A push that lands while you are reading announces itself.
+Agent pushes and edits made directly to the plan source update the open document in place: unchanged blocks keep their browser state and the changed blocks are marked as newly arrived, without moving the page's scroll position or disturbing open drafts or expanded panes. A selection in edited text is restored to the corresponding character offsets when that block still exists; selections in unchanged blocks are left untouched.
 The **Chat** tab leads with a **Pushed just now** entry naming the agent's model and client, plus how many blocks changed when the push revised the plan.
 **Open thread** takes you to the conversation, and **Dismiss** clears the entry; either way the entry names the newest arrival, and a newer push replaces it.
 On a wide screen, where the sidebar sits beside the plan rather than over it, an arrival opens the sidebar on **Chat** for you, unless you are part-way through writing a comment or reply or a pointer press is in flight: reserving the sidebar's gutter would move or recreate the control you are using, so the arrival waits until that interaction finishes.

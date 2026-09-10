@@ -528,9 +528,11 @@ describe("the polled agent snapshot", () => {
   const pollContext = ({
     store,
     readerProgress,
+    externalEdit = { settle: async () => undefined },
   }: {
     readonly store: Awaited<ReturnType<typeof temporaryStore>>;
     readonly readerProgress: ReturnType<typeof createReaderProgress>;
+    readonly externalEdit?: ReviewRouteContext["externalEdit"];
   }): ReviewRouteContext =>
     ({
       store,
@@ -540,6 +542,10 @@ describe("the polled agent snapshot", () => {
       agentCommand: "big-plan agent next /tmp/plan.mdx",
       recoveryPrompt: "",
       readerProgress,
+      // This route now settles an out-of-exchange edit after observing commits;
+      // these cases isolate the commit-observation behavior, so the tracker is
+      // a no-op here.
+      externalEdit,
     }) as unknown as ReviewRouteContext;
 
   const currentSnapshotOf = (response: { readonly value: unknown }): unknown =>
@@ -645,14 +651,25 @@ describe("the polled agent snapshot", () => {
         committedAt: "2026-08-17T12:00:00.000Z",
       }),
     });
-    const context = pollContext({ store, readerProgress: freshProgress() });
+    const settledWith: Array<ReadonlySet<string>> = [];
+    const context = pollContext({
+      store,
+      readerProgress: freshProgress(),
+      externalEdit: {
+        settle: async (_progress, excludedDigests = new Set()) => {
+          settledWith.push(excludedDigests);
+        },
+      },
+    });
 
     counters.revisionReads = [];
     expect(currentSnapshotOf(await readAgentSnapshot(context))).toBe(SNAPSHOT);
-    expect(counters.revisionReads).toEqual([]);
+    expect(counters.revisionReads).toHaveLength(1);
+    expect(settledWith.at(-1)).toEqual(new Set([published]));
 
     // The commit finishes, and the very next poll moves the reader.
     await answeredChat({ store, index: 1 });
     expect(currentSnapshotOf(await readAgentSnapshot(context))).toBe(published);
+    expect(settledWith.at(-1)).toEqual(new Set());
   });
 });

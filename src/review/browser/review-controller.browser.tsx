@@ -164,6 +164,7 @@ import {
   emptyAgentSnapshot,
   isReviewCommentValue as isComment,
   isReviewWireRecord as isRecord,
+  reattachableSessionId,
   STALE_REVIEW_STATE_CODE,
   type AgentRequest,
   type AgentResponse,
@@ -248,7 +249,9 @@ import {
   type ReviewWriteBlocked,
 } from "./review-write-availability.js";
 import {
+  dismissPendingReviewMode,
   reportFailedWrite,
+  reportPendingReviewMode,
   reportRefusedWrite,
   reportReviewFailure,
   reviewFailureDetail as errorMessage,
@@ -260,6 +263,10 @@ import {
   isTerminalReviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
 } from "./review-runtime-request.js";
+import {
+  bootstrapMatchesDisplayedSnapshot,
+  reviewBootstrapSnapshot,
+} from "./review-bootstrap-snapshot.js";
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
   mergeLiveReviewRecovery,
@@ -298,6 +305,7 @@ import {
 } from "../shared/thread-change-set.js";
 import { changeSetTourId, type ChangeSetTourKind } from "./tour-advance.js";
 import {
+  adoptReviewSession,
   requestJson,
   runtimeIdentity,
   type RuntimeIdentity,
@@ -316,7 +324,8 @@ import {
   toast,
   WorkingMark,
 } from "./ui.browser.js";
-import { replacePlanDom } from "./plan-dom.browser.js";
+import { announcedSettleBlockIds, morphPlanDom } from "./plan-dom.browser.js";
+import { seedPlanMorphBaseline } from "./plan-morph.browser.js";
 // The composer's chord is named once, so no surface can tell the reader to
 // press a key that does nothing there.
 import {
@@ -712,16 +721,9 @@ const threadTime = (createdAt: string): string => {
 };
 
 const bootstrapSnapshot = (): string => {
-  try {
-    const value: unknown = JSON.parse(
-      rootElement.getAttribute("data-review-bootstrap") ?? "{}",
-    );
-    return isRecord(value) && typeof value.currentSnapshot === "string"
-      ? value.currentSnapshot
-      : "";
-  } catch {
-    return "";
-  }
+  return reviewBootstrapSnapshot(
+    rootElement.getAttribute("data-review-bootstrap"),
+  );
 };
 
 const localStorageKey = (planId: string): string =>
@@ -1005,9 +1007,14 @@ const ServerGoneBanner = ({
 }) => {
   const unsavedInputWarning = canRefresh
     ? ""
-    : " Keep this tab open because the latest review input has not reached the local review server.";
+    : " Nothing you have typed has been lost; keep this tab open and it is applied once the server answers.";
+  // Reconnection is automatic - the tab keeps polling and clears this banner on
+  // its own the moment the server answers, with the reader's scroll, drafts,
+  // and selection all still in place. The action is an optional "do it now",
+  // never the thing that has to happen, so this stops demanding a manual
+  // refresh (BIG-301, BIG-302).
   const refreshAction = {
-    label: "Refresh",
+    label: "Reload now",
     onAct: onRefresh,
     enabled: canRefresh,
   };
@@ -1019,14 +1026,14 @@ const ServerGoneBanner = ({
     endReason.kind === "deadline-passed"
       ? `The deadline this tab last knew has since passed.${
           replacementLink === undefined
-            ? " Refresh to try reconnecting."
+            ? " The tab is reconnecting automatically."
             : " A newer review session for this plan was recorded at the linked address."
         }`
-      : "This tab lost contact with the local review server. Refresh to try reconnecting.";
+      : "This tab lost contact with the local review server and is reconnecting automatically - your place is kept.";
   return (
     <RuntimeAlertBanner
       scope="data-review-server-gone"
-      heading="This tab lost contact with this review session"
+      heading="Reconnecting to this review session"
       detail={`${contactDetail}${unsavedInputWarning} This is separate from the agent connection.`}
       action={refreshAction}
       {...(replacementLink === undefined ? {} : { link: replacementLink })}
@@ -1034,13 +1041,14 @@ const ServerGoneBanner = ({
   );
 };
 
-// The runtime is up and answering, and refuses this tab: its session or token
-// no longer match what the page was served with, which is what a restart or a
-// re-minted store leaves behind. Without this the tab sat under an
-// "unreachable" card telling the reviewer to restart a runtime that was fine.
-// Recovery is a plain reload, offered under the same unsaved-input guard as
-// the lost-contact banner, because a reload discards what the runtime has not
-// been given (BIG-282).
+// The runtime is up and answering under a different session id than the page
+// was served - what a restart leaves behind, since a fresh runtime mints a new
+// id but keeps the token and the store. The poll follows that id in place, so
+// this banner is what shows during the poll interval or two before the tab has
+// reattached: it says the reconnection is happening on its own rather than
+// telling the reviewer to reload onto the new session and lose their place. A
+// manual reload stays available for impatience, never as the required step
+// (BIG-301, BIG-282).
 const SessionOutOfDateBanner = ({
   canReload,
   onReload,
@@ -1050,13 +1058,13 @@ const SessionOutOfDateBanner = ({
 }) => (
   <RuntimeAlertBanner
     scope="data-review-session-out-of-date"
-    heading="This tab's review session is out of date"
-    detail={`The local review server is answering, but it no longer recognises this tab. Reload this page to reconnect.${
+    heading="Reconnecting to the restarted review session"
+    detail={`The local review server restarted and is answering under a new session. This tab is reattaching to it automatically, keeping your place, drafts, and selection.${
       canReload
         ? ""
-        : " Keep this tab open because the latest review input has not reached the local review server."
+        : " Nothing you have typed has been lost; it is applied once the tab has reattached."
     } All comments are safe. This is separate from the agent connection.`}
-    action={{ label: "Reload", onAct: onReload, enabled: canReload }}
+    action={{ label: "Reload now", onAct: onReload, enabled: canReload }}
   />
 );
 
@@ -1247,18 +1255,17 @@ const parseDecisionAnsweredDetail = (
     : null;
 
 // Adapts a full article refresh to the shared plan-DOM replacement boundary.
-// Swapping the article detaches every node the shell scripts wired at load, so
-// the replacement and its announcement remain one operation.
-const replacePlanArticle = (nextDocument: Document): void => {
+// Reconciling the article in place - rather than swapping the whole node -
+// keeps every block the refresh did not touch, so the reader's selection,
+// scroll, and field carets survive a plan change. Returns the blocks that
+// moved, which is the set worth marking as freshly arrived.
+const replacePlanArticle = (nextDocument: Document): ReadonlyArray<string> => {
   const nextArticle = nextDocument.querySelector("article");
   const currentArticle = document.querySelector("article");
   if (nextArticle === null || currentArticle === null) {
     throw new Error("The revised plan did not contain its reading surface");
   }
-  replacePlanDom({
-    target: currentArticle,
-    replacement: document.importNode(nextArticle, true),
-  });
+  return morphPlanDom({ target: currentArticle, next: nextArticle });
 };
 
 const MarkdownBody = ({
@@ -3171,6 +3178,12 @@ const StalePremiseNotice = ({
   );
 };
 
+// Auto-accept is a reviewer setting, not a message to a live agent, so this
+// stays operable even while the tab is reconnecting: arming it queues when a
+// write cannot land right now and applies the moment the runtime answers,
+// rather than sitting disabled behind a block the way a send does (BIG-302).
+// The block is surfaced as a quiet note, not a danger label, because nothing is
+// failing - the choice is simply pending.
 const AutoAcceptPrompt = ({
   block,
   onArm,
@@ -3181,17 +3194,13 @@ const AutoAcceptPrompt = ({
   <div className="mt-2 rounded-md bg-surface p-2 text-xs text-muted">
     <p className="m-0 font-semibold text-ink">Authoring at pace?</p>
     <p className="mt-0.5 mb-2">Stops asking for a verdict while you dictate.</p>
-    <Button
-      variant="outline"
-      size="micro"
-      disabled={block !== undefined}
-      data-tooltip={block?.cause}
-      onClick={onArm}
-    >
+    <Button variant="outline" size="micro" onClick={onArm}>
       Auto-accept all changes
     </Button>
     {block === undefined ? null : (
-      <p className="mt-1 mb-0 font-semibold text-danger">{block.label}</p>
+      <p className="mt-1 mb-0">
+        Not connected right now — this applies once the tab reconnects.
+      </p>
     )}
   </div>
 );
@@ -4122,6 +4131,13 @@ export const ReviewController = () => {
     syncTourDiff,
   } = useDiffTour();
   const identity = useMemo(runtimeIdentity, []);
+  // The session id the poll compares the runtime's answer against. It starts as
+  // the one this page was served, and moves only when a restarted runtime takes
+  // custody on this same address under a fresh id - the poll follows it here so
+  // the tab reattaches in place, without a reload that would lose the reader's
+  // spot. Only this comparison needs the new id; every request carries the
+  // token and plan, which a restart keeps (BIG-301).
+  const reattachSessionIdRef = useRef(identity?.sessionId ?? "");
   const initialSnapshot = useMemo(bootstrapSnapshot, []);
   const planId =
     identity?.planId ?? rootElement.getAttribute("data-plan-id") ?? "";
@@ -4223,6 +4239,9 @@ export const ReviewController = () => {
   const [hasObservedAgentSnapshot, setHasObservedAgentSnapshot] =
     useState(false);
   const [displayedSnapshot, setDisplayedSnapshot] = useState(initialSnapshot);
+  const [planMorphBaselineSnapshot, setPlanMorphBaselineSnapshot] = useState<
+    string | null
+  >(null);
   const [cancelPendingRequestIds, setCancelPendingRequestIds] = useState<
     ReadonlySet<string>
   >(new Set());
@@ -4242,6 +4261,18 @@ export const ReviewController = () => {
     string | null
   >(null);
   const [isChangingReviewMode, setIsChangingReviewMode] = useState(false);
+  const [reviewModeRetryAtMs, setReviewModeRetryAtMs] = useState<number | null>(
+    null,
+  );
+  // A review-mode change the reviewer asked for while the tab could not reach
+  // the runtime. It is held here rather than dropped, and a flush effect below
+  // applies it the moment the runtime answers again (BIG-302).
+  const [queuedReviewMode, setQueuedReviewMode] = useState<{
+    readonly mode: "review" | "auto-accept";
+    readonly threadId?: string;
+    readonly generation: number;
+  } | null>(null);
+  const reviewModeGenerationRef = useRef(0);
   const [approval, setApproval] = useState<ApprovalSummary | undefined>();
   const runtimeSessionOrder = useMemo(createRuntimeSessionOrder, []);
   const acceptRuntimeSession = useCallback(
@@ -5919,9 +5950,23 @@ export const ReviewController = () => {
         }).then((value) => {
           const session = parseRuntimeSession({
             value,
-            sessionId: identity.sessionId,
+            sessionId: reattachSessionIdRef.current,
           });
           if (session === null) {
+            // The runtime answering on this address is a different,
+            // authoritative session - what a restart leaves behind. Follow it
+            // in place: adopt its id so the next poll recognises it and the
+            // "lost contact" banner clears on its own, no reload, the reader's
+            // scroll, drafts, and selection all still here. This tick still
+            // counts as a miss; the next one, a poll interval away, lands.
+            const takeover = reattachableSessionId({
+              value,
+              currentSessionId: reattachSessionIdRef.current,
+            });
+            if (takeover !== undefined && current) {
+              reattachSessionIdRef.current = takeover;
+              adoptReviewSession(takeover);
+            }
             throw new Error(
               "This page is not connected to its review runtime.",
             );
@@ -6179,10 +6224,17 @@ export const ReviewController = () => {
   }, [arrivalWantsRail, compose, isOpen, isWide, openFeedbackSidebar]);
 
   useEffect(() => {
-    const settleReplacement = () => {
-      const targets = armedSettleTargets.current;
+    const settleReplacement = (event: Event) => {
+      const armed = armedSettleTargets.current;
       armedSettleTargets.current = null;
-      if (targets !== null) settleChangedBlocks(targets);
+      // A morph names exactly the blocks whose bytes moved - the honest answer
+      // for an agent push and the only answer for an outside file edit, which
+      // arms nothing. A replacement that did not name them (a component's own
+      // lens replay) falls back to whatever this path had armed.
+      const named = announcedSettleBlockIds(event);
+      const targets = named ?? armed;
+      if (targets !== null && targets !== undefined)
+        settleChangedBlocks(targets);
     };
     document.addEventListener("bigplan:article-replaced", settleReplacement);
     return () =>
@@ -6208,9 +6260,46 @@ export const ReviewController = () => {
     setRevealResolvedThreads(false);
   });
 
+  // Seeds the in-place morph with a pristine copy of the reading surface before
+  // the first refresh can run. The live article is already wired by the time
+  // this island mounts - collapse frames, diagrams, selection state - so a
+  // pristine fetch, not the live DOM, is what tells a later render's content
+  // moves apart from the shell's own edits (BIG-301).
+  useEffect(() => {
+    if (identity === null || planMorphBaselineSnapshot === displayedSnapshot)
+      return;
+    let current = true;
+    void fetch(window.location.href, { credentials: "same-origin" })
+      .then((response) => (response.ok ? response.text() : null))
+      .then((html) => {
+        if (!current || html === null) return;
+        const nextDocument = new DOMParser().parseFromString(html, "text/html");
+        if (
+          !bootstrapMatchesDisplayedSnapshot({
+            serialized: nextDocument.documentElement.getAttribute(
+              "data-review-bootstrap",
+            ),
+            displayedSnapshot,
+          })
+        ) {
+          return;
+        }
+        const article = nextDocument.querySelector("article");
+        if (article !== null) {
+          seedPlanMorphBaseline(article);
+          setPlanMorphBaselineSnapshot(displayedSnapshot);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [displayedSnapshot, identity, planMorphBaselineSnapshot]);
+
   useEffect(() => {
     if (
       identity === null ||
+      planMorphBaselineSnapshot !== displayedSnapshot ||
       agent.currentSnapshot === "" ||
       agent.currentSnapshot === displayedSnapshot
     ) {
@@ -6232,6 +6321,9 @@ export const ReviewController = () => {
           resultSnapshot: agent.currentSnapshot,
         });
         pendingSettleArrival.current = null;
+        const scrollingElement = document.documentElement;
+        const previousOverflowAnchor = scrollingElement.style.overflowAnchor;
+        scrollingElement.style.overflowAnchor = "none";
         try {
           replacePlanArticle(
             new DOMParser().parseFromString(html, "text/html"),
@@ -6242,10 +6334,18 @@ export const ReviewController = () => {
           // replacement from any source - a lens open, say - painting arrival
           // rings on blocks that arrival never touched.
           armedSettleTargets.current = null;
+          scrollingElement.style.overflowAnchor = previousOverflowAnchor;
           throw error;
         }
         setDisplayedSnapshot(agent.currentSnapshot);
+        setPlanMorphBaselineSnapshot(agent.currentSnapshot);
         window.scrollTo({ left: scrollX, top: scrollY });
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            window.scrollTo({ left: scrollX, top: scrollY });
+            scrollingElement.style.overflowAnchor = previousOverflowAnchor;
+          }),
+        );
       })
       .catch((error: unknown) => {
         if (!current) return;
@@ -6257,7 +6357,12 @@ export const ReviewController = () => {
     return () => {
       current = false;
     };
-  }, [agent.currentSnapshot, displayedSnapshot, identity]);
+  }, [
+    agent.currentSnapshot,
+    displayedSnapshot,
+    identity,
+    planMorphBaselineSnapshot,
+  ]);
 
   useEffect(() => {
     let frame = 0;
@@ -7552,54 +7657,136 @@ export const ReviewController = () => {
     }
     return open;
   };
-  const changeReviewMode = async ({
+  // Sends one review-mode change to the runtime and applies its answer. Only
+  // called when a write can land; a failure here is a real one, so the request
+  // is kept queued and reported pending - never dropped - so the tab applies it
+  // when the runtime answers rather than telling the reviewer it did nothing.
+  const submitReviewMode = useCallback(
+    async (request: {
+      readonly mode: "review" | "auto-accept";
+      readonly threadId?: string;
+      readonly generation: number;
+    }): Promise<void> => {
+      if (identity === null) return;
+      setIsChangingReviewMode(true);
+      try {
+        const value = await requestJson({
+          path: "/api/review-mode",
+          identity,
+          method: "POST",
+          body: {
+            mode: request.mode,
+            ...(request.threadId === undefined
+              ? {}
+              : { threadId: request.threadId }),
+          },
+        });
+        if (isRecord(value)) {
+          runtimeSessionOrder.invalidatePendingRequests();
+          const armedAtMs =
+            typeof value.armedAtMs === "number" ? value.armedAtMs : undefined;
+          setRuntimeSession((current) =>
+            current === null
+              ? null
+              : {
+                  ...current,
+                  mode: request.mode,
+                  ...(request.mode === "auto-accept" && armedAtMs !== undefined
+                    ? { armedAtMs }
+                    : { armedAtMs: undefined }),
+                },
+          );
+        }
+        if (request.generation === reviewModeGenerationRef.current) {
+          setQueuedReviewMode(null);
+          setReviewModeRetryAtMs(null);
+          dismissPendingReviewMode();
+          setPendingAutoAcceptThreadId(null);
+        }
+        refreshVerdicts();
+      } catch (error) {
+        if (request.generation !== reviewModeGenerationRef.current) return;
+        if (isTerminalReviewRuntimeRefusal(error)) {
+          setQueuedReviewMode(null);
+          dismissPendingReviewMode();
+          reportFailedWrite({ path: "review-mode", error });
+          setPendingAutoAcceptThreadId(null);
+          return;
+        }
+        setQueuedReviewMode(request);
+        setReviewModeRetryAtMs(Date.now() + 1_000);
+        reportPendingReviewMode(request.mode);
+      } finally {
+        setIsChangingReviewMode(false);
+      }
+    },
+    [identity, refreshVerdicts, runtimeSessionOrder],
+  );
+
+  useEffect(() => {
+    if (reviewModeRetryAtMs === null) return;
+    const remaining = reviewModeRetryAtMs - Date.now();
+    if (remaining <= 0) {
+      setReviewModeRetryAtMs(null);
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setReviewModeRetryAtMs(null),
+      remaining,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [reviewModeRetryAtMs]);
+
+  // The reviewer's entry point. Auto-accept is a reviewer setting, independent
+  // of whether an agent is connected, so a tab that cannot reach the runtime
+  // right now queues the choice and shows it pending rather than failing hard
+  // with "mode not changed" while it is still reconnecting (BIG-302).
+  const changeReviewMode = ({
     mode,
     threadId,
   }: {
     readonly mode: "review" | "auto-accept";
     readonly threadId?: string;
-  }): Promise<void> => {
-    if (identity === null || isChangingReviewMode) return;
-    const refusal = reviewWriteRefusal({
-      path: "review-mode",
-      availability: writeAvailability,
-    });
-    if (refusal !== undefined) {
-      reportRefusedWrite({ path: "review-mode", refusal });
+  }): void => {
+    if (identity === null) return;
+    const request = {
+      mode,
+      ...(threadId === undefined ? {} : { threadId }),
+      generation: reviewModeGenerationRef.current + 1,
+    };
+    reviewModeGenerationRef.current = request.generation;
+    setPendingAutoAcceptThreadId(null);
+    if (writeAvailability.state !== "available" || isChangingReviewMode) {
+      setQueuedReviewMode(request);
+      reportPendingReviewMode(mode);
       return;
     }
-    setIsChangingReviewMode(true);
-    try {
-      const value = await requestJson({
-        path: "/api/review-mode",
-        identity,
-        method: "POST",
-        body: { mode, ...(threadId === undefined ? {} : { threadId }) },
-      });
-      if (isRecord(value)) {
-        runtimeSessionOrder.invalidatePendingRequests();
-        const armedAtMs =
-          typeof value.armedAtMs === "number" ? value.armedAtMs : undefined;
-        setRuntimeSession((current) =>
-          current === null
-            ? null
-            : {
-                ...current,
-                mode,
-                ...(mode === "auto-accept" && armedAtMs !== undefined
-                  ? { armedAtMs }
-                  : { armedAtMs: undefined }),
-              },
-        );
-      }
-      refreshVerdicts();
-      setPendingAutoAcceptThreadId(null);
-    } catch (error) {
-      reportFailedWrite({ path: "review-mode", error });
-    } finally {
-      setIsChangingReviewMode(false);
-    }
+    void submitReviewMode(request);
   };
+
+  // Applies a queued review-mode change the moment the tab can reach the
+  // runtime again - a reconnect, a stall clearing, or the in-flight attempt
+  // finishing. Verdicts already retry this way; this puts the mode toggle on
+  // the same footing so a reconnect never loses it (BIG-302).
+  useEffect(() => {
+    if (
+      queuedReviewMode === null ||
+      identity === null ||
+      isChangingReviewMode ||
+      reviewModeRetryAtMs !== null ||
+      writeAvailability.state !== "available"
+    ) {
+      return;
+    }
+    void submitReviewMode(queuedReviewMode);
+  }, [
+    identity,
+    isChangingReviewMode,
+    queuedReviewMode,
+    reviewModeRetryAtMs,
+    submitReviewMode,
+    writeAvailability.state,
+  ]);
   const resolvedPushedThreadComments = pushedThreadComments.filter((comment) =>
     resolvedCommentIds.has(comment.id),
   );
@@ -7666,9 +7853,13 @@ export const ReviewController = () => {
           writeAvailability={writeAvailability}
           pushedOrigin={pushedOrigin}
           onArmAutoAccept={
-            runtimeSession?.mode === "review"
-              ? () => setPendingAutoAcceptThreadId(comment.id)
-              : undefined
+            // Offered whenever the session is not already auto-accepting -
+            // including while the tab is reconnecting and the session reading
+            // is momentarily absent - so the reviewer can arm it and have the
+            // choice queued rather than being unable to reach it (BIG-302).
+            runtimeSession?.mode === "auto-accept"
+              ? undefined
+              : () => setPendingAutoAcceptThreadId(comment.id)
           }
           appliedSummaries={
             appliedThreadIds.has(comment.id) ? appliedSummaries : []
@@ -8584,6 +8775,9 @@ export const ReviewController = () => {
                 hasExchanges: activeChatRequests.length > 0,
                 arrivalEntry: pushArrivalEntry,
                 mode: runtimeSession?.mode ?? "review",
+                ...(queuedReviewMode === null
+                  ? {}
+                  : { modePending: queuedReviewMode.mode }),
                 ...(runtimeSession?.armedAtMs === undefined
                   ? {}
                   : {

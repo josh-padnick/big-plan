@@ -306,11 +306,11 @@ test("should discard an image insertion after a comment composer unmounts", asyn
         : fetchFromRuntime(input, init);
     };
   });
-  const banner = page.getByRole("alert").filter({
-    hasText: "This tab lost contact with this review session",
-  });
+  const banner = page.locator("[data-review-server-gone]");
   await expect(banner).toBeVisible({ timeout: 6_000 });
-  await expect(banner.getByRole("button", { name: "Refresh" })).toBeEnabled();
+  await expect(
+    banner.getByRole("button", { name: "Reload now" }),
+  ).toBeEnabled();
 });
 
 test.describe("image upload failures", () => {

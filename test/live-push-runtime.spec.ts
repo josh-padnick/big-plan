@@ -227,6 +227,12 @@ test("should reveal a real agent edit only at commit and preserve review context
     await page.evaluate(() =>
       window.scrollBy({ top: 180, behavior: "instant" }),
     );
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
     const scrollY = await page.evaluate(() => window.scrollY);
     expect(scrollY).toBeGreaterThan(0);
 
@@ -240,6 +246,8 @@ test("should reveal a real agent edit only at commit and preserve review context
     const revised = PLAN.replace(
       "The terminal response publishes the candidate atomically.",
       "The terminal response publishes the staged candidate atomically.",
+    ).concat(
+      "\n\n## Publication notes\n\nThe staged candidate remains reviewable.\n",
     );
     await writeFile(candidatePath, revised, "utf8");
     await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
@@ -251,6 +259,22 @@ test("should reveal a real agent edit only at commit and preserve review context
     await expect(page.locator("article")).not.toContainText(
       "publishes the staged candidate atomically",
     );
+    const selectedText = "The terminal response";
+    await page
+      .locator("[data-block-id='section/delivery-boundary/paragraph-1']")
+      .evaluate((element, text) => {
+        const node = element.firstChild;
+        if (!(node instanceof Text))
+          throw new Error("Paragraph text is missing");
+        const start = node.data.indexOf(text);
+        if (start < 0) throw new Error("Selection text is missing");
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, start + text.length);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }, selectedText);
 
     const responsePath = responseDraftOf(claim.stdout);
     await writeFile(
@@ -290,6 +314,9 @@ test("should reveal a real agent edit only at commit and preserve review context
     await expect(composer.getByLabel("Add a comment")).toHaveValue(
       composerBody,
     );
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+      .toBe(selectedText);
   } finally {
     if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
     else process.env.BIG_PLAN_AGENT_MODEL = previousModel;
@@ -1359,7 +1386,7 @@ test("should arm auto-accept from a pushed thread and apply it only to later arr
   }
 });
 
-test("should disable review-mode controls when writes are unavailable", async ({
+test("should queue review-mode changes while writes are unavailable", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -1371,6 +1398,10 @@ test("should disable review-mode controls when writes are unavailable", async ({
   const runtime = await startReviewRuntime({ planPath });
   let authoritative = true;
   let modeRequests = 0;
+  let releaseFirstModeResponse: (() => void) | undefined;
+  const firstModeResponseHeld = new Promise<void>((resolve) => {
+    releaseFirstModeResponse = resolve;
+  });
 
   await page.route("**/api/session", async (route) => {
     const response = await route.fetch();
@@ -1387,6 +1418,11 @@ test("should disable review-mode controls when writes are unavailable", async ({
     ) {
       modeRequests += 1;
     }
+  });
+  await page.route("**/api/review-mode", async (route) => {
+    const response = await route.fetch();
+    if (modeRequests === 1) await firstModeResponseHeld;
+    await route.fulfill({ response });
   });
 
   try {
@@ -1405,31 +1441,44 @@ test("should disable review-mode controls when writes are unavailable", async ({
     });
 
     authoritative = false;
-    await expect(arm).toBeDisabled({ timeout: 15_000 });
-    await expect(thread.getByText("Review session replaced")).toBeVisible();
-    await arm.evaluate((button: HTMLButtonElement) => button.click());
-    await expect.poll(() => modeRequests).toBe(0);
-
-    authoritative = true;
     await expect(arm).toBeEnabled({ timeout: 15_000 });
+    await expect(rail.getByText("Review session replaced")).toBeVisible();
     await arm.click();
     await page
       .getByRole("alertdialog", { name: "Turn on auto-accept?" })
       .getByRole("button", { name: "Turn on auto-accept" })
       .click();
+    await expect.poll(() => modeRequests).toBe(0);
+    await expect(
+      rail.getByRole("region", { name: "Review mode pending" }),
+    ).toContainText("Auto-accept · pending reconnect");
+
+    authoritative = true;
     await expect.poll(() => modeRequests).toBe(1);
     await expect(rail.getByText(/Auto-accept · on since/u)).toBeVisible();
 
+    await rail.getByRole("button", { name: "Switch back to review" }).click();
+    await expect(
+      rail.getByRole("region", { name: "Review mode pending" }),
+    ).toContainText("Review mode · pending reconnect");
+    releaseFirstModeResponse?.();
+    await expect.poll(() => modeRequests).toBe(2);
+    await expect(rail.getByText(/Auto-accept · on since/u)).toHaveCount(0);
+
     authoritative = false;
-    const switchBack = rail.getByRole("button", {
-      name: "Switch back to review",
+    const armAgain = thread.getByRole("button", {
+      name: "Auto-accept all changes",
     });
-    await expect(switchBack).toBeDisabled({ timeout: 15_000 });
+    await expect(armAgain).toBeEnabled({ timeout: 15_000 });
     await expect(
       rail.getByText("Review session replaced").first(),
     ).toBeVisible();
-    await switchBack.evaluate((button: HTMLButtonElement) => button.click());
-    await expect.poll(() => modeRequests).toBe(1);
+    await armAgain.click();
+    await page
+      .getByRole("alertdialog", { name: "Turn on auto-accept?" })
+      .getByRole("button", { name: "Turn on auto-accept" })
+      .click();
+    await expect.poll(() => modeRequests).toBe(2);
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });

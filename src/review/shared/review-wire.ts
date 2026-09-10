@@ -1232,6 +1232,32 @@ export const decodeRuntimeSession = ({
   };
 };
 
+/**
+ * The session id an open tab may follow in place when the runtime answering on
+ * its own address is a different, authoritative session - what a restart leaves
+ * behind, because a fresh runtime mints a new session id but reuses the token
+ * and the store. Following it lets the tab reattach without a blind reload that
+ * would land the reader on the new session having lost their place. Returns
+ * nothing unless the answering session is authoritative and genuinely different
+ * from the one the tab holds; a non-authoritative or same-session answer is not
+ * a takeover to follow.
+ */
+export const reattachableSessionId = ({
+  value,
+  currentSessionId,
+}: {
+  readonly value: unknown;
+  readonly currentSessionId: string;
+}): string | undefined => {
+  if (!isReviewWireRecord(value)) return undefined;
+  if (value.authoritative !== true) return undefined;
+  if (typeof value.plan !== "string") return undefined;
+  if (typeof value.sessionId !== "string" || value.sessionId === "") {
+    return undefined;
+  }
+  return value.sessionId === currentSessionId ? undefined : value.sessionId;
+};
+
 /** Encodes one complete snapshot diff for browser change surfaces. */
 export const encodeSnapshotDiff = (value: SnapshotDiff): SnapshotDiff => value;
 
