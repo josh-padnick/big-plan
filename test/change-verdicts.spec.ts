@@ -1189,13 +1189,8 @@ test("should keep an accepted change as plan content after its own block is supe
     // the recorded acceptance rather than re-proposing it, and the document
     // beside the bar still reads as the plan rather than the archived diff.
     await test.step("the tour keeps the superseded change accepted", async () => {
-      await feedbackRail()
-        .getByRole("button", { name: /Expand thread:/u })
-        .first()
-        .click();
-      await feedbackRail()
-        .getByRole("button", { name: "Review change" })
-        .click();
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await page.getByRole("button", { name: "Review change" }).click();
       await expect(
         page.getByRole("button", {
           name: "Undo acceptance for this change",
