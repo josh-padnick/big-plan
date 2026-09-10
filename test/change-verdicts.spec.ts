@@ -1192,10 +1192,8 @@ test("should keep an accepted change as plan content after its own block is supe
       await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
       await expect(page.locator("article ins, article del")).toHaveCount(0);
     });
-
-    await page.goto("about:blank");
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
