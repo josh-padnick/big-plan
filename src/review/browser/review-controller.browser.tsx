@@ -326,6 +326,7 @@ import {
 } from "./ui.browser.js";
 import { announcedSettleBlockIds, morphPlanDom } from "./plan-dom.browser.js";
 import { seedPlanMorphBaseline } from "./plan-morph.browser.js";
+import { keepRestored } from "./swap-restore.browser.js";
 // The composer's chord is named once, so no surface can tell the reader to
 // press a key that does nothing there.
 import {
@@ -2031,7 +2032,6 @@ const CommentComposer = ({
   compose,
   body,
   inline,
-  autoFocus,
   submitRightAway,
   identity,
   writeAvailability,
@@ -2045,7 +2045,6 @@ const CommentComposer = ({
   readonly compose: ComposeState;
   readonly body: string;
   readonly inline: boolean;
-  readonly autoFocus: boolean;
   readonly submitRightAway: boolean;
   readonly identity: RuntimeIdentity | null;
   readonly writeAvailability: ReviewWriteAvailability;
@@ -2173,7 +2172,7 @@ const CommentComposer = ({
         <ComposeImages
           identity={identity}
           writeAvailability={writeAvailability}
-          autoFocus={autoFocus}
+          autoFocus
           label="Add a comment"
           textareaClassName="bg-input!"
           placeholder="What should the agent change here?"
@@ -4169,13 +4168,6 @@ export const ReviewController = () => {
   // reverts, so without this the thread would simply spring back unexplained.
   const [resolveRefusal, setResolveRefusal] = useState<string | null>(null);
   const [compose, setCompose] = useState<ComposeState | null>(null);
-  // A live article swap can replace the inline composer's portal host. The
-  // replacement remounts the same logical composer, where native autofocus
-  // would steal focus and collapse the reader's restored text selection.
-  const mountedCompose = useRef<ComposeState | null>(null);
-  useEffect(() => {
-    mountedCompose.current = compose;
-  }, [compose]);
   const [composeBody, setComposeBody] = useState("");
   const [detachedComposer, setDetachedComposer] =
     useState<RecoveredComposer["comment"]>(null);
@@ -4211,15 +4203,6 @@ export const ReviewController = () => {
   // every poll; consumed by the swap so a later revert onto the same snapshot
   // finds nothing to settle.
   const pendingSettleArrival = useRef<PushArrival | null>(null);
-  // A plan swap changes React state after replacing the article. Restore the
-  // reader's viewport in the layout effect for that exact commit, before paint,
-  // instead of racing the commit with frame counts or wall-clock retries.
-  const pendingSwapScroll = useRef<{
-    readonly left: number;
-    readonly top: number;
-    readonly scrollingElement: HTMLElement;
-    readonly previousOverflowAnchor: string;
-  } | null>(null);
   // The Chat tab's Resolved disclosure, so a thread inside it can be revealed
   // when the reader asks for it.
   const resolvedThreadsRef = useRef<HTMLDetailsElement>(null);
@@ -6192,15 +6175,6 @@ export const ReviewController = () => {
     };
   }, []);
 
-  useLayoutEffect(() => {
-    const pending = pendingSwapScroll.current;
-    if (pending === null) return;
-    pendingSwapScroll.current = null;
-    window.scrollTo({ left: pending.left, top: pending.top });
-    pending.scrollingElement.style.overflowAnchor =
-      pending.previousOverflowAnchor;
-  }, [displayedSnapshot]);
-
   /*
   The rail opens on the reader's behalf only once opening it costs them
   nothing. Reserving the gutter moves an open composer and every floating
@@ -6343,6 +6317,7 @@ export const ReviewController = () => {
       return;
     }
     let current = true;
+    let cancelScrollRestore: (() => void) | undefined;
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
     void fetch(window.location.href, { credentials: "same-origin" })
@@ -6374,14 +6349,23 @@ export const ReviewController = () => {
           scrollingElement.style.overflowAnchor = previousOverflowAnchor;
           throw error;
         }
-        pendingSwapScroll.current = {
-          left: scrollX,
-          top: scrollY,
-          scrollingElement,
-          previousOverflowAnchor,
-        };
         setDisplayedSnapshot(agent.currentSnapshot);
         setPlanMorphBaselineSnapshot(agent.currentSnapshot);
+        // The swap owns the scroll position, and re-pins it across the settle
+        // window instead of on a fixed frame: the re-renders the swap sets off
+        // can move it after that frame on a loaded machine, and scroll
+        // anchoring stays off until the re-pin is done so the browser cannot
+        // compensate the reader away from where they were. It yields the moment
+        // the reader scrolls for themselves.
+        cancelScrollRestore = keepRestored({
+          view: window,
+          restore: () => window.scrollTo({ left: scrollX, top: scrollY }),
+          isSettled: () =>
+            window.scrollX === scrollX && window.scrollY === scrollY,
+          onStop: () => {
+            scrollingElement.style.overflowAnchor = previousOverflowAnchor;
+          },
+        });
       })
       .catch((error: unknown) => {
         if (!current) return;
@@ -6392,12 +6376,7 @@ export const ReviewController = () => {
       });
     return () => {
       current = false;
-      const pending = pendingSwapScroll.current;
-      if (pending !== null) {
-        pendingSwapScroll.current = null;
-        pending.scrollingElement.style.overflowAnchor =
-          pending.previousOverflowAnchor;
-      }
+      cancelScrollRestore?.();
     };
   }, [
     agent.currentSnapshot,
@@ -9200,7 +9179,6 @@ export const ReviewController = () => {
           }
           compose={compose}
           inline={false}
-          autoFocus={mountedCompose.current !== compose}
           body={composeBody}
           submitRightAway={submitRightAway}
           identity={identity}
@@ -9225,7 +9203,6 @@ export const ReviewController = () => {
             }
             compose={compose}
             inline
-            autoFocus={mountedCompose.current !== compose}
             body={composeBody}
             submitRightAway={submitRightAway}
             identity={identity}

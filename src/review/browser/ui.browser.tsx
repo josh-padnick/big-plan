@@ -675,7 +675,7 @@ export const AlertDialog = ({
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
     window.getSelection()?.removeAllRanges();
-    dialogRef.current?.focus({ preventScroll: true });
+    dialogRef.current?.focus();
     return () => {
       // The element that opened this dialog can be replaced while the dialog
       // is up - the plan refreshes in place - and focusing a detached node
@@ -689,7 +689,7 @@ export const AlertDialog = ({
   // Holding focus on the panel keeps the trap and the post-refusal position.
   useLayoutEffect(() => {
     if (!open || !pending) return;
-    dialogRef.current?.focus({ preventScroll: true });
+    dialogRef.current?.focus();
   }, [open, pending]);
 
   useLayoutEffect(() => {

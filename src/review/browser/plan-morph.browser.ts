@@ -25,6 +25,8 @@
 // reconciling the article's top-level blocks by address, which can rebuild a
 // whole top-level block but never the page.
 
+import { keepRestored } from "./swap-restore.browser.js";
+
 /** The address a block or collapse frame is matched by across a refresh. */
 const keyOf = (element: Element): string | null =>
   element.getAttribute("data-block-id") ??
@@ -179,16 +181,53 @@ const restoreSelection = (
   }
 };
 
-/** Restores the reader's selection without letting range focus move the page. */
+/**
+ * Restores the reader's selection into the replaced blocks and keeps restoring
+ * it while the swap's own re-renders can still clear the new range - chiefly a
+ * dialog remounting under the in-place refresh, which re-runs the "clear the
+ * selection on open" effect. That clear lands a variable number of renders
+ * later on a loaded machine, so a fixed frame count (or a single retry) misses
+ * it; `keepRestored` re-pins across the settle window until it holds and bails
+ * the moment the reader selects for themselves. Removing that spurious clear at
+ * its source is a filed follow-up that would let this be retired.
+ *
+ * Restoring a range can pull its focus into view, which would move the page the
+ * swap is working to keep still, so each restore snapshots the scroll position
+ * and puts it back: the selection is the only thing this changes. The swap owns
+ * the scroll position it wants; this only refuses to disturb it.
+ */
 const preserveSelectionThroughRender = (
   captured: CapturedSelection | null,
   replacements: ReadonlyMap<string, Element>,
 ): void => {
   const view = captured === null ? null : currentView(captured.selection);
-  const scroll =
-    view === null ? null : { left: view.scrollX, top: view.scrollY };
-  restoreSelection(captured, replacements);
-  if (scroll !== null) view?.scrollTo(scroll);
+  const restore = () => {
+    if (view === null) {
+      restoreSelection(captured, replacements);
+      return;
+    }
+    const left = view.scrollX;
+    const top = view.scrollY;
+    restoreSelection(captured, replacements);
+    view.scrollTo({ left, top });
+  };
+  if (captured === null || view === null) {
+    restore();
+    return;
+  }
+  keepRestored({
+    view,
+    restore,
+    isSettled: () => {
+      const selection = view.getSelection();
+      return (
+        selection !== null &&
+        !selection.isCollapsed &&
+        selection.anchorNode?.isConnected === true &&
+        selection.focusNode?.isConnected === true
+      );
+    },
+  });
 };
 
 /** Resolves the window that owns a captured browser selection. */
