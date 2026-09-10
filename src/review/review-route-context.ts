@@ -14,6 +14,10 @@ import {
   renderDocument,
   warmMarkdownRenderCache,
 } from "../render/render-document.js";
+import type {
+  DocumentIdentity,
+  RenderedDocument,
+} from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
   CommentRejected,
@@ -434,6 +438,21 @@ export const createPlanRenderer = ({
   ): Promise<ReadonlyArray<ReviewComment>> =>
     readComments({ path, validate: validateStored });
 
+  const renderMarkdown = async ({
+    markdown,
+    identity,
+  }: {
+    readonly markdown: string;
+    readonly identity?: DocumentIdentity;
+  }): Promise<RenderedDocument> => {
+    await warmMarkdownRenderCache({ markdown });
+    return renderDocument({
+      markdown,
+      fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+      ...(identity === undefined ? {} : { identity }),
+    });
+  };
+
   /**
    * Validates one batch of reviewer comments against what is already stored.
    *
@@ -455,9 +474,8 @@ export const createPlanRenderer = ({
       }
       try {
         const markdown = await readSnapshot({ store: readStore, snapshot });
-        const rendered = renderDocument({
+        const rendered = await renderMarkdown({
           markdown,
-          fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
         });
         snapshots.set(
           snapshot,
@@ -508,16 +526,8 @@ export const createPlanRenderer = ({
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
     if (blockMapMarkdown !== markdown) {
-      // Render this new source's diagrams off the event loop first, so the
-      // synchronous renders below only read cache hits. This is what keeps the
-      // heartbeat renewing through a revision that introduced diagrams, rather
-      // than a synchronous Chromium launch starving it (BIG-300). Warming is
-      // best-effort; on failure the synchronous path renders exactly as before.
-      // Unchanged source is already warm, so a plain re-poll pays nothing.
-      await warmMarkdownRenderCache({ markdown });
-      const blockMapRender = renderDocument({
+      const blockMapRender = await renderMarkdown({
         markdown,
-        fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
         identity: { planId, reviewSessionId: sessionId, reviewToken: token },
       });
       blocks.clear();
@@ -526,16 +536,17 @@ export const createPlanRenderer = ({
       }
       blockMapMarkdown = markdown;
     }
-    return renderDocument({
-      markdown,
-      fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-      identity: {
-        planId,
-        reviewSessionId: sessionId,
-        reviewToken: token,
-        reviewBootstrap: await readBootstrap(markdown),
-      },
-    }).html;
+    return (
+      await renderMarkdown({
+        markdown,
+        identity: {
+          planId,
+          reviewSessionId: sessionId,
+          reviewToken: token,
+          reviewBootstrap: await readBootstrap(markdown),
+        },
+      })
+    ).html;
   };
 
   return { renderPlan, readStoredComments, validateUpdates };
