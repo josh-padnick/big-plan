@@ -10,6 +10,10 @@ name: Publish npm canary
 on:
   push:
     tags:
+      # A version tag from main. Prereleases use the bare `-alpha` scheme
+      # (`v0.2.0-alpha`, no numeric suffix): `*` matches any character except
+      # `/`, hyphen included, so a bare-`-alpha` tag matches on its two literal
+      # dots exactly as the earlier `v0.1.0-alpha.1` did. See RELEASING.md.
       - "v*.*.*"
   pull_request:
     paths:
@@ -57,6 +61,9 @@ jobs:
         id: release
         shell: bash
         run: |
+          # Plain string comparison against `v${package_version}`, so it holds
+          # for the bare `-alpha` prerelease scheme with no special-casing:
+          # tag `v0.2.0-alpha` equals `v` + package version `0.2.0-alpha`.
           package_version="$(node -p "require('./package.json').version")"
           if [[ "$GITHUB_REF_NAME" != "v${package_version}" ]]; then
             echo "::error::Tag ${GITHUB_REF_NAME} must equal package version v${package_version}."
