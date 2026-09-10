@@ -251,6 +251,22 @@ test("should reveal a real agent edit only at commit and preserve review context
     await expect(page.locator("article")).not.toContainText(
       "publishes the staged candidate atomically",
     );
+    const selectedText = "The terminal response";
+    await page
+      .locator("[data-block-id='section/delivery-boundary/paragraph-1']")
+      .evaluate((element, text) => {
+        const node = element.firstChild;
+        if (!(node instanceof Text))
+          throw new Error("Paragraph text is missing");
+        const start = node.data.indexOf(text);
+        if (start < 0) throw new Error("Selection text is missing");
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, start + text.length);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }, selectedText);
 
     const responsePath = responseDraftOf(claim.stdout);
     await writeFile(
@@ -290,6 +306,9 @@ test("should reveal a real agent edit only at commit and preserve review context
     await expect(composer.getByLabel("Add a comment")).toHaveValue(
       composerBody,
     );
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+      .toBe(selectedText);
   } finally {
     if (previousModel === undefined) delete process.env.BIG_PLAN_AGENT_MODEL;
     else process.env.BIG_PLAN_AGENT_MODEL = previousModel;

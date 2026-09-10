@@ -55,6 +55,130 @@ const keyedNodes = (root: Element): Array<Element> => {
   return found;
 };
 
+type SelectionEndpoint = {
+  readonly node: Node;
+  readonly offset: number;
+  readonly blockKey?: string;
+  readonly textOffset?: number;
+};
+
+type CapturedSelection = {
+  readonly selection: Selection;
+  readonly anchor: SelectionEndpoint;
+  readonly focus: SelectionEndpoint;
+};
+
+const textOffsetWithin = (
+  block: Element,
+  node: Node,
+  offset: number,
+): number | undefined => {
+  if (!block.contains(node)) return undefined;
+  try {
+    const range = block.ownerDocument.createRange();
+    range.selectNodeContents(block);
+    range.setEnd(node, offset);
+    return range.toString().length;
+  } catch {
+    return undefined;
+  }
+};
+
+const captureSelection = (
+  currentArticle: Element,
+  replacingKeys: ReadonlySet<string>,
+): CapturedSelection | null => {
+  const selection = currentArticle.ownerDocument.defaultView?.getSelection();
+  if (
+    selection === undefined ||
+    selection === null ||
+    selection.rangeCount === 0 ||
+    selection.anchorNode === null ||
+    selection.focusNode === null
+  ) {
+    return null;
+  }
+  const endpoint = (node: Node, offset: number): SelectionEndpoint => {
+    const block =
+      node instanceof Element
+        ? node.closest("[data-block-id], [data-collapse-id]")
+        : node.parentElement?.closest(
+            "[data-block-id], [data-collapse-id]",
+          ) ?? null;
+    const blockKey = block === null ? null : keyOf(block);
+    if (block === null || blockKey === null || !replacingKeys.has(blockKey)) {
+      return { node, offset };
+    }
+    const textOffset = textOffsetWithin(block, node, offset);
+    return textOffset === undefined
+      ? { node, offset }
+      : { node, offset, blockKey, textOffset };
+  };
+  const anchor = endpoint(selection.anchorNode, selection.anchorOffset);
+  const focus = endpoint(selection.focusNode, selection.focusOffset);
+  return anchor.blockKey === undefined && focus.blockKey === undefined
+    ? null
+    : { selection, anchor, focus };
+};
+
+const endpointAfterReplacement = (
+  endpoint: SelectionEndpoint,
+  replacements: ReadonlyMap<string, Element>,
+): { readonly node: Node; readonly offset: number } | null => {
+  if (endpoint.blockKey === undefined || endpoint.textOffset === undefined) {
+    return endpoint.node.isConnected
+      ? { node: endpoint.node, offset: endpoint.offset }
+      : null;
+  }
+  const block = replacements.get(endpoint.blockKey);
+  if (block === undefined) return null;
+  let remaining = Math.min(
+    endpoint.textOffset,
+    block.textContent?.length ?? 0,
+  );
+  const walker = block.ownerDocument.createTreeWalker(
+    block,
+    block.ownerDocument.defaultView?.NodeFilter.SHOW_TEXT ?? 4,
+  );
+  let text = walker.nextNode();
+  while (text !== null) {
+    const length = text.textContent?.length ?? 0;
+    if (remaining <= length) return { node: text, offset: remaining };
+    remaining -= length;
+    text = walker.nextNode();
+  }
+  return { node: block, offset: 0 };
+};
+
+const restoreSelection = (
+  captured: CapturedSelection | null,
+  replacements: ReadonlyMap<string, Element>,
+): void => {
+  if (captured === null) return;
+  const anchor = endpointAfterReplacement(captured.anchor, replacements);
+  if (anchor === null) return;
+  const focus = endpointAfterReplacement(captured.focus, replacements);
+  try {
+    captured.selection.removeAllRanges();
+    if (focus === null) {
+      captured.selection.collapse(anchor.node, anchor.offset);
+      return;
+    }
+    captured.selection.setBaseAndExtent(
+      anchor.node,
+      anchor.offset,
+      focus.node,
+      focus.offset,
+    );
+  } catch {
+    try {
+      captured.selection.collapse(anchor.node, anchor.offset);
+    } catch {
+      return undefined;
+    }
+  }
+};
+
 // The pristine server markup of every addressed node the reader is currently
 // shown, keyed by address. It is what a new render is compared against, so the
 // comparison sees content moves rather than the live wiring's own edits.
@@ -160,17 +284,33 @@ export const morphPlanArticle = (
     // the leaves inside it, so the frame - and the reader's state on it - is
     // never touched.
     const liveById = new Map(liveNodes.map((node) => [keyOf(node), node]));
+    const replacingKeys = new Set(
+      nextNodes.flatMap((node) => {
+        const key = keyOf(node);
+        return key !== null &&
+          !hasKeyedDescendant(node) &&
+          baseline.get(key) !== node.outerHTML
+          ? [key]
+          : [];
+      }),
+    );
+    const capturedSelection = captureSelection(currentArticle, replacingKeys);
+    const replacements = new Map<string, Element>();
     for (const nextNode of nextNodes) {
       const key = keyOf(nextNode);
       if (key === null || hasKeyedDescendant(nextNode)) continue;
       if (baseline.get(key) === nextNode.outerHTML) continue;
       const liveNode = liveById.get(key);
       if (liveNode === undefined) continue;
-      liveNode.replaceWith(
-        currentArticle.ownerDocument.importNode(nextNode, true),
+      const replacement = currentArticle.ownerDocument.importNode(
+        nextNode,
+        true,
       );
+      liveNode.replaceWith(replacement);
+      replacements.set(key, replacement);
       changed.add(key);
     }
+    restoreSelection(capturedSelection, replacements);
   } else {
     reconcileTopLevel(currentArticle, nextArticle, changed);
   }
