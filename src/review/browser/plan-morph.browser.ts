@@ -193,7 +193,14 @@ const preserveSelectionThroughRender = (
   view?.requestAnimationFrame(() =>
     view.requestAnimationFrame(() => {
       const selection = view.getSelection();
-      if (selection !== null && !selection.isCollapsed) return;
+      if (
+        selection !== null &&
+        !selection.isCollapsed &&
+        selection.anchorNode?.isConnected === true &&
+        selection.focusNode?.isConnected === true
+      ) {
+        return;
+      }
       const left = view.scrollX;
       const top = view.scrollY;
       restoreSelection(captured, replacements);
