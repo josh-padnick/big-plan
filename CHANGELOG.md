@@ -8,6 +8,27 @@ It is written by hand, once per release, by the release engineer — never per p
 
 Big Plan is pre-1.0 and has no compatibility contract yet; see [Pre-release compatibility](AGENTS.md#pre-release-compatibility).
 
+## 0.2.0-alpha — 2026-09-10
+
+The second alpha, and the point where the live review stops losing your place while a plan changes underneath you.
+
+From this release on, Big Plan's prereleases use a bare `-alpha` tag with no numeric suffix. The minor version moves to `0.2.0` so this version still sorts after `0.1.0-alpha.1` under semver precedence. As with any prerelease, `npx -y big-plan@latest` reaches this version only once the release promotes it to the `latest` dist-tag; pin `npx -y big-plan@0.2.0-alpha` to install exactly this one.
+
+### Reviews update in place, without losing your place
+
+- An open review now reconciles in place on any plan change instead of reloading the whole page. Scroll position, comment drafts, expanded panes, and text selection all survive the update, and only the blocks that actually moved are marked as changed.
+- Edits made to the plan source outside the agent exchange are picked up automatically. Previously such an external write stayed invisible until a manual reload.
+- A restarted review runtime is followed in place: the "lost contact" banner clears on its own instead of demanding a blind reload that would drop your place, and the reconnect banners now say the tab is reconnecting automatically rather than asking for a manual refresh.
+- Auto-accept can be armed while the tab is reconnecting. Turning it on queues the change, shows it pending, and applies it the moment the runtime answers, instead of failing outright with "mode not changed".
+
+### Diagram-heavy reviews stay responsive
+
+- A review of a plan with several Mermaid diagrams no longer falls into a permanent "The review is restarting" state across agent pushes. Mermaid renders are cached and run off the request path, so the review's heartbeat keeps renewing, a second `big-plan review` no longer starts a competing runtime, and `big-plan agent push` no longer reports "not running".
+
+### Internal
+
+- Review persistence and browser responsibilities were split into clearer owners, duplicated architecture guidance was removed, and a verdict-repair race under concurrent requests was fixed. No change to plan authoring, the CLI surface, or the machine-readable output.
+
 ## 0.1.0-alpha.1 — 2026-09-04
 
 The first real release of Big Plan, published as an alpha. Version `0.0.1` was a July 2026 placeholder that claimed the npm name and nothing more; everything below shipped after it.

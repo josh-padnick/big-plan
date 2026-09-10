@@ -69,16 +69,20 @@ A file whose name carries `.generated.` is an output. Edit its authored input, r
 
 ## Prereleases
 
-A prerelease version such as `0.1.0-alpha.1` is published by exactly the same procedure. Only one thing about it needs stating, because getting it wrong is silent:
+A prerelease version such as `0.2.0-alpha` is published by exactly the same procedure. Only one thing about it needs stating, because getting it wrong is silent:
 
 **A prerelease still has to be promoted to `latest`, or first-time users cannot install it.** `npx -y big-plan@latest` and `npm install -g big-plan` both resolve the `latest` dist-tag. That tag moves only in step 7 of the checklist below, never as a side effect of publishing: `publish.yml` always publishes with `--tag next`. Skip the promotion and `latest` stays on the previous release, so every documented install command keeps serving the old version while the release notes announce the new one. There is no warning; installs simply keep working and keep being wrong.
 
 Two consequences of promoting a prerelease to `latest` are deliberate and worth knowing:
 
 - `next` and `latest` then point at the same version. That is fine, and the next canary moves `next` off it again.
-- A consumer who writes a semver **range** such as `^0.1.0` in a `package.json` will not match `0.1.0-alpha.1`, because ranges exclude prerelease versions unless the range itself names one. This does not affect Big Plan's documented paths, which use the `latest` dist-tag rather than a range.
+- A consumer who writes a semver **range** such as `^0.2.0` in a `package.json` will not match `0.2.0-alpha`, because ranges exclude prerelease versions unless the range itself names one. This does not affect Big Plan's documented paths, which use the `latest` dist-tag rather than a range.
 
-Nothing else changes. Tags named `v0.1.0-alpha.1` match the `v*.*.*` filter that triggers `publish.yml` and that the `npm-release` environment allows, the workflow's tag-equals-package-version check is a string comparison, and the CLI's update notice compares prerelease identifiers by semver precedence rather than lexically.
+Nothing else changes. Tags named `v0.2.0-alpha` match the `v*.*.*` filter that triggers `publish.yml` and that the `npm-release` environment allows — the filter's `*` matches any character, hyphen included, so a bare-`-alpha` tag matches on its two literal dots exactly as `v0.1.0-alpha.1` did. The workflow's tag-equals-package-version check is a plain string comparison of `$GITHUB_REF_NAME` against `v${package_version}`, so `v0.2.0-alpha` equals `v0.2.0-alpha`; and the CLI's update notice compares prerelease identifiers by semver precedence rather than lexically.
+
+### Prerelease naming scheme
+
+Big Plan's prereleases use a **bare** `-alpha` suffix with no numeric counter: `0.2.0-alpha`, not `0.2.0-alpha.1`. A new prerelease bumps the release number it precedes (for example the minor, `0.1.0-alpha.1` → `0.2.0-alpha`) rather than incrementing a suffix, so each prerelease still sorts after the last published one under semver precedence. Do not reintroduce a numeric suffix; it is what the bare scheme replaced.
 
 ## Release checklist
 
