@@ -102,7 +102,7 @@ const appendProgressBestEffort = async ({
 export const readAgentSnapshot = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
-  const { store, sessionId, planId, readerProgress } = context;
+  const { store, sessionId, planId, readerProgress, externalEdit } = context;
   const exchange = await readAgentExchange({ store, sessionId, planId });
   // One payload describes one instant, so the reader is moved only onto a
   // revision whose request this very exchange already reports as answered. A
@@ -121,6 +121,11 @@ export const readAgentSnapshot = async (
   })) {
     readerProgress.observe(revision);
   }
+  // A commit the observe loop just read leaves the reader on the live file, so
+  // this runs after it: any remaining gap between the live file and the
+  // reader's snapshot is an edit made outside the exchange, and a coherent one
+  // advances the reader through the same in-place refresh a commit does.
+  await externalEdit.settle(readerProgress);
   const presence = await readAgentPresence({ store, sessionId });
   // Read against this presence record, so a disconnect the reviewer asked for
   // reports itself only while the agent it addressed is still the one the

@@ -23,6 +23,7 @@ import {
   validateStoredComments,
 } from "./shared/comment.js";
 import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
+import type { ExternalPlanEditTracker } from "./external-plan-edit.js";
 import {
   readApprovalRecord,
   readChangeVerdicts,
@@ -270,6 +271,7 @@ export type ReviewRouteContext = {
   readonly snapshotDiffs: SnapshotDiffs;
   readonly approvals: Approvals;
   readonly readerProgress: ReaderProgress;
+  readonly externalEdit: ExternalPlanEditTracker;
   readonly writeGate: WriteGate;
   readonly activityClock: ActivityClock;
   readonly reportDiagnostic: (diagnostic: {

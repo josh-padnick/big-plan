@@ -28,6 +28,13 @@ export type ChatSurfaceModel = {
   readonly arrivalEntry: ReactNode;
   readonly mode: "review" | "auto-accept";
   readonly modeSince?: string;
+  /**
+   * A review-mode change the reviewer asked for that has not reached the
+   * runtime yet - queued while the tab is reconnecting rather than dropped. It
+   * is shown as pending so the toggle never snaps back to a state the reviewer
+   * did not choose (BIG-302).
+   */
+  readonly modePending?: "review" | "auto-accept";
   readonly onSwitchToReview: () => void;
   readonly pushedThreads: ReactNode;
   readonly pushedThreadCount: number;
@@ -126,6 +133,23 @@ export const ChatSurface = ({
             </div>
           </div>
           {model.arrivalEntry}
+          {model.modePending !== undefined &&
+          model.modePending !== model.mode ? (
+            <section
+              className="flex flex-wrap items-center gap-2 rounded-lg bg-surface p-3"
+              aria-label="Review mode pending"
+              data-review-mode-pending={model.modePending}
+            >
+              <Badge tone="statusWarning" size="status">
+                {model.modePending === "auto-accept"
+                  ? "Auto-accept · pending reconnect"
+                  : "Review mode · pending reconnect"}
+              </Badge>
+              <span className="text-2xs text-muted">
+                Saved — Big Plan applies it the moment this tab reconnects.
+              </span>
+            </section>
+          ) : null}
           {model.mode === "auto-accept" ? (
             <>
               <section

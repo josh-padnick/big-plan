@@ -540,6 +540,10 @@ describe("the polled agent snapshot", () => {
       agentCommand: "big-plan agent next /tmp/plan.mdx",
       recoveryPrompt: "",
       readerProgress,
+      // This route now settles an out-of-exchange edit after observing commits;
+      // these cases isolate the commit-observation behavior, so the tracker is
+      // a no-op here.
+      externalEdit: { settle: async () => undefined },
     }) as unknown as ReviewRouteContext;
 
   const currentSnapshotOf = (response: { readonly value: unknown }): unknown =>

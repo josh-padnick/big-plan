@@ -136,6 +136,7 @@ import type {
   ReviewRouteHandler,
   ReviewRouteResponse,
 } from "./review-route-context.js";
+import { createExternalPlanEditTracker } from "./external-plan-edit.js";
 import {
   planAssetResponse,
   publishImage,
@@ -1025,6 +1026,10 @@ export const startReviewRuntime = async ({
       observedResponseIds: (await readCommittedRevisions({ store })).map(
         (revision) => revision.requestId,
       ),
+    }),
+    externalEdit: createExternalPlanEditTracker({
+      resolvedPlanPath,
+      reportDiagnostic,
     }),
     writeGate: createWriteGate({ mutations, stallMs: writeStallMs }),
     activityClock: createActivityClock(idleTimeoutMs),

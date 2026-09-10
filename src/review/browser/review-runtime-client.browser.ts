@@ -43,6 +43,28 @@ export const runtimeIdentity = (): RuntimeIdentity | null => {
 export const isReadOnlyReview = (): boolean =>
   document.documentElement.hasAttribute("data-review-read-only");
 
+/**
+ * Points this page at the session id a restarted runtime took custody under,
+ * so the tab follows it in place instead of reloading onto it. Only the session
+ * id moves: the token and plan the transport uses are stable across a restart,
+ * so no request has to change - what changes is the id the session poll
+ * compares against, which is what was telling the tab its session was gone.
+ * Announces the move for any reader of the served identity. A no-op, returning
+ * false, when the id is empty or already the current one.
+ */
+export const adoptReviewSession = (sessionId: string): boolean => {
+  const root = document.documentElement;
+  if (
+    sessionId === "" ||
+    root.getAttribute("data-review-session") === sessionId
+  ) {
+    return false;
+  }
+  root.setAttribute("data-review-session", sessionId);
+  document.dispatchEvent(new CustomEvent("bigplan:review-identity"));
+  return true;
+};
+
 const requestRuntime = async <Result>({
   path,
   identity,

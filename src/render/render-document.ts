@@ -10,7 +10,9 @@ import type {
 import {
   compileMarkdown,
   compileMarkdownModel,
+  parseValidatedPlan,
 } from "./markdown/compile-markdown.js";
+import { createDiagnosticCollector } from "../components/_authoring/diagnostics.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 // Warming renders a source's diagrams off the event loop and returns the
 // request-local artifacts consumed by the synchronous render below. A live
@@ -106,6 +108,24 @@ const renderCompiledDocument = ({
     rootAttributes: rootAttributesFor(identity),
   });
   return { html, title: resolvedTitle, sections, blocks };
+};
+
+/**
+ * Cheaply decides whether a plan source is coherent enough to navigate a
+ * reader onto, without rendering it. It runs only the parse and component
+ * validation passes - the same ones that reject a half-written edit - and
+ * deliberately never launches the Mermaid render or builds the document, so a
+ * caller on a hot request path (the review poll, which asks this every time it
+ * notices the plan file changed) pays parse cost, not render cost. Throws
+ * `MarkdownDiagnosticsError` when the source cannot be a plan yet, which is how
+ * a transient mid-edit write is told from a finished one.
+ */
+export const validatePlanSource = ({
+  markdown,
+}: {
+  readonly markdown: string;
+}): void => {
+  parseValidatedPlan({ markdown, diagnostics: createDiagnosticCollector() });
 };
 
 /**

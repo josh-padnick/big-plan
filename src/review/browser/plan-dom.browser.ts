@@ -2,6 +2,8 @@
 // announcement every shell script uses to re-resolve detached nodes, and the
 // one distinction that announcement carries.
 
+import { morphPlanArticle } from "./plan-morph.browser.js";
+
 /** What an announcement says about the plan identity behind the new markup. */
 export type PlanDomAnnouncement = {
   /**
@@ -14,6 +16,14 @@ export type PlanDomAnnouncement = {
    * would tear down the very markup the announcement is about.
    */
   readonly carriesNoPlanIdentity?: boolean;
+  /**
+   * The blocks an in-place refresh added or replaced, when the replacement knew
+   * them. A whole-node replace cannot say, so it leaves this out and a listener
+   * falls back to whatever it had armed; an in-place morph names exactly the
+   * blocks whose bytes moved, which is the set worth marking as freshly
+   * arrived and the honest answer to "what changed" for any writer.
+   */
+  readonly settleBlockIds?: ReadonlyArray<string>;
 };
 
 export const PLAN_DOM_REPLACED_EVENT = "bigplan:article-replaced";
@@ -32,6 +42,13 @@ export const announcementMovedPlanIdentity = (event: Event): boolean =>
   (event as CustomEvent<PlanDomAnnouncement | undefined>).detail
     ?.carriesNoPlanIdentity !== true;
 
+/** The blocks an in-place refresh named as changed, when it knew them. */
+export const announcedSettleBlockIds = (
+  event: Event,
+): ReadonlyArray<string> | undefined =>
+  (event as CustomEvent<PlanDomAnnouncement | undefined>).detail
+    ?.settleBlockIds;
+
 /** Replaces one live plan node and announces that browser wiring must refresh. */
 export const replacePlanDom = ({
   target,
@@ -42,4 +59,22 @@ export const replacePlanDom = ({
 }): void => {
   target.replaceWith(replacement);
   announcePlanDom();
+};
+
+/**
+ * Reconciles the live `<article>` against a freshly rendered one in place -
+ * keeping every block the refresh did not touch, and with it the reader's
+ * selection, scroll, and field carets - then announces the refresh, naming the
+ * blocks that actually moved. Returns those ids for a caller that wants them.
+ */
+export const morphPlanDom = ({
+  target,
+  next,
+}: {
+  readonly target: Element;
+  readonly next: Element;
+}): ReadonlyArray<string> => {
+  const changed = morphPlanArticle(target, next);
+  announcePlanDom({ settleBlockIds: changed });
+  return changed;
 };
