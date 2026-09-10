@@ -4220,10 +4220,7 @@ export const ReviewController = () => {
     planId === "" ? new Set<string>() : readArchivedChatRequestIds(planId),
   );
 
-  useEffect(
-    () => () => cancelScrollRestoreRef.current?.(),
-    [],
-  );
+  useEffect(() => () => cancelScrollRestoreRef.current?.(), []);
   const [commentQuery, setCommentQuery] = useState("");
   const [unsavedInputKeys, setUnsavedInputKeys] = useState<ReadonlySet<string>>(
     new Set(),
