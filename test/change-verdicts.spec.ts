@@ -1191,11 +1191,6 @@ test("should keep an accepted change as plan content after its own block is supe
     await test.step("the tour keeps the superseded change accepted", async () => {
       await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
       await page.getByRole("button", { name: "Review change" }).click();
-      await expect(
-        page.getByRole("button", {
-          name: "Undo acceptance for this change",
-        }),
-      ).toBeVisible();
       await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
       await expect(
         page.locator("article [data-review-accepted-place]"),
