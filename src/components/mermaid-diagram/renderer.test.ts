@@ -213,6 +213,44 @@ describe(
       expect(asynchronous).toEqual(sync);
     });
 
+    it("coalesces concurrent async renders for the same uncached source (BIG-300)", async () => {
+      const cache = createMermaidRenderCache();
+      const source = "flowchart LR\n  concurrent[Concurrent] --> once[Once]";
+      const [first, second] = await Promise.all([
+        renderMermaidSourcesAsync([{ source }], { cache }),
+        renderMermaidSourcesAsync([{ source }], { cache }),
+      ]);
+      expect(second[0]).toBe(first[0]);
+    });
+
+    it("keeps recurring diagrams cached across a growing revision sequence (BIG-300)", async () => {
+      const cache = createMermaidRenderCache();
+      const revisions = [
+        ["a", "b"],
+        ["a", "b", "c"],
+        ["a", "c", "d"],
+        ["a", "b", "d", "e"],
+      ].map((names) =>
+        names.map((name) => ({
+          source: `flowchart LR\n  ${name}[${name}] --> done[Done]`,
+        })),
+      );
+      const firstBySource = new Map<string, MermaidRenderResult>();
+      const identities = new Set<MermaidRenderResult>();
+      for (const revision of revisions) {
+        const rendered = await renderMermaidSourcesAsync(revision, { cache });
+        revision.forEach(({ source }, index) => {
+          const result = rendered[index] as MermaidRenderResult;
+          const earlier = firstBySource.get(source);
+          if (earlier === undefined) firstBySource.set(source, result);
+          else expect(result).toBe(earlier);
+          identities.add(result);
+        });
+      }
+      expect(identities.size).toBe(firstBySource.size);
+      expect(firstBySource.size).toBe(5);
+    });
+
     it("warms diagrams off the event loop so the synchronous render never blocks (BIG-300)", async () => {
       const source = "flowchart LR\n  warm[Warm] --> ready[Ready]";
       const markdown = `<MermaidDiagram>\n\n\`\`\`mermaid\n${source}\n\`\`\`\n\n</MermaidDiagram>`;

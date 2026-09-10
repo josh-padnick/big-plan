@@ -1211,6 +1211,7 @@ export const MERMAID_RENDER_CACHE_MAX_ENTRIES = 256;
 export type MermaidRenderCache = {
   readonly get: (source: string) => MermaidRenderResult | undefined;
   readonly set: (source: string, result: MermaidRenderResult) => void;
+  readonly inFlight: Map<string, Promise<MermaidRenderResult>>;
   readonly clear: () => void;
 };
 
@@ -1219,6 +1220,7 @@ export const createMermaidRenderCache = (
   maxEntries: number = MERMAID_RENDER_CACHE_MAX_ENTRIES,
 ): MermaidRenderCache => {
   const entries = new Map<string, MermaidRenderResult>();
+  const inFlight = new Map<string, Promise<MermaidRenderResult>>();
   return {
     get: (source) => {
       const value = entries.get(source);
@@ -1237,7 +1239,11 @@ export const createMermaidRenderCache = (
         entries.delete(oldest);
       }
     },
-    clear: () => entries.clear(),
+    inFlight,
+    clear: () => {
+      entries.clear();
+      inFlight.clear();
+    },
   };
 };
 
@@ -1257,6 +1263,7 @@ export type MermaidRenderOptions = {
 };
 
 const CHROMIUM_HINT = `Mermaid compile-time rendering needs Chromium (Playwright ${MERMAID_BROWSER_VERSION}); install the pinned browser with "bunx playwright install chromium".`;
+const MERMAID_RENDER_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
 
 const mermaidProcessInput = (sources: MermaidRenderInput): string =>
   JSON.stringify({
@@ -1294,7 +1301,7 @@ const spawnMermaidRenderSync = (
       {
         input: mermaidProcessInput(sources),
         encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
+        maxBuffer: MERMAID_RENDER_MAX_BUFFER_BYTES,
       },
     );
   } catch (error: unknown) {
@@ -1325,16 +1332,48 @@ const spawnMermaidRenderAsync = async (
       );
       let stdout = "";
       let stderr = "";
+      let stdoutBytes = 0;
+      let stderrBytes = 0;
+      let bufferError: Error | undefined;
+      const appendOutput = (
+        current: string,
+        chunk: string,
+        byteCount: number,
+        streamName: "stdout" | "stderr",
+      ): { readonly output: string; readonly bytes: number } => {
+        const bytes = byteCount + Buffer.byteLength(chunk);
+        if (
+          bytes > MERMAID_RENDER_MAX_BUFFER_BYTES &&
+          bufferError === undefined
+        ) {
+          bufferError = new Error(
+            `Mermaid renderer ${streamName} exceeded the 64 MiB buffer limit`,
+          );
+          child.kill();
+        }
+        return {
+          output: bufferError === undefined ? current + chunk : current,
+          bytes,
+        };
+      };
       child.stdout.setEncoding("utf8");
       child.stdout.on("data", (chunk: string) => {
-        stdout += chunk;
+        const next = appendOutput(stdout, chunk, stdoutBytes, "stdout");
+        stdout = next.output;
+        stdoutBytes = next.bytes;
       });
       child.stderr.setEncoding("utf8");
       child.stderr.on("data", (chunk: string) => {
-        stderr += chunk;
+        const next = appendOutput(stderr, chunk, stderrBytes, "stderr");
+        stderr = next.output;
+        stderrBytes = next.bytes;
       });
       child.once("error", reject);
       child.once("close", (code) => {
+        if (bufferError !== undefined) {
+          reject(bufferError);
+          return;
+        }
         if (code === 0) {
           resolve(stdout);
           return;
@@ -1424,12 +1463,57 @@ export const renderMermaidSourcesAsync = async (
   { cache = sharedMermaidRenderCache }: MermaidRenderOptions = {},
 ): Promise<ReadonlyArray<MermaidRenderResult>> => {
   if (sources.length === 0) return [];
-  const partition = partitionByCache(sources, cache);
-  if (partition.uncached.length === 0) {
-    return partition.results as ReadonlyArray<MermaidRenderResult>;
+  const results: Array<
+    MermaidRenderResult | Promise<MermaidRenderResult> | string
+  > = [];
+  const newSources: Array<string> = [];
+  const newSourceSet = new Set<string>();
+  for (const { source } of sources) {
+    const hit = cache.get(source);
+    if (hit !== undefined) {
+      results.push(hit);
+      continue;
+    }
+    const active = cache.inFlight.get(source);
+    if (active !== undefined) {
+      results.push(active);
+      continue;
+    }
+    if (!newSourceSet.has(source)) {
+      newSourceSet.add(source);
+      newSources.push(source);
+    }
+    results.push(source);
   }
-  const rendered = await spawnMermaidRenderAsync(partition.uncached);
-  return fillFromRender({ partition, rendered, cache });
+  if (newSources.length > 0) {
+    const batch = spawnMermaidRenderAsync(
+      newSources.map((source) => ({ source })),
+    );
+    newSources.forEach((source, index) => {
+      const render: Promise<MermaidRenderResult> = batch
+        .then((rendered) => {
+          const result = rendered[index] as MermaidRenderResult;
+          cache.set(source, result);
+          return result;
+        })
+        .finally(() => {
+          if (cache.inFlight.get(source) === render) {
+            cache.inFlight.delete(source);
+          }
+        });
+      cache.inFlight.set(source, render);
+    });
+  }
+  return Promise.all(
+    results.map((result) => {
+      if (typeof result !== "string") return result;
+      const render = cache.inFlight.get(result);
+      if (render === undefined) {
+        throw new Error("Mermaid render cache lost pending work");
+      }
+      return render;
+    }),
+  );
 };
 
 const markdownChildren = (
