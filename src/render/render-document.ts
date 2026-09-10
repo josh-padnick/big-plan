@@ -12,6 +12,10 @@ import {
   compileMarkdownModel,
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
+// Warming renders a source's diagrams off the event loop into the shared cache
+// so the synchronous render below only reads hits. A live review runtime uses
+// it to keep its heartbeat alive across a legitimate render (BIG-300).
+export { warmMarkdownRenderCache } from "./markdown/compile-markdown.js";
 export type { BlockDescriptor } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
 import { derivePlanId } from "./plan-id.js";

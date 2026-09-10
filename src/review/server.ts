@@ -42,6 +42,7 @@ import { basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   renderDocument,
+  warmMarkdownRenderCache,
   MarkdownDiagnosticsError,
 } from "../render/render-document.js";
 import type { ReviewComment } from "./shared/comment.js";
@@ -787,6 +788,10 @@ export const startReviewRuntime = async ({
   // same plan; the session id, not the token, identifies write authority.
   const token = previousSession?.token ?? randomBytes(32).toString("base64url");
   const initialSource = await readFile(resolvedPlanPath, "utf8");
+  // Render the diagrams off the event loop before the first synchronous render,
+  // so this runtime's diagrams are cached from the start and the first document
+  // fetch does not launch Chromium on the request path (BIG-300).
+  await warmMarkdownRenderCache({ markdown: initialSource });
   renderDocument({
     markdown: initialSource,
     fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),

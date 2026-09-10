@@ -43,6 +43,7 @@ import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 import {
   MERMAID_FONT_CSS,
   prepareMermaidArtifacts,
+  warmMermaidArtifacts,
 } from "../../components/mermaid-diagram/renderer.js";
 import type { DocumentOutline } from "../../components/_model/document-outline/document-outline.js";
 
@@ -469,3 +470,29 @@ export const compileMarkdownModel = ({
   readonly markdown: string;
 }): CompiledMarkdown =>
   compileMarkdownTree({ markdown, materializeNestedModels: true });
+
+/**
+ * Renders one plan's Mermaid diagrams off the event loop into the shared render
+ * cache, so a subsequent synchronous compile of the same source renders nothing.
+ *
+ * A live review runtime calls this before it serves or diffs a source, so the
+ * synchronous request-path render only ever reads cache hits and never blocks
+ * the heartbeat on a Chromium launch. It is best-effort: a source that cannot
+ * even be parsed leaves the cache untouched and the synchronous path unchanged.
+ */
+export const warmMarkdownRenderCache = async ({
+  markdown,
+}: {
+  readonly markdown: string;
+}): Promise<void> => {
+  let parsed: MarkdownRoot;
+  try {
+    parsed = parseValidatedPlan({
+      markdown,
+      diagnostics: createDiagnosticCollector(),
+    });
+  } catch {
+    return;
+  }
+  await warmMermaidArtifacts(parsed);
+};

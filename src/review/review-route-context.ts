@@ -10,7 +10,10 @@
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
-import { renderDocument } from "../render/render-document.js";
+import {
+  renderDocument,
+  warmMarkdownRenderCache,
+} from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
   CommentRejected,
@@ -505,6 +508,13 @@ export const createPlanRenderer = ({
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
     if (blockMapMarkdown !== markdown) {
+      // Render this new source's diagrams off the event loop first, so the
+      // synchronous renders below only read cache hits. This is what keeps the
+      // heartbeat renewing through a revision that introduced diagrams, rather
+      // than a synchronous Chromium launch starving it (BIG-300). Warming is
+      // best-effort; on failure the synchronous path renders exactly as before.
+      // Unchanged source is already warm, so a plain re-poll pays nothing.
+      await warmMarkdownRenderCache({ markdown });
       const blockMapRender = renderDocument({
         markdown,
         fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),

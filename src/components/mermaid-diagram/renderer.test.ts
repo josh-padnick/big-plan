@@ -8,11 +8,14 @@ import {
   MERMAID_THEME_TOKENS,
   MERMAID_FONT_FAMILY,
   MERMAID_VERSION,
+  createMermaidRenderCache,
   isMermaidRenderFailure,
   parseMermaidRenderOutput,
   prepareMermaidArtifacts,
   renderMermaidSources,
+  renderMermaidSourcesAsync,
   rewriteMermaidSvgTargets,
+  warmMermaidArtifacts,
   type MermaidRawRender,
   type MermaidRenderResult,
 } from "./renderer.js";
@@ -151,9 +154,85 @@ describe(
   compile --> review{Review}
   review -->|accept| execute([Execute])
   review -.->|revise| plan`;
-      const first = success(renderMermaidSources([{ source }])[0]);
-      const second = success(renderMermaidSources([{ source }])[0]);
+      // Isolated caches force two genuine renders: this is the determinism the
+      // shared render cache relies on to be safe.
+      const first = success(
+        renderMermaidSources([{ source }], {
+          cache: createMermaidRenderCache(),
+        })[0],
+      );
+      const second = success(
+        renderMermaidSources([{ source }], {
+          cache: createMermaidRenderCache(),
+        })[0],
+      );
       expect(first).toEqual(second);
+    });
+
+    it("serves a repeated render from the content cache instead of relaunching Chromium (BIG-300)", () => {
+      const cache = createMermaidRenderCache();
+      const source = "flowchart LR\n  a[Alpha] --> b[Beta]";
+      const first = renderMermaidSources([{ source }], { cache })[0];
+      const second = renderMermaidSources([{ source }], { cache })[0];
+      // Reference equality proves the second call returned the cached object:
+      // no second Chromium launch, and no event-loop-blocking render. This is
+      // the re-render that starved the review heartbeat before the fix.
+      expect(second).toBe(first);
+      // A fresh cache renders again into a different object, so the identity
+      // check above is meaningful and the diagrams stay deterministic.
+      const rerendered = renderMermaidSources([{ source }], {
+        cache: createMermaidRenderCache(),
+      })[0];
+      expect(rerendered).not.toBe(first);
+      expect(rerendered).toEqual(first);
+    });
+
+    it("caches a render failure so a broken diagram is not re-rendered every request", () => {
+      const cache = createMermaidRenderCache();
+      const source = "flowchart LR\n  a[A] -> b[B]";
+      const first = renderMermaidSources([{ source }], { cache })[0];
+      expect(first !== undefined && isMermaidRenderFailure(first)).toBe(true);
+      const second = renderMermaidSources([{ source }], { cache })[0];
+      expect(second).toBe(first);
+    });
+
+    it("renders the same SVG on the async path as the sync path", async () => {
+      const source = "flowchart LR\n  async[Async] --> same[Same]";
+      const sync = success(
+        renderMermaidSources([{ source }], {
+          cache: createMermaidRenderCache(),
+        })[0],
+      );
+      const asynchronous = success(
+        (
+          await renderMermaidSourcesAsync([{ source }], {
+            cache: createMermaidRenderCache(),
+          })
+        )[0],
+      );
+      expect(asynchronous).toEqual(sync);
+    });
+
+    it("warms diagrams off the event loop so the synchronous render never blocks (BIG-300)", async () => {
+      const source = "flowchart LR\n  warm[Warm] --> ready[Ready]";
+      const markdown = `<MermaidDiagram>\n\n\`\`\`mermaid\n${source}\n\`\`\`\n\n</MermaidDiagram>`;
+      const tree = unified().use(remarkParse).use(remarkMdx).parse(markdown);
+      // The event loop must keep turning while the async render runs, or a
+      // review heartbeat would starve exactly as it did before the fix.
+      let ticks = 0;
+      const ticker = setInterval(() => {
+        ticks += 1;
+      }, 50);
+      try {
+        await warmMermaidArtifacts(tree);
+      } finally {
+        clearInterval(ticker);
+      }
+      expect(ticks).toBeGreaterThan(0);
+      // The synchronous compile now reads the warmed cache: the same object,
+      // with no Chromium launch on the request path.
+      const warmed = prepareMermaidArtifacts(tree).get(source);
+      expect(warmed).toBe(renderMermaidSources([{ source }])[0]);
     });
 
     it("does not pre-render Mermaid examples inside a fenced text block", () => {
