@@ -73,7 +73,7 @@ test("should never let a Disconnect click on an unusable session go unanswered",
     });
     await expect(disconnect).toBeEnabled();
 
-    await test.step("a runtime that refuses this tab makes the control inert, with a reload as the way back", async () => {
+    await test.step("a restarted runtime makes the control inert while the tab reattaches", async () => {
       await page.route("**/api/**", (route) => route.fulfill(REFUSAL));
       await expect(card).toHaveAttribute(
         "data-review-current-activity",
@@ -87,10 +87,10 @@ test("should never let a Disconnect click on an unusable session go unanswered",
       );
       const banner = page.locator("[data-review-session-out-of-date]");
       await expect(banner).toContainText(
-        "This tab's review session is out of date",
+        "Reconnecting to the restarted review session",
       );
       await expect(
-        banner.getByRole("button", { name: "Reload" }),
+        banner.getByRole("button", { name: "Reload now" }),
       ).toBeEnabled();
       await expect(disconnect).toBeDisabled();
       await expect(reason).toHaveText("Review session out of date");

@@ -227,6 +227,12 @@ test("should reveal a real agent edit only at commit and preserve review context
     await page.evaluate(() =>
       window.scrollBy({ top: 180, behavior: "instant" }),
     );
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
     const scrollY = await page.evaluate(() => window.scrollY);
     expect(scrollY).toBeGreaterThan(0);
 
@@ -1378,7 +1384,7 @@ test("should arm auto-accept from a pushed thread and apply it only to later arr
   }
 });
 
-test("should disable review-mode controls when writes are unavailable", async ({
+test("should queue review-mode changes while writes are unavailable", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -1424,18 +1430,19 @@ test("should disable review-mode controls when writes are unavailable", async ({
     });
 
     authoritative = false;
-    await expect(arm).toBeDisabled({ timeout: 15_000 });
-    await expect(thread.getByText("Review session replaced")).toBeVisible();
-    await arm.evaluate((button: HTMLButtonElement) => button.click());
-    await expect.poll(() => modeRequests).toBe(0);
-
-    authoritative = true;
     await expect(arm).toBeEnabled({ timeout: 15_000 });
+    await expect(rail.getByText("Review session replaced")).toBeVisible();
     await arm.click();
     await page
       .getByRole("alertdialog", { name: "Turn on auto-accept?" })
       .getByRole("button", { name: "Turn on auto-accept" })
       .click();
+    await expect.poll(() => modeRequests).toBe(0);
+    await expect(
+      rail.getByRole("region", { name: "Review mode pending" }),
+    ).toContainText("Auto-accept · pending reconnect");
+
+    authoritative = true;
     await expect.poll(() => modeRequests).toBe(1);
     await expect(rail.getByText(/Auto-accept · on since/u)).toBeVisible();
 

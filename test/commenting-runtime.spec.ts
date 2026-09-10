@@ -2422,14 +2422,12 @@ test("should merge an outage-time draft with newer runtime state", async ({
     };
   }, Array.from(runtimePaths));
 
-  const banner = page.getByRole("alert").filter({
-    hasText: "This tab lost contact with this review session",
-  });
+  const banner = page.locator("[data-review-server-gone]");
   await expect(banner).toBeVisible({ timeout: 6_000 });
   await expect(banner).toContainText(
-    "This tab lost contact with the local review server. Refresh to try reconnecting.",
+    "This tab lost contact with the local review server and is reconnecting automatically",
   );
-  const refresh = banner.getByRole("button", { name: "Refresh" });
+  const refresh = banner.getByRole("button", { name: "Reload now" });
   const slide = page.locator("[data-slide]").first();
   await slide.hover();
   await slide.getByRole("button", { name: "Comment on slide" }).click();
@@ -2438,7 +2436,7 @@ test("should merge an outage-time draft with newer runtime state", async ({
   await commentBody.fill("Preserve this comment through the outage.");
   await expect(refresh).toBeDisabled();
   await expect(banner).toContainText(
-    "the latest review input has not reached the local review server",
+    "Nothing you have typed has been lost; keep this tab open and it is applied once the server answers.",
   );
   const submitRightAway = composer.getByRole("switch", {
     name: "Submit right away",
@@ -2633,20 +2631,20 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
     };
   });
 
-  const banner = page.getByRole("alert").filter({
-    hasText: "This tab lost contact with this review session",
-  });
+  const banner = page.locator("[data-review-server-gone]");
   await expect(banner).toBeVisible({ timeout: 6_000 });
   await expect(banner).toContainText(
     "The deadline this tab last knew has since passed. A newer review session for this plan was recorded at the linked address.",
   );
   await expect(banner).toContainText(
-    "Keep this tab open because the latest review input has not reached the local review server.",
+    "Nothing you have typed has been lost; keep this tab open and it is applied once the server answers.",
   );
   await expect(
     banner.getByRole("link", { name: "Open latest review" }),
   ).toHaveAttribute("href", latestReviewUrl);
-  await expect(banner.getByRole("button", { name: "Refresh" })).toBeDisabled();
+  await expect(
+    banner.getByRole("button", { name: "Reload now" }),
+  ).toBeDisabled();
   await expect(banner).not.toContainText(session.restartCommand);
   await expect(banner).not.toContainText(/\b(?:run|start|restart)\b/u);
   await expect(banner).not.toContainText(
@@ -2657,7 +2655,7 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
     document.dispatchEvent(new CustomEvent("bigplan-test:hang-agent-poll"));
   });
   await expect(banner).toContainText(
-    "This tab lost contact with the local review server. Refresh to try reconnecting.",
+    "This tab lost contact with the local review server and is reconnecting automatically",
     { timeout: 4_000 },
   );
   await expect(banner).not.toContainText(
@@ -3811,6 +3809,9 @@ test.describe("a resolve the runtime refuses", () => {
     await expect(page.locator("[data-review-resolve-refusal]")).toContainText(
       "waiting for the coding agent",
     );
+    await inlineThread
+      .getByRole("button", { name: `Expand comment: ${COMMENT}` })
+      .click();
     await expect(
       inlineThread.getByRole("button", { name: "Resolve thread" }),
     ).toBeVisible();
