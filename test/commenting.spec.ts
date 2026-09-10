@@ -2388,6 +2388,24 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
     "opacity",
     "1",
   );
+  await dataTable.getByRole("button", { name: "Maximize table" }).click();
+  await expect(tableComment).toHaveCount(0);
+  const maximizedCell = dataTable
+    .locator('[data-block-kind="table-cell"]')
+    .first();
+  await maximizedCell.evaluate((cell) => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  await expect(
+    page.getByRole("button", { name: "Comment on selected text" }),
+  ).toHaveCount(0);
+  await dataTable.getByRole("button", { name: "Restore table size" }).click();
+  await expect(tableComment).toBeVisible();
   await page.locator("[data-block-kind='table-cell']").first().hover();
   await expect(tableComment).toBeVisible();
   await tableComment.hover();

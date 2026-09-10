@@ -1354,6 +1354,11 @@ const useBlockHosts = () => {
           !TABLE_PRECISION_KINDS.has(blockKind(block)) &&
           !DERIVED_KINDS.has(blockKind(block)) &&
           canMountReviewBlockHost(block) &&
+          !(
+            (blockKind(block) === "data-table" ||
+              blockKind(block) === "table") &&
+            block.hasAttribute("data-figure-maximized")
+          ) &&
           block.closest("[data-quick-summary]") === null &&
           // A figure that already offers its own whole-figure comment owns
           // that affordance, and its notes join the batch the reader submits
@@ -1486,7 +1491,12 @@ const useBlockHosts = () => {
         reconcile();
       });
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, {
+      attributeFilter: ["data-figure-maximized"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
     return () => {
       if (scheduled !== 0) cancelAnimationFrame(scheduled);
       observer.disconnect();

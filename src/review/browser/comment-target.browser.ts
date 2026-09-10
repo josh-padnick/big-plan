@@ -300,7 +300,10 @@ export const selectionControlState = (): SelectionControlState | null => {
     (startBlock !== endBlock &&
       (startReviewContainer == null ||
         startReviewContainer !== endReviewContainer)) ||
-    startBlock.closest("#big-plan-review-root") !== null
+    startBlock.closest("#big-plan-review-root") !== null ||
+    startBlock.closest(
+      '[data-figure-maximized][data-block-kind="data-table"], [data-figure-maximized][data-block-kind="table"]',
+    ) !== null
   ) {
     return null;
   }
