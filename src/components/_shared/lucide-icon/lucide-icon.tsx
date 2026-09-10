@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 // Renders the local official Lucide icon-node data directly as React SVGs.
 
 import { createElement } from "react";

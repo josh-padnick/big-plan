@@ -385,7 +385,7 @@ test("should preserve generous separation before visible group bands when sortin
     .poll(groupEndRows)
     .toEqual([{ group: "Enterprise", failure: "Processor timeout" }]);
 
-  await table.getByRole("button", { name: "Failure" }).click();
+  await table.getByRole("button", { name: "Failure", exact: true }).click();
 
   await expect(separatedBands).toHaveCount(1);
   await expect

@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 // Owns the React edge of the maximize control: one dormant button that every
 // component-rendered figure shares, so five figure families cannot drift into
 // five slightly different affordances. The contract it writes lives in

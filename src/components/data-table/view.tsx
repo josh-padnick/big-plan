@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 // Renders DataTable: the complete grid plus the chrome the viewer script
 // activates. Every row and column is server-rendered in authored order, so a
 // document with scripts disabled loses no content and shows no dead control.
@@ -133,7 +134,7 @@ const HeaderCell = ({
 }) => (
   <th
     scope="col"
-    className="data-table-head bg-[var(--table-head-bg)] py-1 text-2xs font-medium tracking-caps whitespace-nowrap text-muted uppercase select-none data-[table-sorted]:text-ink"
+    className="data-table-head bg-[var(--table-head-bg)] py-1 text-2xs font-medium tracking-caps whitespace-nowrap text-muted uppercase select-none data-[table-sorted]:text-ink max-[55.999rem]:whitespace-normal"
     data-commentable-kind="table-column"
     data-commentable-label={`Column: ${column.label}`}
     data-table-column={index}
@@ -399,7 +400,7 @@ export const DataTable = ({
   readonly showIdentity?: boolean;
 }) => (
   <figure
-    className="data-table mb-6 w-fit max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)]"
+    className={`data-table mb-6 max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)] ${showIdentity ? "w-fit" : "w-full min-w-0"}`}
     data-data-table
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "table" }}
     data-table-id={model.id}

@@ -13,9 +13,9 @@
 // subtree and is left untouched; only author-written prose tables are enhanced.
 
 import type { Element, ElementContent, Root } from "hast";
-import { createElement } from "react";
-import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
+import type { Jsx } from "hast-util-to-jsx-runtime";
+import { createElement, Fragment } from "react";
 import { reactToHast } from "./component-pipeline/react-hast-adapter.js";
 import { DataTable } from "../../components/data-table/view.js";
 import type {
@@ -185,12 +185,22 @@ const emptyCell = (): Element => ({
 
 // Renders the inline HAST inside one authored cell as a React node, so the
 // grid shows the author's real links and code rather than flattened text.
+// Playwright supplies its own JSX runtime while loading TypeScript test files,
+// so this server-rendering boundary calls React directly instead of importing
+// whichever automatic runtime loaded the caller.
+const createReactElement: Jsx = (type, props, key) =>
+  createElement(type, key === undefined ? props : { ...props, key });
+
 const cellToReact = (cell: Element | undefined) =>
   cell === undefined
     ? null
     : toJsxRuntime(
         { type: "root", children: cell.children },
-        { Fragment, jsx, jsxs },
+        {
+          Fragment,
+          jsx: createReactElement,
+          jsxs: createReactElement,
+        },
       );
 
 const enhanceTable = (table: Element, id: string): Element | undefined => {
