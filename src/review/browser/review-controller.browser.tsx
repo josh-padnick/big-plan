@@ -4239,6 +4239,9 @@ export const ReviewController = () => {
   const [hasObservedAgentSnapshot, setHasObservedAgentSnapshot] =
     useState(false);
   const [displayedSnapshot, setDisplayedSnapshot] = useState(initialSnapshot);
+  const [planMorphBaselineSnapshot, setPlanMorphBaselineSnapshot] = useState<
+    string | null
+  >(null);
   const [cancelPendingRequestIds, setCancelPendingRequestIds] = useState<
     ReadonlySet<string>
   >(new Set());
@@ -4258,6 +4261,9 @@ export const ReviewController = () => {
     string | null
   >(null);
   const [isChangingReviewMode, setIsChangingReviewMode] = useState(false);
+  const [reviewModeRetryAtMs, setReviewModeRetryAtMs] = useState<number | null>(
+    null,
+  );
   // A review-mode change the reviewer asked for while the tab could not reach
   // the runtime. It is held here rather than dropped, and a flush effect below
   // applies it the moment the runtime answers again (BIG-302).
@@ -6258,7 +6264,8 @@ export const ReviewController = () => {
   // pristine fetch, not the live DOM, is what tells a later render's content
   // moves apart from the shell's own edits (BIG-301).
   useEffect(() => {
-    if (identity === null) return;
+    if (identity === null || planMorphBaselineSnapshot === displayedSnapshot)
+      return;
     let current = true;
     void fetch(window.location.href, { credentials: "same-origin" })
       .then((response) => (response.ok ? response.text() : null))
@@ -6276,17 +6283,21 @@ export const ReviewController = () => {
           return;
         }
         const article = nextDocument.querySelector("article");
-        if (article !== null) seedPlanMorphBaseline(article);
+        if (article !== null) {
+          seedPlanMorphBaseline(article);
+          setPlanMorphBaselineSnapshot(displayedSnapshot);
+        }
       })
       .catch(() => undefined);
     return () => {
       current = false;
     };
-  }, [displayedSnapshot, identity]);
+  }, [displayedSnapshot, identity, planMorphBaselineSnapshot]);
 
   useEffect(() => {
     if (
       identity === null ||
+      planMorphBaselineSnapshot !== displayedSnapshot ||
       agent.currentSnapshot === "" ||
       agent.currentSnapshot === displayedSnapshot
     ) {
@@ -6325,6 +6336,7 @@ export const ReviewController = () => {
           throw error;
         }
         setDisplayedSnapshot(agent.currentSnapshot);
+        setPlanMorphBaselineSnapshot(agent.currentSnapshot);
         window.scrollTo({ left: scrollX, top: scrollY });
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
@@ -6343,7 +6355,12 @@ export const ReviewController = () => {
     return () => {
       current = false;
     };
-  }, [agent.currentSnapshot, displayedSnapshot, identity]);
+  }, [
+    agent.currentSnapshot,
+    displayedSnapshot,
+    identity,
+    planMorphBaselineSnapshot,
+  ]);
 
   useEffect(() => {
     let frame = 0;
@@ -7678,6 +7695,7 @@ export const ReviewController = () => {
           );
         }
         setQueuedReviewMode(null);
+        setReviewModeRetryAtMs(null);
         dismissPendingReviewMode();
         refreshVerdicts();
         setPendingAutoAcceptThreadId(null);
@@ -7690,6 +7708,7 @@ export const ReviewController = () => {
           return;
         }
         setQueuedReviewMode(request);
+        setReviewModeRetryAtMs(Date.now() + 1_000);
         reportPendingReviewMode(request.mode);
       } finally {
         setIsChangingReviewMode(false);
@@ -7697,6 +7716,20 @@ export const ReviewController = () => {
     },
     [identity, refreshVerdicts, runtimeSessionOrder],
   );
+
+  useEffect(() => {
+    if (reviewModeRetryAtMs === null) return;
+    const remaining = reviewModeRetryAtMs - Date.now();
+    if (remaining <= 0) {
+      setReviewModeRetryAtMs(null);
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setReviewModeRetryAtMs(null),
+      remaining,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [reviewModeRetryAtMs]);
 
   // The reviewer's entry point. Auto-accept is a reviewer setting, independent
   // of whether an agent is connected, so a tab that cannot reach the runtime
@@ -7729,6 +7762,7 @@ export const ReviewController = () => {
       queuedReviewMode === null ||
       identity === null ||
       isChangingReviewMode ||
+      reviewModeRetryAtMs !== null ||
       writeAvailability.state !== "available"
     ) {
       return;
@@ -7738,6 +7772,7 @@ export const ReviewController = () => {
     identity,
     isChangingReviewMode,
     queuedReviewMode,
+    reviewModeRetryAtMs,
     submitReviewMode,
     writeAvailability.state,
   ]);

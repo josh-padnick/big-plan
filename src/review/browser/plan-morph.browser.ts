@@ -130,7 +130,11 @@ const endpointAfterReplacement = (
       : null;
   }
   const block = replacements.get(endpoint.blockKey);
-  if (block === undefined) return null;
+  if (block === undefined) {
+    return endpoint.node.isConnected
+      ? { node: endpoint.node, offset: endpoint.offset }
+      : null;
+  }
   let remaining = Math.min(endpoint.textOffset, block.textContent?.length ?? 0);
   const walker = block.ownerDocument.createTreeWalker(
     block,
@@ -234,9 +238,10 @@ export const hasPlanMorphBaseline = (): boolean => baseline.size > 0;
  * Reconciles the article's top-level blocks by address: keeps an unchanged one,
  * replaces a changed one, inserts a new one, drops a removed one, and reorders
  * without rebuilding. This is the fallback for a structural change - a block
- * added, removed, or moved - so it may rebuild a whole top-level block (and
- * lose a selection inside that one block), but never the page, and never a
- * block that did not change. The common content edit never reaches here.
+ * added, removed, or moved - so it may rebuild a whole top-level block, but it
+ * restores a selection inside a keyed descendant that survives the change and
+ * never rebuilds an unchanged block. The common content edit never reaches
+ * here.
  */
 const reconcileTopLevel = (
   current: Element,
@@ -248,6 +253,14 @@ const reconcileTopLevel = (
     const key = keyOf(child);
     if (key !== null) currentByKey.set(key, child);
   }
+  const nextKeys = new Set(keyedNodes(next).map(keyOf).filter(Boolean));
+  const replacingKeys = new Set(
+    keyedNodes(current)
+      .map(keyOf)
+      .filter((key): key is string => key !== null && nextKeys.has(key)),
+  );
+  const capturedSelection = captureSelection(current, replacingKeys);
+  const replacements = new Map<string, Element>();
   const desired: Array<Element> = [];
   for (const nextChild of Array.from(next.children)) {
     const key = keyOf(nextChild);
@@ -266,6 +279,12 @@ const reconcileTopLevel = (
     }
     const imported = current.ownerDocument.importNode(nextChild, true);
     collectBlockIds(imported, changed);
+    for (const node of [imported, ...keyedNodes(imported)]) {
+      const importedKey = keyOf(node);
+      if (importedKey !== null && replacingKeys.has(importedKey)) {
+        replacements.set(importedKey, node);
+      }
+    }
     desired.push(imported);
   }
   for (const child of Array.from(current.childNodes)) {
@@ -280,6 +299,7 @@ const reconcileTopLevel = (
     }
     index += 1;
   }
+  preserveSelectionThroughRender(capturedSelection, replacements);
 };
 
 /**

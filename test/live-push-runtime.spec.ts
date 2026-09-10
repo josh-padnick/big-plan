@@ -246,6 +246,8 @@ test("should reveal a real agent edit only at commit and preserve review context
     const revised = PLAN.replace(
       "The terminal response publishes the candidate atomically.",
       "The terminal response publishes the staged candidate atomically.",
+    ).concat(
+      "\n\n## Publication notes\n\nThe staged candidate remains reviewable.\n",
     );
     await writeFile(candidatePath, revised, "utf8");
     await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
