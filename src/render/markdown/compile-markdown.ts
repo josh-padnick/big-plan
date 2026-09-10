@@ -454,10 +454,16 @@ const compileMarkdownTree = ({
  */
 export const compileMarkdown = ({
   markdown,
+  renderArtifacts,
 }: {
   readonly markdown: string;
+  readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): CompiledMarkdown =>
-  compileMarkdownTree({ markdown, materializeNestedModels: false });
+  compileMarkdownTree({
+    markdown,
+    materializeNestedModels: false,
+    ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
+  });
 
 /**
  * Compiles Markdown for machine delivery, where a component's model has to
@@ -472,19 +478,19 @@ export const compileMarkdownModel = ({
   compileMarkdownTree({ markdown, materializeNestedModels: true });
 
 /**
- * Renders one plan's Mermaid diagrams off the event loop into the shared render
- * cache, so a subsequent synchronous compile of the same source renders nothing.
+ * Renders one plan's Mermaid diagrams off the event loop and returns the
+ * complete request-local artifact set for the following synchronous compile.
  *
  * A live review runtime calls this before it serves or diffs a source, so the
- * synchronous request-path render only ever reads cache hits and never blocks
- * the heartbeat on a Chromium launch. A source that cannot be parsed leaves the
- * cache untouched; renderer failures propagate to the caller.
+ * request path never blocks the heartbeat on a Chromium launch, even when the
+ * bounded shared cache evicts an artifact. A source that cannot be parsed
+ * leaves the cache untouched; renderer failures propagate to the caller.
  */
 export const warmMarkdownRenderCache = async ({
   markdown,
 }: {
   readonly markdown: string;
-}): Promise<void> => {
+}): Promise<ReadonlyMap<string, unknown> | undefined> => {
   let parsed: MarkdownRoot;
   try {
     parsed = parseValidatedPlan({
@@ -492,7 +498,7 @@ export const warmMarkdownRenderCache = async ({
       diagnostics: createDiagnosticCollector(),
     });
   } catch {
-    return;
+    return undefined;
   }
-  await warmMermaidArtifacts(parsed);
+  return warmMermaidArtifacts(parsed);
 };

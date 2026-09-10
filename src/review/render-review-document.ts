@@ -11,6 +11,11 @@ type RenderDocumentOutput = ReturnType<typeof renderDocument>;
 export const renderReviewDocument = async (
   input: RenderDocumentInput,
 ): Promise<RenderDocumentOutput> => {
-  await warmMarkdownRenderCache({ markdown: input.markdown });
-  return renderDocument(input);
+  const renderArtifacts = await warmMarkdownRenderCache({
+    markdown: input.markdown,
+  });
+  return renderDocument({
+    ...input,
+    ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
+  });
 };

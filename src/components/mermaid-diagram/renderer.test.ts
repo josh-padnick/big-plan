@@ -273,6 +273,59 @@ describe(
       expect(warmed).toBe(renderMermaidSources([{ source }])[0]);
     });
 
+    it("returns every warmed artifact when the bounded cache evicts earlier diagrams (BIG-300)", async () => {
+      const cache = createMermaidRenderCache(1);
+      const firstSource = "flowchart LR\n  first[first] --> done[Done]";
+      const secondSource = "flowchart LR\n  second[second] --> done[Done]";
+      const sources = [firstSource, secondSource];
+      const markdown = sources
+        .map(
+          (source) =>
+            `<MermaidDiagram>\n\n\`\`\`mermaid\n${source}\n\`\`\`\n\n</MermaidDiagram>`,
+        )
+        .join("\n\n");
+      const tree = unified().use(remarkParse).use(remarkMdx).parse(markdown);
+
+      const artifacts = await warmMermaidArtifacts(tree, { cache });
+
+      expect(artifacts.size).toBe(2);
+      expect(success(artifacts.get(firstSource)).light).toContain("first");
+      expect(success(artifacts.get(secondSource)).light).toContain("second");
+    });
+
+    it("returns complete request artifacts when concurrent batches evict one another (BIG-300)", async () => {
+      const cache = createMermaidRenderCache(1);
+      const treeFor = (name: string) =>
+        unified()
+          .use(remarkParse)
+          .use(remarkMdx)
+          .parse(
+            `<MermaidDiagram>\n\n\`\`\`mermaid\nflowchart LR\n  ${name}[${name}] --> done[Done]\n\`\`\`\n\n</MermaidDiagram>`,
+          );
+
+      const [first, second] = await Promise.all([
+        warmMermaidArtifacts(treeFor("first-concurrent"), { cache }),
+        warmMermaidArtifacts(treeFor("second-concurrent"), { cache }),
+      ]);
+
+      expect(first.size).toBe(1);
+      expect(second.size).toBe(1);
+      expect(
+        success(
+          first.get(
+            "flowchart LR\n  first-concurrent[first-concurrent] --> done[Done]",
+          ),
+        ).light,
+      ).toContain("first-concurrent");
+      expect(
+        success(
+          second.get(
+            "flowchart LR\n  second-concurrent[second-concurrent] --> done[Done]",
+          ),
+        ).light,
+      ).toContain("second-concurrent");
+    });
+
     it("does not pre-render Mermaid examples inside a fenced text block", () => {
       const markdown = `<MermaidDiagram>\n\n\`\`\`mermaid\nflowchart LR\n  a[Actual] --> b[Figure]\n\`\`\`\n\n</MermaidDiagram>\n\n\`\`\`\`text\n<MermaidDiagram>\n\`\`\`mermaid\nflowchart LR\n  rejected[Rejected]\n\`\`\`\n</MermaidDiagram>\n\`\`\`\``;
       const tree = unified().use(remarkParse).use(remarkMdx).parse(markdown);

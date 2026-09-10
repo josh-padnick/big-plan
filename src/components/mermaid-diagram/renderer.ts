@@ -1264,6 +1264,7 @@ export type MermaidRenderOptions = {
 
 const CHROMIUM_HINT = `Mermaid compile-time rendering needs Chromium (Playwright ${MERMAID_BROWSER_VERSION}); install the pinned browser with "bunx playwright install chromium".`;
 const MERMAID_RENDER_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+const MERMAID_RENDER_TIMEOUT_MS = 60_000;
 
 const mermaidProcessInput = (sources: MermaidRenderInput): string =>
   JSON.stringify({
@@ -1335,6 +1336,20 @@ const spawnMermaidRenderAsync = async (
       let stdoutBytes = 0;
       let stderrBytes = 0;
       let bufferError: Error | undefined;
+      let settled = false;
+      const settle = (complete: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        complete();
+      };
+      const timeout = setTimeout(() => {
+        child.kill();
+        settle(() => {
+          reject(new Error("Mermaid renderer timed out after 60 seconds"));
+        });
+      }, MERMAID_RENDER_TIMEOUT_MS);
+      timeout.unref();
       const appendOutput = (
         current: string,
         chunk: string,
@@ -1368,23 +1383,37 @@ const spawnMermaidRenderAsync = async (
         stderr = next.output;
         stderrBytes = next.bytes;
       });
-      child.once("error", reject);
+      child.once("error", (error) => {
+        settle(() => {
+          reject(error);
+        });
+      });
       child.once("close", (code) => {
         if (bufferError !== undefined) {
-          reject(bufferError);
+          settle(() => {
+            reject(bufferError);
+          });
           return;
         }
         if (code === 0) {
-          resolve(stdout);
+          settle(() => {
+            resolve(stdout);
+          });
           return;
         }
-        reject(
-          new Error(
-            stderr.trim() || `Mermaid renderer exited with code ${code}`,
-          ),
-        );
+        settle(() => {
+          reject(
+            new Error(
+              stderr.trim() || `Mermaid renderer exited with code ${code}`,
+            ),
+          );
+        });
       });
-      child.stdin.on("error", reject);
+      child.stdin.on("error", (error) => {
+        settle(() => {
+          reject(error);
+        });
+      });
       child.stdin.end(mermaidProcessInput(sources));
     });
   } catch (error: unknown) {
@@ -1574,19 +1603,27 @@ export const prepareMermaidArtifacts = (
 };
 
 /**
- * Renders one plan tree's diagrams off the event loop into the shared cache, so
- * a later synchronous render finds every diagram already prepared.
+ * Renders one plan tree's diagrams off the event loop and returns the complete
+ * request-local artifact set. The shared cache remains a bounded optimization;
+ * eviction can never force the caller's following compile back onto Chromium.
  *
  * This is how the review runtime keeps its heartbeat alive through a legitimate
- * render: it warms here, on the async path, before the request path renders the
- * same source synchronously. Renderer failures propagate to the caller.
+ * render: it warms here, on the async path, then passes these artifacts into
+ * the synchronous compiler. Renderer failures propagate to the caller.
  */
 export const warmMermaidArtifacts = async (
   tree: MarkdownRoot,
-): Promise<void> => {
-  const sources = renderableMermaidSources(tree).filter(
-    (source) => sharedMermaidRenderCache.get(source) === undefined,
+  { cache = sharedMermaidRenderCache }: MermaidRenderOptions = {},
+): Promise<ReadonlyMap<string, MermaidRenderResult>> => {
+  const allSources = renderableMermaidSources(tree);
+  const rendered = await renderMermaidSourcesAsync(
+    allSources.map((source) => ({ source })),
+    { cache },
   );
-  if (sources.length === 0) return;
-  await renderMermaidSourcesAsync(sources.map((source) => ({ source })));
+  return new Map(
+    allSources.map((source, index) => [
+      source,
+      rendered[index] as MermaidRenderResult,
+    ]),
+  );
 };
