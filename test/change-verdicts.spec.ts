@@ -1173,28 +1173,23 @@ test("should keep an accepted change as plan content after its own block is supe
       { timeout: 15_000 },
     );
 
+    // Surface two - the open review tour. Stepping back onto the change shows
+    // the recorded acceptance rather than re-proposing it, and the document
+    // beside the bar still reads as the plan rather than the archived diff.
+    await test.step("the tour keeps the superseded change accepted", async () => {
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+      await expect(
+        page.locator("article [data-review-accepted-place]"),
+      ).toHaveCount(1);
+      await expect(page.locator("article ins, article del")).toHaveCount(0);
+    });
+
     await test.step("the ordinary view keeps resolved plan content", async () => {
       await page.getByRole("button", { name: "Exit review" }).click();
       await expect(page.locator("article")).toContainText(
         "The worker retries a failed job on an exponential backoff schedule.",
       );
-      await expect(
-        page.locator("article [data-review-accepted-place]"),
-      ).toHaveCount(0);
       await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
-      await expect(page.locator("article ins, article del")).toHaveCount(0);
-    });
-
-    // Surface two - the open review tour. Stepping back onto the change shows
-    // the recorded acceptance rather than re-proposing it, and the document
-    // beside the bar still reads as the plan rather than the archived diff.
-    await test.step("the tour keeps the superseded change accepted", async () => {
-      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-      await page.getByRole("button", { name: "Review change" }).click();
-      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
-      await expect(
-        page.locator("article [data-review-accepted-place]"),
-      ).toHaveCount(1);
       await expect(page.locator("article ins, article del")).toHaveCount(0);
     });
 
