@@ -179,6 +179,29 @@ const restoreSelection = (
   }
 };
 
+/** Restores once more if the selection-control render clears the new range. */
+const preserveSelectionThroughRender = (
+  captured: CapturedSelection | null,
+  replacements: ReadonlyMap<string, Element>,
+): void => {
+  restoreSelection(captured, replacements);
+  if (captured === null) return;
+  const view = currentView(captured.selection);
+  view?.requestAnimationFrame(() =>
+    view.requestAnimationFrame(() => {
+      const selection = view.getSelection();
+      if (selection !== null && !selection.isCollapsed) return;
+      restoreSelection(captured, replacements);
+    }),
+  );
+};
+
+/** Resolves the window that owns a captured browser selection. */
+const currentView = (selection: Selection): Window | null =>
+  selection.anchorNode instanceof Document
+    ? selection.anchorNode.defaultView
+    : selection.anchorNode?.ownerDocument?.defaultView ?? null;
+
 // The pristine server markup of every addressed node the reader is currently
 // shown, keyed by address. It is what a new render is compared against, so the
 // comparison sees content moves rather than the live wiring's own edits.
@@ -310,7 +333,7 @@ export const morphPlanArticle = (
       replacements.set(key, replacement);
       changed.add(key);
     }
-    restoreSelection(capturedSelection, replacements);
+    preserveSelectionThroughRender(capturedSelection, replacements);
   } else {
     reconcileTopLevel(currentArticle, nextArticle, changed);
   }
