@@ -4,15 +4,19 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import {
   MERMAID_BROWSER_VERSION,
+  MERMAID_RENDER_CACHE_MAX_ENTRIES,
   MERMAID_ROLE_TOKENS,
   MERMAID_THEME_TOKENS,
   MERMAID_FONT_FAMILY,
   MERMAID_VERSION,
+  createMermaidRenderCache,
   isMermaidRenderFailure,
   parseMermaidRenderOutput,
   prepareMermaidArtifacts,
   renderMermaidSources,
+  renderMermaidSourcesAsync,
   rewriteMermaidSvgTargets,
+  warmMermaidArtifacts,
   type MermaidRawRender,
   type MermaidRenderResult,
 } from "./renderer.js";
@@ -151,9 +155,192 @@ describe(
   compile --> review{Review}
   review -->|accept| execute([Execute])
   review -.->|revise| plan`;
-      const first = success(renderMermaidSources([{ source }])[0]);
-      const second = success(renderMermaidSources([{ source }])[0]);
+      // Isolated caches force two genuine renders: this is the determinism the
+      // shared render cache relies on to be safe.
+      const first = success(
+        renderMermaidSources([{ source }], {
+          cache: createMermaidRenderCache(),
+        })[0],
+      );
+      const second = success(
+        renderMermaidSources([{ source }], {
+          cache: createMermaidRenderCache(),
+        })[0],
+      );
       expect(first).toEqual(second);
+    });
+
+    it("serves a repeated render from the content cache instead of relaunching Chromium (BIG-300)", () => {
+      const cache = createMermaidRenderCache();
+      const source = "flowchart LR\n  a[Alpha] --> b[Beta]";
+      const first = renderMermaidSources([{ source }], { cache })[0];
+      const second = renderMermaidSources([{ source }], { cache })[0];
+      // Reference equality proves the second call returned the cached object:
+      // no second Chromium launch, and no event-loop-blocking render. This is
+      // the re-render that starved the review heartbeat before the fix.
+      expect(second).toBe(first);
+      // A fresh cache renders again into a different object, so the identity
+      // check above is meaningful and the diagrams stay deterministic.
+      const rerendered = renderMermaidSources([{ source }], {
+        cache: createMermaidRenderCache(),
+      })[0];
+      expect(rerendered).not.toBe(first);
+      expect(rerendered).toEqual(first);
+    });
+
+    it("caches a render failure so a broken diagram is not re-rendered every request", () => {
+      const cache = createMermaidRenderCache();
+      const source = "flowchart LR\n  a[A] -> b[B]";
+      const first = renderMermaidSources([{ source }], { cache })[0];
+      expect(first !== undefined && isMermaidRenderFailure(first)).toBe(true);
+      const second = renderMermaidSources([{ source }], { cache })[0];
+      expect(second).toBe(first);
+    });
+
+    it("renders the same SVG on the async path as the sync path", async () => {
+      const source = "flowchart LR\n  async[Async] --> same[Same]";
+      const sync = success(
+        renderMermaidSources([{ source }], {
+          cache: createMermaidRenderCache(),
+        })[0],
+      );
+      const asynchronous = success(
+        (
+          await renderMermaidSourcesAsync([{ source }], {
+            cache: createMermaidRenderCache(),
+          })
+        )[0],
+      );
+      expect(asynchronous).toEqual(sync);
+    });
+
+    it("coalesces concurrent async renders for the same uncached source (BIG-300)", async () => {
+      const cache = createMermaidRenderCache();
+      const source = "flowchart LR\n  concurrent[Concurrent] --> once[Once]";
+      const [first, second] = await Promise.all([
+        renderMermaidSourcesAsync([{ source }], { cache }),
+        renderMermaidSourcesAsync([{ source }], { cache }),
+      ]);
+      expect(second[0]).toBe(first[0]);
+    });
+
+    it("keeps recurring diagrams cached across a growing revision sequence (BIG-300)", async () => {
+      const cache = createMermaidRenderCache();
+      const revisions = [
+        ["a", "b"],
+        ["a", "b", "c"],
+        ["a", "c", "d"],
+        ["a", "b", "d", "e"],
+      ].map((names) =>
+        names.map((name) => ({
+          source: `flowchart LR\n  ${name}[${name}] --> done[Done]`,
+        })),
+      );
+      const firstBySource = new Map<string, MermaidRenderResult>();
+      const identities = new Set<MermaidRenderResult>();
+      for (const revision of revisions) {
+        const rendered = await renderMermaidSourcesAsync(revision, { cache });
+        revision.forEach(({ source }, index) => {
+          const result = rendered[index] as MermaidRenderResult;
+          const earlier = firstBySource.get(source);
+          if (earlier === undefined) firstBySource.set(source, result);
+          else expect(result).toBe(earlier);
+          identities.add(result);
+        });
+      }
+      expect(identities.size).toBe(firstBySource.size);
+      expect(firstBySource.size).toBe(5);
+    });
+
+    it("warms diagrams off the event loop so the synchronous render never blocks (BIG-300)", async () => {
+      const source = "flowchart LR\n  warm[Warm] --> ready[Ready]";
+      const markdown = `<MermaidDiagram>\n\n\`\`\`mermaid\n${source}\n\`\`\`\n\n</MermaidDiagram>`;
+      const tree = unified().use(remarkParse).use(remarkMdx).parse(markdown);
+      // The event loop must keep turning while the async render runs, or a
+      // review heartbeat would starve exactly as it did before the fix.
+      let ticks = 0;
+      const ticker = setInterval(() => {
+        ticks += 1;
+      }, 50);
+      try {
+        await warmMermaidArtifacts(tree);
+      } finally {
+        clearInterval(ticker);
+      }
+      expect(ticks).toBeGreaterThan(0);
+      // The synchronous compile now reads the warmed cache: the same object,
+      // with no Chromium launch on the request path.
+      const warmed = prepareMermaidArtifacts(tree).get(source);
+      expect(warmed).toBe(renderMermaidSources([{ source }])[0]);
+    });
+
+    it("returns every warmed artifact when a request exceeds the shared cache bound (BIG-300)", async () => {
+      const cache = createMermaidRenderCache();
+      const firstSource = "flowchart LR\n  source0[Source 0] --> done[Done]";
+      const overflowSource = `flowchart LR\n  source${MERMAID_RENDER_CACHE_MAX_ENTRIES}[Source ${MERMAID_RENDER_CACHE_MAX_ENTRIES}] --> done[Done]`;
+      const sources = [
+        firstSource,
+        ...Array.from(
+          { length: MERMAID_RENDER_CACHE_MAX_ENTRIES - 1 },
+          (_, index) =>
+            `flowchart LR\n  source${index + 1}[Source ${index + 1}] --> done[Done]`,
+        ),
+        overflowSource,
+      ];
+      const cachedArtifact = success(
+        renderMermaidSources([{ source: firstSource }], { cache })[0],
+      );
+      for (const source of sources.slice(1, -1)) {
+        cache.set(source, cachedArtifact);
+      }
+      const markdown = sources
+        .map(
+          (source) =>
+            `<MermaidDiagram>\n\n\`\`\`mermaid\n${source}\n\`\`\`\n\n</MermaidDiagram>`,
+        )
+        .join("\n\n");
+      const tree = unified().use(remarkParse).use(remarkMdx).parse(markdown);
+
+      const artifacts = await warmMermaidArtifacts(tree, { cache });
+
+      expect(artifacts.size).toBe(MERMAID_RENDER_CACHE_MAX_ENTRIES + 1);
+      expect(artifacts.get(firstSource)).toBe(cachedArtifact);
+      expect(success(artifacts.get(overflowSource)).light).toContain(
+        `source${MERMAID_RENDER_CACHE_MAX_ENTRIES}`,
+      );
+    });
+
+    it("returns complete request artifacts when concurrent batches evict one another (BIG-300)", async () => {
+      const cache = createMermaidRenderCache(1);
+      const treeFor = (name: string) =>
+        unified()
+          .use(remarkParse)
+          .use(remarkMdx)
+          .parse(
+            `<MermaidDiagram>\n\n\`\`\`mermaid\nflowchart LR\n  ${name}[${name}] --> done[Done]\n\`\`\`\n\n</MermaidDiagram>`,
+          );
+
+      const [first, second] = await Promise.all([
+        warmMermaidArtifacts(treeFor("first-concurrent"), { cache }),
+        warmMermaidArtifacts(treeFor("second-concurrent"), { cache }),
+      ]);
+
+      expect(first.size).toBe(1);
+      expect(second.size).toBe(1);
+      expect(
+        success(
+          first.get(
+            "flowchart LR\n  first-concurrent[first-concurrent] --> done[Done]",
+          ),
+        ).light,
+      ).toContain("first-concurrent");
+      expect(
+        success(
+          second.get(
+            "flowchart LR\n  second-concurrent[second-concurrent] --> done[Done]",
+          ),
+        ).light,
+      ).toContain("second-concurrent");
     });
 
     it("does not pre-render Mermaid examples inside a fenced text block", () => {

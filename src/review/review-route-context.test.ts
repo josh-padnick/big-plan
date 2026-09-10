@@ -19,6 +19,7 @@ import {
   createWriteGate,
 } from "./review-route-context.js";
 import { renderDocument } from "../render/render-document.js";
+import { clearMermaidRenderCache } from "../components/mermaid-diagram/renderer.js";
 import type { SnapshotDiff } from "./shared/review-wire.js";
 import type { BlockMapEntry } from "./shared/comment.js";
 import { prepareStore, reviewStoreFor, writeSnapshot } from "./store.js";
@@ -559,6 +560,75 @@ describe("createPlanRenderer snapshot target maps", () => {
       snapshot,
       label: block.label,
     });
+  });
+
+  it("keeps the event loop responsive while rendering an uncached retained snapshot (BIG-300)", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
+    created.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    const currentMarkdown = "# Current plan\n\nA current paragraph.\n";
+    const snapshotMarkdown = `# Earlier plan
+
+<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  earlier[Earlier] --> snapshot[Snapshot]
+\`\`\`
+
+</MermaidDiagram>
+
+A retained paragraph.
+`;
+    await writeFile(planPath, currentMarkdown);
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const snapshot = "2424242424242424";
+    await writeSnapshot({ store, snapshot, source: snapshotMarkdown });
+    const block = renderDocument({
+      markdown: snapshotMarkdown,
+      fallbackTitle: "plan",
+    }).blocks.find((candidate) => candidate.kind === "paragraph");
+    if (block === undefined)
+      throw new Error("Paragraph fixture did not compile");
+    clearMermaidRenderCache();
+    const renderer = createPlanRenderer({
+      store,
+      planId: "0123456789abcdef",
+      sessionId: "fedcba9876543210",
+      token: "token",
+      resolvedPlanPath: planPath,
+      initialSnapshot: snapshot,
+      isDiffPreview: false,
+      blocksForSnapshot: () => undefined,
+    });
+    let ticks = 0;
+    const ticker = setInterval(() => {
+      ticks += 1;
+    }, 10);
+    try {
+      const [comment] = await renderer.validateUpdates([
+        {
+          id: "ddeeffaa",
+          body: "A retained note.",
+          createdAt: "2026-08-29T00:00:00.000Z",
+          premiseSnapshot: snapshot,
+          target: {
+            type: "block",
+            blockId: block.id,
+            snapshot,
+          },
+        },
+      ]);
+      expect(comment?.target).toMatchObject({
+        type: "block",
+        blockId: block.id,
+        snapshot,
+      });
+    } finally {
+      clearInterval(ticker);
+    }
+    expect(ticks).toBeGreaterThan(0);
   });
 
   it("refuses a qualified target when its snapshot has been pruned", async () => {

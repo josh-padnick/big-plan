@@ -40,10 +40,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  renderDocument,
-  MarkdownDiagnosticsError,
-} from "../render/render-document.js";
+import { MarkdownDiagnosticsError } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import type { ReviewComment } from "./shared/comment.js";
 import {
   CommentRejected,
@@ -527,16 +525,18 @@ const initializeOwnedReviewState = async ({
       source: diffPreviewSource,
     });
     const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
-    const before = renderDocument({
-      markdown: diffPreviewSource,
-      fallbackTitle,
-      identity: {},
-    });
-    const after = renderDocument({
-      markdown: initialSource,
-      fallbackTitle,
-      identity: {},
-    });
+    const [before, after] = await Promise.all([
+      renderReviewDocument({
+        markdown: diffPreviewSource,
+        fallbackTitle,
+        identity: {},
+      }),
+      renderReviewDocument({
+        markdown: initialSource,
+        fallbackTitle,
+        identity: {},
+      }),
+    ]);
     const previewDiff = buildSnapshotDiff({
       from: premiseSnapshot,
       to: initialSnapshot,
@@ -787,7 +787,7 @@ export const startReviewRuntime = async ({
   // same plan; the session id, not the token, identifies write authority.
   const token = previousSession?.token ?? randomBytes(32).toString("base64url");
   const initialSource = await readFile(resolvedPlanPath, "utf8");
-  renderDocument({
+  await renderReviewDocument({
     markdown: initialSource,
     fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
     identity: {},

@@ -1,8 +1,8 @@
-// Owns the compile-time browser bridge for Mermaid. The caller sends every
-// Mermaid source in one batch so one Big Plan invocation launches one browser,
-// while the delivered document receives only sanitized SVG strings.
+// Owns the compile-time browser bridge and process-wide render cache for
+// Mermaid. Cache misses are batched into a pinned browser process, while the
+// delivered document receives only sanitized SVG strings.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fromHtml } from "hast-util-from-html";
 import { toHtml } from "hast-util-to-html";
@@ -1193,48 +1193,355 @@ export const rewriteMermaidSvgTargets = ({
   return toHtml(svgRoot, { allowDangerousHtml: false });
 };
 
-/** Renders all sources in one pinned browser and sanitizes both theme variants. */
-export const renderMermaidSources = (
-  sources: MermaidRenderInput,
-): ReadonlyArray<MermaidRenderResult> => {
-  if (sources.length === 0) return [];
-  let output: string;
-  try {
-    output = execFileSync(
-      process.execPath,
-      ["--input-type=module", "-e", RENDER_SCRIPT],
-      {
-        input: JSON.stringify({
-          mermaidScriptPath: MERMAID_SCRIPT_PATH,
-          playwrightPath: PLAYWRIGHT_PATH,
-          fontCss: MERMAID_FONT_CSS,
-          fontFamily: MERMAID_FONT_FAMILY,
-          fontProbes: MERMAID_FONT_PROBES,
-          themeTokens: MERMAID_THEME_TOKENS,
-          sources: sources.map(({ source }) => source),
-        }),
-        encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
-      },
-    );
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Mermaid compile-time rendering needs Chromium (Playwright ${MERMAID_BROWSER_VERSION}); install the pinned browser with "bunx playwright install chromium". ${detail}`,
-      { cause: error },
-    );
-  }
-  const rendered = parseMermaidRenderOutput({
-    output,
-    expectedCount: sources.length,
+/**
+ * A content-addressed cache of rendered Mermaid diagrams.
+ *
+ * Rendering is a pure function of its source: the pinned browser, Mermaid
+ * version, theme tokens, bundled font, and fixed handDrawnSeed are all constant
+ * for the life of the process, so identical sources render to identical SVG.
+ * That is exactly why one cache is safe, and why it is the fix a long-lived
+ * review runtime needs: the request path re-renders the same diagrams on every
+ * poll, every push, and every rollback evaluation, and each uncached render
+ * launches Chromium synchronously and blocks the event loop (BIG-300). The
+ * cache is keyed by the same trimmed source string the compiler keys artifacts
+ * by, so a hit here is the artifact the compiler would have asked for.
+ */
+export const MERMAID_RENDER_CACHE_MAX_ENTRIES = 256;
+
+export type MermaidRenderCache = {
+  readonly get: (source: string) => MermaidRenderResult | undefined;
+  readonly set: (source: string, result: MermaidRenderResult) => void;
+  readonly inFlight: Map<string, Promise<MermaidRenderResult>>;
+  readonly clear: () => void;
+};
+
+/** A bounded LRU keyed by Mermaid source; both renders and failures are cached. */
+export const createMermaidRenderCache = (
+  maxEntries: number = MERMAID_RENDER_CACHE_MAX_ENTRIES,
+): MermaidRenderCache => {
+  const entries = new Map<string, MermaidRenderResult>();
+  const inFlight = new Map<string, Promise<MermaidRenderResult>>();
+  return {
+    get: (source) => {
+      const value = entries.get(source);
+      if (value !== undefined) {
+        entries.delete(source);
+        entries.set(source, value);
+      }
+      return value;
+    },
+    set: (source, result) => {
+      entries.delete(source);
+      entries.set(source, result);
+      while (entries.size > maxEntries) {
+        const oldest = entries.keys().next().value;
+        if (oldest === undefined) break;
+        entries.delete(oldest);
+      }
+    },
+    inFlight,
+    clear: () => {
+      entries.clear();
+      inFlight.clear();
+    },
+  };
+};
+
+// One cache shared by every render in this process. A review runtime renders
+// the same plan hundreds of times over its life; this is what keeps all but the
+// first of those off Chromium.
+const sharedMermaidRenderCache = createMermaidRenderCache();
+
+/** Empties the process-wide cache. Tests use it to force a real render. */
+export const clearMermaidRenderCache = (): void => {
+  sharedMermaidRenderCache.clear();
+};
+
+export type MermaidRenderOptions = {
+  // The cache to consult and populate; defaults to the process-wide cache.
+  readonly cache?: MermaidRenderCache;
+};
+
+const CHROMIUM_HINT = `Mermaid compile-time rendering needs Chromium (Playwright ${MERMAID_BROWSER_VERSION}); install the pinned browser with "bunx playwright install chromium".`;
+const MERMAID_RENDER_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+const MERMAID_RENDER_TIMEOUT_MS = 60_000;
+
+const mermaidProcessInput = (sources: MermaidRenderInput): string =>
+  JSON.stringify({
+    mermaidScriptPath: MERMAID_SCRIPT_PATH,
+    playwrightPath: PLAYWRIGHT_PATH,
+    fontCss: MERMAID_FONT_CSS,
+    fontFamily: MERMAID_FONT_FAMILY,
+    fontProbes: MERMAID_FONT_PROBES,
+    themeTokens: MERMAID_THEME_TOKENS,
+    sources: sources.map(({ source }) => source),
   });
-  return rendered.map((result) =>
+
+const sanitizeRenderedSources = (
+  output: string,
+  expectedCount: number,
+): MermaidRenderOutput =>
+  parseMermaidRenderOutput({ output, expectedCount }).map((result) =>
     isMermaidRenderFailure(result)
       ? result
       : {
           light: sanitizeSvg({ svg: result.light, variant: "light" }),
           dark: sanitizeSvg({ svg: result.dark, variant: "dark" }),
         },
+  );
+
+/** Renders uncached sources in one pinned browser, blocking the event loop. */
+const spawnMermaidRenderSync = (
+  sources: MermaidRenderInput,
+): MermaidRenderOutput => {
+  let output: string;
+  try {
+    output = execFileSync(
+      process.execPath,
+      ["--input-type=module", "-e", RENDER_SCRIPT],
+      {
+        input: mermaidProcessInput(sources),
+        encoding: "utf8",
+        maxBuffer: MERMAID_RENDER_MAX_BUFFER_BYTES,
+      },
+    );
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${CHROMIUM_HINT} ${detail}`, { cause: error });
+  }
+  return sanitizeRenderedSources(output, sources.length);
+};
+
+/**
+ * Renders uncached sources in one pinned browser off the event loop.
+ *
+ * A long-lived review runtime uses this so a legitimate render never blocks the
+ * heartbeat: the child does the synchronous browser work in its own process
+ * while this process keeps renewing liveness. A genuine hang is still detected,
+ * because the runtime's own timers keep running rather than being masked.
+ */
+const spawnMermaidRenderAsync = async (
+  sources: MermaidRenderInput,
+): Promise<MermaidRenderOutput> => {
+  let output: string;
+  try {
+    output = await new Promise<string>((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        ["--input-type=module", "-e", RENDER_SCRIPT],
+        { stdio: ["pipe", "pipe", "pipe"] },
+      );
+      let stdout = "";
+      let stderr = "";
+      let stdoutBytes = 0;
+      let stderrBytes = 0;
+      let bufferError: Error | undefined;
+      let settled = false;
+      const settle = (complete: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        complete();
+      };
+      const timeout = setTimeout(() => {
+        child.kill();
+        settle(() => {
+          reject(new Error("Mermaid renderer timed out after 60 seconds"));
+        });
+      }, MERMAID_RENDER_TIMEOUT_MS);
+      timeout.unref();
+      const appendOutput = (
+        current: string,
+        chunk: string,
+        byteCount: number,
+        streamName: "stdout" | "stderr",
+      ): { readonly output: string; readonly bytes: number } => {
+        const bytes = byteCount + Buffer.byteLength(chunk);
+        if (
+          bytes > MERMAID_RENDER_MAX_BUFFER_BYTES &&
+          bufferError === undefined
+        ) {
+          bufferError = new Error(
+            `Mermaid renderer ${streamName} exceeded the 64 MiB buffer limit`,
+          );
+          child.kill();
+        }
+        return {
+          output: bufferError === undefined ? current + chunk : current,
+          bytes,
+        };
+      };
+      child.stdout.setEncoding("utf8");
+      child.stdout.on("data", (chunk: string) => {
+        const next = appendOutput(stdout, chunk, stdoutBytes, "stdout");
+        stdout = next.output;
+        stdoutBytes = next.bytes;
+      });
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        const next = appendOutput(stderr, chunk, stderrBytes, "stderr");
+        stderr = next.output;
+        stderrBytes = next.bytes;
+      });
+      child.once("error", (error) => {
+        settle(() => {
+          reject(error);
+        });
+      });
+      child.once("close", (code) => {
+        if (bufferError !== undefined) {
+          settle(() => {
+            reject(bufferError);
+          });
+          return;
+        }
+        if (code === 0) {
+          settle(() => {
+            resolve(stdout);
+          });
+          return;
+        }
+        settle(() => {
+          reject(
+            new Error(
+              stderr.trim() || `Mermaid renderer exited with code ${code}`,
+            ),
+          );
+        });
+      });
+      child.stdin.on("error", (error) => {
+        settle(() => {
+          reject(error);
+        });
+      });
+      child.stdin.end(mermaidProcessInput(sources));
+    });
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${CHROMIUM_HINT} ${detail}`, { cause: error });
+  }
+  return sanitizeRenderedSources(output, sources.length);
+};
+
+type CachePartition = {
+  readonly results: Array<MermaidRenderResult | undefined>;
+  readonly uncached: Array<{ readonly source: string }>;
+  readonly uncachedIndices: Array<number>;
+};
+
+const partitionByCache = (
+  sources: MermaidRenderInput,
+  cache: MermaidRenderCache,
+): CachePartition => {
+  const results: Array<MermaidRenderResult | undefined> = sources.map(
+    () => undefined,
+  );
+  const uncached: Array<{ readonly source: string }> = [];
+  const uncachedIndices: Array<number> = [];
+  sources.forEach(({ source }, index) => {
+    const hit = cache.get(source);
+    if (hit !== undefined) {
+      results[index] = hit;
+      return;
+    }
+    uncached.push({ source });
+    uncachedIndices.push(index);
+  });
+  return { results, uncached, uncachedIndices };
+};
+
+const fillFromRender = ({
+  partition,
+  rendered,
+  cache,
+}: {
+  readonly partition: CachePartition;
+  readonly rendered: MermaidRenderOutput;
+  readonly cache: MermaidRenderCache;
+}): ReadonlyArray<MermaidRenderResult> => {
+  partition.uncachedIndices.forEach((index, position) => {
+    const result = rendered[position] as MermaidRenderResult;
+    partition.results[index] = result;
+    cache.set(partition.uncached[position]?.source ?? "", result);
+  });
+  return partition.results as ReadonlyArray<MermaidRenderResult>;
+};
+
+/**
+ * Renders all sources, reusing cached diagrams and rendering only the rest in
+ * one pinned browser. Synchronous, so it blocks the event loop for uncached
+ * sources; a runtime that must stay live warms the cache with the async path
+ * first so this only ever reads hits.
+ */
+export const renderMermaidSources = (
+  sources: MermaidRenderInput,
+  { cache = sharedMermaidRenderCache }: MermaidRenderOptions = {},
+): ReadonlyArray<MermaidRenderResult> => {
+  if (sources.length === 0) return [];
+  const partition = partitionByCache(sources, cache);
+  if (partition.uncached.length === 0) {
+    return partition.results as ReadonlyArray<MermaidRenderResult>;
+  }
+  const rendered = spawnMermaidRenderSync(partition.uncached);
+  return fillFromRender({ partition, rendered, cache });
+};
+
+/** The event-loop-safe render: identical results, off-thread for cache misses. */
+export const renderMermaidSourcesAsync = async (
+  sources: MermaidRenderInput,
+  { cache = sharedMermaidRenderCache }: MermaidRenderOptions = {},
+): Promise<ReadonlyArray<MermaidRenderResult>> => {
+  if (sources.length === 0) return [];
+  const results: Array<
+    MermaidRenderResult | Promise<MermaidRenderResult> | string
+  > = [];
+  const newSources: Array<string> = [];
+  const newSourceSet = new Set<string>();
+  for (const { source } of sources) {
+    const hit = cache.get(source);
+    if (hit !== undefined) {
+      results.push(hit);
+      continue;
+    }
+    const active = cache.inFlight.get(source);
+    if (active !== undefined) {
+      results.push(active);
+      continue;
+    }
+    if (!newSourceSet.has(source)) {
+      newSourceSet.add(source);
+      newSources.push(source);
+    }
+    results.push(source);
+  }
+  if (newSources.length > 0) {
+    const batch = spawnMermaidRenderAsync(
+      newSources.map((source) => ({ source })),
+    );
+    newSources.forEach((source, index) => {
+      const render: Promise<MermaidRenderResult> = batch
+        .then((rendered) => {
+          const result = rendered[index] as MermaidRenderResult;
+          cache.set(source, result);
+          return result;
+        })
+        .finally(() => {
+          if (cache.inFlight.get(source) === render) {
+            cache.inFlight.delete(source);
+          }
+        });
+      cache.inFlight.set(source, render);
+    });
+  }
+  return Promise.all(
+    results.map((result) => {
+      if (typeof result !== "string") return result;
+      const render = cache.inFlight.get(result);
+      if (render === undefined) {
+        throw new Error("Mermaid render cache lost pending work");
+      }
+      return render;
+    }),
   );
 };
 
@@ -1263,9 +1570,10 @@ const mermaidSourcesInTree = (tree: MarkdownRoot): ReadonlyArray<string> => {
   return sources;
 };
 
-export const prepareMermaidArtifacts = (
+/** The unique, renderable diagram sources one plan tree carries, in order. */
+const renderableMermaidSources = (
   tree: MarkdownRoot,
-): ReadonlyMap<string, MermaidRenderResult> => {
+): ReadonlyArray<string> => {
   const sources: Array<string> = [];
   const seen = new Set<string>();
   for (const source of mermaidSourcesInTree(tree)) {
@@ -1278,11 +1586,56 @@ export const prepareMermaidArtifacts = (
       sources.push(source);
     }
   }
+  return sources;
+};
+
+export const prepareMermaidArtifacts = (
+  tree: MarkdownRoot,
+): ReadonlyMap<string, MermaidRenderResult> => {
+  const sources = renderableMermaidSources(tree);
   const rendered = renderMermaidSources(sources.map((source) => ({ source })));
+  return requestArtifactsFor({ sources, rendered });
+};
+
+/** Retains one complete render result set independently of shared-cache eviction. */
+const requestArtifactsFor = ({
+  sources,
+  rendered,
+}: {
+  readonly sources: ReadonlyArray<string>;
+  readonly rendered: ReadonlyArray<MermaidRenderResult>;
+}): ReadonlyMap<string, MermaidRenderResult> => {
+  if (sources.length !== rendered.length) {
+    throw new Error("Mermaid rendering returned an incomplete artifact set");
+  }
   return new Map(
-    sources.map((source, index) => [
-      source,
-      rendered[index] as MermaidRenderResult,
-    ]),
+    sources.map((source, index) => {
+      const artifact = rendered[index];
+      if (artifact === undefined) {
+        throw new Error("Mermaid rendering omitted an artifact");
+      }
+      return [source, artifact];
+    }),
   );
+};
+
+/**
+ * Renders one plan tree's diagrams off the event loop and returns the complete
+ * request-local artifact set. The shared cache remains a bounded optimization;
+ * eviction can never force the caller's following compile back onto Chromium.
+ *
+ * This is how the review runtime keeps its heartbeat alive through a legitimate
+ * render: it warms here, on the async path, then passes these artifacts into
+ * the synchronous compiler. Renderer failures propagate to the caller.
+ */
+export const warmMermaidArtifacts = async (
+  tree: MarkdownRoot,
+  { cache = sharedMermaidRenderCache }: MermaidRenderOptions = {},
+): Promise<ReadonlyMap<string, MermaidRenderResult>> => {
+  const allSources = renderableMermaidSources(tree);
+  const rendered = await renderMermaidSourcesAsync(
+    allSources.map((source) => ({ source })),
+    { cache },
+  );
+  return requestArtifactsFor({ sources: allSources, rendered });
 };

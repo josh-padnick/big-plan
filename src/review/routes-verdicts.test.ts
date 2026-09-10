@@ -47,7 +47,7 @@ describe("recordChangeVerdicts", () => {
       writeSnapshot({ store, snapshot: from, source: baseline }),
       writeSnapshot({ store, snapshot: to, source: proposed }),
     ]);
-    const [placeId] = changedPlaceIds({
+    const [placeId] = await changedPlaceIds({
       baselineSource: baseline,
       proposedSource: proposed,
       from,
@@ -130,7 +130,7 @@ describe("recordChangeVerdicts", () => {
       writeSnapshot({ store, snapshot: from, source: baseline }),
       writeSnapshot({ store, snapshot: to, source: proposed }),
     ]);
-    const [placeId] = changedPlaceIds({
+    const [placeId] = await changedPlaceIds({
       baselineSource: baseline,
       proposedSource: proposed,
       from,
@@ -228,7 +228,7 @@ describe("recordChangeVerdicts", () => {
       writeSnapshot({ store, snapshot: from, source: baseline }),
       writeSnapshot({ store, snapshot: to, source: proposed }),
     ]);
-    const placeIds = changedPlaceIds({
+    const placeIds = await changedPlaceIds({
       baselineSource: baseline,
       proposedSource: proposed,
       from,
@@ -433,7 +433,7 @@ describe("recordChangeVerdicts ownership", () => {
       readerProgress: { accept: () => undefined },
     } as unknown as ReviewRouteContext;
 
-    const owned = changedPlaceIds({
+    const owned = await changedPlaceIds({
       baselineSource: baseline,
       proposedSource: proposed,
       from,

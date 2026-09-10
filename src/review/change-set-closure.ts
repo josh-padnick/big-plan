@@ -9,7 +9,7 @@
 // so nothing can grow a second way to record an acceptance.
 
 import { basename, extname } from "node:path";
-import { renderDocument } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import {
   applyChangeVerdictMutation,
   updateStoredChangeVerdicts,
@@ -73,16 +73,18 @@ export const transactionSnapshotDiff = async ({
     readSnapshot({ store, snapshot: from }),
     readSnapshot({ store, snapshot: to }),
   ]);
-  const before = renderDocument({
-    markdown: beforeSource,
-    fallbackTitle,
-    identity: {},
-  });
-  const after = renderDocument({
-    markdown: afterSource,
-    fallbackTitle,
-    identity: {},
-  });
+  const [before, after] = await Promise.all([
+    renderReviewDocument({
+      markdown: beforeSource,
+      fallbackTitle,
+      identity: {},
+    }),
+    renderReviewDocument({
+      markdown: afterSource,
+      fallbackTitle,
+      identity: {},
+    }),
+  ]);
   const ownership = await readChangeOwnership({
     store,
     sessionId,

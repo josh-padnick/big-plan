@@ -43,6 +43,7 @@ import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 import {
   MERMAID_FONT_CSS,
   prepareMermaidArtifacts,
+  warmMermaidArtifacts,
 } from "../../components/mermaid-diagram/renderer.js";
 import type { DocumentOutline } from "../../components/_model/document-outline/document-outline.js";
 
@@ -453,10 +454,16 @@ const compileMarkdownTree = ({
  */
 export const compileMarkdown = ({
   markdown,
+  renderArtifacts,
 }: {
   readonly markdown: string;
+  readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): CompiledMarkdown =>
-  compileMarkdownTree({ markdown, materializeNestedModels: false });
+  compileMarkdownTree({
+    markdown,
+    materializeNestedModels: false,
+    ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
+  });
 
 /**
  * Compiles Markdown for machine delivery, where a component's model has to
@@ -469,3 +476,29 @@ export const compileMarkdownModel = ({
   readonly markdown: string;
 }): CompiledMarkdown =>
   compileMarkdownTree({ markdown, materializeNestedModels: true });
+
+/**
+ * Renders one plan's Mermaid diagrams off the event loop and returns the
+ * complete request-local artifact set for the following synchronous compile.
+ *
+ * A live review runtime calls this before it serves or diffs a source, so the
+ * request path never blocks the heartbeat on a Chromium launch, even when the
+ * bounded shared cache evicts an artifact. A source that cannot be parsed
+ * leaves the cache untouched; renderer failures propagate to the caller.
+ */
+export const warmMarkdownRenderCache = async ({
+  markdown,
+}: {
+  readonly markdown: string;
+}): Promise<ReadonlyMap<string, unknown> | undefined> => {
+  let parsed: MarkdownRoot;
+  try {
+    parsed = parseValidatedPlan({
+      markdown,
+      diagnostics: createDiagnosticCollector(),
+    });
+  } catch {
+    return undefined;
+  }
+  return warmMermaidArtifacts(parsed);
+};

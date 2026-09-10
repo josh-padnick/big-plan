@@ -101,22 +101,22 @@ Two workers drain the queue every two seconds.
 `;
 
 describe("restoreRejectedPlaces", () => {
-  it("returns the proposed revision untouched when nothing is rejected", () => {
-    expect(
+  it("returns the proposed revision untouched when nothing is rejected", async () => {
+    await expect(
       restore({
         baselineSource: BASELINE,
         proposedSource: PROPOSED,
         placeIds: [],
       }),
-    ).toBe(PROPOSED);
+    ).resolves.toBe(PROPOSED);
   });
 
-  it("puts one change back to the baseline bytes and leaves the other alone", () => {
+  it("puts one change back to the baseline bytes and leaves the other alone", async () => {
     const places = placesOf({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
     });
-    const restored = restore({
+    const restored = await restore({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
       placeIds: [placeLabelled(places, "durable")],
@@ -131,21 +131,21 @@ describe("restoreRejectedPlaces", () => {
   // The whole point of deriving the source from the rejected set: a reviewer
   // who rejects both changes lands on the thread's baseline exactly, and one
   // who then undoes both lands back on the agent's proposal exactly.
-  it("lands on the baseline when every change is rejected", () => {
+  it("lands on the baseline when every change is rejected", async () => {
     const places = placesOf({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
     });
-    expect(
+    await expect(
       restore({
         baselineSource: BASELINE,
         proposedSource: PROPOSED,
         placeIds: places.map((place) => place.placeId),
       }),
-    ).toBe(BASELINE);
+    ).resolves.toBe(BASELINE);
   });
 
-  it("restores only the deleting thread's owned bytes", () => {
+  it("restores only the deleting thread's owned bytes", async () => {
     const before = renderDocument({
       markdown: BASELINE,
       fallbackTitle: TITLE,
@@ -176,7 +176,7 @@ describe("restoreRejectedPlaces", () => {
       diff,
       changeSetId: "aaaa",
     });
-    const restored = restoreRejectedPlaces({
+    const restored = await restoreRejectedPlaces({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
       from: FROM,
@@ -193,18 +193,18 @@ describe("restoreRejectedPlaces", () => {
     expect(threadA.placeIds).toHaveLength(1);
   });
 
-  it("re-derives the same bytes whichever order the rejections arrived in", () => {
+  it("re-derives the same bytes whichever order the rejections arrived in", async () => {
     const places = placesOf({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
     });
     const ids = places.map((place) => place.placeId);
-    const forward = restore({
+    const forward = await restore({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
       placeIds: ids,
     });
-    const backward = restore({
+    const backward = await restore({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
       placeIds: [...ids].reverse(),
@@ -214,7 +214,7 @@ describe("restoreRejectedPlaces", () => {
 
   // Undo is the same derivation with the place taken out of the set, so a
   // rejection followed by its undo has to leave no trace at all.
-  it("undoes a rejection back to the exact proposed bytes", () => {
+  it("undoes a rejection back to the exact proposed bytes", async () => {
     const places = placesOf({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
@@ -223,29 +223,28 @@ describe("restoreRejectedPlaces", () => {
     const others = places
       .map((place) => place.placeId)
       .filter((placeId) => placeId !== rejected);
-    expect(
-      restore({
-        baselineSource: BASELINE,
-        proposedSource: PROPOSED,
-        placeIds: others,
-      }),
-    ).toBe(
-      restore({
+    const restored = await restore({
+      baselineSource: BASELINE,
+      proposedSource: PROPOSED,
+      placeIds: others,
+    });
+    expect(restored).toBe(
+      await restore({
         baselineSource: BASELINE,
         proposedSource: PROPOSED,
         placeIds: others,
       }),
     );
-    expect(
+    await expect(
       restore({
         baselineSource: BASELINE,
         proposedSource: PROPOSED,
         placeIds: [],
       }),
-    ).toBe(PROPOSED);
+    ).resolves.toBe(PROPOSED);
   });
 
-  it("takes back a paragraph the agent added without disturbing its neighbours", () => {
+  it("takes back a paragraph the agent added without disturbing its neighbours", async () => {
     const proposed = `# Retry the failed checkout
 
 ## The retry queue
@@ -264,16 +263,16 @@ One worker drains the queue every ten seconds.
       baselineSource: BASELINE,
       proposedSource: proposed,
     });
-    expect(
+    await expect(
       restore({
         baselineSource: BASELINE,
         proposedSource: proposed,
         placeIds: places.map((place) => place.placeId),
       }),
-    ).toBe(BASELINE);
+    ).resolves.toBe(BASELINE);
   });
 
-  it("puts back a paragraph the agent removed", () => {
+  it("puts back a paragraph the agent removed", async () => {
     const proposed = `# Retry the failed checkout
 
 ## The retry queue
@@ -288,18 +287,18 @@ One worker drains the queue every ten seconds.
       baselineSource: BASELINE,
       proposedSource: proposed,
     });
-    expect(
+    await expect(
       restore({
         baselineSource: BASELINE,
         proposedSource: proposed,
         placeIds: places.map((place) => place.placeId),
       }),
-    ).toBe(BASELINE);
+    ).resolves.toBe(BASELINE);
   });
 
   // A component is one authored node, so rejecting it puts the whole component
   // back rather than reaching into markup the author never split.
-  it("puts a whole component back when its change is rejected", () => {
+  it("puts a whole component back when its change is rejected", async () => {
     const baseline = `# Skill distribution
 
 ## The channel
@@ -328,18 +327,18 @@ The installer runs offline.
       baselineSource: baseline,
       proposedSource: proposed,
     });
-    expect(
+    await expect(
       restore({
         baselineSource: baseline,
         proposedSource: proposed,
         placeIds: places.map((place) => place.placeId),
       }),
-    ).toBe(baseline);
+    ).resolves.toBe(baseline);
   });
 
   // The two changes sit in different authored nodes, one of them a component,
   // so deciding them apart has to leave the other node byte-identical.
-  it("leaves a component alone when a change beside it is rejected", () => {
+  it("leaves a component alone when a change beside it is rejected", async () => {
     const baseline = `# Skill distribution
 
 ## The channel
@@ -368,7 +367,7 @@ The installer needs the network.
       baselineSource: baseline,
       proposedSource: proposed,
     });
-    const restored = restore({
+    const restored = await restore({
       baselineSource: baseline,
       proposedSource: proposed,
       placeIds: [placeLabelled(places, "installer")],
@@ -378,26 +377,26 @@ The installer needs the network.
     expect(restored).not.toContain("needs the network");
   });
 
-  it("refuses a place the agent's proposal does not contain", () => {
-    expect(() =>
+  it("refuses a place the agent's proposal does not contain", async () => {
+    await expect(
       restore({
         baselineSource: BASELINE,
         proposedSource: PROPOSED,
         placeIds: ["not-a-place"],
       }),
-    ).toThrow(ChangeRestoreRejected);
+    ).rejects.toThrow(ChangeRestoreRejected);
   });
 
   // Nothing changed at all, so there is no authored source to put back and no
   // honest answer to give: refusing is the only one that does not write bytes
   // on a guess.
-  it("refuses when the two revisions hold the same source", () => {
-    expect(() =>
+  it("refuses when the two revisions hold the same source", async () => {
+    await expect(
       restore({
         baselineSource: BASELINE,
         proposedSource: BASELINE,
         placeIds: ["anything"],
       }),
-    ).toThrow(ChangeRestoreRejected);
+    ).rejects.toThrow(ChangeRestoreRejected);
   });
 });

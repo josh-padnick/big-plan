@@ -7,7 +7,8 @@ import { readFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { lintPlan } from "../lint/lint-plan.js";
-import { renderDocument } from "../render/render-document.js";
+import type { RenderedDocument } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import { OPERATOR_AGENT_PROMPT } from "./agent-prompt.generated.js";
 import {
   AgentExchangeRejected,
@@ -1725,7 +1726,7 @@ const respond = async ({
   }
   const publishes = request.kind !== "approval";
   let prepared: PreparedPlanAssets = { source: candidate, assets: [] };
-  let rendered: ReturnType<typeof renderDocument> | undefined;
+  let rendered: RenderedDocument | undefined;
   if (publishes) {
     // Everything expensive happens before the commit takes its lock, and the
     // candidate is compiled as if it already sat at the canonical plan
@@ -1742,7 +1743,7 @@ const respond = async ({
       );
     }
     try {
-      rendered = renderDocument({
+      rendered = await renderReviewDocument({
         markdown: prepared.source,
         fallbackTitle: basename(session.planPath, extname(session.planPath)),
         identity: {},
@@ -1760,13 +1761,13 @@ const respond = async ({
   });
   const changedBlocks = new Set<string>();
   if (rendered !== undefined) {
-    let previousRendered: ReturnType<typeof renderDocument>;
+    let previousRendered: RenderedDocument;
     try {
       const previousMarkdown = await readSnapshot({
         store: session.store,
         snapshot: requestBaselineSnapshot(request),
       });
-      previousRendered = renderDocument({
+      previousRendered = await renderReviewDocument({
         markdown: previousMarkdown,
         fallbackTitle: basename(session.planPath, extname(session.planPath)),
         identity: {},

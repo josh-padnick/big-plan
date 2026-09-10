@@ -12,6 +12,11 @@ import {
   compileMarkdownModel,
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
+// Warming renders a source's diagrams off the event loop and returns the
+// request-local artifacts consumed by the synchronous render below. A live
+// review runtime uses it to keep its heartbeat alive across a legitimate
+// render (BIG-300).
+export { warmMarkdownRenderCache } from "./markdown/compile-markdown.js";
 export type { BlockDescriptor } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
 import { derivePlanId } from "./plan-id.js";
@@ -115,6 +120,7 @@ export const renderDocument = ({
   planPath,
   identity,
   approval,
+  renderArtifacts,
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
@@ -128,8 +134,12 @@ export const renderDocument = ({
   // matches what that approval pinned, and nothing otherwise. A served review
   // leaves it out: its island owns the stamp.
   readonly approval?: ApprovalDecoration;
+  readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): RenderedDocument => {
-  const compiled = compileMarkdown({ markdown });
+  const compiled = compileMarkdown({
+    markdown,
+    ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
+  });
   const resolvedIdentity =
     identity ??
     (planPath === undefined

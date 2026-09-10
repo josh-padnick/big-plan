@@ -10,7 +10,11 @@
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
-import { renderDocument } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
+import type {
+  DocumentIdentity,
+  RenderedDocument,
+} from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
   CommentRejected,
@@ -431,6 +435,20 @@ export const createPlanRenderer = ({
   ): Promise<ReadonlyArray<ReviewComment>> =>
     readComments({ path, validate: validateStored });
 
+  const renderMarkdown = async ({
+    markdown,
+    identity,
+  }: {
+    readonly markdown: string;
+    readonly identity?: DocumentIdentity;
+  }): Promise<RenderedDocument> => {
+    return renderReviewDocument({
+      markdown,
+      fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+      ...(identity === undefined ? {} : { identity }),
+    });
+  };
+
   /**
    * Validates one batch of reviewer comments against what is already stored.
    *
@@ -452,9 +470,8 @@ export const createPlanRenderer = ({
       }
       try {
         const markdown = await readSnapshot({ store: readStore, snapshot });
-        const rendered = renderDocument({
+        const rendered = await renderMarkdown({
           markdown,
-          fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
         });
         snapshots.set(
           snapshot,
@@ -505,9 +522,8 @@ export const createPlanRenderer = ({
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
     if (blockMapMarkdown !== markdown) {
-      const blockMapRender = renderDocument({
+      const blockMapRender = await renderMarkdown({
         markdown,
-        fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
         identity: { planId, reviewSessionId: sessionId, reviewToken: token },
       });
       blocks.clear();
@@ -516,16 +532,17 @@ export const createPlanRenderer = ({
       }
       blockMapMarkdown = markdown;
     }
-    return renderDocument({
-      markdown,
-      fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-      identity: {
-        planId,
-        reviewSessionId: sessionId,
-        reviewToken: token,
-        reviewBootstrap: await readBootstrap(markdown),
-      },
-    }).html;
+    return (
+      await renderMarkdown({
+        markdown,
+        identity: {
+          planId,
+          reviewSessionId: sessionId,
+          reviewToken: token,
+          reviewBootstrap: await readBootstrap(markdown),
+        },
+      })
+    ).html;
   };
 
   return { renderPlan, readStoredComments, validateUpdates };

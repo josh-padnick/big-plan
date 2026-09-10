@@ -45,7 +45,7 @@ import {
 } from "./change-set-commit.js";
 import { readChangeOwnership } from "./change-ownership.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
-import { renderDocument } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import { carryForwardChangeVerdicts } from "./change-carry-forward.js";
 import { settlementRefusal } from "./review-route-settlement.js";
 import { deriveSnapshotDigest } from "./agent-exchange.js";
@@ -107,7 +107,7 @@ const reconcilePlanSource = async ({
       to,
     }),
   ]);
-  const restored = (placeIds: ReadonlyArray<string>): string =>
+  const restored = (placeIds: ReadonlyArray<string>): Promise<string> =>
     restoreRejectedPlaces({
       baselineSource,
       proposedSource,
@@ -117,8 +117,10 @@ const reconcilePlanSource = async ({
       fallbackTitle,
       ...(ownership === undefined ? {} : { ownership }),
     });
-  const expectedSource = restored(before);
-  const nextSource = restored(after);
+  const [expectedSource, nextSource] = await Promise.all([
+    restored(before),
+    restored(after),
+  ]);
   if (expectedSource === nextSource) return;
   const currentSource = await readFile(resolvedPlanPath, "utf8");
   if (currentSource === nextSource) return;
@@ -206,7 +208,7 @@ const reconcileRecordedRejections = async ({
       }),
     ]);
     const rejected = rejectedPlaceIdsFor({ verdicts, from, to });
-    const restored = (placeIds: ReadonlyArray<string>): string =>
+    const restored = (placeIds: ReadonlyArray<string>): Promise<string> =>
       restoreRejectedPlaces({
         baselineSource,
         proposedSource,
@@ -216,10 +218,10 @@ const reconcileRecordedRejections = async ({
         fallbackTitle,
         ...(ownership === undefined ? {} : { ownership }),
       });
-    const intendedSource = restored(rejected);
+    const intendedSource = await restored(rejected);
     if (currentSource === intendedSource) return;
     const rejectedSet = new Set(rejected);
-    const places = changedPlaceIds({
+    const places = await changedPlaceIds({
       baselineSource,
       proposedSource,
       from,
@@ -233,7 +235,7 @@ const reconcileRecordedRejections = async ({
         ? rejected.filter((candidate) => candidate !== placeId)
         : [...rejected, placeId];
       try {
-        if (restored(neighbor) === currentSource) {
+        if ((await restored(neighbor)) === currentSource) {
           matchingNeighbors += 1;
         }
       } catch (error: unknown) {
@@ -447,13 +449,15 @@ const refuseForeignPlaces = async ({
     );
   }
   const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
-  const blocksOf = (markdown: string) =>
-    renderDocument({ markdown, fallbackTitle, identity: {} }).blocks;
+  const [beforeRender, afterRender] = await Promise.all([
+    renderReviewDocument({ markdown: before, fallbackTitle, identity: {} }),
+    renderReviewDocument({ markdown: after, fallbackTitle, identity: {} }),
+  ]);
   const diff = buildSnapshotDiff({
     from: mutation.from,
     to: mutation.to,
-    before: blocksOf(before),
-    after: blocksOf(after),
+    before: beforeRender.blocks,
+    after: afterRender.blocks,
     ownership,
   });
   const placesById = new Map(

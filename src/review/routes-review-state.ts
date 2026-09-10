@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
-import { renderDocument } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import { jsonResponse, payloadOf, refusal } from "./review-route-context.js";
 import type {
   ReviewRouteContext,
@@ -674,7 +674,7 @@ export const revertAgentChanges = async (
       reason: "The response baseline is no longer available",
     });
   }
-  renderDocument({
+  await renderReviewDocument({
     markdown: baselineSource,
     fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
     identity: {},
