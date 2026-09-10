@@ -2,7 +2,7 @@
 
 A dataset the reviewer queries - sortable columns, an optional filter, selectable columns, and text that wraps instead of scrolling off the page.
 
-- Default to a plain markdown table. Reach for `DataTable` when the grid runs past roughly ten rows, carries more than four columns, would scroll sideways as prose, or is a reference the reviewer returns to. A prose table cannot wrap, sort, or filter; that is the whole difference.
+- Default to a plain markdown table. Big Plan gives it reader controls for sorting, filtering, column visibility and order, text fit, reset, and maximize without changing the authored Markdown. Reach for `DataTable` when the author also needs a title, an explicit opening sort, typed columns, grouping, or a summary row.
 - The body is one fenced block with language `table` holding an ordinary GFM pipe grid, so a markdown table that outgrew itself is wrapped, not rewritten. The delimiter row's colons still set alignment.
 - Add `filter` only when the table is long enough that the reviewer will hunt a row. On a short table the search box is chrome that earns nothing.
 - Declare `<Column name="..." />` only to override a default: `type="number"` or `type="date"` for a correct comparator, `align`, `sort="asc"` on at most one column for the opening order, and `fit` when one column should behave differently from the rest.

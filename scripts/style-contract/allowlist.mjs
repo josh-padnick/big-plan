@@ -61,7 +61,10 @@ export const STYLESHEET_BUDGETS = {
   "src/components/data-table/styles.css": {
     // Bought so the last visible data row yields its lower edge to the
     // summary row's stronger divider, including an empty filtered result.
-    declarations: 82,
+    // The reader's per-column fit toggle needs hover, focus, selected, and
+    // reduced-motion treatment; maximized tables override resting fit choices
+    // so ordinary content wraps within the viewport.
+    declarations: 95,
   },
   "src/components/database-table-schema/styles.css": { declarations: 47 },
   "src/components/flow-diagram/styles.css": { declarations: 467 },

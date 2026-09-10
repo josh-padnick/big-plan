@@ -249,15 +249,21 @@ const installColumnPointerReorder = ({
         return;
       const pointerTarget =
         event.target instanceof Element ? event.target : head;
+      const interactiveTarget = pointerTarget.closest(
+        "a, button, input, select, textarea, [contenteditable]",
+      );
+      const headerControl = pointerTarget.closest(
+        "[data-table-sort], [data-table-column-fit-toggle]",
+      );
       if (
-        pointerTarget.closest(
-          "a, button, input, select, textarea, [contenteditable]",
-        ) !== null
+        interactiveTarget !== null &&
+        headerControl === null
       )
         return;
+      const captureTarget = headerControl ?? head;
       activeColumnReorder = {
         head,
-        captureTarget: head,
+        captureTarget,
         heads,
         columnOf,
         onDrop,
