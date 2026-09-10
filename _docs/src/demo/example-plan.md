@@ -38,9 +38,12 @@ export const checkLimit = async ({
   redis,
   apiKey,
   limit,
+  burst,
   windowSeconds,
 }: CheckLimitArgs): Promise<LimitResult> => {
-  const now = Date.now();
+  const [seconds, microseconds] = await redis.time();
+  const now =
+    Number(seconds) * 1_000 + Math.floor(Number(microseconds) / 1_000);
   const windowStart = now - windowSeconds * 1_000;
   const key = `rl:${apiKey}`;
 
@@ -52,11 +55,16 @@ export const checkLimit = async ({
     .expire(key, windowSeconds)
     .exec();
 
-  return { allowed: count <= limit, remaining: Math.max(0, limit - count) };
+  const capacity = limit + burst;
+  return {
+    allowed: count <= capacity,
+    remaining: Math.max(0, capacity - count),
+  };
 };
 ```
 
-Limits are read from the existing `api_keys` row so plans can differ per customer:
+Limits are read from the existing `api_keys` row so plans can differ per customer.
+The middleware passes `rate_limit_per_minute` as `limit`, `rate_limit_burst` as `burst`, and a 60-second window to `checkLimit`:
 
 ```sql
 ALTER TABLE api_keys

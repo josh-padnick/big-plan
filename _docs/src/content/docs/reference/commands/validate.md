@@ -45,9 +45,12 @@ It writes no output.
 
 | Code                | Raised when                                                                                                                                        | Exit |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `GUIDANCE_REQUIRED` | Guidance has not been read for this working directory in the last 24 hours                                                                         | 2    |
+| `GUIDANCE_REQUIRED` | A current guidance acknowledgment cannot be verified for this working directory and a state directory is writable                                  | 2    |
 | `VALIDATION_ERROR`  | The input argument is missing, a second positional argument is present, an option is unknown, the MDX is invalid, or the plan fails authoring lint | 2    |
 | `INPUT_NOT_FOUND`   | The input cannot be read; the message carries the resolved absolute path                                                                           | 1    |
+
+If no state directory is writable, `validate` continues with a warning that guidance acknowledgment could not be verified.
+Run `big-plan guidance` and follow its principles, or set `BIG_PLAN_STATE_DIR` to a writable directory to restore the gate.
 
 ## Troubleshooting
 

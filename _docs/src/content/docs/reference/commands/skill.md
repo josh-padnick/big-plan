@@ -31,8 +31,8 @@ Overwriting an existing file at that path is allowed only because `write` was ex
 
 After a package upgrade, new guidance is available immediately via `big-plan guidance`.
 Re-run `skill write` only when the thin shell itself changed.
-Prefer `npx -y big-plan@latest` for always-current one-off runs; it executes the registry's current
-release with your privileges, so use an exact reviewed version when your environment requires one.
+Use your installed `big-plan` command to keep the package version consistent across a review.
+For a one-off run, select an exact package version you have reviewed; avoid a moving registry tag.
 See [Use the skill](/for-agents/) for the full update-propagation story.
 
 ## Result
@@ -57,9 +57,7 @@ See [Use the skill](/for-agents/) for the full update-propagation story.
   explicit. Inspect a destination before replacing it; there is no silent overwrite of a skill
   directory.
 - **The skill text is older than the docs.** The shell is embedded in the package from
-  `assets/skill/SKILL.md`, so it matches your installed CLI version. Upgrade, or use
-  `npx -y big-plan@latest`, which executes the registry's current release with your privileges;
-  use an exact reviewed version when your environment requires one.
+  `assets/skill/SKILL.md`, so it matches your installed CLI version. Upgrade deliberately to a reviewed package version before refreshing the skill.
 - **You upgraded and wonder whether to reinstall.** New authoring guidance arrives through
   `big-plan guidance` immediately. Re-run `skill write` only when the thin shell itself changed.
 

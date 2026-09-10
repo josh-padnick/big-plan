@@ -59,6 +59,8 @@ A queue worker owns retries end to end.
 *What the queue worker does on every attempt.*
 
 - Claims due schedules with explicit state per attempt.
+- Persists an idempotency key for each logical capture before its first processor call and reuses that key for every retry.
+- Reconciles in-flight or unknown attempts with the processor before replay; a confirmed capture is recorded as complete, while an unresolved outcome stays pending.
 - Applies bounded backoff, so a stuck capture never retries forever.
 
 ### The audit trail
@@ -83,4 +85,5 @@ A queue worker owns retries end to end.
 ## Restarts preserve scheduled retries
 
 - A failed capture is retried on schedule after an API-server restart.
+- If the processor captures successfully and the API server restarts before recording the result, recovery reconciles that capture without issuing a duplicate.
 - Operators can pause, force, and cancel retries per merchant.

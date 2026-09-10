@@ -7,7 +7,7 @@ description: Review, revise, and approve a plan through the local runtime.
 rendered blocks and hand the staged set to the agent.
 
 ```sh
-npx -y big-plan@latest review plans/checkout-retry.mdx
+big-plan review plans/checkout-retry.mdx
 ```
 
 By default, the command prints a stable `http://127.0.0.1:8790/plan/<plan-id>` address and keeps running.
@@ -27,6 +27,9 @@ If it does have unsaved input, Refresh stays disabled and the page asks you to k
 It does not say why contact was lost, because a page that has lost contact cannot tell an idle expiry from a runtime someone stopped, or from one that is still serving another tab.
 For the same reason it never tells you to start a new review runtime; the command is the only place that decides whether starting or taking over a runtime is allowed, and it answers that question for you.
 When a newer review session for that plan was recorded before contact was lost, the page also links to it as **Open latest review**.
+
+The examples use your installed CLI version.
+See [Installation](/intro/installation/) to choose or update that version deliberately.
 
 ## The link worth saving
 
@@ -56,7 +59,7 @@ holds the address for the replacement runtime and includes the command that
 starts the review again there.
 
 The address is answered by a small local process described in
-[the CLI reference](/reference/cli/#big-plan-service); `big-plan service status`
+[the CLI reference](/reference/commands/service/); `big-plan service status`
 reports on it and `big-plan service stop` stops it. When it cannot run, the
 command explains why and falls back to the direct session address.
 
@@ -74,7 +77,7 @@ Two `big-plan review` commands started at the same instant resolve the same way:
 Pass `--takeover` to replace a live session deliberately, for example when its terminal is gone but the process is still running:
 
 ```sh
-npx -y big-plan@latest review plans/checkout-retry.mdx --takeover
+big-plan review plans/checkout-retry.mdx --takeover
 ```
 
 The replaced runtime keeps listening but loses write custody.
@@ -302,7 +305,7 @@ version control. Feedback packages and their Markdown briefs live under
 Keep the review runtime open, then run this in the plan repository:
 
 ```sh
-npx -y big-plan@latest agent plans/checkout-retry.mdx
+big-plan agent plans/checkout-retry.mdx
 ```
 
 Start either pasteable command it returns. That coding-agent session waits for
@@ -386,7 +389,7 @@ The [agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/m
 
 A connected agent may declare its model, its reasoning effort, its client, and
 its own conversation, each optional and independent of the others, by exporting
-the environment variables the [CLI reference](/reference/cli/) lists for
+the environment variables the [CLI reference](/reference/configuration/) lists for
 `big-plan agent` in the session it was launched in.
 
 **Agent Status** writes model, effort, and client as one identity line, each
@@ -415,7 +418,7 @@ change to that table rather than a change to what a connector may declare.
 Model ids are looked up, never rewritten. A known id prints the name its vendor
 writes - `grok-4.6` shows as `Grok 4.6` - and uses that vendor's own logo. An id
 Big Plan does not hold prints exactly as declared after the [CLI
-reference's](/reference/cli/) documented input cleanup, and shows a logo only
+reference's](/reference/configuration/) documented input cleanup, and shows a logo only
 where Big Plan holds a mark faithful to the vendor's published one, so a different
 GPT-named model such as EleutherAI's GPT-J neither borrows the OpenAI logo nor
 stands behind a generic one.
@@ -516,7 +519,7 @@ The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed rout
 It checks the `Host` header on every request and refuses any value outside a short allow-list: its own address and the review-link service's, so the service hop can reach it while a rebound name still cannot.
 
 The service that answers saved links is a separate process on its own stable loopback port, holding no review content. It forwards requests to this runtime by default, while `BIG_PLAN_PROXY=0` restores the redirect, without rewriting the browser's `Host`, `Origin`, or `Sec-Fetch-Site` headers. Either way every check below still happens here.
-[The CLI reference](/reference/cli/#big-plan-service) owns what that process stores and how to stop it.
+[The CLI reference](/reference/commands/service/) owns what that process stores and how to stop it.
 
 Three types of read-only GET request do not use the review token, `Origin`, or `Sec-Fetch-Site` checks:
 
