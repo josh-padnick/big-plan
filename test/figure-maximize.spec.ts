@@ -475,12 +475,7 @@ test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maxi
   }
 });
 
-// Quarantined as known-flaky under parallel load: the copied chrome reverts on
-// a fixed 1.5s timer in the viewer script, and under heavy contention that timer
-// is starved past the assertion window - a synthetic-over-load timing artifact,
-// out of BIG-305 incident scope. Tracked by follow-up bp-big305-figure478-flake;
-// un-quarantine when it lands.
-test.fixme("should morph every figure copy control without shifting its toolbar", async ({
+test("should morph every figure copy control without shifting its toolbar", async ({
   page,
   allComponentsViewerUrl,
 }) => {
@@ -490,6 +485,7 @@ test.fixme("should morph every figure copy control without shifting its toolbar"
       value: { writeText: async () => {} },
     });
   });
+  await page.clock.install();
   await page.goto(allComponentsViewerUrl);
 
   for (const theme of ["light", "dark"]) {
@@ -535,6 +531,10 @@ test.fixme("should morph every figure copy control without shifting its toolbar"
       expect(after?.x).toBe(before?.x);
       expect(after?.width).toBe(before?.width);
       expect(after?.height).toBe(before?.height);
+      // The copied state is explicitly timer-owned. Advance browser time to
+      // that public transition instead of making runner scheduling part of the
+      // assertion.
+      await page.clock.fastForward(1_500);
       await expect(copy).not.toHaveAttribute("data-copy-state");
       await expect(copy).toHaveAccessibleName(/Copy/);
       await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
