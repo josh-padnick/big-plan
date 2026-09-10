@@ -326,6 +326,7 @@ import {
 } from "./ui.browser.js";
 import { announcedSettleBlockIds, morphPlanDom } from "./plan-dom.browser.js";
 import { seedPlanMorphBaseline } from "./plan-morph.browser.js";
+import { keepRestored } from "./swap-restore.browser.js";
 // The composer's chord is named once, so no surface can tell the reader to
 // press a key that does nothing there.
 import {
@@ -6316,6 +6317,7 @@ export const ReviewController = () => {
       return;
     }
     let current = true;
+    let cancelScrollRestore: (() => void) | undefined;
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
     void fetch(window.location.href, { credentials: "same-origin" })
@@ -6349,13 +6351,21 @@ export const ReviewController = () => {
         }
         setDisplayedSnapshot(agent.currentSnapshot);
         setPlanMorphBaselineSnapshot(agent.currentSnapshot);
-        window.scrollTo({ left: scrollX, top: scrollY });
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            window.scrollTo({ left: scrollX, top: scrollY });
+        // The swap owns the scroll position, and re-pins it across the settle
+        // window instead of on a fixed frame: the re-renders the swap sets off
+        // can move it after that frame on a loaded machine, and scroll
+        // anchoring stays off until the re-pin is done so the browser cannot
+        // compensate the reader away from where they were. It yields the moment
+        // the reader scrolls for themselves.
+        cancelScrollRestore = keepRestored({
+          view: window,
+          restore: () => window.scrollTo({ left: scrollX, top: scrollY }),
+          isSettled: () =>
+            window.scrollX === scrollX && window.scrollY === scrollY,
+          onStop: () => {
             scrollingElement.style.overflowAnchor = previousOverflowAnchor;
-          }),
-        );
+          },
+        });
       })
       .catch((error: unknown) => {
         if (!current) return;
@@ -6366,6 +6376,7 @@ export const ReviewController = () => {
       });
     return () => {
       current = false;
+      cancelScrollRestore?.();
     };
   }, [
     agent.currentSnapshot,
