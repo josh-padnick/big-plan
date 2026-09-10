@@ -179,7 +179,7 @@ const restoreSelection = (
   }
 };
 
-/** Restores once more if the selection-control render clears the new range. */
+/** Restores after the selection-control's concurrent render settles. */
 const preserveSelectionThroughRender = (
   captured: CapturedSelection | null,
   replacements: ReadonlyMap<string, Element>,
@@ -191,21 +191,23 @@ const preserveSelectionThroughRender = (
   if (captured === null) return;
   if (view !== null && scroll !== null) view.scrollTo(scroll);
   view?.requestAnimationFrame(() =>
-    view.requestAnimationFrame(() => {
-      const selection = view.getSelection();
-      if (
-        selection !== null &&
-        !selection.isCollapsed &&
-        selection.anchorNode?.isConnected === true &&
-        selection.focusNode?.isConnected === true
-      ) {
-        return;
-      }
-      const left = view.scrollX;
-      const top = view.scrollY;
-      restoreSelection(captured, replacements);
-      view.scrollTo({ left, top });
-    }),
+    view.requestAnimationFrame(() =>
+      view.requestAnimationFrame(() => {
+        const selection = view.getSelection();
+        if (
+          selection !== null &&
+          !selection.isCollapsed &&
+          selection.anchorNode?.isConnected === true &&
+          selection.focusNode?.isConnected === true
+        ) {
+          return;
+        }
+        const left = view.scrollX;
+        const top = view.scrollY;
+        restoreSelection(captured, replacements);
+        view.scrollTo({ left, top });
+      }),
+    ),
   );
 };
 

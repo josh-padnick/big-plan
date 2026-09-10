@@ -3987,9 +3987,21 @@ test("should restore and submit staged comments through the local review runtime
   );
   expect(agentStatusWidth).toBeGreaterThan(0);
 
-  await stageComment(page, "Clarify the failure boundary.");
-  await stageComment(page, "Name the operator recovery path.");
-  await stageComment(page, "Remove this queued comment before pickup.");
+  // Keep each optimistic runtime version causal before creating the next
+  // draft; otherwise a slow CI worker can make the later write legitimately
+  // collide with the earlier one and exercise recovery instead of restore.
+  const stagePersistedComment = async (body: string): Promise<void> => {
+    const persisted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
+    await stageComment(page, body);
+    expect((await persisted).ok()).toBe(true);
+  };
+  await stagePersistedComment("Clarify the failure boundary.");
+  await stagePersistedComment("Name the operator recovery path.");
+  await stagePersistedComment("Remove this queued comment before pickup.");
 
   const slide = page.locator("[data-slide]").first();
   await slide.hover();
