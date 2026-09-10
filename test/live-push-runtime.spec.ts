@@ -1398,6 +1398,10 @@ test("should queue review-mode changes while writes are unavailable", async ({
   const runtime = await startReviewRuntime({ planPath });
   let authoritative = true;
   let modeRequests = 0;
+  let releaseFirstModeResponse: (() => void) | undefined;
+  const firstModeResponseHeld = new Promise<void>((resolve) => {
+    releaseFirstModeResponse = resolve;
+  });
 
   await page.route("**/api/session", async (route) => {
     const response = await route.fetch();
@@ -1414,6 +1418,11 @@ test("should queue review-mode changes while writes are unavailable", async ({
     ) {
       modeRequests += 1;
     }
+  });
+  await page.route("**/api/review-mode", async (route) => {
+    const response = await route.fetch();
+    if (modeRequests === 1) await firstModeResponseHeld;
+    await route.fulfill({ response });
   });
 
   try {
@@ -1448,16 +1457,28 @@ test("should queue review-mode changes while writes are unavailable", async ({
     await expect.poll(() => modeRequests).toBe(1);
     await expect(rail.getByText(/Auto-accept · on since/u)).toBeVisible();
 
+    await rail.getByRole("button", { name: "Switch back to review" }).click();
+    await expect(
+      rail.getByRole("region", { name: "Review mode pending" }),
+    ).toContainText("Review mode · pending reconnect");
+    releaseFirstModeResponse?.();
+    await expect.poll(() => modeRequests).toBe(2);
+    await expect(rail.getByText(/Auto-accept · on since/u)).toHaveCount(0);
+
     authoritative = false;
-    const switchBack = rail.getByRole("button", {
-      name: "Switch back to review",
+    const armAgain = thread.getByRole("button", {
+      name: "Auto-accept all changes",
     });
-    await expect(switchBack).toBeDisabled({ timeout: 15_000 });
+    await expect(armAgain).toBeEnabled({ timeout: 15_000 });
     await expect(
       rail.getByText("Review session replaced").first(),
     ).toBeVisible();
-    await switchBack.evaluate((button: HTMLButtonElement) => button.click());
-    await expect.poll(() => modeRequests).toBe(1);
+    await armAgain.click();
+    await page
+      .getByRole("alertdialog", { name: "Turn on auto-accept?" })
+      .getByRole("button", { name: "Turn on auto-accept" })
+      .click();
+    await expect.poll(() => modeRequests).toBe(2);
   } finally {
     await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });

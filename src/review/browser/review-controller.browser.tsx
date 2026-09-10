@@ -4270,7 +4270,9 @@ export const ReviewController = () => {
   const [queuedReviewMode, setQueuedReviewMode] = useState<{
     readonly mode: "review" | "auto-accept";
     readonly threadId?: string;
+    readonly generation: number;
   } | null>(null);
+  const reviewModeGenerationRef = useRef(0);
   const [approval, setApproval] = useState<ApprovalSummary | undefined>();
   const runtimeSessionOrder = useMemo(createRuntimeSessionOrder, []);
   const acceptRuntimeSession = useCallback(
@@ -7663,6 +7665,7 @@ export const ReviewController = () => {
     async (request: {
       readonly mode: "review" | "auto-accept";
       readonly threadId?: string;
+      readonly generation: number;
     }): Promise<void> => {
       if (identity === null) return;
       setIsChangingReviewMode(true);
@@ -7694,12 +7697,15 @@ export const ReviewController = () => {
                 },
           );
         }
-        setQueuedReviewMode(null);
-        setReviewModeRetryAtMs(null);
-        dismissPendingReviewMode();
+        if (request.generation === reviewModeGenerationRef.current) {
+          setQueuedReviewMode(null);
+          setReviewModeRetryAtMs(null);
+          dismissPendingReviewMode();
+          setPendingAutoAcceptThreadId(null);
+        }
         refreshVerdicts();
-        setPendingAutoAcceptThreadId(null);
       } catch (error) {
+        if (request.generation !== reviewModeGenerationRef.current) return;
         if (isTerminalReviewRuntimeRefusal(error)) {
           setQueuedReviewMode(null);
           dismissPendingReviewMode();
@@ -7743,7 +7749,12 @@ export const ReviewController = () => {
     readonly threadId?: string;
   }): void => {
     if (identity === null) return;
-    const request = { mode, ...(threadId === undefined ? {} : { threadId }) };
+    const request = {
+      mode,
+      ...(threadId === undefined ? {} : { threadId }),
+      generation: reviewModeGenerationRef.current + 1,
+    };
+    reviewModeGenerationRef.current = request.generation;
     setPendingAutoAcceptThreadId(null);
     if (writeAvailability.state !== "available" || isChangingReviewMode) {
       setQueuedReviewMode(request);
