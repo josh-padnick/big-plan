@@ -1594,11 +1594,28 @@ export const prepareMermaidArtifacts = (
 ): ReadonlyMap<string, MermaidRenderResult> => {
   const sources = renderableMermaidSources(tree);
   const rendered = renderMermaidSources(sources.map((source) => ({ source })));
+  return requestArtifactsFor({ sources, rendered });
+};
+
+/** Retains one complete render result set independently of shared-cache eviction. */
+const requestArtifactsFor = ({
+  sources,
+  rendered,
+}: {
+  readonly sources: ReadonlyArray<string>;
+  readonly rendered: ReadonlyArray<MermaidRenderResult>;
+}): ReadonlyMap<string, MermaidRenderResult> => {
+  if (sources.length !== rendered.length) {
+    throw new Error("Mermaid rendering returned an incomplete artifact set");
+  }
   return new Map(
-    sources.map((source, index) => [
-      source,
-      rendered[index] as MermaidRenderResult,
-    ]),
+    sources.map((source, index) => {
+      const artifact = rendered[index];
+      if (artifact === undefined) {
+        throw new Error("Mermaid rendering omitted an artifact");
+      }
+      return [source, artifact];
+    }),
   );
 };
 
@@ -1620,10 +1637,5 @@ export const warmMermaidArtifacts = async (
     allSources.map((source) => ({ source })),
     { cache },
   );
-  return new Map(
-    allSources.map((source, index) => [
-      source,
-      rendered[index] as MermaidRenderResult,
-    ]),
-  );
+  return requestArtifactsFor({ sources: allSources, rendered });
 };
