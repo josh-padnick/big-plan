@@ -4,6 +4,7 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import {
   MERMAID_BROWSER_VERSION,
+  MERMAID_RENDER_CACHE_MAX_ENTRIES,
   MERMAID_ROLE_TOKENS,
   MERMAID_THEME_TOKENS,
   MERMAID_FONT_FAMILY,
@@ -273,11 +274,25 @@ describe(
       expect(warmed).toBe(renderMermaidSources([{ source }])[0]);
     });
 
-    it("returns every warmed artifact when the bounded cache evicts earlier diagrams (BIG-300)", async () => {
-      const cache = createMermaidRenderCache(1);
-      const firstSource = "flowchart LR\n  first[first] --> done[Done]";
-      const secondSource = "flowchart LR\n  second[second] --> done[Done]";
-      const sources = [firstSource, secondSource];
+    it("returns every warmed artifact when a request exceeds the shared cache bound (BIG-300)", async () => {
+      const cache = createMermaidRenderCache();
+      const firstSource = "flowchart LR\n  source0[Source 0] --> done[Done]";
+      const overflowSource = `flowchart LR\n  source${MERMAID_RENDER_CACHE_MAX_ENTRIES}[Source ${MERMAID_RENDER_CACHE_MAX_ENTRIES}] --> done[Done]`;
+      const sources = [
+        firstSource,
+        ...Array.from(
+          { length: MERMAID_RENDER_CACHE_MAX_ENTRIES - 1 },
+          (_, index) =>
+            `flowchart LR\n  source${index + 1}[Source ${index + 1}] --> done[Done]`,
+        ),
+        overflowSource,
+      ];
+      const cachedArtifact = success(
+        renderMermaidSources([{ source: firstSource }], { cache })[0],
+      );
+      for (const source of sources.slice(1, -1)) {
+        cache.set(source, cachedArtifact);
+      }
       const markdown = sources
         .map(
           (source) =>
@@ -288,9 +303,11 @@ describe(
 
       const artifacts = await warmMermaidArtifacts(tree, { cache });
 
-      expect(artifacts.size).toBe(2);
-      expect(success(artifacts.get(firstSource)).light).toContain("first");
-      expect(success(artifacts.get(secondSource)).light).toContain("second");
+      expect(artifacts.size).toBe(MERMAID_RENDER_CACHE_MAX_ENTRIES + 1);
+      expect(artifacts.get(firstSource)).toBe(cachedArtifact);
+      expect(success(artifacts.get(overflowSource)).light).toContain(
+        `source${MERMAID_RENDER_CACHE_MAX_ENTRIES}`,
+      );
     });
 
     it("returns complete request artifacts when concurrent batches evict one another (BIG-300)", async () => {
