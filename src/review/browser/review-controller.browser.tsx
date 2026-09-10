@@ -6339,6 +6339,7 @@ export const ReviewController = () => {
         });
         pendingSettleArrival.current = null;
         const scrollingElement = document.documentElement;
+        cancelScrollRestoreRef.current?.();
         const previousOverflowAnchor = scrollingElement.style.overflowAnchor;
         scrollingElement.style.overflowAnchor = "none";
         try {
@@ -6362,7 +6363,6 @@ export const ReviewController = () => {
         // anchoring stays off until the re-pin is done so the browser cannot
         // compensate the reader away from where they were. It yields the moment
         // the reader scrolls for themselves.
-        cancelScrollRestoreRef.current?.();
         cancelScrollRestoreRef.current = keepRestored({
           view: window,
           restore: () => window.scrollTo({ left: scrollX, top: scrollY }),
