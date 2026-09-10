@@ -4193,6 +4193,7 @@ export const ReviewController = () => {
   const pointerPressed = useRef(false);
   const previousIsWide = useRef(isWide);
   const seenPushResponseIds = useRef<ReadonlySet<string> | null>(null);
+  const cancelScrollRestoreRef = useRef<(() => void) | null>(null);
   // The blocks the next plan-DOM replacement should settle. Armed immediately
   // before the swap a push drove and consumed by the announcement it makes, so
   // a lens replacing plan DOM for the same revision cannot inherit them.
@@ -4217,6 +4218,11 @@ export const ReviewController = () => {
     ReadonlySet<string>
   >(() =>
     planId === "" ? new Set<string>() : readArchivedChatRequestIds(planId),
+  );
+
+  useEffect(
+    () => () => cancelScrollRestoreRef.current?.(),
+    [],
   );
   const [commentQuery, setCommentQuery] = useState("");
   const [unsavedInputKeys, setUnsavedInputKeys] = useState<ReadonlySet<string>>(
@@ -6317,7 +6323,6 @@ export const ReviewController = () => {
       return;
     }
     let current = true;
-    let cancelScrollRestore: (() => void) | undefined;
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
     void fetch(window.location.href, { credentials: "same-origin" })
@@ -6357,7 +6362,8 @@ export const ReviewController = () => {
         // anchoring stays off until the re-pin is done so the browser cannot
         // compensate the reader away from where they were. It yields the moment
         // the reader scrolls for themselves.
-        cancelScrollRestore = keepRestored({
+        cancelScrollRestoreRef.current?.();
+        cancelScrollRestoreRef.current = keepRestored({
           view: window,
           restore: () => window.scrollTo({ left: scrollX, top: scrollY }),
           isSettled: () =>
@@ -6376,7 +6382,6 @@ export const ReviewController = () => {
       });
     return () => {
       current = false;
-      cancelScrollRestore?.();
     };
   }, [
     agent.currentSnapshot,
