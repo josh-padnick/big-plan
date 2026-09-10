@@ -26,7 +26,12 @@
 // the selection. A "scroll" event is deliberately not among them: the restore
 // scrolls the page itself, and listening for that would cancel the defence the
 // first time it did its job.
-const READER_INTENT = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+const READER_INTENT = [
+  "wheel",
+  "touchstart",
+  "keydown",
+  "pointerdown",
+] as const;
 
 // Re-pins promptly right after the swap - where the render that undoes it is
 // most likely - and thins out toward the end, so the whole defence is a handful
