@@ -68,6 +68,26 @@
   article [data-table-reorderable] thead:hover [data-lucide="grip-vertical"] {
     opacity: 0.65;
   }
+  /* A column's own text-fit toggle rests quiet like the reorder grip and
+     reveals on header hover or keyboard focus. Its box stays reserved so
+     revealing it never reflows the header row. A column already truncated
+     keeps its toggle lit, so the reader can see which columns they clamped. */
+  article [data-table-interactive] .data-table-column-fit-toggle {
+    opacity: 0;
+  }
+  article [data-table-interactive] thead:hover .data-table-column-fit-toggle,
+  article .data-table-column-fit-toggle:focus-visible,
+  article .data-table-column-fit-toggle[aria-pressed="true"] {
+    opacity: 1;
+  }
+  article .data-table-column-fit-toggle[aria-pressed="true"] {
+    color: var(--color-ink);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    article .data-table-column-fit-toggle {
+      transition: opacity 0.15s ease;
+    }
+  }
   article .data-table-head-drop-before {
     box-shadow: inset 2px 0 0 var(--color-accent);
   }

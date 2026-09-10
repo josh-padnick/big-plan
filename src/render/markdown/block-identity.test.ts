@@ -140,7 +140,7 @@ describe("block identity slide scope", () => {
       "## Costs\n\n| Tier | Price |\n| --- | --- |\n| Free | 0 |\n",
     );
     expect(slideTextOf({ blocks, id: "section/costs/heading-1" })).toBe(
-      "Costs\n\nTier\n\nPrice\n\nFree\n\n0",
+      "Costs\n\nTier\nPrice\nFree\n0",
     );
   });
 
