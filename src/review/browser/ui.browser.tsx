@@ -674,10 +674,7 @@ export const AlertDialog = ({
   useLayoutEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
-    // Focusing the dialog is enough to retire selection-driven controls. Keep
-    // the browser range itself intact: an open dialog can remount while a live
-    // plan refresh reconciles its surrounding chrome, and clearing the range
-    // again would erase the selection the article swap just restored.
+    window.getSelection()?.removeAllRanges();
     dialogRef.current?.focus({ preventScroll: true });
     return () => {
       // The element that opened this dialog can be replaced while the dialog

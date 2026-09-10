@@ -16,8 +16,12 @@ export const isRuntimeBackpressureError = ({
   try {
     const location = new URL(locationUrl);
     const page = new URL(pageUrl);
+    const pageDirectory = page.pathname.endsWith("/")
+      ? page.pathname
+      : `${page.pathname}/`;
     return (
-      location.origin === page.origin && location.pathname.startsWith("/api/")
+      location.origin === page.origin &&
+      location.pathname.startsWith(`${pageDirectory}api/`)
     );
   } catch {
     return false;

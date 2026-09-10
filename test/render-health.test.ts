@@ -11,8 +11,18 @@ describe("isRuntimeBackpressureError", () => {
     expect(
       isRuntimeBackpressureError({
         text: SERVICE_UNAVAILABLE,
-        locationUrl: "http://127.0.0.1:4173/api/reviews/review-1",
-        pageUrl: "http://127.0.0.1:4173/reviews/review-1",
+        locationUrl: "http://127.0.0.1:4173/plan/1111111111111111/api/drafts",
+        pageUrl: "http://127.0.0.1:4173/plan/1111111111111111/",
+      }),
+    ).toBe(true);
+  });
+
+  it("should ignore runtime backpressure when the review is served at root", () => {
+    expect(
+      isRuntimeBackpressureError({
+        text: SERVICE_UNAVAILABLE,
+        locationUrl: "http://127.0.0.1:4173/api/input-contract",
+        pageUrl: "http://127.0.0.1:4173/",
       }),
     ).toBe(true);
   });
@@ -22,7 +32,7 @@ describe("isRuntimeBackpressureError", () => {
       isRuntimeBackpressureError({
         text: SERVICE_UNAVAILABLE,
         locationUrl: "https://example.test/api/image",
-        pageUrl: "http://127.0.0.1:4173/reviews/review-1",
+        pageUrl: "http://127.0.0.1:4173/plan/1111111111111111/",
       }),
     ).toBe(false);
   });
@@ -32,7 +42,17 @@ describe("isRuntimeBackpressureError", () => {
       isRuntimeBackpressureError({
         text: SERVICE_UNAVAILABLE,
         locationUrl: "http://127.0.0.1:4173/assets/api/image",
-        pageUrl: "http://127.0.0.1:4173/reviews/review-1",
+        pageUrl: "http://127.0.0.1:4173/plan/1111111111111111/",
+      }),
+    ).toBe(false);
+  });
+
+  it("should preserve an API failure belonging to a different plan", () => {
+    expect(
+      isRuntimeBackpressureError({
+        text: SERVICE_UNAVAILABLE,
+        locationUrl: "http://127.0.0.1:4173/plan/2222222222222222/api/drafts",
+        pageUrl: "http://127.0.0.1:4173/plan/1111111111111111/",
       }),
     ).toBe(false);
   });
