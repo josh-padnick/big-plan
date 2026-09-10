@@ -440,6 +440,44 @@ test("should restore a maximized table when filter Escape has no work", async ({
   ).toBeFocused();
 });
 
+test("should fit wide table choices to the viewport only while maximized", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 900, height: 720 });
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    hasText: "Queue depth by processor",
+  });
+  const scroll = table.locator(".data-table-scroll");
+  const noteCell = table.locator("tbody td").nth(3);
+
+  await table.getByRole("button", { name: "Text fit" }).click();
+  await table.getByRole("menuitemradio", { name: "Scroll sideways" }).click();
+  await table.getByRole("button", { name: "Truncate Note column" }).click();
+
+  await expect
+    .poll(() => scroll.evaluate((node) => node.scrollWidth))
+    .toBeGreaterThan(await scroll.evaluate((node) => node.clientWidth));
+  await expect(noteCell).toHaveCSS("white-space", "nowrap");
+
+  await table.getByRole("button", { name: "Maximize table" }).click();
+
+  await expect
+    .poll(() =>
+      scroll.evaluate((node) =>
+        Math.max(0, node.scrollWidth - node.clientWidth),
+      ),
+    )
+    .toBe(0);
+  await expect(noteCell).toHaveCSS("white-space", "normal");
+  await expect(noteCell).toHaveCSS("text-overflow", "clip");
+
+  await table.getByRole("button", { name: "Restore table" }).click();
+
+  await expect(noteCell).toHaveCSS("white-space", "nowrap");
+});
+
 test("should keep the filter header inside a 320px viewport", async ({
   page,
   dataTableViewerUrl,

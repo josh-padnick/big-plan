@@ -233,10 +233,26 @@
     appearance: none;
   }
 
-  /* The maximized panel itself is owned by _shared/figure-controls; the grid
-     only says how its bottom edge behaves inside one. */
+  /* The maximized panel itself is owned by _shared/figure-controls. Inside it,
+     fixed layout makes ordinary wide tables fit the viewport regardless of
+     their resting fit choices. `break-word` preserves bounded overflow as a
+     last resort for a pathological unbroken token. */
+  article [data-data-table][data-figure-maximized] .data-table-scroll {
+    overflow-x: auto;
+  }
   article [data-data-table][data-figure-maximized] .data-table-grid {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
     border-bottom: 1px solid var(--edge-c);
+  }
+  article [data-data-table][data-figure-maximized] .data-table-grid th,
+  article [data-data-table][data-figure-maximized] .data-table-grid td {
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: break-word;
+    text-overflow: clip;
+    max-width: none;
   }
   article
     [data-data-table][data-figure-maximized]

@@ -84,7 +84,7 @@ const alignmentOf = (cell: Element): TableGridAlignment => {
 // Conservative type inference: a column is a number or date only when every
 // non-empty cell fits a strict shape, so sorting never mis-orders text that
 // merely happens to start with a digit. Text is always the safe default.
-const NUMERIC = /^[-+]?[$£€]?\s?\d{1,3}(?:[,\s]\d{3})*(?:\.\d+)?\s*%?$/;
+const NUMERIC = /^[-+]?[$£€]?\s?(?:\d+|\d{1,3}(?:[,\s]\d{3})+)(?:\.\d+)?\s*%?$/;
 const PLAIN_NUMBER = /^[-+]?\d+(?:\.\d+)?\s*%?$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T\s]\d{2}:\d{2})?/;
 const SLASH_DATE = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
