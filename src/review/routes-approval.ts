@@ -14,7 +14,7 @@
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
-import { renderDocument } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import {
   DecisionStampRejected,
   stampDecisions,
@@ -219,16 +219,18 @@ const changeSetsAtApproval = async (
       readSnapshot({ store: context.store, snapshot: from }),
       readSnapshot({ store: context.store, snapshot: to }),
     ]);
-    const before = renderDocument({
-      markdown: beforeSource,
-      fallbackTitle,
-      identity: {},
-    });
-    const after = renderDocument({
-      markdown: afterSource,
-      fallbackTitle,
-      identity: {},
-    });
+    const [before, after] = await Promise.all([
+      renderReviewDocument({
+        markdown: beforeSource,
+        fallbackTitle,
+        identity: {},
+      }),
+      renderReviewDocument({
+        markdown: afterSource,
+        fallbackTitle,
+        identity: {},
+      }),
+    ]);
     // Approval closes the sets at the addresses the reviewer was shown, so it
     // groups the revision exactly as the reader's diff grouped it.
     const ownership = await readChangeOwnership({
@@ -460,7 +462,7 @@ const buildApprovalEntry = ({
  * required to be empty, because a finding the author already had is not one
  * this write introduced and is not this write's to refuse.
  */
-const stampApprovedAnswers = ({
+const stampApprovedAnswers = async ({
   source,
   answers,
   fallbackTitle,
@@ -468,7 +470,7 @@ const stampApprovedAnswers = ({
   readonly source: string;
   readonly answers: ApprovalAnswers;
   readonly fallbackTitle: string;
-}): string => {
+}): Promise<string> => {
   const { stamped } = stampDecisions({
     markdown: source,
     answers: answers.recorded.map((answer) => ({
@@ -477,7 +479,11 @@ const stampApprovedAnswers = ({
     })),
   });
   if (stamped === source) return stamped;
-  renderDocument({ markdown: stamped, fallbackTitle, identity: {} });
+  await renderReviewDocument({
+    markdown: stamped,
+    fallbackTitle,
+    identity: {},
+  });
   const before = lintPlan({ markdown: source }).length;
   const after = lintPlan({ markdown: stamped });
   if (after.length > before) {
@@ -595,7 +601,7 @@ export const approvePlan = async (
       requestIds,
     });
     verdicts = changeSets.verdicts;
-    stampedSource = stampApprovedAnswers({
+    stampedSource = await stampApprovedAnswers({
       source: settledSource.source,
       answers,
       fallbackTitle: basename(

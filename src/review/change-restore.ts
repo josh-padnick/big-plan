@@ -18,8 +18,8 @@
 // plan untouched, because bytes written on a guess are the one failure a
 // reviewer has no way to see.
 
-import { renderDocument } from "../render/render-document.js";
 import type { BlockDescriptor } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import { planSourceSegments } from "../render/plan-source-segments.js";
 import type { PlanSourceSegment } from "../render/plan-source-segments.js";
 import {
@@ -49,7 +49,7 @@ export class ChangeRestoreRejected extends Error {
   }
 }
 
-export const changedSnapshotDiff = ({
+export const changedSnapshotDiff = async ({
   baselineSource,
   proposedSource,
   from,
@@ -64,9 +64,11 @@ export const changedSnapshotDiff = ({
   readonly fallbackTitle: string;
   /** The reader's ownership partition, so these are the reader's addresses. */
   readonly ownership?: ChangeOwnership;
-}): SnapshotDiff => {
-  const before = blocksOf({ markdown: baselineSource, fallbackTitle });
-  const after = blocksOf({ markdown: proposedSource, fallbackTitle });
+}): Promise<SnapshotDiff> => {
+  const [before, after] = await Promise.all([
+    blocksOf({ markdown: baselineSource, fallbackTitle }),
+    blocksOf({ markdown: proposedSource, fallbackTitle }),
+  ]);
   return buildSnapshotDiff({
     from,
     to,
@@ -78,11 +80,13 @@ export const changedSnapshotDiff = ({
 
 export const changedPlaces = (
   input: Parameters<typeof changedSnapshotDiff>[0],
-): ReadonlyArray<DiffPlace> => changedSnapshotDiff(input).places;
+): Promise<ReadonlyArray<DiffPlace>> =>
+  changedSnapshotDiff(input).then((diff) => diff.places);
 
 export const changedPlaceIds = (
   input: Parameters<typeof changedPlaces>[0],
-): ReadonlyArray<string> => changedPlaces(input).map((place) => place.placeId);
+): Promise<ReadonlyArray<string>> =>
+  changedPlaces(input).then((places) => places.map((place) => place.placeId));
 
 /** One splice: proposed bytes to remove, baseline bytes to put in their place. */
 type SourceEdit = {
@@ -509,8 +513,10 @@ const blocksOf = ({
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
-}): ReadonlyArray<BlockDescriptor> =>
-  renderDocument({ markdown, fallbackTitle, identity: {} }).blocks;
+}): Promise<ReadonlyArray<BlockDescriptor>> =>
+  renderReviewDocument({ markdown, fallbackTitle, identity: {} }).then(
+    (rendered) => rendered.blocks,
+  );
 
 const asMultiset = (values: ReadonlyArray<string>): string =>
   [...values].sort().join("\n");
@@ -539,7 +545,7 @@ const withoutFirst = ({
  * here. An empty set is the proposed revision itself: nothing was rejected, so
  * nothing is restored.
  */
-export const restoreRejectedPlaces = ({
+export const restoreRejectedPlaces = async ({
   baselineSource,
   proposedSource,
   from,
@@ -560,13 +566,12 @@ export const restoreRejectedPlaces = ({
    * the place they rejected is not in this proposal at all.
    */
   readonly ownership?: ChangeOwnership;
-}): string => {
+}): Promise<string> => {
   if (placeIds.length === 0) return proposedSource;
-  const baselineBlocks = blocksOf({
-    markdown: baselineSource,
-    fallbackTitle,
-  });
-  const proposedBlocks = blocksOf({ markdown: proposedSource, fallbackTitle });
+  const [baselineBlocks, proposedBlocks] = await Promise.all([
+    blocksOf({ markdown: baselineSource, fallbackTitle }),
+    blocksOf({ markdown: proposedSource, fallbackTitle }),
+  ]);
   const proposed = buildSnapshotDiff({
     from,
     to,
@@ -611,12 +616,13 @@ export const restoreRejectedPlaces = ({
   // accounts for. Attribution is measured rather than inferred: the authored
   // nodes and the reader's places are two different groupings of the same
   // revision, and neither is derivable from the other.
-  const selected = edits.filter((edit) => {
+  const selected: Array<SourceEdit> = [];
+  for (const edit of edits) {
     let remaining: ReadonlyArray<string>;
     try {
       remaining = changeSignatures({
         before: baselineBlocks,
-        after: blocksOf({
+        after: await blocksOf({
           markdown: applyEdits({ source: proposedSource, edits: [edit] }),
           fallbackTitle,
         }),
@@ -624,19 +630,23 @@ export const restoreRejectedPlaces = ({
     } catch {
       // An edit that does not stand on its own explains nothing by itself. The
       // proof below decides whether the restore still works without it.
-      return false;
+      continue;
     }
-    return withoutFirst({
-      values: proposedSignatures,
-      removed: remaining,
-    }).some((signature) => wanted.has(signature));
-  });
+    if (
+      withoutFirst({
+        values: proposedSignatures,
+        removed: remaining,
+      }).some((signature) => wanted.has(signature))
+    ) {
+      selected.push(edit);
+    }
+  }
   const restored = applyEdits({ source: proposedSource, edits: selected });
   let remaining: ReadonlyArray<string>;
   try {
     remaining = changeSignatures({
       before: baselineBlocks,
-      after: blocksOf({ markdown: restored, fallbackTitle }),
+      after: await blocksOf({ markdown: restored, fallbackTitle }),
     });
   } catch {
     throw new ChangeRestoreRejected(

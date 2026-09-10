@@ -35,7 +35,7 @@ describe("autoAcceptChangeSets", () => {
         writeSnapshot({ store, snapshot: from, source: baseline }),
         writeSnapshot({ store, snapshot: to, source: proposed }),
       ]);
-      const [placeId] = changedPlaceIds({
+      const [placeId] = await changedPlaceIds({
         baselineSource: baseline,
         proposedSource: proposed,
         from,

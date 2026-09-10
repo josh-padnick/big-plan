@@ -29,7 +29,7 @@
 // question nobody could answer cheaply.
 
 import { basename, extname } from "node:path";
-import { renderDocument } from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import { readChangeOwnership } from "./change-ownership.js";
 import {
   changeSetsFrom,
@@ -247,13 +247,23 @@ const diffFor = async ({
     readSnapshot({ store, snapshot: from }),
     readSnapshot({ store, snapshot: to }),
   ]);
-  const blocksOf = (markdown: string) =>
-    renderDocument({ markdown, fallbackTitle, identity: {} }).blocks;
+  const [before, after] = await Promise.all([
+    renderReviewDocument({
+      markdown: beforeSource,
+      fallbackTitle,
+      identity: {},
+    }),
+    renderReviewDocument({
+      markdown: afterSource,
+      fallbackTitle,
+      identity: {},
+    }),
+  ]);
   return buildSnapshotDiff({
     from,
     to,
-    before: blocksOf(beforeSource),
-    after: blocksOf(afterSource),
+    before: before.blocks,
+    after: after.blocks,
     ...(ownership === undefined ? {} : { ownership }),
   });
 };

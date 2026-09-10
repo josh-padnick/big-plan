@@ -88,7 +88,7 @@ describe("threadChangesAllDecided", () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  const places = (): ReadonlyArray<string> =>
+  const places = (): Promise<ReadonlyArray<string>> =>
     changedPlaceIds({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
@@ -98,7 +98,7 @@ describe("threadChangesAllDecided", () => {
     });
 
   it("stays shut while one change is still undecided", async () => {
-    const [first] = places();
+    const [first] = await places();
     expect(first).toBeDefined();
     await expect(
       threadChangesAllDecided({
@@ -121,7 +121,7 @@ describe("threadChangesAllDecided", () => {
   });
 
   it("opens once every change carries a verdict, whichever way each went", async () => {
-    const all = places();
+    const all = await places();
     expect(all.length).toBeGreaterThan(1);
     await expect(
       threadChangesAllDecided({
@@ -158,7 +158,7 @@ describe("threadChangesAllDecided", () => {
   });
 
   it("stays shut when a verdict names a different revision", async () => {
-    const all = places();
+    const all = await places();
     await expect(
       threadChangesAllDecided({
         store,
@@ -179,7 +179,7 @@ describe("threadChangesAllDecided", () => {
   });
 
   it("stays shut when every carried verdict changed again", async () => {
-    const currentPlaces = changedPlaces({
+    const currentPlaces = await changedPlaces({
       baselineSource: BASELINE,
       proposedSource: PROPOSED,
       from,

@@ -10,10 +10,7 @@
 
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
-import {
-  renderDocument,
-  warmMarkdownRenderCache,
-} from "../render/render-document.js";
+import { renderReviewDocument } from "./render-review-document.js";
 import type {
   DocumentIdentity,
   RenderedDocument,
@@ -445,8 +442,7 @@ export const createPlanRenderer = ({
     readonly markdown: string;
     readonly identity?: DocumentIdentity;
   }): Promise<RenderedDocument> => {
-    await warmMarkdownRenderCache({ markdown });
-    return renderDocument({
+    return renderReviewDocument({
       markdown,
       fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
       ...(identity === undefined ? {} : { identity }),

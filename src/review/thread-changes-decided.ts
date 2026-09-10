@@ -76,7 +76,7 @@ export const threadChangesAllDecided = async ({
     from,
     to,
   });
-  const diff = changedSnapshotDiff({
+  const diff = await changedSnapshotDiff({
     baselineSource,
     proposedSource,
     from,
