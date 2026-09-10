@@ -24,6 +24,7 @@ import {
   startService,
   type ServiceRuntime,
 } from "../src/review/service/server.js";
+import { isRuntimeBackpressureError } from "./render-health.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -1053,8 +1054,11 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       // the assertion waiting on that data never gets it, and any other status
       // (a real 404 or 500) still fails render health here.
       if (
-        text.includes("status of 503 (Service Unavailable)") &&
-        url.includes("/api/")
+        isRuntimeBackpressureError({
+          text,
+          locationUrl: url,
+          pageUrl: page.url(),
+        })
       ) {
         return;
       }
