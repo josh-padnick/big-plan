@@ -2184,12 +2184,13 @@ test("should confirm deleting every staged comment from Comments", async ({
     .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
     .not.toBe("");
   await deleteAll.click();
-  await expect
-    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
-    .toBe("");
   const deleteDialog = page.getByRole("alertdialog", {
     name: "Delete all comments?",
   });
+  await expect(deleteDialog).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+    .toBe("");
   await expect(deleteDialog).toContainText(
     "This permanently removes all 2 staged comments.",
   );
