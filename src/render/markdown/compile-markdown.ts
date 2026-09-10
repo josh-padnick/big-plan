@@ -20,6 +20,7 @@ import type {
   DiagnosticCollector,
 } from "../../components/_authoring/diagnostics.js";
 import { rehypeCodeFigures } from "./code-figure.js";
+import { rehypeEnhanceTables } from "./enhance-table.js";
 import { stripComponentInstanceKeys } from "./component-pipeline/component-instance.js";
 import {
   rehypeRenderComponents,
@@ -388,6 +389,10 @@ const compileMarkdownTree = ({
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
     .use(rehypeHighlight)
+    // Author-written tables become the interactive DataTable grid; the wrap
+    // pass then scroll-boxes any table left plain (a headerless table, or one a
+    // component rendered bare).
+    .use(rehypeEnhanceTables)
     .use(rehypeWrapTables)
     .use(rehypeCodeFigures)
     .use(rehypeDeckTransform, { outline, diagnostics })

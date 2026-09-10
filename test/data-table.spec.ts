@@ -3,6 +3,29 @@
 
 import { expect, test } from "./fixtures";
 
+test("should navigate a Markdown header link without sorting its column", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    has: page.getByRole("link", { name: "Status" }),
+  });
+  const header = table.locator("th").first();
+  const firstStatus = table.locator("tbody tr").first().locator("td").first();
+
+  await table.getByRole("link", { name: "Status" }).click();
+
+  await expect(page).toHaveURL(/#the-default-table$/);
+  await expect(header).toHaveAttribute("aria-sort", "none");
+  await expect(firstStatus).toHaveText("Pending");
+
+  await table.getByRole("button", { name: "Status", exact: true }).click();
+
+  await expect(header).toHaveAttribute("aria-sort", "ascending");
+  await expect(firstStatus).toHaveText("Active");
+});
+
 test("should keep the aggregate row pinned when sorting data rows", async ({
   page,
   dataTableViewerUrl,
@@ -362,7 +385,7 @@ test("should preserve generous separation before visible group bands when sortin
     .poll(groupEndRows)
     .toEqual([{ group: "Enterprise", failure: "Processor timeout" }]);
 
-  await table.getByRole("button", { name: "Failure" }).click();
+  await table.getByRole("button", { name: "Failure", exact: true }).click();
 
   await expect(separatedBands).toHaveCount(1);
   await expect
@@ -438,6 +461,44 @@ test("should restore a maximized table when filter Escape has no work", async ({
   await expect(
     table.getByRole("button", { name: "Maximize table" }),
   ).toBeFocused();
+});
+
+test("should fit wide table choices to the viewport only while maximized", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 900, height: 720 });
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    hasText: "Queue depth by processor",
+  });
+  const scroll = table.locator(".data-table-scroll");
+  const noteCell = table.locator("tbody td").nth(3);
+
+  await table.getByRole("button", { name: "Text fit" }).click();
+  await table.getByRole("menuitemradio", { name: "Scroll sideways" }).click();
+  await table.getByRole("button", { name: "Truncate Note column" }).click();
+
+  await expect
+    .poll(() => scroll.evaluate((node) => node.scrollWidth))
+    .toBeGreaterThan(await scroll.evaluate((node) => node.clientWidth));
+  await expect(noteCell).toHaveCSS("white-space", "nowrap");
+
+  await table.getByRole("button", { name: "Maximize table" }).click();
+
+  await expect
+    .poll(() =>
+      scroll.evaluate((node) =>
+        Math.max(0, node.scrollWidth - node.clientWidth),
+      ),
+    )
+    .toBe(0);
+  await expect(noteCell).toHaveCSS("white-space", "normal");
+  await expect(noteCell).toHaveCSS("text-overflow", "clip");
+
+  await table.getByRole("button", { name: "Restore table" }).click();
+
+  await expect(noteCell).toHaveCSS("white-space", "nowrap");
 });
 
 test("should keep the filter header inside a 320px viewport", async ({

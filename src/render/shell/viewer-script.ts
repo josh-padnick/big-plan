@@ -249,7 +249,18 @@ const installColumnPointerReorder = ({
         return;
       const pointerTarget =
         event.target instanceof Element ? event.target : head;
-      const captureTarget = pointerTarget.closest("button") ?? head;
+      const interactiveTarget = pointerTarget.closest(
+        "a, button, input, select, textarea, [contenteditable]",
+      );
+      const headerControl = pointerTarget.closest(
+        "[data-table-sort], [data-table-column-fit-toggle]",
+      );
+      if (
+        interactiveTarget !== null &&
+        headerControl === null
+      )
+        return;
+      const captureTarget = headerControl ?? head;
       activeColumnReorder = {
         head,
         captureTarget,
@@ -1791,13 +1802,71 @@ const wireDataTables = () => {
       }
     };
 
+    // A column's own text fit overrides the table-wide mode. The author may set
+    // one; the reader may change it or clear it back to "match" (follow table).
+    const columnFit = new Map();
+    const authoredColumnFit = new Map();
+    for (const head of heads) {
+      const declared = head.getAttribute("data-table-cell-fit");
+      if (declared !== null) {
+        const index = Number(head.getAttribute("data-table-column"));
+        authoredColumnFit.set(index, declared);
+        columnFit.set(index, declared);
+      }
+    }
+
     const persist = () => {
       write(storageKey, {
         order: currentOrder(),
         hidden: hiddenColumns(),
         fit: figure.getAttribute("data-table-fit"),
         group: groupColumn,
+        columnFit: Object.fromEntries(columnFit),
       });
+    };
+
+    const setColumnFit = (column, mode, save) => {
+      const cells = [];
+      for (const row of columnRows) {
+        for (const cell of row.children) {
+          if (
+            cell.tagName === "TD" &&
+            Number(cell.getAttribute("data-table-column")) === column
+          ) {
+            cells.push(cell);
+          }
+        }
+      }
+      if (mode === "match") {
+        columnFit.delete(column);
+        for (const cell of cells) cell.removeAttribute("data-table-cell-fit");
+      } else if (FITS.indexOf(mode) !== -1) {
+        columnFit.set(column, mode);
+        for (const cell of cells) cell.setAttribute("data-table-cell-fit", mode);
+      } else {
+        return;
+      }
+      syncColumnFitToggles();
+      if (save !== false) persist();
+    };
+
+    // A column's toggle reads the fit the reader actually sees - its own
+    // override when it has one, otherwise the table-wide fit - so the pressed
+    // state and tooltip stay honest after either control changes.
+    const syncColumnFitToggles = () => {
+      const tableFit = figure.getAttribute("data-table-fit") || "wrap";
+      for (const head of heads) {
+        const index = Number(head.getAttribute("data-table-column"));
+        const toggle = head.querySelector("[data-table-column-fit-toggle]");
+        if (toggle === null) continue;
+        const effective = columnFit.get(index) || tableFit;
+        const truncated = effective === "truncate";
+        toggle.setAttribute("aria-pressed", truncated ? "true" : "false");
+        toggle.setAttribute(
+          "data-tooltip",
+          truncated ? "Wrap this column" : "Truncate this column",
+        );
+      }
     };
 
     const setFit = (fit, save) => {
@@ -1812,6 +1881,7 @@ const wireDataTables = () => {
             : "false",
         );
       }
+      syncColumnFitToggles();
       if (save !== false) persist();
     };
 
@@ -2088,6 +2158,16 @@ const wireDataTables = () => {
         applyOrder(saved.order);
       }
       if (typeof saved.fit === "string") setFit(saved.fit, false);
+      if (saved.columnFit !== null && typeof saved.columnFit === "object") {
+        // Start from the authored overrides, then let the saved layout win, so
+        // a cleared column stays cleared across a reload.
+        for (const column of authoredColumnFit.keys()) {
+          setColumnFit(column, "match", false);
+        }
+        for (const key of Object.keys(saved.columnFit)) {
+          setColumnFit(Number(key), saved.columnFit[key], false);
+        }
+      }
       if (
         typeof saved.group === "number" &&
         saved.group >= -1 &&
@@ -2110,10 +2190,11 @@ const wireDataTables = () => {
     figure.setAttribute("data-table-reorderable", "");
     figure.setAttribute("data-table-interactive", "");
     for (const control of figure.querySelectorAll(
-      "[data-table-filter],[data-table-fit-button],[data-table-menu-button],[data-table-reset]",
+      "[data-table-filter],[data-table-fit-button],[data-table-menu-button],[data-table-reset],[data-table-column-fit-toggle]",
     )) {
       control.hidden = false;
     }
+    syncColumnFitToggles();
 
     const reorderableHeads = [];
     for (const head of headRow.children) {
@@ -2145,6 +2226,16 @@ const wireDataTables = () => {
           const from = positions.indexOf(head);
           moveColumn(from, from + (event.key === "ArrowLeft" ? -1 : 1));
           button.focus();
+        });
+      }
+      const fitToggle = head.querySelector("[data-table-column-fit-toggle]");
+      if (fitToggle !== null) {
+        fitToggle.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const index = Number(head.getAttribute("data-table-column"));
+          const tableFit = figure.getAttribute("data-table-fit") || "wrap";
+          const effective = columnFit.get(index) || tableFit;
+          setColumnFit(index, effective === "truncate" ? "wrap" : "truncate");
         });
       }
     }
@@ -2183,6 +2274,9 @@ const wireDataTables = () => {
       setGroupColumn(authoredGroupColumn, false);
       applyHiddenColumns(authoredHidden);
       setFit(authoredFit, false);
+      for (let column = 0; column < columnCount; column += 1) {
+        setColumnFit(column, authoredColumnFit.get(column) || "match", false);
+      }
       persist();
       applyFilter();
     };

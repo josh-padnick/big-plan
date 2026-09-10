@@ -63,6 +63,14 @@ Run | Result
     );
     expect(bodyHtml.slice(wireframeStart)).toContain('class="wireframe-table"');
   });
+
+  it("should infer ungrouped currency with any digit length as numeric", () => {
+    const bodyHtml = compileAndSerialize(
+      "| Amount |\n| ---: |\n| -$1000 |\n| -$20 |\n",
+    );
+
+    expect(bodyHtml).toContain('data-table-type="number"');
+  });
 });
 
 describe("compileMarkdown code highlighting", () => {

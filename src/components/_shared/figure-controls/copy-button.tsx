@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 // Owns the shared direct copy control used by React-rendered source figures.
 // The viewer script wires the dormant button to the figure's source, deriving
 // table text from the rendered view.

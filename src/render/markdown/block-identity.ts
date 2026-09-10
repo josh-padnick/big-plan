@@ -352,6 +352,16 @@ const isTableScrollContainer = (node: Element): boolean =>
 const isRedundantKicker = (node: Element): boolean =>
   node.properties["data-slide-kicker"] !== undefined && node.tagName === "p";
 
+// A table figure's caption and empty-state are generated chrome, not authored
+// content. The walk descends through a non-component figure to reach the table
+// its scroll container holds, so without this it would turn caption menu labels
+// and the empty-filter notice into commentable paragraphs. Component figures
+// stop the walk at their root, so this only guards the enhanced plain-table
+// figure; its real, commentable content is the table inside the scroll box.
+const isFigureChrome = (node: Element): boolean =>
+  node.tagName === "figcaption" ||
+  node.properties["data-table-empty"] !== undefined;
+
 const kindOf = (node: Element): string | undefined => {
   const component = componentName(node);
   if (component !== undefined) {
@@ -784,6 +794,9 @@ const stampScope = ({
       continue;
     }
     if (isRedundantKicker(child) || isNestedScope(child)) {
+      continue;
+    }
+    if (isFigureChrome(child)) {
       continue;
     }
     const kind = kindOf(child);

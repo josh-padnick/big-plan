@@ -146,7 +146,7 @@ test("should preserve component content without controls when JavaScript is disa
   const controls = page.locator(
     "[data-diff-toggle-group], [data-tree-toggle-group], [data-diff-menu-button], [data-schema-menu-button], [data-copy-source], [data-code-diff] [data-figure-maximize], [data-database-table-schema] [data-figure-maximize]",
   );
-  await expect(controls).toHaveCount(10);
+  await expect(controls).toHaveCount(11);
   for (const control of await controls.all()) {
     await expect(control).toBeHidden();
   }

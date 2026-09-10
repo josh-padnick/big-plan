@@ -68,6 +68,26 @@
   article [data-table-reorderable] thead:hover [data-lucide="grip-vertical"] {
     opacity: 0.65;
   }
+  /* A column's own text-fit toggle rests quiet like the reorder grip and
+     reveals on header hover or keyboard focus. Its box stays reserved so
+     revealing it never reflows the header row. A column already truncated
+     keeps its toggle lit, so the reader can see which columns they clamped. */
+  article [data-table-interactive] .data-table-column-fit-toggle {
+    opacity: 0;
+  }
+  article [data-table-interactive] thead:hover .data-table-column-fit-toggle,
+  article .data-table-column-fit-toggle:focus-visible,
+  article .data-table-column-fit-toggle[aria-pressed="true"] {
+    opacity: 1;
+  }
+  article .data-table-column-fit-toggle[aria-pressed="true"] {
+    color: var(--color-ink);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    article .data-table-column-fit-toggle {
+      transition: opacity 0.15s ease;
+    }
+  }
   article .data-table-head-drop-before {
     box-shadow: inset 2px 0 0 var(--color-accent);
   }
@@ -213,10 +233,26 @@
     appearance: none;
   }
 
-  /* The maximized panel itself is owned by _shared/figure-controls; the grid
-     only says how its bottom edge behaves inside one. */
+  /* The maximized panel itself is owned by _shared/figure-controls. Inside it,
+     fixed layout makes ordinary wide tables fit the viewport regardless of
+     their resting fit choices. `break-word` preserves bounded overflow as a
+     last resort for a pathological unbroken token. */
+  article [data-data-table][data-figure-maximized] .data-table-scroll {
+    overflow-x: auto;
+  }
   article [data-data-table][data-figure-maximized] .data-table-grid {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
     border-bottom: 1px solid var(--edge-c);
+  }
+  article [data-data-table][data-figure-maximized] .data-table-grid th,
+  article [data-data-table][data-figure-maximized] .data-table-grid td {
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: break-word;
+    text-overflow: clip;
+    max-width: none;
   }
   article
     [data-data-table][data-figure-maximized]

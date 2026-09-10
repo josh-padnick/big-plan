@@ -76,19 +76,19 @@ The shape of the document itself, and the one thing a skimmer must not miss.
 
 A few of these look like each other. The dividing line is what the reviewer needs to _see_.
 
-| Reach for          | Rather than        | When                                                                                                |
-| ------------------ | ------------------ | --------------------------------------------------------------------------------------------------- |
-| `QuickDecision`    | `Decision`         | The reviewer can answer from the option titles alone                                                |
-| `Decision`         | `DecisionAnalysis` | Option-by-option considerations are enough, and a matrix would be ceremony                          |
-| `DecisionAnalysis` | `Decision`         | The reviewer should audit the choice across explicit criteria, or check weighted arithmetic         |
-| `CodeSnippet`      | `CodeDiff`         | You are showing existing code to read, with no change to mark                                       |
-| `CodeDiff`         | `CodeSnippet`      | The point is what changes, not what is there                                                        |
-| `FileTree`         | `FileTreeDiff`     | The tree carries no change status. `FileTreeDiff` rejects a tree with no change and points you here |
-| `FileTreeDiff`     | `FileTree`         | Entries carry added, modified, removed, or renamed status                                           |
-| `FlowDiagram`      | `MermaidDiagram`   | The content is a staged left-to-right story and you want Big Plan's own cards and connectors        |
-| `MermaidDiagram`   | `FlowDiagram`      | It is a general graph, or a sequence, class, state, or ER view                                      |
-| A Markdown table   | `DataTable`        | Under roughly ten rows and four columns. A prose table cannot wrap, sort, or filter                 |
-| `DataTable`        | A Markdown table   | The grid is a reference the reviewer returns to, or would scroll sideways as prose                  |
+| Reach for          | Rather than        | When                                                                                                 |
+| ------------------ | ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `QuickDecision`    | `Decision`         | The reviewer can answer from the option titles alone                                                 |
+| `Decision`         | `DecisionAnalysis` | Option-by-option considerations are enough, and a matrix would be ceremony                           |
+| `DecisionAnalysis` | `Decision`         | The reviewer should audit the choice across explicit criteria, or check weighted arithmetic          |
+| `CodeSnippet`      | `CodeDiff`         | You are showing existing code to read, with no change to mark                                        |
+| `CodeDiff`         | `CodeSnippet`      | The point is what changes, not what is there                                                         |
+| `FileTree`         | `FileTreeDiff`     | The tree carries no change status. `FileTreeDiff` rejects a tree with no change and points you here  |
+| `FileTreeDiff`     | `FileTree`         | Entries carry added, modified, removed, or renamed status                                            |
+| `FlowDiagram`      | `MermaidDiagram`   | The content is a staged left-to-right story and you want Big Plan's own cards and connectors         |
+| `MermaidDiagram`   | `FlowDiagram`      | It is a general graph, or a sequence, class, state, or ER view                                       |
+| A Markdown table   | `DataTable`        | The author needs only a plain grid; reader sorting, filtering, reshaping, and maximize are automatic |
+| `DataTable`        | A Markdown table   | The author needs a title, typed columns, opening sort, grouping, or summary row                      |
 
 And before any of them: if the content is an argument, prose is usually right. Reach for a
 component when the reader needs to compare, scan, sort, or point at something. Never draw an

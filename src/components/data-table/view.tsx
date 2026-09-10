@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 // Renders DataTable: the complete grid plus the chrome the viewer script
 // activates. Every row and column is server-rendered in authored order, so a
 // document with scripts disabled loses no content and shows no dead control.
@@ -19,6 +20,7 @@ import {
   MAXIMIZABLE_ATTRIBUTE,
 } from "../_model/figure-controls/figure-controls.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
+import type { ReactNode } from "react";
 import type {
   CompiledDataTable,
   CompiledDataTableColumn,
@@ -26,6 +28,23 @@ import type {
   DataTableFit,
 } from "./compile.js";
 import type { TableCell } from "./parse-table-grid.js";
+
+// A DataTable model carries plain text and inline code, so its cells and header
+// labels render from that model. A plain Markdown table enhanced into the same
+// grid keeps links, emphasis, and other inline markup its authored cells hold,
+// so the enhancer passes these render overrides to place that real content in
+// the grid the model shapes. Sorting and filtering still read cell text, so the
+// override changes only what the reader sees, never how the table reasons.
+export type DataTableCellRenderer = (input: {
+  readonly rowIndex: number;
+  readonly columnIndex: number;
+  readonly cell: TableCell;
+}) => ReactNode;
+
+export type DataTableHeaderRenderer = (input: {
+  readonly columnIndex: number;
+  readonly column: CompiledDataTableColumn;
+}) => ReactNode;
 
 // /* off-scale */ Phase A preserves the legacy compact grid metrics, inset
 // header radius, menu geometry, and 20% focus halo exactly. Phase B may
@@ -79,16 +98,43 @@ const SortGlyphs = ({ sort }: { readonly sort?: "asc" | "desc" }) => (
   </span>
 );
 
-const HeaderCell = ({
+// One column's text-fit control: an icon-only toggle that flips this column
+// between wrapping and truncating, independent of the table-wide fit. It holds
+// no text, so it never leaks into the column's comment label or the flattened
+// block text the way a menu of worded choices would. It ships dormant; the
+// viewer script reveals it and wires the toggle to this column's cells.
+const ColumnFitToggle = ({
   column,
   index,
 }: {
   readonly column: CompiledDataTableColumn;
   readonly index: number;
 }) => (
+  <button
+    type="button"
+    className={`${BUTTON_CLASSES} data-table-column-fit-toggle`}
+    aria-label={`Truncate ${column.label} column`}
+    aria-pressed={column.fit === "truncate" ? "true" : "false"}
+    data-tooltip="Truncate this column"
+    hidden
+    data-table-column-fit-toggle={index}
+  >
+    {lucideIconToReact({ icon: WRAP_TEXT_ICON, hidden: false })}
+  </button>
+);
+
+const HeaderCell = ({
+  column,
+  index,
+  renderLabel,
+}: {
+  readonly column: CompiledDataTableColumn;
+  readonly index: number;
+  readonly renderLabel?: DataTableHeaderRenderer;
+}) => (
   <th
     scope="col"
-    className="data-table-head bg-[var(--table-head-bg)] py-1 text-2xs font-medium tracking-caps whitespace-nowrap text-muted uppercase select-none data-[table-sorted]:text-ink"
+    className="data-table-head bg-[var(--table-head-bg)] py-1 text-2xs font-medium tracking-caps whitespace-nowrap text-muted uppercase select-none data-[table-sorted]:text-ink max-[55.999rem]:whitespace-normal"
     data-commentable-kind="table-column"
     data-commentable-label={`Column: ${column.label}`}
     data-table-column={index}
@@ -100,17 +146,21 @@ const HeaderCell = ({
       ? {}
       : { "data-table-authored-sort": column.sort })}
   >
-    {/* Disabled server-side: without the viewer script the header is a plain
-        label, not a button that does nothing when pressed. */}
+    <span className="data-table-head-label">
+      {renderLabel === undefined
+        ? column.label
+        : renderLabel({ columnIndex: index, column })}
+    </span>
     <button
       type="button"
-      className="data-table-sort inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-[inherit] tracking-[inherit] text-[inherit] uppercase hover:text-ink disabled:cursor-default disabled:text-inherit disabled:hover:text-inherit"
+      className="data-table-sort ml-1 inline-flex cursor-pointer items-center border-0 bg-transparent p-0 font-[inherit] tracking-[inherit] text-[inherit] uppercase hover:text-ink disabled:cursor-default disabled:text-inherit disabled:hover:text-inherit"
+      aria-label={column.label}
       data-table-sort={index}
       disabled
     >
-      <span className="data-table-head-label">{column.label}</span>
       <SortGlyphs />
     </button>
+    <ColumnFitToggle column={column} index={index} />
     {lucideIconToReact({ icon: GRIP_VERTICAL_ICON, hidden: false })}
   </th>
 );
@@ -120,9 +170,13 @@ const HeaderCell = ({
 const ColumnsMenu = ({
   columns,
   groupColumn,
+  showGrouping = true,
 }: {
   readonly columns: ReadonlyArray<CompiledDataTableColumn>;
   readonly groupColumn: number;
+  // A plain Markdown table enhanced into this grid offers column visibility
+  // and reorder, but not grouping, so the enhancer hides the group section.
+  readonly showGrouping?: boolean;
 }) => (
   <span className="data-table-menu relative inline-flex" data-table-menu>
     <button
@@ -162,39 +216,43 @@ const ColumnsMenu = ({
           {column.label}
         </button>
       ))}
-      <div
-        className="data-table-menu-separator -mx-1 my-1 h-px bg-edge"
-        role="separator"
-        aria-orientation="horizontal"
-      />
-      {/* Grouping is a setting over the data, so the reader can change which
-          column supplies the bands; the author only chooses the default. */}
-      <p className={MENU_LABEL_CLASSES}>Group by</p>
-      <button
-        type="button"
-        className={MENU_ITEM_CLASSES}
-        role="menuitemradio"
-        aria-checked={groupColumn === -1 ? "true" : "false"}
-        tabIndex={-1}
-        data-table-group-choice="-1"
-      >
-        {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
-        No grouping
-      </button>
-      {columns.map((column, index) => (
-        <button
-          key={`group-${column.label}`}
-          type="button"
-          className={MENU_ITEM_CLASSES}
-          role="menuitemradio"
-          aria-checked={groupColumn === index ? "true" : "false"}
-          tabIndex={-1}
-          data-table-group-choice={index}
-        >
-          {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
-          {column.label}
-        </button>
-      ))}
+      {showGrouping ? (
+        <>
+          <div
+            className="data-table-menu-separator -mx-1 my-1 h-px bg-edge"
+            role="separator"
+            aria-orientation="horizontal"
+          />
+          {/* Grouping is a setting over the data, so the reader can change which
+              column supplies the bands; the author only chooses the default. */}
+          <p className={MENU_LABEL_CLASSES}>Group by</p>
+          <button
+            type="button"
+            className={MENU_ITEM_CLASSES}
+            role="menuitemradio"
+            aria-checked={groupColumn === -1 ? "true" : "false"}
+            tabIndex={-1}
+            data-table-group-choice="-1"
+          >
+            {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+            No grouping
+          </button>
+          {columns.map((column, index) => (
+            <button
+              key={`group-${column.label}`}
+              type="button"
+              className={MENU_ITEM_CLASSES}
+              role="menuitemradio"
+              aria-checked={groupColumn === index ? "true" : "false"}
+              tabIndex={-1}
+              data-table-group-choice={index}
+            >
+              {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+              {column.label}
+            </button>
+          ))}
+        </>
+      ) : null}
     </div>
   </span>
 );
@@ -281,10 +339,15 @@ const RowCells = ({
   row,
   columns,
   kind,
+  rowIndex,
+  renderCell,
 }: {
   readonly row: CompiledDataTableRow;
   readonly columns: ReadonlyArray<CompiledDataTableColumn>;
   readonly kind: "data" | "summary";
+  // The authored row index, so a cell renderer can address the original cell.
+  readonly rowIndex: number;
+  readonly renderCell?: DataTableCellRenderer;
 }) => (
   <>
     {row.cells.map((cell, cellIndex) => {
@@ -306,7 +369,11 @@ const RowCells = ({
             : { "data-table-cell-fit": column.fit })}
           title={cell.text}
         >
-          <CellContent cell={cell} />
+          {renderCell === undefined || kind === "summary" ? (
+            <CellContent cell={cell} />
+          ) : (
+            renderCell({ rowIndex, columnIndex: cellIndex, cell })
+          )}
         </td>
       );
     })}
@@ -314,9 +381,26 @@ const RowCells = ({
 );
 
 /** Renders one DataTable as a figure: caption chrome over the complete grid. */
-export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
+export const DataTable = ({
+  model,
+  renderCell,
+  renderHeaderLabel,
+  showGrouping = true,
+  showIdentity = true,
+}: {
+  readonly model: CompiledDataTable;
+  // Overrides supplied when a plain Markdown table is enhanced into this grid,
+  // so its cells keep the inline markup the model's plain text cannot carry.
+  readonly renderCell?: DataTableCellRenderer;
+  readonly renderHeaderLabel?: DataTableHeaderRenderer;
+  readonly showGrouping?: boolean;
+  // An enhanced plain Markdown table drops the figure identity - the table
+  // glyph, the "Table" label, and the row count - so it reads as the table the
+  // author wrote rather than as a named component, while keeping every control.
+  readonly showIdentity?: boolean;
+}) => (
   <figure
-    className="data-table mb-6 w-fit max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)]"
+    className={`data-table mb-6 max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)] ${showIdentity ? "w-fit" : "w-full min-w-0"}`}
     data-data-table
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "table" }}
     data-table-id={model.id}
@@ -324,24 +408,31 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
     data-table-group-column={model.groupColumn}
   >
     <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 rounded-t-md bg-[var(--diff-header-bg)] px-2 py-1 max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-1">
-      <span className="data-table-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
-        {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
-        <span className="data-table-title min-w-0 truncate font-semibold text-ink">
-          {model.title ?? "Table"}
+      {showIdentity ? (
+        <span className="data-table-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
+          {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
+          <span className="data-table-title min-w-0 truncate font-semibold text-ink">
+            {model.title ?? "Table"}
+          </span>
+          <span
+            className="data-table-count min-w-0 text-xs text-muted"
+            data-table-count
+          >
+            {`${model.rows.length} rows`}
+          </span>
         </span>
-        <span
-          className="data-table-count min-w-0 text-xs text-muted"
-          data-table-count
-        >
-          {`${model.rows.length} rows`}
-        </span>
-      </span>
+      ) : (
+        // A zero-width spacer keeps the caption's justify-between so the controls
+        // stay at the right edge with no identity on the left.
+        <span className="data-table-identity min-w-0" aria-hidden />
+      )}
       <span className="data-table-controls flex shrink-0 items-center gap-2 max-[55.999rem]:w-full">
         <span className="data-table-settings-group inline-flex items-center gap-1">
           {model.filter ? <FilterField id={model.id} /> : null}
           <ColumnsMenu
             columns={model.columns}
             groupColumn={model.groupColumn}
+            showGrouping={showGrouping}
           />
           <FitMenu fit={model.fit} />
           <ResetButton />
@@ -364,7 +455,12 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
         <thead>
           <tr>
             {model.columns.map((column, index) => (
-              <HeaderCell key={column.label} column={column} index={index} />
+              <HeaderCell
+                key={column.label}
+                column={column}
+                index={index}
+                renderLabel={renderHeaderLabel}
+              />
             ))}
           </tr>
         </thead>
@@ -380,7 +476,13 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
               }
               data-table-row={row.diffSourceIndex ?? rowIndex}
             >
-              <RowCells row={row} columns={model.columns} kind="data" />
+              <RowCells
+                row={row}
+                columns={model.columns}
+                kind="data"
+                rowIndex={row.diffSourceIndex ?? rowIndex}
+                renderCell={renderCell}
+              />
             </tr>
           ))}
         </tbody>
@@ -395,6 +497,7 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
                 row={model.summaryRow}
                 columns={model.columns}
                 kind="summary"
+                rowIndex={-1}
               />
             </tr>
           </tfoot>
