@@ -8,12 +8,30 @@
 // their rejection cannot tell it happened, and one who cannot undo it has been
 // given a decision they cannot take back.
 
+import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  commentsFromExchange,
+  deriveSnapshotDigest,
+  messageAgentRequest,
+  nextPendingAgentRequest,
+  readAgentExchange,
+  validateAgentResponseDraft,
+  writeAgentRequest,
+} from "../src/review/agent-exchange.js";
+import {
+  claimAgentRequest,
+  commitRequestTerminal,
+} from "../src/review/request-mailbox.js";
+import { diffSnapshots } from "../src/review/snapshot-diff.js";
+import { reviewStoreFor, writeSnapshot } from "../src/review/store.js";
+import { renderDocument } from "../src/render/render-document.js";
+import {
   closeReviewRuntime,
   expect,
+  stageComment,
   startReviewRuntime,
   test,
   type Page,
@@ -909,6 +927,281 @@ test("should reveal an undone change, keep an accepted one as plan content, and 
     await expect(
       stepper(page).getByRole("button", { name: /^Open comment thread:/u }),
     ).toBeVisible();
+    await page.goto("about:blank");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// The plan the accepted change is about, so its own block can be superseded.
+const SUPERSEDE_INITIAL = `# Retry queue
+
+## Delivery
+
+The worker retries a failed job once before it gives up.
+`;
+const SUPERSEDE_REVISED = SUPERSEDE_INITIAL.replace(
+  "The worker retries a failed job once before it gives up.",
+  "The worker retries a failed job three times before it gives up.",
+);
+const SUPERSEDE_LATEST = SUPERSEDE_INITIAL.replace(
+  "The worker retries a failed job once before it gives up.",
+  "The worker retries a failed job on an exponential backoff schedule.",
+);
+
+// BIG-291. An accepted change reads as the plan, and it keeps reading as the
+// plan even after its own block is superseded: a later, unrelated push edits
+// that same paragraph and moves the plan past the revision the acceptance
+// belongs to. The change set's span stays pinned to its own result, so the
+// verdict is carried onto content that has moved out from under it - the exact
+// case the review bar was filed to get right (BIG-291, fixed by #259). The
+// place the reviewer accepted must still render as the plan's own content -
+// resolved by structural anchor, never the archived diff - rather than going
+// back to a "What changed" card in the document. The sibling test above only
+// covers the weaker case where the accepted block's own content never moves.
+test("should keep an accepted change as plan content after its own block is superseded", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  // One coding agent works this review, so every claim speaks as one session.
+  const agentSessionId = "aaaa0000aaaa0000";
+  const agentViewer = () => ({ claimedBy: agentSessionId, nowMs: Date.now() });
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-verdicts-superseded-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, SUPERSEDE_INITIAL, "utf8");
+  const { startReviewRuntime: startCompiledRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startReviewRuntime({ planPath }, startCompiledRuntime);
+  const feedbackRail = () =>
+    page.getByRole("complementary", { name: "Feedback" });
+  try {
+    await page.goto(runtime.url);
+    await stageComment(page, "Retry more than once before giving up.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await feedbackRail()
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+    await feedbackRail()
+      .getByRole("button", { name: "Close feedback" })
+      .click();
+
+    // The agent side answers through the store, so read the live session it
+    // has to speak as.
+    const session: unknown = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const response = await fetch("api/session", {
+        headers: { "x-big-plan-review-token": root.dataset.reviewToken ?? "" },
+      });
+      return response.json();
+    });
+    if (
+      typeof session !== "object" ||
+      session === null ||
+      !("sessionId" in session) ||
+      !("planId" in session) ||
+      !("plan" in session) ||
+      typeof session.sessionId !== "string" ||
+      typeof session.planId !== "string" ||
+      typeof session.plan !== "string"
+    ) {
+      throw new Error(
+        "The superseded-acceptance journey requires a live review session",
+      );
+    }
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange, agentViewer());
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+
+    // The one block the change is about, named the way the diff names it.
+    const fallbackTitle = "Retry queue";
+    const initialBlocks = renderDocument({
+      markdown: SUPERSEDE_INITIAL,
+      fallbackTitle,
+      identity: {},
+    }).blocks;
+    const revisedBlocks = renderDocument({
+      markdown: SUPERSEDE_REVISED,
+      fallbackTitle,
+      identity: {},
+    }).blocks;
+    const targetBlockId = diffSnapshots({
+      before: initialBlocks,
+      after: revisedBlocks,
+    }).find((location) => location.status === "changed")?.newBlockId;
+    if (targetBlockId === undefined) {
+      throw new Error("The proposed revision produced no changed block");
+    }
+
+    const revisedSnapshot = deriveSnapshotDigest(SUPERSEDE_REVISED);
+    const latestSnapshot = deriveSnapshotDigest(SUPERSEDE_LATEST);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: SUPERSEDE_REVISED,
+    });
+
+    // The agent answers the feedback by changing that block, and the live plan
+    // now holds the proposed content, so the change is current - not already
+    // behind the plan - when the reviewer accepts it.
+    const answeredAt = new Date().toISOString();
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: session.sessionId,
+      requestId: request.requestId,
+      claimedBy: agentSessionId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: answeredAt,
+    });
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
+      store,
+      now: answeredAt,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((comment) => ({
+            commentId: comment.id,
+            state: "changed",
+            message: "Retries three times before giving up now.",
+            changeTargets: [targetBlockId],
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks: new Set([targetBlockId]),
+        currentSnapshot: revisedSnapshot,
+        now: answeredAt,
+      }),
+    });
+    await writeFile(session.plan, SUPERSEDE_REVISED, "utf8");
+
+    // Accept the proposed change on its thread.
+    await test.step("accept the proposed change on the thread", async () => {
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await feedbackRail()
+        .getByRole("button", { name: /Expand thread:/u })
+        .first()
+        .click();
+      await feedbackRail()
+        .getByRole("button", { name: "Review change" })
+        .click();
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(1);
+      const recorded = page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/change-verdicts") &&
+          response.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "Accept this change" }).click();
+      expect((await recorded).ok()).toBe(true);
+      // Before anything supersedes it, the acceptance already reads as the
+      // plan's own content: no proposal beside the block, and its resolved
+      // paragraph is what the reader meets.
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+      await expect(
+        page.locator("article [data-review-accepted-place]"),
+      ).toHaveCount(1);
+    });
+
+    // A later, unrelated push edits the SAME paragraph again and advances the
+    // plan past this change's result snapshot. Because the push is its own
+    // change set, the accepted set's span stays pinned to its own result, so
+    // the acceptance is carried onto content the plan has moved out from under.
+    await writeSnapshot({
+      store,
+      snapshot: latestSnapshot,
+      source: SUPERSEDE_LATEST,
+    });
+    await writeFile(session.plan, SUPERSEDE_LATEST, "utf8");
+    const supersededAt = new Date(Date.parse(answeredAt) + 1).toISOString();
+    const followUp = messageAgentRequest({
+      kind: "chat",
+      requestId: randomBytes(8).toString("hex"),
+      sessionId: session.sessionId,
+      planId: session.planId,
+      premiseSnapshot: revisedSnapshot,
+      createdAt: supersededAt,
+      body: "Use an exponential backoff schedule instead.",
+    });
+    await writeAgentRequest({ store, request: followUp });
+    const claimedFollowUp = await claimAgentRequest({
+      store,
+      activeSessionId: session.sessionId,
+      requestId: followUp.requestId,
+      claimedBy: agentSessionId,
+      baselineSnapshot: revisedSnapshot,
+      now: supersededAt,
+    });
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
+      store,
+      now: supersededAt,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: followUp.requestId,
+          message: "Switched to an exponential backoff schedule.",
+        },
+        request: claimedFollowUp,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: latestSnapshot,
+        now: supersededAt,
+      }),
+    });
+
+    // The plan the reader now meets holds the superseding content.
+    await expect(page.locator("article")).toContainText(
+      "The worker retries a failed job on an exponential backoff schedule.",
+      { timeout: 15_000 },
+    );
+
+    // Surface one - the ordinary reading view. The accepted change is the
+    // plan's own paragraph, resolved by structural anchor onto the block that
+    // still stands there: not a "What changed" card marooned in the document,
+    // and carrying no word runs from the proposal it settled. That the block
+    // now holds later content is a fact about which revision it is on, not a
+    // question the reviewer has to answer a second time.
+    await expect(
+      page.locator("article [data-review-accepted-place]"),
+    ).toHaveCount(1);
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+    await expect(page.locator("article ins, article del")).toHaveCount(0);
+
+    // Surface two - the open review tour. Stepping back onto the change shows
+    // the recorded acceptance rather than re-proposing it, and the document
+    // beside the bar still reads as the plan rather than the archived diff.
+    await test.step("the tour keeps the superseded change accepted", async () => {
+      await page.getByRole("button", { name: "Back to review" }).click();
+      await expect(
+        page.getByRole("button", {
+          name: "Undo acceptance for this change",
+        }),
+      ).toBeVisible();
+      await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+      await expect(
+        page.locator("article [data-review-accepted-place]"),
+      ).toHaveCount(1);
+      await expect(page.locator("article ins, article del")).toHaveCount(0);
+    });
+
     await page.goto("about:blank");
   } finally {
     await runtime.close();
