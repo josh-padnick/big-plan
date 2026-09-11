@@ -11,7 +11,11 @@ export default defineConfig({
     ),
   },
   test: {
-    include: ["src/**/*.test.ts", "_docs/src/**/*.test.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "test/render-health.test.ts",
+      "_docs/src/**/*.test.ts",
+    ],
     // Several document-delivery suites start the pinned browser synchronously.
     // Bound file concurrency so those processes cannot starve one another on
     // the fixed-capacity CI runners and turn honest render work into timeouts.

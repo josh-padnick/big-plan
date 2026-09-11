@@ -125,7 +125,8 @@ That is worst exactly when it matters most: a new regression test looks green ag
 Prove a regression test by watching it fail on the unfixed build, and rebuild before every run on both sides of that check.
 
 Use the repository fixture in every browser spec.
-A journey that deliberately provokes a browser-level message, such as the 404 a missing picture logs while the document proves it says so, names that one message through the fixture's `allowedConsoleErrors` option; every other console error still fails the test.
+A journey that deliberately provokes a browser-level message, such as the 404 a missing picture logs while the document proves it says so, names that one message through the fixture's `allowedConsoleErrors` option.
+Otherwise console errors fail the test, except that the fixture treats a 503 from the page's own `/api/` routes as recoverable runtime backpressure because the polling island retries it; cross-origin failures and every other status still fail render health.
 Use user-facing roles, accessible names, and stable domain identifiers.
 Use Playwright auto-waiting actions and web-first assertions.
 Do not use arbitrary sleeps.

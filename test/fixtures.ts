@@ -24,6 +24,7 @@ import {
   startService,
   type ServiceRuntime,
 } from "../src/review/service/server.js";
+import { isRuntimeBackpressureError } from "./render-health.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -1036,17 +1037,32 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   page: async ({ page, allowedConsoleErrors }, use) => {
     const renderHealthErrors: Array<string> = [];
     page.on("console", (message) => {
+      if (message.type() !== "error") return;
+      // A failed resource load logs only a status line, so the offending
+      // URL has to come from the message location to be diagnosable.
+      const text = message.text();
+      const url = message.location().url;
+      if (allowedConsoleErrors.some((allowed) => allowed.test(text))) return;
+      // A loaded machine can starve the review runtime for long enough that it
+      // answers a background poll with 503 "Service Unavailable" - its own
+      // "busy, try again" backpressure, which the polling island absorbs on its
+      // next pass with nothing shown to the reader. Chromium logs that answer
+      // as a console error all the same, so counting it against render health
+      // turns runtime backpressure into a spurious failure whenever the suite
+      // runs under contention. Ignore it only for the runtime's own /api routes
+      // and only for 503: a persistent outage still fails the journey, because
+      // the assertion waiting on that data never gets it, and any other status
+      // (a real 404 or 500) still fails render health here.
       if (
-        message.type() === "error" &&
-        !allowedConsoleErrors.some((allowed) => allowed.test(message.text()))
+        isRuntimeBackpressureError({
+          text,
+          locationUrl: url,
+          pageUrl: page.url(),
+        })
       ) {
-        // A failed resource load logs only a status line, so the offending
-        // URL has to come from the message location to be diagnosable.
-        const url = message.location().url;
-        renderHealthErrors.push(
-          url === "" ? message.text() : `${message.text()} (${url})`,
-        );
+        return;
       }
+      renderHealthErrors.push(url === "" ? text : `${text} (${url})`);
     });
     page.on("pageerror", (error) => {
       renderHealthErrors.push(error.message);

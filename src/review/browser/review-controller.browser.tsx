@@ -326,6 +326,7 @@ import {
 } from "./ui.browser.js";
 import { announcedSettleBlockIds, morphPlanDom } from "./plan-dom.browser.js";
 import { seedPlanMorphBaseline } from "./plan-morph.browser.js";
+import { keepRestored } from "./swap-restore.browser.js";
 // The composer's chord is named once, so no surface can tell the reader to
 // press a key that does nothing there.
 import {
@@ -4192,6 +4193,7 @@ export const ReviewController = () => {
   const pointerPressed = useRef(false);
   const previousIsWide = useRef(isWide);
   const seenPushResponseIds = useRef<ReadonlySet<string> | null>(null);
+  const cancelScrollRestoreRef = useRef<(() => void) | null>(null);
   // The blocks the next plan-DOM replacement should settle. Armed immediately
   // before the swap a push drove and consumed by the announcement it makes, so
   // a lens replacing plan DOM for the same revision cannot inherit them.
@@ -4217,6 +4219,8 @@ export const ReviewController = () => {
   >(() =>
     planId === "" ? new Set<string>() : readArchivedChatRequestIds(planId),
   );
+
+  useEffect(() => () => cancelScrollRestoreRef.current?.(), []);
   const [commentQuery, setCommentQuery] = useState("");
   const [unsavedInputKeys, setUnsavedInputKeys] = useState<ReadonlySet<string>>(
     new Set(),
@@ -6332,6 +6336,7 @@ export const ReviewController = () => {
         });
         pendingSettleArrival.current = null;
         const scrollingElement = document.documentElement;
+        cancelScrollRestoreRef.current?.();
         const previousOverflowAnchor = scrollingElement.style.overflowAnchor;
         scrollingElement.style.overflowAnchor = "none";
         try {
@@ -6349,13 +6354,21 @@ export const ReviewController = () => {
         }
         setDisplayedSnapshot(agent.currentSnapshot);
         setPlanMorphBaselineSnapshot(agent.currentSnapshot);
-        window.scrollTo({ left: scrollX, top: scrollY });
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            window.scrollTo({ left: scrollX, top: scrollY });
+        // The swap owns the scroll position, and re-pins it across the settle
+        // window instead of on a fixed frame: the re-renders the swap sets off
+        // can move it after that frame on a loaded machine, and scroll
+        // anchoring stays off until the re-pin is done so the browser cannot
+        // compensate the reader away from where they were. It yields the moment
+        // the reader scrolls for themselves.
+        cancelScrollRestoreRef.current = keepRestored({
+          view: window,
+          restore: () => window.scrollTo({ left: scrollX, top: scrollY }),
+          isSettled: () =>
+            window.scrollX === scrollX && window.scrollY === scrollY,
+          onStop: () => {
             scrollingElement.style.overflowAnchor = previousOverflowAnchor;
-          }),
-        );
+          },
+        });
       })
       .catch((error: unknown) => {
         if (!current) return;
