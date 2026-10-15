@@ -39,7 +39,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # The merge guard compares this branch against main, so it needs the
           # full history and the origin/main remote-tracking ref.
@@ -75,6 +75,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Audit gate must fail closed on a policy finding and retry only transport errors
         run: node scripts/npm-audit-gate/selftest.mjs
