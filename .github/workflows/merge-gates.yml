@@ -148,7 +148,7 @@ jobs:
       # Reading the pull request conversation, where every marker comment lives.
       issues: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # The gate runs no git command after this, and the workspace on a
           # self-hosted runner outlives the job, so the token must not stay

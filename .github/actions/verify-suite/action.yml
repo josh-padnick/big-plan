@@ -40,7 +40,7 @@ runs:
           echo "BIG_PLAN_STATE_DIR=$job_root/state"
           echo "TMPDIR=$job_root/tmp"
         } >> "$GITHUB_ENV"
-    - uses: oven-sh/setup-bun@v2
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
         # Reads the packageManager field so CI and local bun stay in lockstep.
         bun-version-file: package.json
